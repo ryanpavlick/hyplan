@@ -1,0 +1,61 @@
+export.py:
+* export to trackair
+* export to KML
+* export to GeoJSON
+
+airports.py:
+* remove duplicate functions
+
+dubins.py:
+* 3D dubins
+* compare 2D and 3D dubins output and performance
+
+
+
+flight_lines.py:
+* curved lines for glint CH4
+* spiral
+
+weather.py:
+* API for GMAO forecast
+* wind data for wind barbs
+* cloud data
+* TOD would be even better
+
+glint.py:
+* calculate percentage of line with glint above threshold
+* map predicted glint
+
+gui.py:
+* map lines
+* select lines with a box or ad hoc polygon
+* hover to reveal solar elevation rise/set times
+* copy a line
+* delete a line
+* rotate a line
+* nudge a line
+* draw a polygon and calculate flight lines
+* need to find icons for various aircraft
+* wind barbs on map
+
+geometry.py:
+* regionate by UTM zone
+
+
+
+* get time zone based on lat lon
+
+swath.py:
+* calculate ground pixel size for a flight line
+* plot with ground pixel size
+* 2D plot with terrain and flight line
+
+
+
+
+
+
+
+
+
+

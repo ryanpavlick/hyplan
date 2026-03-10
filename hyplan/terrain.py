@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import tempfile
 import shutil
@@ -13,27 +14,26 @@ import pymap3d.aer
 
 from .download import download_file
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Minimum cos(tilt) magnitude below which ray-terrain intersection is undefined
+_COS_TILT_MIN = 1e-6
+
 
 def get_cache_root(custom_path: str = None) -> str:
-    """
-    Get the root directory for caching files.
-    """
+    """Get the root directory for caching files."""
     return custom_path or os.environ.get("HYPLAN_CACHE_ROOT", f"{tempfile.gettempdir()}/hyplan")
 
 def clear_cache():
-    """
-    Clears the entire cache directory after confirming it is safe to do so.
-    """
+    """Clears the entire cache directory after confirming it is safe to do so."""
     cache_dir = get_cache_root()
     if not cache_dir.startswith(tempfile.gettempdir()):
         raise ValueError(f"Refusing to clear unsafe cache directory: {cache_dir}")
     if os.path.exists(cache_dir):
         shutil.rmtree(cache_dir)
-        logging.info(f"Cache directory {cache_dir} cleared.")
+        logger.info(f"Cache directory {cache_dir} cleared.")
     else:
-        logging.info(f"Cache directory {cache_dir} does not exist.")
+        logger.info(f"Cache directory {cache_dir} does not exist.")
 
 def clear_localdem_cache(confirm: bool = True):
     """
@@ -46,37 +46,31 @@ def clear_localdem_cache(confirm: bool = True):
         confirm (bool): If True, prompt the user for confirmation before clearing the cache.
     """
     localdem_dir = os.path.join(get_cache_root(), "localdem")
-    
-    # Check if the directory exists
+
     if not os.path.exists(localdem_dir):
-        logging.info(f"Local DEM cache directory {localdem_dir} does not exist.")
+        logger.info(f"Local DEM cache directory {localdem_dir} does not exist.")
         return
-    
-    # Safety check: Ensure the path starts within the cache root
+
     cache_root = get_cache_root()
     if not os.path.commonpath([localdem_dir, cache_root]) == cache_root:
         raise ValueError(f"Refusing to clear unsafe directory: {localdem_dir}")
-    
-    # Confirmation prompt
+
     if confirm:
         user_input = input(f"Are you sure you want to delete all files in {localdem_dir}? (yes/no): ").strip().lower()
         if user_input not in ("yes", "y"):
-            logging.info("Local DEM cache clear operation canceled by the user.")
+            logger.info("Local DEM cache clear operation canceled by the user.")
             return
-    
-    # Clear the directory
+
     try:
         shutil.rmtree(localdem_dir)
-        logging.info(f"Local DEM cache directory {localdem_dir} cleared successfully.")
+        logger.info(f"Local DEM cache directory {localdem_dir} cleared successfully.")
     except Exception as e:
-        logging.error(f"Failed to clear local DEM cache: {e}")
+        logger.error(f"Failed to clear local DEM cache: {e}")
         raise
 
 
 def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, box]]]:
-    """
-    Build an R-tree spatial index for DEM tiles.
-    """
+    """Build an R-tree spatial index for DEM tiles."""
     idx = index.Index()
     tile_bboxes = []
 
@@ -91,7 +85,7 @@ def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, 
                 idx.insert(i, bbox.bounds)
                 tile_bboxes.append((tile, bbox))
             except Exception as e:
-                logging.warning(f"Skipping invalid tile entry: {tile} ({e})")
+                logger.warning(f"Skipping invalid tile entry: {tile} ({e})")
 
     return idx, tile_bboxes
 
@@ -108,7 +102,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     matching_tiles = [tile_bboxes[i][0] for i in idx.intersection(query_bbox.bounds)]
 
     if not matching_tiles:
-        logging.info("No overlapping DEM tiles found.")
+        logger.info("No overlapping DEM tiles found.")
         return []
 
     downloaded_files = []
@@ -118,7 +112,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
             tile_url = f"{aws_dir}{tile}/{tile}.tif"
             tile_file = os.path.join(localdem_dir, f"{tile}.tif")
             if not os.path.exists(tile_file):
-                logging.info(f"Submitting download for tile: {tile_url}")
+                logger.info(f"Submitting download for tile: {tile_url}")
                 futures[executor.submit(download_file, tile_file, tile_url)] = tile_file
             else:
                 downloaded_files.append(tile_file)
@@ -128,7 +122,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                 future.result()
                 downloaded_files.append(tile_file)
             except Exception as e:
-                logging.error(f"Error downloading tile {tile_file}: {e}")
+                logger.error(f"Error downloading tile {tile_file}: {e}")
 
     return downloaded_files
 
@@ -142,32 +136,33 @@ def merge_tiles(output_filename, tile_file_list):
         raise ValueError(f"Invalid or missing raster files: {invalid_tiles}")
 
     try:
-        logging.info(f"Merging {len(tile_file_list)} tiles into {output_filename}")
+        logger.info(f"Merging {len(tile_file_list)} tiles into {output_filename}")
         gdal.Warp(
             destNameOrDestDS=output_filename,
             srcDSOrSrcDSTab=tile_file_list,
             format="GTiff",
         )
-        logging.info(f"Successfully merged tiles into {output_filename}")
+        logger.info(f"Successfully merged tiles into {output_filename}")
     except Exception as e:
-        logging.error(f"Failed to merge tiles: {e}")
+        logger.error(f"Failed to merge tiles: {e}")
         raise RuntimeError(f"Tile merging failed: {e}")
 
 
-
 def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str = "https://copernicus-dem-30m.s3.amazonaws.com/") -> str:
-    """
-    Generate a DEM file covering the specified latitude and longitude extents.
-    """
+    """Generate a DEM file covering the specified latitude and longitude extents."""
     dem_cache_dir = os.path.join(get_cache_root(), "dem_cache")
     os.makedirs(dem_cache_dir, exist_ok=True)
 
     lon_min, lon_max = np.min(longitude) - 0.1, np.max(longitude) + 0.1
     lat_min, lat_max = np.min(latitude) - 0.1, np.max(latitude) + 0.1
 
-    cache_filename = os.path.join(dem_cache_dir, f"{int(lat_min)}_{int(lon_min)}_{int(lat_max)}_{int(lon_max)}.tif")
+    # Use math.floor to correctly handle negative coordinates (int() truncates toward zero)
+    cache_filename = os.path.join(
+        dem_cache_dir,
+        f"{math.floor(lat_min)}_{math.floor(lon_min)}_{math.floor(lat_max)}_{math.floor(lon_max)}.tif"
+    )
     if os.path.exists(cache_filename):
-        logging.info(f"Using cached DEM file: {cache_filename}")
+        logger.info(f"Using cached DEM file: {cache_filename}")
         return cache_filename
 
     tile_files = download_dem_files(lon_min, lat_min, lon_max, lat_max, aws_dir)
@@ -180,6 +175,9 @@ def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str =
 def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndarray:
     """
     Extract elevation values for given latitudes and longitudes from a DEM file.
+
+    Reads the entire raster band once and indexes it in bulk, rather than
+    querying pixel-by-pixel, for efficient batch lookups.
     """
     dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
     if not dataset:
@@ -190,40 +188,36 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
     if not band:
         raise RuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
 
-    def get_pixel(lat, lon):
-        x = int((lon - geotransform[0]) / geotransform[1])
-        y = int((lat - geotransform[3]) / geotransform[5])
-        return x, y
+    raster = band.ReadAsArray()
+    dataset = None  # Close the dataset
 
-    elevations = []
-    for lat, lon in zip(lats, lons):
-        x, y = get_pixel(lat, lon)
-        elevations.append(band.ReadAsArray(x, y, 1, 1)[0][0])
+    xs = ((lons - geotransform[0]) / geotransform[1]).astype(int)
+    ys = ((lats - geotransform[3]) / geotransform[5]).astype(int)
 
-    return np.array(elevations)
+    xs = np.clip(xs, 0, raster.shape[1] - 1)
+    ys = np.clip(ys, 0, raster.shape[0] - 1)
+
+    return raster[ys, xs]
 
 
-def get_min_max_elevations(dem_file: str) -> float:
+def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
     """
-    Get the maximum elevation value from a DEM file.
+    Get the minimum and maximum elevation values from a DEM file.
 
     Args:
         dem_file (str): Path to the DEM file.
 
     Returns:
-        float: Maximum elevation value in the DEM file.
+        Tuple[float, float]: (min_elevation, max_elevation) in the DEM file.
     """
-    # Open the DEM file
     dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
     if not dataset:
         raise RuntimeError(f"Could not open DEM file: {dem_file}")
 
-    # Read the raster band
     band = dataset.GetRasterBand(1)
     if not band:
         raise RuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
 
-    # Get the minimum and maximum elevation values
     min_val, max_val = band.ComputeRasterMinMax()
     dataset = None  # Close the dataset
 
@@ -246,74 +240,90 @@ def ray_terrain_intersection(
         lat0 (np.ndarray): Array of observer latitudes (degrees).
         lon0 (np.ndarray): Array of observer longitudes (degrees).
         h0 (float): Altitude of the observer above the ellipsoid (meters).
-        az (float): Azimuth angle of the ray (degrees).
-        tilt (float): Tilt angle of the ray (degrees).
+        az (np.ndarray): Azimuth angle of the ray (degrees).
+        tilt (np.ndarray): Tilt angle of the ray below horizontal (degrees, 0–90).
         precision (float): Precision of the slant range sampling (meters).
-        dem_file (str): Path to the DEM file. If None, it will generate one.
+        dem_file (str): Path to the DEM file. If None, one will be generated.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray]: (intersection_lats, intersection_lons, intersection_alts)
-    """
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: (intersection_lats, intersection_lons,
+            intersection_alts). Observers with no terrain intersection have NaN in all
+            three arrays.
 
-    # Ensure all inputs are arrays
+    Raises:
+        ValueError: If tilt or azimuth values are out of range, or if tilt is too close
+            to horizontal (±90°) where slant-range geometry is undefined.
+    """
     lat0 = np.atleast_1d(lat0)
     lon0 = np.atleast_1d(lon0)
     az = np.atleast_1d(az)
     tilt = np.atleast_1d(tilt)
+    n_obs = len(lat0)
 
-    # Validate input
     if np.any((tilt < -90) | (tilt > 90)):
         raise ValueError("Tilt angles must be between -90 and 90 degrees.")
     if np.any((az < 0) | (az > 360)):
         raise ValueError("Azimuth angle must be between 0 and 360 degrees.")
-    if np.any((tilt < -90.0) | (tilt > 90)):
-        raise ValueError("Tilt angle must be between -90 and 90 degrees.")
 
-    # Compute slant range for ellipsoid intersection
+    cos_tilt = np.cos(np.radians(tilt))
+    if np.any(np.abs(cos_tilt) < _COS_TILT_MIN):
+        raise ValueError(
+            "One or more tilt angles are too close to ±90° (horizontal). "
+            "Ray-terrain intersection is undefined for near-horizontal rays."
+        )
+
+    # Compute slant range to ellipsoid for each observer
     lat_ell, lon_ell, rng_ell = pymap3d.los.lookAtSpheroid(lat0, lon0, h0, az, tilt)
 
-    # Generate DEM file if not provided
     if dem_file is None:
         dem_file = generate_demfile(lat_ell, lon_ell)
 
-    # Get terrain elevation bounds
     min_elev, max_elev = get_min_max_elevations(dem_file)
-    max_elev = min(h0, max_elev)  # Cap maximum elevation at observer altitude
+    max_elev = min(h0, max_elev)
     if np.any(min_elev > h0):
         raise ValueError("Observer altitude is below the minimum terrain elevation.")
 
-    # Compute slant range bounds
-    cos_tilt = np.cos(np.radians(tilt))
-    upper_bound = rng_ell - (min_elev / cos_tilt)
-    lower_bound = rng_ell - (max_elev / cos_tilt)
+    # Per-observer slant range bounds
+    upper_bound = np.ceil((rng_ell - (min_elev / cos_tilt)) / precision) * precision
+    lower_bound = np.floor((rng_ell - (max_elev / cos_tilt)) / precision) * precision
 
-    lower_bound = np.floor(lower_bound / precision) * precision
-    upper_bound = np.ceil(upper_bound / precision) * precision
-
-    # Generate slant range sampling
+    # Global range array spanning the worst-case window across all observers.
+    # A per-observer validity mask (below) ensures each observer's intersection
+    # is only detected within its own valid slant-range window, preventing
+    # cross-observer false positives.
     rs = np.arange(lower_bound.min(), upper_bound.max() + precision, precision)
 
-    tilt = tilt - 90.0  # Convert to elevation angle
+    tilt_el = tilt - 90.0  # Convert depression angle to elevation angle for aer2geodetic
 
-    # Compute geodetic positions for all observer positions and slant ranges
     lats, lons, alts = pymap3d.aer.aer2geodetic(
-        az[np.newaxis,:], tilt[np.newaxis,:], rs[:, np.newaxis], lat0[np.newaxis, :], lon0[np.newaxis, :], h0
+        az[np.newaxis, :], tilt_el[np.newaxis, :], rs[:, np.newaxis],
+        lat0[np.newaxis, :], lon0[np.newaxis, :], h0
     )
 
-    # Flatten for DEM query
     lats_flat = lats.ravel()
     lons_flat = lons.ravel()
 
-    # Query DEM for terrain elevations
     dem_elevations = get_elevations(lats_flat, lons_flat, dem_file).reshape(lats.shape)
 
-    # Find the first intersection point
-    mask = dem_elevations > alts
-    idx = np.argmax(mask, axis=0)
+    # Per-observer validity mask: only accept intersections within [lower_bound[i], upper_bound[i]].
+    # Without this, a range step that is geometrically valid for one observer could be
+    # incorrectly attributed to another observer whose window doesn't cover that range.
+    valid_range = (rs[:, np.newaxis] >= lower_bound[np.newaxis, :]) & \
+                  (rs[:, np.newaxis] <= upper_bound[np.newaxis, :])
 
-    # Extract intersection points
-    intersection_lats = lats[idx, np.arange(len(lat0))]
-    intersection_lons = lons[idx, np.arange(len(lon0))]
-    intersection_alts = dem_elevations[idx, np.arange(len(lat0))]
+    mask = (dem_elevations > alts) & valid_range
+
+    # Detect observers with no terrain intersection and return NaN for them
+    has_intersection = mask.any(axis=0)
+    safe_idx = np.where(has_intersection, np.argmax(mask, axis=0), 0)
+    col_idx = np.arange(n_obs)
+
+    intersection_lats = np.where(has_intersection, lats[safe_idx, col_idx], np.nan)
+    intersection_lons = np.where(has_intersection, lons[safe_idx, col_idx], np.nan)
+    intersection_alts = np.where(has_intersection, dem_elevations[safe_idx, col_idx], np.nan)
+
+    n_miss = int((~has_intersection).sum())
+    if n_miss:
+        logger.warning(f"{n_miss} observer(s) had no terrain intersection within the valid slant-range window.")
 
     return intersection_lats, intersection_lons, intersection_alts

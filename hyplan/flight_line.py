@@ -11,8 +11,8 @@ from .units import ureg
 from .geometry import wrap_to_180
 from .dubins_path import Waypoint
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 class FlightLine:
     """
@@ -53,7 +53,7 @@ class FlightLine:
             altitude = altitude.to("meter")
 
         if altitude.magnitude < 0 or altitude.magnitude > 22000:
-            logging.warning(
+            logger.warning(
                 f"Altitude {altitude.magnitude} meters is outside the typical range (0-22000 meters).")
         return altitude
 
@@ -76,7 +76,7 @@ class FlightLine:
     @property
     def length(self) -> Quantity:
         length, _ = pymap3d.vincenty.vdist(self.lat1, self.lon1, self.lat2, self.lon2)
-        return ureg.Quantity(round(length,2), "meter")
+        return ureg.Quantity(round(length, 2), "meter")
 
     @property
     def az12(self) -> Quantity:
@@ -87,27 +87,31 @@ class FlightLine:
     def az21(self) -> Quantity:
         _, az21 = pymap3d.vincenty.vdist(self.lat2, self.lon2, self.lat1, self.lon1)
         return ureg.Quantity(az21, "degree")
-    
+
     @property
     def waypoint1(self) -> Waypoint:
-        return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude=self.altitude, name=self.site_name+"_start")
-    
+        name = f"{self.site_name}_start" if self.site_name else "start"
+        return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude=self.altitude, name=name)
+
     @property
     def waypoint2(self) -> Waypoint:
         heading = (self.az21.magnitude + 180.0) % 360.0
-        return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude=self.altitude, name=self.site_name+"_end")
-    
+        name = f"{self.site_name}_end" if self.site_name else "end"
+        return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude=self.altitude, name=name)
+
     @classmethod
     def start_length_azimuth(
         cls,
         lat1: float,
         lon1: float,
         length: Quantity,
-        az: Quantity,
+        az: float,
         **kwargs,
     ) -> "FlightLine":
-        if not length.check("[length]"):
-            raise ValueError("Length must have units of distance.")
+        if not isinstance(length, Quantity) or not length.check("[length]"):
+            raise ValueError("Length must be a Quantity with units of distance.")
+        if not isinstance(az, (int, float)):
+            raise ValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
         length_m = length.to("meter").magnitude
         lat2, lon2 = pymap3d.vincenty.vreckon(lat1, lon1, length_m, az)
@@ -122,11 +126,13 @@ class FlightLine:
         lat: float,
         lon: float,
         length: Quantity,
-        az: Quantity,
+        az: float,
         **kwargs,
     ) -> "FlightLine":
-        if not length.check("[length]"):
-            raise ValueError("Length must have units of distance.")
+        if not isinstance(length, Quantity) or not length.check("[length]"):
+            raise ValueError("Length must be a Quantity with units of distance.")
+        if not isinstance(az, (int, float)):
+            raise ValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
         length_m = length.to("meter").magnitude
 
@@ -152,15 +158,15 @@ class FlightLine:
         clipped_geometry = self.geometry.intersection(clip_polygon)
 
         if clipped_geometry.is_empty:
-            logging.info(f"FlightLine {self.site_name or '<Unnamed>'} excluded after clipping: No intersection.")
+            logger.info(f"FlightLine {self.site_name or '<Unnamed>'} excluded after clipping: No intersection.")
             return None
 
         if isinstance(clipped_geometry, LineString):
             if clipped_geometry.equals(self.geometry):
-                logging.info(f"FlightLine {self.site_name or '<Unnamed>'} is entirely within the polygon.")
-                return [self]  # No changes
+                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} is entirely within the polygon.")
+                return [self]
             else:
-                logging.info(f"FlightLine {self.site_name or '<Unnamed>'} was clipped into a single segment.")
+                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was clipped into a single segment.")
                 return [
                     FlightLine(
                         geometry=clipped_geometry,
@@ -175,7 +181,7 @@ class FlightLine:
             results = []
             for i, segment in enumerate(clipped_geometry.geoms):
                 new_site_name = f"{self.site_name}_{i:02d}" if self.site_name else f"Segment_{i:02d}"
-                logging.info(f"FlightLine {self.site_name or '<Unnamed>'} was split into segment: {new_site_name}")
+                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was split into segment: {new_site_name}")
                 results.append(
                     FlightLine(
                         geometry=segment,
@@ -187,37 +193,33 @@ class FlightLine:
                 )
             return results
 
-        logging.error(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
+        logger.error(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
         raise TypeError(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
 
-
-    def track(self, precision=100.0) -> LineString:
+    def track(self, precision: Union[Quantity, float] = 100.0) -> LineString:
         """
         Generate a LineString representing the flight line.
 
         Args:
-            precision (float): Desired distance (in meters) between interpolated points.
+            precision (Union[Quantity, float]): Desired distance between interpolated points.
+                Accepts a Quantity with length units or a plain float (assumed meters).
 
         Returns:
             LineString: A LineString object containing the interpolated track.
         """
-        # Compute the number of points based on the length and precision
-        num_points = int(np.ceil(self.length.to("meter").magnitude / precision)) + 1
+        if isinstance(precision, Quantity):
+            precision_m = precision.to("meter").magnitude
+        else:
+            precision_m = float(precision)
 
-        # Interpolate the points along the flight line
+        num_points = int(np.ceil(self.length.to("meter").magnitude / precision_m)) + 1
+
         track_lat, track_lon = pymap3d.vincenty.track2(
             self.lat1, self.lon1, self.lat2, self.lon2, npts=num_points, deg=True
         )
 
-        # Wrap longitude to the range [-180, 180]
         track_lon = wrap_to_180(track_lon)
-
-        # Create and return the LineString
         return LineString(zip(track_lon, track_lat))
-
-
-
-
 
     def reverse(self) -> "FlightLine":
         """
@@ -226,10 +228,7 @@ class FlightLine:
         Returns:
             FlightLine: A new FlightLine object with reversed direction.
         """
-        # Reverse the order of the coordinates
         reversed_geometry = LineString(list(reversed(self.geometry.coords)))
-
-        # Create a new FlightLine with the reversed geometry
         return FlightLine(
             geometry=reversed_geometry,
             altitude=self.altitude,
@@ -279,16 +278,20 @@ class FlightLine:
             investigator=self.investigator
         )
 
-    def offset_across(self, offset_distance: Quantity) -> "FlightLine":
+    def offset_across(self, offset_distance: Union[Quantity, float]) -> "FlightLine":
         """
         Offset the flight line perpendicular to its direction by a specified distance.
 
         Args:
-            offset_distance (Quantity): Distance to offset the line (positive for right, negative for left).
+            offset_distance (Union[Quantity, float]): Distance to offset the line
+                (positive for right, negative for left). Plain floats are assumed meters.
 
         Returns:
             FlightLine: A new FlightLine object with the offset applied.
         """
+        if not isinstance(offset_distance, Quantity):
+            offset_distance = ureg.Quantity(offset_distance, "meter")
+
         perpendicular_az = (self.az12.magnitude + 90) % 360 if offset_distance.magnitude >= 0 else (self.az12.magnitude - 90) % 360
 
         def compute_offset(lat, lon, distance, azimuth):
@@ -311,17 +314,24 @@ class FlightLine:
             investigator=self.investigator
         )
 
-    def offset_along(self, offset_start: Quantity, offset_end: Quantity) -> "FlightLine":
+    def offset_along(self, offset_start: Union[Quantity, float], offset_end: Union[Quantity, float]) -> "FlightLine":
         """
         Offset the flight line along its direction by modifying the start and end points.
 
         Args:
-            offset_start (Quantity): Distance to offset the start point along the line (positive or negative).
-            offset_end (Quantity): Distance to offset the end point along the line (positive or negative).
+            offset_start (Union[Quantity, float]): Distance to offset the start point along the line
+                (positive or negative). Plain floats are assumed meters.
+            offset_end (Union[Quantity, float]): Distance to offset the end point along the line
+                (positive or negative). Plain floats are assumed meters.
 
         Returns:
             FlightLine: A new FlightLine object with the offset applied.
         """
+        if not isinstance(offset_start, Quantity):
+            offset_start = ureg.Quantity(offset_start, "meter")
+        if not isinstance(offset_end, Quantity):
+            offset_end = ureg.Quantity(offset_end, "meter")
+
         def compute_offset(lat, lon, offset, azimuth):
             if offset < 0:
                 azimuth = (azimuth + 180) % 360
@@ -355,46 +365,31 @@ class FlightLine:
         Returns:
             FlightLine: A new FlightLine object rotated around its midpoint.
         """
-        try:
-            # Validate input
-            if not isinstance(angle, (int, float)):
-                raise ValueError(f"Angle must be a number. Received: {angle}")
+        if not isinstance(angle, (int, float)):
+            raise ValueError(f"Angle must be a number. Received: {angle}")
 
-            # Convert angle to radians
-            angle_rad = np.radians(angle)
+        angle_rad = np.radians(angle)
+        midpoint = self.geometry.interpolate(0.5, normalized=True)
 
-            # Compute the midpoint of the flight line
-            midpoint = self.geometry.interpolate(0.5, normalized=True)
+        def rotate_point(x, y, center_x, center_y, angle_radians):
+            delta_x = x - center_x
+            delta_y = y - center_y
+            rotated_x = delta_x * np.cos(angle_radians) - delta_y * np.sin(angle_radians) + center_x
+            rotated_y = delta_x * np.sin(angle_radians) + delta_y * np.cos(angle_radians) + center_y
+            return rotated_x, rotated_y
 
-            # Helper function to rotate a single point
-            def rotate_point(x, y, center_x, center_y, angle_radians):
-                delta_x = x - center_x
-                delta_y = y - center_y
-                rotated_x = delta_x * np.cos(angle_radians) - delta_y * np.sin(angle_radians) + center_x
-                rotated_y = delta_x * np.sin(angle_radians) + delta_y * np.cos(angle_radians) + center_y
-                return rotated_x, rotated_y
+        rotated_coords = [
+            rotate_point(x, y, midpoint.x, midpoint.y, angle_rad)
+            for x, y in self.geometry.coords
+        ]
 
-            # Rotate both endpoints of the line
-            rotated_coords = [
-                rotate_point(x, y, midpoint.x, midpoint.y, angle_rad)
-                for x, y in self.geometry.coords
-            ]
-
-            # Create the new rotated geometry
-            rotated_geometry = LineString(rotated_coords)
-
-            # Return a new FlightLine object with the rotated geometry
-            return FlightLine(
-                geometry=rotated_geometry,
-                altitude=self.altitude,
-                site_name=self.site_name,
-                site_description=self.site_description,
-                investigator=self.investigator,
-            )
-
-        except Exception as e:
-            logging.error(f"Failed to rotate FlightLine: {e}")
-            raise
+        return FlightLine(
+            geometry=LineString(rotated_coords),
+            altitude=self.altitude,
+            site_name=self.site_name,
+            site_description=self.site_description,
+            investigator=self.investigator,
+        )
 
     def split_by_length(self, max_length: Quantity, gap_length: Optional[Quantity] = None) -> List["FlightLine"]:
         """
@@ -416,7 +411,7 @@ class FlightLine:
         if gap_length and gap_length_m < 0:
             raise ValueError("Gap length cannot be negative.")
         if max_length_m + gap_length_m > total_length_m:
-            return [self]  # No split is possible if the segment + gap is longer than the flight line
+            return [self]
 
         segments = []
         remaining_length_m = total_length_m
@@ -424,17 +419,14 @@ class FlightLine:
         segment_index = 0
 
         while remaining_length_m > 0:
-            # Calculate segment length, ensuring it doesn't exceed remaining length
             current_segment_length_m = min(max_length_m, remaining_length_m)
             remaining_length_m -= current_segment_length_m
 
-            # Calculate endpoint for the current segment
             end_lat, end_lon = pymap3d.vincenty.vreckon(
                 current_start_lat, current_start_lon, current_segment_length_m, self.az12.magnitude
             )
             end_lon = wrap_to_180(end_lon)
 
-            # Create the segment geometry
             segment_geometry = LineString([(current_start_lon, current_start_lat), (end_lon, end_lat)])
             segments.append(
                 FlightLine(
@@ -447,7 +439,6 @@ class FlightLine:
             )
             segment_index += 1
 
-            # Calculate the starting point for the next segment, skipping the gap
             if gap_length and remaining_length_m > gap_length_m:
                 remaining_length_m -= gap_length_m
                 current_start_lat, current_start_lon = pymap3d.vincenty.vreckon(
@@ -455,7 +446,7 @@ class FlightLine:
                 )
                 current_start_lon = wrap_to_180(current_start_lon)
             else:
-                break  # If no room for a new segment after the gap, stop splitting
+                break
 
         return segments
 

@@ -1,12 +1,10 @@
-
-#%%
 """
 HyPlan Clouds
 
 Overview:
-Optical remote sensing of the Earth's surface often requires clear skies. Deploying airborne remote sensing 
-instruments can be costly, with daily costs for aircraft, labor, and per diem travel expenses for aircraft 
-and instrument teams. This script addresses the question: 
+Optical remote sensing of the Earth's surface often requires clear skies. Deploying airborne remote sensing
+instruments can be costly, with daily costs for aircraft, labor, and per diem travel expenses for aircraft
+and instrument teams. This script addresses the question:
 "Statistically, how many days is it likely to take to acquire clear-sky observations for a given set of flight boxes?".
 
 The script operates under several simplifying assumptions:
@@ -28,9 +26,8 @@ Key Features:
     - Generates heatmaps of cloud conditions, visit days, and rest days for each simulated year.
     - Produces cumulative distribution function (CDF) plots to estimate the likelihood of completing visits.
 
-TODO: Currently, it is not possible to span years (a campaign can not include dates in both December and January). 
+TODO: Currently, it is not possible to span years (a campaign can not include dates in both December and January).
 """
-#%%
 
 # Core Libraries
 import pandas as pd
@@ -47,36 +44,54 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.colors as mcolors
 
-# Google Earth Engine
+# Google Earth Engine (imported lazily via _get_ee())
 import ee
 
+__all__ = [
+    "get_binary_cloud", "calculate_cloud_fraction", "create_date_ranges",
+    "create_cloud_data_array_with_limit", "simulate_visits",
+    "plot_yearly_cloud_fraction_heatmaps_with_visits",
+]
 
-# Initialize the Earth Engine with error handling
-try:
-    # ee.Authenticate()
-    ee.Initialize()
-except Exception as e:
-    raise RuntimeError("Earth Engine initialization failed. Check your authentication.") from e
-
-# Initialize logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
+_ee_initialized = False
 
-#%%
+
+def _init_ee():
+    """Initialize Google Earth Engine on first use."""
+    global _ee_initialized
+    if not _ee_initialized:
+        try:
+            ee.Initialize()
+            _ee_initialized = True
+        except Exception as e:
+            raise RuntimeError("Earth Engine initialization failed. Check your authentication.") from e
+
+
+def _drop_z(geom):
+    """Strip Z coordinates from a geometry."""
+    return wkb.loads(wkb.dumps(geom, output_dimension=2))
+
 
 def get_binary_cloud(image):
     """
     Generates a binary cloud mask for a given MODIS image.
 
+    The MOD09GA/MYD09GA state_1km band encodes cloud state in bits 0-1:
+      00 = clear, 01 = cloudy, 10 = mixed, 11 = not set.
+    Any non-zero value (bits 0-1 != 00) is treated as cloudy.
+
     Parameters:
         image (ee.Image): An Earth Engine image with a "state_1km" quality assessment band.
 
     Returns:
-        ee.Image: Binary cloud mask (1 for cloudy, 0 for clear) with an added "date_char" property.
+        ee.Image: Binary cloud mask (1 for cloudy/mixed, 0 for clear) with an added "date_char" property.
     """
+    _init_ee()
     qa = image.select("state_1km")
-    clouds = qa.bitwiseAnd(1).eq(1)
+    clouds = qa.bitwiseAnd(3).gt(0)
     date_char = image.date().format('yyyy-MM-dd')
     return clouds.set("date_char", date_char)
 
@@ -91,18 +106,15 @@ def calculate_cloud_fraction(image, polygon_geometry):
     Returns:
         ee.Feature: A feature containing the date and calculated cloud fraction for the polygon.
     """
-    # Reduce the cloud image to the region of interest and calculate mean
+    _init_ee()
     reduction = image.reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=polygon_geometry,
         scale=1000
     )
-    # Extract the cloud fraction value
     cloud_fraction = reduction.get('state_1km')
-    # Return the cloud fraction value with date
     return ee.Feature(None, {'date_char': image.get('date_char'), 'cloud_fraction': cloud_fraction})
 
-# Determine year spans based on the day range
 def create_date_ranges(day_start, day_stop, year_start, year_stop):
     """
     Creates date ranges for filtering Earth Engine image collections.
@@ -118,17 +130,17 @@ def create_date_ranges(day_start, day_stop, year_start, year_stop):
     """
     date_ranges = []
     for year in range(year_start, year_stop + 1):
-        # Adjust end date to ensure inclusion of day_stop
-        end_date = f"{year}-{day_stop:03}"
-        date_ranges.append((f"{year}-{day_start:03}", end_date))
+        date_ranges.append((f"{year}-{day_start:03}", f"{year}-{day_stop:03}"))
     return date_ranges
 
 def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_start, day_stop, limit=5000):
     """
     Processes MODIS cloud data for polygons and calculates daily cloud fractions.
 
+    The polygon file must contain a 'Name' column identifying each polygon.
+
     Parameters:
-        polygon_file (str): Path to a GeoJSON or shapefile containing polygons.
+        polygon_file (str): Path to a GeoJSON or shapefile containing polygons with a 'Name' column.
         year_start (int): Start year for data processing.
         year_stop (int): End year for data processing.
         day_start (int): Start day of the year for data processing.
@@ -138,69 +150,52 @@ def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_
     Returns:
         pd.DataFrame: A DataFrame with columns 'polygon_id', 'year', 'day_of_year', and 'cloud_fraction'.
     """
+    _init_ee()
     try:
-        # Load your polygon data
         gdf = gpd.read_file(polygon_file)
         if gdf.empty:
             raise ValueError("Polygon file is empty or invalid.")
     except Exception as e:
         raise RuntimeError(f"Failed to load polygon file: {polygon_file}") from e
 
-    gdf = gdf[['Name', 'geometry']]
-    _drop_z = lambda geom: wkb.loads(wkb.dumps(geom, output_dimension=2))
-    gdf.geometry = gdf.geometry.apply(_drop_z)
+    if 'Name' not in gdf.columns:
+        raise ValueError(f"Polygon file must contain a 'Name' column. Found columns: {list(gdf.columns)}")
 
-    # Initialize results list
+    gdf = gdf[['Name', 'geometry']].copy()
+    gdf['geometry'] = gdf['geometry'].apply(_drop_z)
+
     results = []
-
-    # Create date ranges based on the year spans
     date_ranges = create_date_ranges(day_start, day_stop, year_start, year_stop)
 
-    # Initialize an empty ImageCollection
-    cloud_data = ee.ImageCollection([])
-
     try:
-        # Filter the collection by created date ranges and day of year
+        cloud_data = ee.ImageCollection([])
         for start, stop in date_ranges:
-            cloud_aqua = ee.ImageCollection("MODIS/061/MOD09GA").filterDate(start, stop).limit(limit)
-            cloud_terra = ee.ImageCollection('MODIS/061/MYD09GA').filterDate(start, stop).limit(limit)
-            cloud_data = cloud_data.merge(cloud_aqua).merge(cloud_terra)
-
-        # Map the binary cloud mask function
+            cloud_terra = ee.ImageCollection("MODIS/061/MOD09GA").filterDate(start, stop).limit(limit)
+            cloud_aqua = ee.ImageCollection('MODIS/061/MYD09GA').filterDate(start, stop).limit(limit)
+            cloud_data = cloud_data.merge(cloud_terra).merge(cloud_aqua)
         cloud_data = cloud_data.map(get_binary_cloud)
     except Exception as e:
         raise RuntimeError("Error occurred while processing MODIS data.") from e
 
-    # Iterate over each polygon
     for _, row in gdf.iterrows():
         polygon_name = row['Name']
-        polygon_geojson = row['geometry'].__geo_interface__
-        polygon_geometry = ee.Geometry(polygon_geojson)
+        polygon_geometry = ee.Geometry(row['geometry'].__geo_interface__)
 
-        # Map the cloud fraction calculation over the image collection
         mapped_results = cloud_data.map(lambda image: calculate_cloud_fraction(image, polygon_geometry))
+        feature_list = ee.FeatureCollection(mapped_results).limit(limit).getInfo()['features']
 
-        # Get the results as a list of features
-        feature_collection = ee.FeatureCollection(mapped_results)
-        feature_list = feature_collection.limit(limit).getInfo()['features']
-
-        # Process each feature
         for feature in feature_list:
             properties = feature['properties']
             date_char = properties.get('date_char')
             if date_char is None:
-                continue  # Skip this feature if 'date_char' is not present
+                continue
             cloud_fraction = properties.get('cloud_fraction')
             if cloud_fraction is not None:
                 year, month, day = [int(x) for x in date_char.split('-')]
                 day_of_year = pd.Timestamp(year=year, month=month, day=day).dayofyear
                 results.append({'year': year, 'day_of_year': day_of_year, 'polygon_id': polygon_name, 'cloud_fraction': cloud_fraction})
 
-    # Convert the results to a DataFrame
     results_df = pd.DataFrame(results)
-
-    # Aggregate the DataFrame to ensure unique indices
-    # You can choose different aggregation methods like mean, median, etc.
     aggregated_df = results_df.groupby(['polygon_id', 'year', 'day_of_year']).mean().reset_index()
     return aggregated_df
 
@@ -218,6 +213,9 @@ def simulate_visits(
     """
     Simulate visits to polygons based on cloud fraction thresholds, ensuring no more than one visit per day.
     Adds rest days after a set number of consecutive visits and resets counters on weekends or when no polygons meet the threshold.
+
+    On each visitable day, the alphabetically first unvisited polygon that meets the cloud threshold is chosen.
+    Rest days count toward total_days but no polygon is visited.
 
     Parameters:
         df (pd.DataFrame): Cloud fraction data with columns: 'polygon_id', 'year', 'day_of_year', 'cloud_fraction'.
@@ -256,23 +254,18 @@ def simulate_visits(
             total_days += 1
             current_date = datetime(year, 1, 1) + timedelta(days=current_day_of_year - 1)
 
-            # Skip weekends if exclude_weekends=True
             if exclude_weekends and current_date.weekday() >= 5:
-                logging.debug(f"Skipping weekend on day {current_day_of_year} of year {year}")
+                logger.debug(f"Skipping weekend on day {current_day_of_year} of year {year}")
                 current_day_of_year += 1
-                consecutive_visits = 0  # Reset counter
+                consecutive_visits = 0
                 continue
 
-            # Filter cloud data for polygons not yet visited
             daily_df = df[(df['year'] == year) & (df['day_of_year'] == current_day_of_year)]
             daily_df = daily_df[~daily_df['polygon_id'].isin(visited_polygons)]
-
-            # Check if any polygons are visitable on this day
             visitable_polygons = daily_df[daily_df['cloud_fraction'] < cloud_fraction_threshold]
 
             if not visitable_polygons.empty:
                 if consecutive_visits < rest_day_threshold:
-                    # Visit the first polygon (sorted by priority, e.g., alphabetical order)
                     polygon_to_visit = visitable_polygons.sort_values(by='polygon_id').iloc[0]
                     polygon_id = polygon_to_visit['polygon_id']
 
@@ -283,34 +276,29 @@ def simulate_visits(
                         visit_tracker[year][polygon_id] = []
                     visit_tracker[year][polygon_id].append(current_day_of_year)
 
-                    logging.debug(f"Visiting polygon {polygon_id} on day {current_day_of_year} of year {year}")
-
+                    logger.debug(f"Visiting polygon {polygon_id} on day {current_day_of_year} of year {year}")
                     consecutive_visits += 1
                 else:
-                    # Trigger a rest day if threshold is reached
                     rest_days[year].append(current_day_of_year)
-                    logging.info(f"Rest day added on day {current_day_of_year} of year {year}")
+                    logger.info(f"Rest day added on day {current_day_of_year} of year {year}")
                     consecutive_visits = 0
             else:
-                # No polygons meet the threshold; reset consecutive visits counter
-                logging.debug(f"No visitable polygons on day {current_day_of_year} of year {year}")
+                logger.debug(f"No visitable polygons on day {current_day_of_year} of year {year}")
                 consecutive_visits = 0
 
-            # Check if all polygons have been visited
             if not remaining_polygons:
-                logging.info(f"All polygons visited for year {year}.")
+                logger.info(f"All polygons visited for year {year}.")
                 break
 
             current_day_of_year += 1
 
-        # Append total days for the year
         visit_days.append({'year': year, 'days': total_days})
 
     return pd.DataFrame(visit_days), visit_tracker, rest_days
 
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
-    cloud_data_df, visit_tracker, rest_days, 
-    cloud_fraction_threshold=0.10, exclude_weekends=False, 
+    cloud_data_df, visit_tracker, rest_days,
+    cloud_fraction_threshold=0.10, exclude_weekends=False,
     day_start=1, day_stop=365
 ):
     """
@@ -337,59 +325,49 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
     bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
-    # Create a heatmap for each year
     unique_years = cloud_data_df['year'].unique()
     for year in sorted(unique_years):
-        # Filter data for the year and restrict to the specified day range
-        year_data = cloud_data_df[(cloud_data_df['year'] == year) & 
-                                  (cloud_data_df['day_of_year'] >= day_start) & 
+        year_data = cloud_data_df[(cloud_data_df['year'] == year) &
+                                  (cloud_data_df['day_of_year'] >= day_start) &
                                   (cloud_data_df['day_of_year'] <= day_stop)]
         heatmap_data = year_data.pivot(index='polygon_id', columns='day_of_year', values='cloud_fraction')
-
-        # Ensure the heatmap only includes the specified range of days
         heatmap_data = heatmap_data.reindex(columns=range(day_start, day_stop + 1), fill_value=0)
 
-        # Apply cloud fraction threshold to determine clear/cloudy
-        binary_data = (heatmap_data >= cloud_fraction_threshold).astype(int)  # 1 = cloudy (black), 0 = clear (white)
-        status_data = binary_data.copy()  # Start with clear/cloudy data
+        binary_data = (heatmap_data >= cloud_fraction_threshold).astype(int)
+        status_data = binary_data.copy()
 
-        # Process visits and mark visited days as grey
         stars_x = []
         stars_y = []
         rest_days_set = set(rest_days.get(year, [])) if rest_days else set()
 
         for i, polygon_id in enumerate(status_data.index):
             if polygon_id in visit_tracker.get(year, {}):
-                visit_days = sorted(visit_tracker[year][polygon_id])
-                for visit_day in visit_days:
+                visit_days_list = sorted(visit_tracker[year][polygon_id])
+                for visit_day in visit_days_list:
                     if day_start <= visit_day <= day_stop:
-                        stars_x.append(visit_day - day_start + 0.5)  # Adjust star position to match day_start
-                        stars_y.append(i + 0.5)  # Center the star in the cell
+                        stars_x.append(visit_day - day_start + 0.5)
+                        stars_y.append(i + 0.5)
 
-                        # Mark all subsequent days as gray until another visit or the end of the range
                         for day in range(visit_day + 1, day_stop + 1):
                             if exclude_weekends:
                                 weekday = (datetime(year, 1, 1) + timedelta(days=day - 1)).weekday()
-                                if weekday < 5:  # Only mark weekdays
-                                    status_data.loc[polygon_id, day] = 2  # Grey
+                                if weekday < 5:
+                                    status_data.loc[polygon_id, day] = 2
                             else:
-                                status_data.loc[polygon_id, day] = 2  # Grey
+                                status_data.loc[polygon_id, day] = 2
 
-        # Mark rest days as orange
         for rest_day in rest_days_set:
             if day_start <= rest_day <= day_stop:
-                status_data.iloc[:, rest_day - day_start] = 4  # Orange for rest days
+                status_data.iloc[:, rest_day - day_start] = 4
 
-        # Mark weekends as purple if exclude_weekends=True
         if exclude_weekends:
             for day in range(day_start, day_stop + 1):
                 weekday = (datetime(year, 1, 1) + timedelta(days=day - 1)).weekday()
-                if weekday >= 5:  # Saturday or Sunday
-                    status_data.loc[:, day] = 3  # Purple for weekends
+                if weekday >= 5:
+                    status_data.loc[:, day] = 3
 
-        # Plot the heatmap with the custom colormap
         plt.figure(figsize=(16, 8))
-        ax = sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False, 
+        ax = sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False,
                          linewidths=0.5, linecolor='gray', square=True)
         plt.scatter(stars_x, stars_y, color='red', marker='*', s=150, label='Visit Day')
         plt.title(f'Cloud Fraction Heatmap with Visits for Year {year}')
