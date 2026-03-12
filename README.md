@@ -47,6 +47,17 @@ cd hyplan
 pip uninstall -y hyplan; pip install -e .
 ```
 
+Or using conda/mamba, e.g. to create a new environment and install the dependencies
+
+```
+# Assuming you have downloaded the repo, run the following outside of the repo folder
+mamba deactivate
+mamba env create --file hyplan/hyplan.yml
+mamba activate hyplan-env
+pip install -e hyplan
+```
+This will create a new conda environment names "hyplan" with the dependencies and install the hyplan library within that environment
+
 ---
 
 ## Usage
