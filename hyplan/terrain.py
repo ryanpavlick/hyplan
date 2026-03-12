@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import tempfile
 import shutil
@@ -156,10 +155,10 @@ def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str =
     lon_min, lon_max = np.min(longitude) - 0.1, np.max(longitude) + 0.1
     lat_min, lat_max = np.min(latitude) - 0.1, np.max(latitude) + 0.1
 
-    # Use math.floor to correctly handle negative coordinates (int() truncates toward zero)
+    # Use rounded float values to create unique cache keys for different extents
     cache_filename = os.path.join(
         dem_cache_dir,
-        f"{math.floor(lat_min)}_{math.floor(lon_min)}_{math.floor(lat_max)}_{math.floor(lon_max)}.tif"
+        f"{lat_min:.2f}_{lon_min:.2f}_{lat_max:.2f}_{lon_max:.2f}.tif"
     )
     if os.path.exists(cache_filename):
         logger.info(f"Using cached DEM file: {cache_filename}")
@@ -193,6 +192,14 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
 
     xs = ((lons - geotransform[0]) / geotransform[1]).astype(int)
     ys = ((lats - geotransform[3]) / geotransform[5]).astype(int)
+
+    out_of_bounds = (xs < 0) | (xs >= raster.shape[1]) | (ys < 0) | (ys >= raster.shape[0])
+    if np.any(out_of_bounds):
+        n_oob = int(out_of_bounds.sum())
+        logger.warning(
+            f"{n_oob} query point(s) fall outside the DEM extent. "
+            "Edge pixel elevations will be used for these points."
+        )
 
     xs = np.clip(xs, 0, raster.shape[1] - 1)
     ys = np.clip(ys, 0, raster.shape[0] - 1)

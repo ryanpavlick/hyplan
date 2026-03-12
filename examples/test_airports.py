@@ -18,7 +18,7 @@ logging.info("Airports data initialized.")
 
 #%% Example 1: Find the nearest airport to a point
 latitude, longitude = 34.05, -118.25  # Los Angeles coordinates
-nearest_icao = find_nearest_airport(latitude, longitude, unit="miles")
+nearest_icao = find_nearest_airport(latitude, longitude)
 logging.info(f"Nearest Airport ICAO Code: {nearest_icao}")
 
 #%% Example 2: Find all airports within a 50-mile radius

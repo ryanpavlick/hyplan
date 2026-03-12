@@ -1,3 +1,6 @@
+#%%
+import ee
+ee.Authenticate()
 from hyplan.clouds import create_cloud_data_array_with_limit, simulate_visits, plot_yearly_cloud_fraction_heatmaps_with_visits
 
 #%%
@@ -5,7 +8,7 @@ from hyplan.clouds import create_cloud_data_array_with_limit, simulate_visits, p
 
 
 # Parameters
-polygon_file = 'hyspiri.json'
+polygon_file = 'data/hyspiri.geojson'
 year_start = 2003
 year_stop = 2006
 day_start = 1  # January 1
@@ -16,8 +19,6 @@ cloud_data_df = create_cloud_data_array_with_limit(polygon_file, year_start, yea
 
 #%%
 
-exclude_weekends=False,
-cloud_fraction_threshold=0.10,
 day_start = 30
 day_stop = 74
 
@@ -36,8 +37,8 @@ visit_days_df, visit_tracker, rest_days = simulate_visits(
 
 #%%
 plot_yearly_cloud_fraction_heatmaps_with_visits(
-    cloud_data_df, visit_tracker, rest_days, 
-    cloud_fraction_threshold=0.25, exclude_weekends=True, 
-    day_start=1, day_stop=74
+    cloud_data_df, visit_tracker, rest_days,
+    cloud_fraction_threshold=0.25, exclude_weekends=True,
+    day_start=day_start, day_stop=day_stop
 )# %%
 # %%

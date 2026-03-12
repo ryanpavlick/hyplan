@@ -61,7 +61,6 @@ def compute_flight_plan(
             start_heading = segment.waypoint1.heading  # From FlightLine.az12
             end_heading = segment.waypoint2.heading    # From FlightLine.az21 (adjusted)
 
-            print(start_heading)
             records.append({
                 "geometry": track_geometry,
                 "start_lat": latitudes[0],
@@ -80,16 +79,15 @@ def compute_flight_plan(
 
         # Process the connecting phase between the current and next segment.
         if i + 1 < len(flight_sequence):
-            start = segment.waypoint2 if isinstance(segment, FlightLine) else segment
             end = flight_sequence[i + 1]
-            start_wp = start.waypoint2 if isinstance(start, FlightLine) else start
+            start_wp = segment.waypoint2 if isinstance(segment, FlightLine) else segment
             end_wp = end.waypoint1 if isinstance(end, FlightLine) else end
 
             cruise_info = aircraft.time_to_cruise(start_wp, end_wp)
             if cruise_info["total_time"].to(ureg.minute).magnitude > 0:
                 phase_name = (
                     "Departure" if (i == 0 and takeoff_airport is None) else
-                    f"{getattr(start, 'site_name', getattr(start, 'name', 'Unknown'))} to "
+                    f"{getattr(segment, 'site_name', getattr(segment, 'name', 'Unknown'))} to "
                     f"{getattr(end, 'site_name', getattr(end, 'name', 'Unknown'))}"
                 )
                 records.extend(process_flight_phase(start_wp, end_wp, cruise_info, phase_name))
@@ -167,6 +165,8 @@ def process_flight_phase(start, end, phase_info, segment_name):
             phase_distance_nm = None
             # phase_distance_nm = dubins_path.length.to(ureg.nautical_mile).magnitude
 
+        # TODO: Split dubins_path.geometry into per-phase sub-segments using
+        # phase distances so each sub-phase has its own distinct geometry.
         records.append({
             "geometry": dubins_path.geometry,
             "start_lat": start.latitude,

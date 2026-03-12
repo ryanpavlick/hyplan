@@ -439,15 +439,15 @@ def process_linestring(linestring):
         distance, az12 = vdist(
             track_lat[i], track_lon[i], track_lat[i + 1], track_lon[i + 1]
         )
-        azimuths.append(az12)
-        distances.append(distance)
+        azimuths.append(float(az12))
+        distances.append(float(distance))
 
     # Add reverse azimuth for the last point to match array sizes
     if len(track_lat) > 1:
         _, reverse_az = vdist(
             track_lat[-1], track_lon[-1], track_lat[-2], track_lon[-2]
         )
-        azimuths.append((reverse_az + 180) % 360)  # Reverse azimuth with normalization
+        azimuths.append(float((reverse_az + 180) % 360))  # Reverse azimuth with normalization
     else:
         azimuths.append(0.0)  # Single point, azimuth is undefined
 

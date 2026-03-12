@@ -96,11 +96,21 @@ def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, obser
     half_angle = sensor.half_angle  # Extract half angle from sensor
     tilt_angles = np.arange(-half_angle, half_angle + 1, 1)  # Shape: (T,)
 
-    # Repeat azimuths for all tilt angles
-    view_azimuths = np.repeat(azimuths+90.0, len(tilt_angles))
+    if len(tilt_angles) == 0:
+        raise ValueError(f"Sensor half_angle {half_angle} produced an empty tilt angle array.")
 
-    # Tile tilt angles for all azimuths
-    tilt_angles = np.tile(tilt_angles, len(latitudes))  # One azimuth per lat/lon
+    # Cross-track line scanner: the scan is perpendicular to the flight direction.
+    # Positive tilt looks starboard (azimuth + 90°), negative tilt looks port (azimuth - 90°).
+    # Build per-point azimuths that match the tilt sign.
+    n_tilts = len(tilt_angles)
+    view_azimuths = np.empty(len(azimuths) * n_tilts)
+    for j, az in enumerate(azimuths):
+        for k, t in enumerate(tilt_angles):
+            view_azimuths[j * n_tilts + k] = (az + 90.0) % 360.0 if t >= 0 else (az - 90.0) % 360.0
+
+    # Tile tilt angles for all azimuths and take absolute value since
+    # the port/starboard direction is now encoded in view_azimuths
+    tilt_angles = np.tile(np.abs(tilt_angles), len(latitudes))
 
     # Repeat latitudes, longitudes, and altitudes to match the number of angle combinations
     latitudes = np.repeat(latitudes, len(tilt_angles) // len(latitudes))

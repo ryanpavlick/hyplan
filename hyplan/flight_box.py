@@ -9,8 +9,7 @@ from .units import ureg, altitude_to_flight_level
 from .geometry import wrap_to_180, rotated_rectangle, minimum_rotated_rectangle, buffer_polygon_along_azimuth, _validate_polygon
 
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def _validate_inputs(**kwargs) -> None:
@@ -44,7 +43,6 @@ def _validate_inputs(**kwargs) -> None:
         'starting_point': lambda x: x in {"edge", "center"},
         'azimuth': lambda x: isinstance(x, float),
         'polygon': lambda x: x is None or _validate_polygon(x),
-        'starting_point': lambda x: x in {"edge", "center"},
         'clip_to_polygon': lambda x: isinstance(x, bool),
     }
 
@@ -77,9 +75,9 @@ def _validate_inputs(**kwargs) -> None:
                 raise ValueError(f"Invalid value for '{key}': {value}. Check documentation for valid inputs.")
         else:
             # Warn about unknown parameters
-            logging.warning(f"Unknown parameter '{key}' provided. No validation rule exists.")
+            logger.warning(f"Unknown parameter '{key}' provided. No validation rule exists.")
     
-    logging.debug("All inputs passed validation.")
+    logger.debug("All inputs passed validation.")
 
         
 def box_around_center_line(
@@ -141,6 +139,8 @@ def box_around_center_line(
 
     # Compute swath spacing and number of lines
     swath = instrument.swath_width(altitude)
+    if not isinstance(swath, ureg.Quantity):
+        swath = ureg.Quantity(swath, "meter")
     if swath <= 0:
         raise ValueError(f"Invalid swath width {swath}. Must be positive.")
 
@@ -155,8 +155,8 @@ def box_around_center_line(
 
     nlines = max(1, int(np.ceil(box_width / swath_spacing)))
 
-    logging.info(f"Calculated swath spacing: {swath_spacing:.2f} meters.")
-    logging.info(f"Number of lines: {nlines}.")
+    logger.info(f"Calculated swath spacing: {swath_spacing:.2f} meters.")
+    logger.info(f"Number of lines: {nlines}.")
 
     # Generate flight lines
     dists_from_center = np.arange(-nlines // 2, nlines // 2 + 1) * swath_spacing
@@ -184,14 +184,14 @@ def box_around_center_line(
             clipped_lines = line.clip_to_polygon(polygon)
             if clipped_lines:
                 lines.extend(clipped_lines)
-                logging.debug(f"Line {line.site_name} clipped into {len(clipped_lines)} segments.")
+                logger.debug(f"Line {line.site_name} clipped into {len(clipped_lines)} segments.")
             else:
-                logging.info(f"Line {line.site_name} fully excluded after clipping.")
+                logger.info(f"Line {line.site_name} fully excluded after clipping.")
         else:
             lines.append(line)
 
     if not lines:
-        logging.warning("No flight lines were generated after clipping.")
+        logger.warning("No flight lines were generated after clipping.")
 
     return lines
 
@@ -243,10 +243,10 @@ def box_around_polygon(
     # Compute bounding rectangle based on the provided azimuth
     try:
         if azimuth is None:
-            logging.info("Using minimum rotated rectangle for polygon bounding box.")
+            logger.info("Using minimum rotated rectangle for polygon bounding box.")
             bounding_box = minimum_rotated_rectangle(polygon)
         else:
-            logging.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
+            logger.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
             bounding_box = rotated_rectangle(polygon, azimuth)
     except Exception as e:
         raise ValueError(f"Failed to calculate bounding box: {e}")
@@ -272,7 +272,7 @@ def box_around_polygon(
             azimuth = wrap_to_180(az2)
 
 
-    logging.info(
+    logger.info(
         f"Bounding box derived: Center=({lat0:.6f}, {lon0:.6f}), Azimuth={azimuth:.2f}°, "
         f"Length={box_length.magnitude:.2f} m, Width={box_width.magnitude:.2f} m."
     )
