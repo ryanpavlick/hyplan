@@ -1,15 +1,10 @@
-from typing import List, Tuple
-from shapely.geometry import Point
+from typing import List, Tuple, Dict
 from pint import Quantity
 import numpy as np
 
 from .terrain import ray_terrain_intersection
 from .units import ureg
-
-from .units import ureg
 from .sensors import Sensor
-from typing import Dict, Type
-import numpy as np
 
 class FrameCamera(Sensor):
     """Class to represent a frame camera."""
@@ -117,12 +112,13 @@ class FrameCamera(Sensor):
         return value.to(expected_unit)
 
 
+    @staticmethod
     def footprint_corners(
-        lat: float, 
-        lon: float, 
-        altitude: float, 
-        fov_x: float, 
-        fov_y: float, 
+        lat: float,
+        lon: float,
+        altitude: float,
+        fov_x: float,
+        fov_y: float,
         dem_file: str
     ) -> List[Tuple[Quantity, Quantity, Quantity]]:
         """
@@ -143,22 +139,21 @@ class FrameCamera(Sensor):
         # Calculate the offsets in azimuth for the four corners
         azimuths = [45, 135, 225, 315]  # Diagonal directions for corners
 
-        # Calculate the distances to the corners (half-width and half-height)
-        half_width = altitude * np.tan(np.radians(fov_x / 2))
-        half_height = altitude * np.tan(np.radians(fov_y / 2))
+        # Calculate the tilt (depression) angle to each corner
+        half_fov_x_rad = np.radians(fov_x / 2)
+        half_fov_y_rad = np.radians(fov_y / 2)
+        corner_tilt = np.degrees(np.arctan(np.sqrt(
+            np.tan(half_fov_x_rad)**2 + np.tan(half_fov_y_rad)**2
+        )))
 
-        # Combine these into corner distances
-        corner_distances = [
-            np.sqrt(half_width**2 + half_height**2)  # Same for all corners
-        ] * 4
-
-        # Calculate corner points
+        # Calculate corner points using ray-terrain intersection
         corners = []
-        for azimuth, distance in zip(azimuths, corner_distances):
+        for azimuth in azimuths:
             corner_lat, corner_lon, corner_alt = ray_terrain_intersection(
-                lat=lat, lon=lon, altitude=altitude, azimuth=azimuth, distance=distance, dem_file=dem_file
+                lat, lon, altitude, np.array([azimuth]), np.array([corner_tilt]),
+                dem_file=dem_file
             )
-            corners.append((corner_lat, corner_lon, corner_alt))
+            corners.append((float(corner_lat[0]), float(corner_lon[0]), float(corner_alt[0])))
 
         return corners
 
@@ -171,6 +166,6 @@ if __name__ == "__main__":
     fov_y = ureg.Quantity(24.0, "degree")
     dem_file = "path/to/dem/file"
 
-    corners = footprint_corners(lat, lon, altitude, fov_x, fov_y, dem_file)
+    corners = FrameCamera.footprint_corners(lat, lon, altitude, fov_x, fov_y, dem_file)
     for idx, (corner_lat, corner_lon, corner_alt) in enumerate(corners):
         print(f"Corner {idx + 1}: Latitude={corner_lat:.6f}, Longitude={corner_lon:.6f}, Altitude={corner_alt:.2f} m")

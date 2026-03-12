@@ -73,21 +73,21 @@ def altitude_to_flight_level(altitude, pressure=1013.25):
         if not altitude.check("[length]"):
             raise ValueError("Altitude must have units of length.")
         altitude_ft = altitude.to("feet").magnitude
-    elif isinstance(altitude, float):
-        # Assume float is in meters
+    elif isinstance(altitude, (int, float)):
+        # Assume numeric value is in meters
         altitude_ft = (altitude * ureg.meter).to("feet").magnitude
     else:
-        raise ValueError("Altitude must be a pint length or a float (assumed meters).")
+        raise ValueError("Altitude must be a pint length or a number (assumed meters).")
 
     # Validate pressure
     if isinstance(pressure, ureg.Quantity):
         if not pressure.check("[pressure]"):
             raise ValueError("Pressure must have units of pressure.")
         pressure_hpa = pressure.to("hPa").magnitude
-    elif isinstance(pressure, float):
-        pressure_hpa = pressure  # Assume float is in hPa
+    elif isinstance(pressure, (int, float)):
+        pressure_hpa = pressure  # Assume numeric value is in hPa
     else:
-        raise ValueError("Pressure must be a pint pressure unit or a float (assumed hPa).")
+        raise ValueError("Pressure must be a pint pressure unit or a number (assumed hPa).")
 
     # Adjust altitude for atmospheric pressure deviation
     if pressure_hpa != 1013.25:

@@ -149,7 +149,8 @@ def load_airports(
     countries: List[str] = None,
     min_runway_length: int = None,
     runway_surface: Union[str, List[str]] = None,
-    airport_types: List[str] = None
+    airport_types: List[str] = None,
+    runways_filepath: str = None
 ) -> gpd.GeoDataFrame:
     """Load and preprocess airport data with filters for country codes, runway length, surface type, and airport types."""
     try:
@@ -173,7 +174,7 @@ def load_airports(
         df_airports = _filter_airports_by_country(df_airports, countries)
 
     if min_runway_length or runway_surface:
-        runways_path = os.path.join(os.path.dirname(filepath), "runways.csv")
+        runways_path = runways_filepath or os.path.join(os.path.dirname(filepath), "runways.csv")
         df_rwy = load_runways(runways_path)
         df_rwy = _filter_runways(df_rwy, length_ft=min_runway_length, surface=runway_surface)
         valid_airports = df_rwy['airport_ident'].unique()
@@ -229,7 +230,8 @@ def initialize_data(
         countries=countries,
         min_runway_length=min_runway_length,
         runway_surface=runway_surface,
-        airport_types=airport_types
+        airport_types=airport_types,
+        runways_filepath=runways_file
     )
     df_runways = load_runways(runways_file)
 
@@ -243,8 +245,9 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     if gdf_airports is None:
         raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
     point = Point(lon, lat)
-    idx = gdf_airports.sindex.nearest(point)
-    return gdf_airports.iloc[idx[0]]['icao_code']
+    # sindex.nearest returns (input_indices, tree_indices) arrays
+    _, tree_idx = gdf_airports.sindex.nearest(point)
+    return gdf_airports.iloc[tree_idx[0]]['icao_code']
 
 def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     """Find the N nearest airports to a given latitude and longitude.
@@ -256,8 +259,9 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     if gdf_airports is None:
         raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
     point = Point(lon, lat)
-    idxs = gdf_airports.sindex.nearest(point, max_results=n)
-    return gdf_airports.iloc[idxs]['icao_code'].tolist()
+    # sindex.nearest returns (input_indices, tree_indices) arrays
+    _, tree_idxs = gdf_airports.sindex.nearest(point, max_items=n)
+    return gdf_airports.iloc[tree_idxs]['icao_code'].tolist()
 
 def airports_within_radius(
     lat: float, lon: float, radius: float, unit: str = "kilometers",

@@ -130,7 +130,7 @@ def create_date_ranges(day_start, day_stop, year_start, year_stop):
     """
     date_ranges = []
     for year in range(year_start, year_stop + 1):
-        date_ranges.append((f"{year}-{day_start:03}", f"{year}-{day_stop:03}"))
+        date_ranges.append((f"{year}-{day_start:03}", f"{year}-{day_stop + 1:03}"))
     return date_ranges
 
 def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_start, day_stop, limit=5000):
@@ -262,7 +262,7 @@ def simulate_visits(
 
             daily_df = df[(df['year'] == year) & (df['day_of_year'] == current_day_of_year)]
             daily_df = daily_df[~daily_df['polygon_id'].isin(visited_polygons)]
-            visitable_polygons = daily_df[daily_df['cloud_fraction'] < cloud_fraction_threshold]
+            visitable_polygons = daily_df[daily_df['cloud_fraction'] <= cloud_fraction_threshold]
 
             if not visitable_polygons.empty:
                 if consecutive_visits < rest_day_threshold:
@@ -320,9 +320,9 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
     if not required_columns.issubset(cloud_data_df.columns):
         raise ValueError(f"Input DataFrame must contain columns: {required_columns}")
 
-    # Define a custom colormap: white (clear), black (cloudy), grey (visited), purple (weekend), orange (rest days)
-    cmap = mcolors.ListedColormap(['white', 'black', 'grey', 'purple', 'orange'])
-    bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5]
+    # Define a custom colormap: lightgrey (no data), white (clear), black (cloudy), grey (visited), purple (weekend), orange (rest days)
+    cmap = mcolors.ListedColormap(['lightgrey', 'white', 'black', 'grey', 'purple', 'orange'])
+    bounds = [-1.5, -0.5, 0.5, 1.5, 2.5, 3.5, 4.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
     unique_years = cloud_data_df['year'].unique()
@@ -331,9 +331,10 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
                                   (cloud_data_df['day_of_year'] >= day_start) &
                                   (cloud_data_df['day_of_year'] <= day_stop)]
         heatmap_data = year_data.pivot(index='polygon_id', columns='day_of_year', values='cloud_fraction')
-        heatmap_data = heatmap_data.reindex(columns=range(day_start, day_stop + 1), fill_value=0)
+        heatmap_data = heatmap_data.reindex(columns=range(day_start, day_stop + 1), fill_value=float('nan'))
 
-        binary_data = (heatmap_data >= cloud_fraction_threshold).astype(int)
+        binary_data = (heatmap_data > cloud_fraction_threshold).astype(int)
+        binary_data[heatmap_data.isna()] = -1
         status_data = binary_data.copy()
 
         stars_x = []

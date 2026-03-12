@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import pymap3d.vincenty
 from .units import ureg
 from .airports import Airport
 from .dubins_path import Waypoint, DubinsPath
@@ -12,7 +13,7 @@ class Aircraft:
 
     def __init__(
         self,
-        type: str,  # aircraft model
+        aircraft_type: str,  # aircraft model
         tail_number: str, # unique identifier
         service_ceiling: Quantity,  # feet
         approach_speed: Quantity,  # knots
@@ -32,7 +33,7 @@ class Aircraft:
         Initializes an Aircraft object with performance parameters.
 
         Args:
-            type (str): Aircraft model or name.
+            aircraft_type (str): Aircraft model or name.
             tail_number (str): Aircraft tail number or unique identifier.
             service_ceiling (Quantity): Maximum operational altitude (feet).
             approach_speed (Quantity): Landing approach speed (knots).
@@ -54,7 +55,7 @@ class Aircraft:
         """
 
         # **Validation: Ensure correct types**
-        if not isinstance(type, str):
+        if not isinstance(aircraft_type, str):
             raise TypeError("Aircraft type must be a string.")
         if not isinstance(tail_number, str):
             raise TypeError("Tail number must be a string.")
@@ -77,7 +78,7 @@ class Aircraft:
         self.descent_rate = self._convert_to_unit(descent_rate, ureg.feet / ureg.minute)
 
         # Assign validated string and numeric values
-        self.type = type
+        self.aircraft_type = aircraft_type
         self.tail_number = tail_number
         self.operator = operator
         self.max_bank_angle = float(max_bank_angle)  # Ensure float type
@@ -155,7 +156,8 @@ class Aircraft:
             # Climb phase
             climb_time, climb_distance = self._climb(airport_altitude, waypoint_altitude, true_air_speed=self.vy)
 
-            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=waypoint.heading+90.0, altitude=airport_altitude)
+            _, departure_heading = pymap3d.vincenty.vdist(airport.latitude, airport.longitude, waypoint.latitude, waypoint.longitude)
+            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=departure_heading, altitude=airport_altitude)
             # Cruise phase
             dubins_path = DubinsPath(
                 start=airport_waypoint,
@@ -205,7 +207,8 @@ class Aircraft:
         with detailed altitude and time information for each phase.
         """
         try:
-            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=waypoint.heading+90.0, altitude=airport.elevation)
+            _, arrival_heading = pymap3d.vincenty.vdist(waypoint.latitude, waypoint.longitude, airport.latitude, airport.longitude)
+            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=(arrival_heading + 180.0) % 360.0, altitude=airport.elevation)
             dubins_path = DubinsPath(
                 start=waypoint,
                 end=airport_waypoint,
@@ -378,7 +381,7 @@ class Aircraft:
 class NASA_ER2(Aircraft):
     def __init__(self):
         super().__init__(
-            type="ER-2",
+            aircraft_type="ER-2",
             tail_number="NASA 806",
             service_ceiling=70000 * ureg.feet,
             approach_speed=130 * ureg.knot,
@@ -398,7 +401,7 @@ class NASA_ER2(Aircraft):
 class NASA_GIII(Aircraft):
     def __init__(self):
         super().__init__(
-            type="Gulfstream III",
+            aircraft_type="Gulfstream III",
             tail_number="NASA 520",
             service_ceiling=45000 * ureg.feet,
             approach_speed=140 * ureg.knot,
@@ -418,7 +421,7 @@ class NASA_GIII(Aircraft):
 class NASA_GIV(Aircraft):
     def __init__(self):
         super().__init__(
-            type="Gulfstream IV",
+            aircraft_type="Gulfstream IV",
             tail_number="NASA 817",
             service_ceiling=45000 * ureg.feet,
             approach_speed=140 * ureg.knot,
@@ -438,7 +441,7 @@ class NASA_GIV(Aircraft):
 class NASA_C20A(Aircraft):
     def __init__(self):
         super().__init__(
-            type="C-20A",
+            aircraft_type="C-20A",
             tail_number="NASA 502",
             service_ceiling=45000 * ureg.feet,
             approach_speed=140 * ureg.knot,
@@ -458,7 +461,7 @@ class NASA_C20A(Aircraft):
 class NASA_P3(Aircraft):
     def __init__(self):
         super().__init__(
-            type="P-3 Orion",
+            aircraft_type="P-3 Orion",
             tail_number="NASA 426",
             service_ceiling=32000 * ureg.feet,
             approach_speed=130 * ureg.knot,
@@ -478,7 +481,7 @@ class NASA_P3(Aircraft):
 class NASA_WB57(Aircraft):
     def __init__(self):
         super().__init__(
-            type="WB-57",
+            aircraft_type="WB-57",
             tail_number="NASA 927",
             service_ceiling=60000 * ureg.feet,
             approach_speed=130 * ureg.knot,
@@ -498,7 +501,7 @@ class NASA_WB57(Aircraft):
 class NASA_B777(Aircraft):
     def __init__(self):
         super().__init__(
-            type="B777",
+            aircraft_type="B777",
             tail_number="Unknown",
             service_ceiling=43000 * ureg.feet,
             approach_speed=150 * ureg.knot,
@@ -519,7 +522,7 @@ class NASA_B777(Aircraft):
 class DynamicAviation_DH8(Aircraft):
     def __init__(self):
         super().__init__(
-            type="Dash 8",
+            aircraft_type="Dash 8",
             tail_number="Unknown",
             service_ceiling=25000 * ureg.feet,
             approach_speed=110 * ureg.knot,
@@ -539,7 +542,7 @@ class DynamicAviation_DH8(Aircraft):
 class DynamicAviation_A90(Aircraft):
     def __init__(self):
         super().__init__(
-            type="King Air 90",
+            aircraft_type="King Air 90",
             tail_number="Unknown",
             service_ceiling=30000 * ureg.feet,
             approach_speed=110 * ureg.knot,
@@ -559,7 +562,7 @@ class DynamicAviation_A90(Aircraft):
 class DynamicAviation_B200(Aircraft):
     def __init__(self):
         super().__init__(
-            type="King Air 200",
+            aircraft_type="King Air 200",
             tail_number="Unknown",
             service_ceiling=35000 * ureg.feet,
             approach_speed=120 * ureg.knot,

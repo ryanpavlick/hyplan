@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 
 import math
@@ -41,8 +40,8 @@ class Waypoint:
         # Validate and process altitude
         if altitude is None:
             self.altitude = None
-        elif isinstance(altitude, float):
-            self.altitude = altitude * ureg.meter  # Assume meters if a float is provided
+        elif isinstance(altitude, (int, float)):
+            self.altitude = float(altitude) * ureg.meter  # Assume meters if a number is provided
         elif hasattr(altitude, 'units') and altitude.check('[length]'):
             self.altitude = altitude.to(ureg.meter)
         else:
@@ -125,13 +124,14 @@ class DubinsPath:
         # Generate the Dubins path
         qs, _ = path_sample(q0, q1, turn_radius, self.step_size)
 
-        # Convert sampled points back to geographic coordinates
-        dubins_path_coords = [
-            (transform(from_utm, Point(x, y)).y, transform(from_utm, Point(x, y)).x) for x, y, _ in qs
-        ]
+        # Convert sampled points back to geographic coordinates using bulk transform
+        qs_arr = np.array(qs)
+        xs_utm = qs_arr[:, 0]
+        ys_utm = qs_arr[:, 1]
+        lons_geo, lats_geo = from_utm(xs_utm, ys_utm)
 
         # Create LineString and calculate length
-        self._geometry = LineString([(lon, lat) for lat, lon in dubins_path_coords])
+        self._geometry = LineString(np.column_stack([lons_geo, lats_geo]))
         self._length = self._calculate_length(qs)
     
     def _calculate_length(self, qs) -> ureg.Quantity:

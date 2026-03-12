@@ -34,7 +34,9 @@ def generate_swath_polygon(
     # Interpolate points along the flight line
     lats, lons, azimuths, *_ = process_linestring(flight_line.track(precision=along_precision))
 
-    # Calculate the half-angle for port and starboard
+    # Calculate the half-angle for port and starboard.
+    # half_angle is a scalar; ray_terrain_intersection broadcasts it
+    # across all along-track points via np.atleast_1d.
     half_angle = sensor.half_angle
 
     # Compute azimuths for port and starboard sides
