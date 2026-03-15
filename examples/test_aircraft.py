@@ -35,7 +35,7 @@ flight_line = FlightLine.start_length_azimuth(
     lon1=-118.25,
     length=ureg.Quantity(100000, "meter"),
     az=45.0,
-    altitude=ureg.Quantity(20000, "feet"),
+    altitude_msl=ureg.Quantity(20000, "feet"),
     site_name="LA Northeast",
     investigator="Dr. Smith"
 )

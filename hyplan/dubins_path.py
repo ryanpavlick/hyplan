@@ -11,7 +11,7 @@ from .units import ureg
 
 
 class Waypoint:
-    def __init__(self, latitude: float, longitude: float, heading: float, altitude: Union[ureg.Quantity, float, None] = None, name: str = None):
+    def __init__(self, latitude: float, longitude: float, heading: float, altitude_msl: Union[ureg.Quantity, float, None] = None, name: str = None):
         """
         Initialize a Waypoint object.
 
@@ -19,10 +19,10 @@ class Waypoint:
             latitude (float): Latitude in decimal degrees.
             longitude (float): Longitude in decimal degrees.
             heading (float): Heading in degrees relative to North.
-            altitude (Union[Quantity, float, None], optional): Altitude in meters or as a pint Quantity. Defaults to None.
+            altitude_msl (Union[Quantity, float, None], optional): Altitude MSL in meters or as a pint Quantity. Defaults to None.
             name (str, optional): Name of the waypoint. Defaults to None.
         """
-        # Validate latitude and longitude and process geometry 
+        # Validate latitude and longitude and process geometry
         if not (-90.0 <= latitude <= 90.0):
             raise ValueError("Latitude must be between -90 and 90 degrees")
         if not (-180.0 <= longitude <= 180.0):
@@ -37,16 +37,16 @@ class Waypoint:
         else:
             raise TypeError("Heading must be a float or an int")
 
-        # Validate and process altitude
-        if altitude is None:
-            self.altitude = None
-        elif isinstance(altitude, (int, float)):
-            self.altitude = float(altitude) * ureg.meter  # Assume meters if a number is provided
-        elif hasattr(altitude, 'units') and altitude.check('[length]'):
-            self.altitude = altitude.to(ureg.meter)
+        # Validate and process altitude (MSL)
+        if altitude_msl is None:
+            self.altitude_msl = None
+        elif isinstance(altitude_msl, (int, float)):
+            self.altitude_msl = float(altitude_msl) * ureg.meter
+        elif hasattr(altitude_msl, 'units') and altitude_msl.check('[length]'):
+            self.altitude_msl = altitude_msl.to(ureg.meter)
         else:
-            raise TypeError("Altitude must be None, a float (meters), or a pint Quantity with length units")
-        
+            raise TypeError("altitude_msl must be None, a float (meters), or a pint Quantity with length units")
+
         if name is not None:
             self.name = str(name)
         else:
@@ -57,7 +57,7 @@ class Waypoint:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "heading": self.heading,
-            "altitude": self.altitude,
+            "altitude_msl": self.altitude_msl,
             "name": self.name
         }
 
@@ -179,8 +179,8 @@ class DubinsPath:
             "start_lon": self.start.longitude,
             "end_lat": self.end.latitude,
             "end_lon": self.end.longitude,
-            "start_altitude": self.start.altitude.to(ureg.meter).magnitude,
-            "end_altitude": self.end.altitude.to(ureg.meter).magnitude,
+            "start_altitude": self.start.altitude_msl.to(ureg.meter).magnitude,
+            "end_altitude": self.end.altitude_msl.to(ureg.meter).magnitude,
             "start_heading": self.start.heading,
             "end_heading": self.end.heading,
             "distance": self.length.to(ureg.nautical_mile).magnitude

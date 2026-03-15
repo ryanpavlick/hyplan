@@ -17,18 +17,22 @@ logger = logging.getLogger(__name__)
 class FlightLine:
     """
     Represents a geospatial flight line with properties, validations, and operations.
+
+    Altitude is stored as MSL (above mean sea level), which is the standard
+    aviation reference. Sensor calculations that depend on height above ground
+    (AGL) must account for terrain elevation separately.
     """
     def __init__(
         self,
         geometry: LineString,
-        altitude: Quantity,
+        altitude_msl: Quantity,
         site_name: Optional[str] = None,
         site_description: Optional[str] = None,
         investigator: Optional[str] = None,
     ):
         self._validate_geometry(geometry)
         self.geometry = geometry
-        self.altitude = self._validate_altitude(altitude)
+        self.altitude_msl = self._validate_altitude(altitude_msl)
         self.site_name = site_name
         self.site_description = site_description
         self.investigator = investigator
@@ -91,13 +95,13 @@ class FlightLine:
     @property
     def waypoint1(self) -> Waypoint:
         name = f"{self.site_name}_start" if self.site_name else "start"
-        return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude=self.altitude, name=name)
+        return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude_msl=self.altitude_msl, name=name)
 
     @property
     def waypoint2(self) -> Waypoint:
         heading = (self.az21.magnitude + 180.0) % 360.0
         name = f"{self.site_name}_end" if self.site_name else "end"
-        return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude=self.altitude, name=name)
+        return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude_msl=self.altitude_msl, name=name)
 
     @classmethod
     def start_length_azimuth(
@@ -170,7 +174,7 @@ class FlightLine:
                 return [
                     FlightLine(
                         geometry=clipped_geometry,
-                        altitude=self.altitude,
+                        altitude_msl=self.altitude_msl,
                         site_name=self.site_name,
                         site_description=self.site_description,
                         investigator=self.investigator,
@@ -185,7 +189,7 @@ class FlightLine:
                 results.append(
                     FlightLine(
                         geometry=segment,
-                        altitude=self.altitude,
+                        altitude_msl=self.altitude_msl,
                         site_name=new_site_name,
                         site_description=self.site_description,
                         investigator=self.investigator,
@@ -231,7 +235,7 @@ class FlightLine:
         reversed_geometry = LineString(list(reversed(self.geometry.coords)))
         return FlightLine(
             geometry=reversed_geometry,
-            altitude=self.altitude,
+            altitude_msl=self.altitude_msl,
             site_name=self.site_name,
             site_description=self.site_description,
             investigator=self.investigator
@@ -258,7 +262,7 @@ class FlightLine:
 
         def compute_offset(lat, lon, north, east):
             new_lat, new_lon, _ = pymap3d.ned2geodetic(
-                north, east, 0, lat, lon, self.altitude.magnitude
+                north, east, 0, lat, lon, self.altitude_msl.magnitude
             )
             return new_lat, wrap_to_180(new_lon)
 
@@ -272,7 +276,7 @@ class FlightLine:
 
         return FlightLine(
             geometry=offset_geometry,
-            altitude=self.altitude,
+            altitude_msl=self.altitude_msl,
             site_name=self.site_name,
             site_description=self.site_description,
             investigator=self.investigator
@@ -308,7 +312,7 @@ class FlightLine:
 
         return FlightLine(
             geometry=offset_geometry,
-            altitude=self.altitude,
+            altitude_msl=self.altitude_msl,
             site_name=self.site_name,
             site_description=self.site_description,
             investigator=self.investigator
@@ -349,7 +353,7 @@ class FlightLine:
 
         return FlightLine(
             geometry=offset_geometry,
-            altitude=self.altitude,
+            altitude_msl=self.altitude_msl,
             site_name=self.site_name,
             site_description=self.site_description,
             investigator=self.investigator
@@ -385,7 +389,7 @@ class FlightLine:
 
         return FlightLine(
             geometry=LineString(rotated_coords),
-            altitude=self.altitude,
+            altitude_msl=self.altitude_msl,
             site_name=self.site_name,
             site_description=self.site_description,
             investigator=self.investigator,
@@ -431,7 +435,7 @@ class FlightLine:
             segments.append(
                 FlightLine(
                     geometry=segment_geometry,
-                    altitude=self.altitude,
+                    altitude_msl=self.altitude_msl,
                     site_name=f"{self.site_name}_seg_{segment_index}" if self.site_name else f"Segment_{segment_index}",
                     site_description=self.site_description,
                     investigator=self.investigator,
@@ -458,7 +462,7 @@ class FlightLine:
             "lat2": self.lat2,
             "lon2": self.lon2,
             "length": self.length.magnitude,
-            "altitude_m": self.altitude.magnitude,
+            "altitude_m": self.altitude_msl.magnitude,
             "site_name": self.site_name,
             "site_description": self.site_description,
             "investigator": self.investigator,
@@ -472,7 +476,7 @@ class FlightLine:
                 "coordinates": list(self.geometry.coords),
             },
             "properties": {
-                "altitude_m": self.altitude.magnitude,
+                "altitude_m": self.altitude_msl.magnitude,
                 "site_name": self.site_name,
                 "site_description": self.site_description,
                 "investigator": self.investigator,

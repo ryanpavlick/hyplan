@@ -10,7 +10,7 @@ waypoints = [
     Waypoint(latitude=34.20, longitude=-117.95, heading=wrap_to_360(270.0), name = "Waypoint 1"),
     Waypoint(latitude=34.20, longitude=-118.15, heading=wrap_to_360(270.0), name = "Waypoint 2"),
     Waypoint(latitude=34.20, longitude=-118.35, heading=wrap_to_360(270.0), name = "Waypoint 3"),
-    Waypoint(latitude=34.05, longitude=-118.25, heading=wrap_to_360(180.0), altitude=100 * ureg.meter, name = "Waypoint 4"),
+    Waypoint(latitude=34.05, longitude=-118.25, heading=wrap_to_360(180.0), altitude_msl=100 * ureg.meter, name = "Waypoint 4"),
     Waypoint(latitude=34.10, longitude=-118.15, heading=wrap_to_360(180.0), name = "Waypoint 5"),
     Waypoint(latitude=34.15, longitude=-118.05, heading=wrap_to_360(0.0), name = "Waypoint 6"),
     Waypoint(latitude=34.20, longitude=-117.95, heading=wrap_to_360(270.0), name = "Waypoint 1")
