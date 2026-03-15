@@ -69,7 +69,19 @@ def clear_localdem_cache(confirm: bool = True):
 
 
 def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, box]]]:
-    """Build an R-tree spatial index for DEM tiles."""
+    """
+    Build an R-tree spatial index for DEM tiles from a tile list file.
+
+    Each line in the file is a tile name encoding lat/lon in the filename.
+    Tiles are parsed into 1x1 degree bounding boxes and indexed spatially.
+
+    Args:
+        tile_list_file (str): Path to the text file listing available DEM tiles.
+
+    Returns:
+        Tuple[index.Index, List[Tuple[str, box]]]: A tuple of (rtree_index,
+            tile_bboxes) where tile_bboxes is a list of (tile_name, bounding_box) pairs.
+    """
     idx = index.Index()
     tile_bboxes = []
 
@@ -89,6 +101,22 @@ def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, 
     return idx, tile_bboxes
 
 def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: float, aws_dir: str) -> List[str]:
+    """
+    Download DEM tile files covering a geographic bounding box.
+
+    Tiles are downloaded from the specified AWS directory and cached locally.
+    Already-downloaded tiles are reused from the cache.
+
+    Args:
+        lon_min (float): Western longitude bound (degrees).
+        lat_min (float): Southern latitude bound (degrees).
+        lon_max (float): Eastern longitude bound (degrees).
+        lat_max (float): Northern latitude bound (degrees).
+        aws_dir (str): Base URL of the AWS-hosted DEM tile directory.
+
+    Returns:
+        List[str]: List of local file paths to the downloaded DEM tiles.
+    """
     localdem_dir = os.path.join(get_cache_root(), "localdem")
     os.makedirs(localdem_dir, exist_ok=True)
 
@@ -127,6 +155,17 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
 
 
 def merge_tiles(output_filename, tile_file_list):
+    """
+    Merge multiple DEM tile files into a single GeoTIFF using GDAL Warp.
+
+    Args:
+        output_filename (str): Path for the merged output GeoTIFF file.
+        tile_file_list (List[str]): List of file paths to DEM tiles to merge.
+
+    Raises:
+        ValueError: If tile_file_list is empty or contains invalid paths.
+        RuntimeError: If GDAL merge operation fails.
+    """
     if not tile_file_list:
         raise ValueError("No tiles provided for merging.")
 

@@ -110,7 +110,15 @@ def compute_flight_plan(
 
 def create_flight_line_record(flight_line, aircraft):
     """
-    Helper function to create a flight line record for the DataFrame.
+    Create a flight line record dictionary for inclusion in a flight plan DataFrame.
+
+    Args:
+        flight_line (FlightLine): The flight line to convert.
+        aircraft (Aircraft): Aircraft used to compute segment timing.
+
+    Returns:
+        dict: Record with geometry, endpoints, altitudes (feet), headings,
+            time (minutes), segment type, and distance (nautical miles).
     """
     return {
         "geometry": flight_line.geometry,
@@ -223,7 +231,13 @@ def process_flight_phase(start, end, phase_info, segment_name):
 
 def plot_flight_plan(flight_plan_gdf, takeoff_airport, return_airport, flight_sequence):
     """
-    Plot the computed flight plan along with airports, waypoints, and flight lines.
+    Plot the computed flight plan on a 2D map with airports, waypoints, and flight lines.
+
+    Args:
+        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
+        takeoff_airport (Airport): Departure airport (plotted as red star).
+        return_airport (Airport): Arrival airport (plotted as blue star).
+        flight_sequence (list): Sequence of FlightLine and Waypoint objects.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     flight_plan_gdf.plot(ax=ax, column="segment_type", legend=True, cmap="viridis")

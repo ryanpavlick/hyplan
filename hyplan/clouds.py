@@ -60,7 +60,15 @@ _ee_initialized = False
 
 
 def _init_ee():
-    """Initialize Google Earth Engine on first use."""
+    """
+    Initialize Google Earth Engine on first use.
+
+    Called automatically by functions that access Earth Engine. Requires
+    prior authentication via ``ee.Authenticate()``.
+
+    Raises:
+        RuntimeError: If Earth Engine initialization fails.
+    """
     global _ee_initialized
     if not _ee_initialized:
         try:
@@ -71,7 +79,15 @@ def _init_ee():
 
 
 def _drop_z(geom):
-    """Strip Z coordinates from a geometry."""
+    """
+    Strip Z coordinates from a Shapely geometry, returning a 2D geometry.
+
+    Args:
+        geom: A Shapely geometry, potentially with Z coordinates.
+
+    Returns:
+        A 2D Shapely geometry with Z values removed.
+    """
     return wkb.loads(wkb.dumps(geom, output_dimension=2))
 
 
