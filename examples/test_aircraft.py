@@ -44,7 +44,7 @@ waypoint_1 = flight_line.waypoint1
 waypoint_2 = flight_line.waypoint2
 
 # Define an example aircraft
-aircraft = DynamicAviation_B200()
+aircraft = NASA_P3()
 
 # Compute flight phases
 takeoff_info = aircraft.time_to_takeoff(airport, waypoint_1)
