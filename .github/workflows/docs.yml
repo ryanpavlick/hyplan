@@ -33,6 +33,7 @@ jobs:
         run: |
           pip install GDAL==$(gdal-config --version)
           pip install -e .
+          pip install dubins matplotlib networkx sunposition folium
           pip install sphinx myst-parser furo sphinx-autodoc-typehints
 
       - name: Build docs
