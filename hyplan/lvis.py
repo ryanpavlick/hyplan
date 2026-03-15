@@ -128,6 +128,24 @@ class LVIS(Sensor):
     # LVIS-specific methods
     # ------------------------------------------------------------------
 
+    def effective_fov(self, altitude_agl: Quantity, speed: Quantity) -> float:
+        """Effective field of view in degrees, accounting for contiguous coverage.
+
+        When the laser footprint can fill the full scanner swath, this equals
+        the geometric max FOV (≈11.42°). When coverage is limited, the
+        effective FOV narrows: 2 * atan(effective_swath / (2 * altitude)).
+
+        Args:
+            altitude_agl: Flight altitude above ground level.
+            speed: Aircraft ground speed.
+
+        Returns:
+            Effective FOV in degrees.
+        """
+        esw = self.effective_swath_width(altitude_agl, speed).magnitude
+        alt_m = altitude_agl.to(ureg.meter).magnitude
+        return 2 * np.degrees(np.arctan(esw / (2 * alt_m)))
+
     def footprint_diameter(self, altitude_agl: Quantity) -> Quantity:
         """Laser footprint diameter on the ground for the configured lens.
 
