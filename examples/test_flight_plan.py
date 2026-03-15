@@ -48,6 +48,6 @@ print(flight_plan_df)
 
 # Plot flight plan
 plot_flight_plan(flight_plan_df, departure_airport, return_airport, flight_sequence)
-plot_altitude_trajectory(flight_plan_df)
+plot_altitude_trajectory(flight_plan_df, aircraft=aircraft)
 
 # %%

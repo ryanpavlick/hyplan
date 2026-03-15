@@ -83,6 +83,6 @@ print(flight_plan_df[["segment_type", "segment_name", "distance", "time_to_segme
 
 #%% Plot
 plot_flight_plan(flight_plan_df, departure_airport, return_airport, result["flight_sequence"])
-plot_altitude_trajectory(flight_plan_df)
+plot_altitude_trajectory(flight_plan_df, aircraft=aircraft)
 
 # %%
