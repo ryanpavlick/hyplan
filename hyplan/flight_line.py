@@ -455,6 +455,13 @@ class FlightLine:
         return segments
 
     def to_dict(self) -> Dict:
+        """
+        Convert the flight line to a dictionary representation.
+
+        Returns:
+            Dict: Dictionary with keys for geometry coordinates, endpoints,
+                length (meters), altitude (meters), and metadata fields.
+        """
         return {
             "geometry": list(self.geometry.coords),
             "lat1": self.lat1,
@@ -469,6 +476,13 @@ class FlightLine:
         }
 
     def to_geojson(self) -> Dict:
+        """
+        Convert the flight line to a GeoJSON Feature dictionary.
+
+        Returns:
+            Dict: GeoJSON Feature with LineString geometry and properties
+                including altitude, site name, description, and investigator.
+        """
         return {
             "type": "Feature",
             "geometry": {
@@ -485,6 +499,16 @@ class FlightLine:
 
 
 def to_gdf(flight_lines: List[FlightLine], crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+    """
+    Convert a list of FlightLine objects to a GeoDataFrame.
+
+    Args:
+        flight_lines (List[FlightLine]): Flight lines to convert.
+        crs (str): Coordinate reference system (default: "EPSG:4326").
+
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame with flight line attributes and geometries.
+    """
     data = [fl.to_dict() for fl in flight_lines]
     geometries = [fl.geometry for fl in flight_lines]
     return gpd.GeoDataFrame(data, geometry=geometries, crs=crs)

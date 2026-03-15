@@ -15,12 +15,30 @@ from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
 
 
-# Wrap angles to -180 to 180 degrees
 def wrap_to_180(lon):
+    """
+    Wrap angle(s) to the range [-180, 180) degrees.
+
+    Args:
+        lon (float or array-like): Angle(s) in degrees.
+
+    Returns:
+        numpy.ndarray or float: Angle(s) wrapped to [-180, 180).
+    """
     lon = np.mod(np.array(lon) + 180.0, 360.0) - 180.0
     return np.squeeze(lon)
 
+
 def wrap_to_360(angle):
+    """
+    Wrap angle(s) to the range [0, 360) degrees.
+
+    Args:
+        angle (float or array-like): Angle(s) in degrees.
+
+    Returns:
+        numpy.ndarray: Angle(s) wrapped to [0, 360).
+    """
     return np.mod(np.array(angle), 360.0)
 
 def _validate_polygon(polygon: Optional[Polygon]) -> None:
@@ -205,7 +223,19 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float, radius: float 
     return radius * c
 
 def random_points_in_polygon(polygon, k):
-    "Return list of k points chosen uniformly at random inside the polygon."
+    """
+    Generate k points chosen uniformly at random inside a polygon.
+
+    Uses Delaunay triangulation with area-weighted sampling to ensure
+    uniform distribution across the polygon's interior.
+
+    Args:
+        polygon (Polygon): A Shapely Polygon to sample points from.
+        k (int): Number of random points to generate.
+
+    Returns:
+        list[Point]: List of k Shapely Point objects inside the polygon.
+    """
     areas = []
     transforms = []
     for t in triangulate(polygon):

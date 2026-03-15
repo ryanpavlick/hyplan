@@ -273,7 +273,18 @@ def compute_ground_track(
 # ---------------------------------------------------------------------------
 
 def _compute_headings(lats, lons):
-    """Compute forward azimuths between consecutive ground track points."""
+    """
+    Compute forward azimuths between consecutive ground track points.
+
+    The last point reuses the azimuth from the second-to-last segment.
+
+    Args:
+        lats (np.ndarray): Latitudes in decimal degrees.
+        lons (np.ndarray): Longitudes in decimal degrees.
+
+    Returns:
+        np.ndarray: Forward azimuths in degrees for each point.
+    """
     headings = np.zeros(len(lats))
     for i in range(len(lats) - 1):
         _, az = pymap3d.vincenty.vdist(lats[i], lons[i], lats[i + 1], lons[i + 1])
@@ -769,7 +780,14 @@ def overpasses_to_kml(
 # ---------------------------------------------------------------------------
 
 def _empty_overpass_gdf() -> gpd.GeoDataFrame:
-    """Return an empty GeoDataFrame with the overpass schema."""
+    """
+    Return an empty GeoDataFrame with the standard overpass column schema.
+
+    Used as a fallback when no overpasses are found for a given query.
+
+    Returns:
+        gpd.GeoDataFrame: Empty GeoDataFrame with overpass columns and EPSG:4326 CRS.
+    """
     return gpd.GeoDataFrame(
         columns=["satellite_name", "norad_id", "pass_start", "pass_end",
                  "pass_duration_s", "ascending", "ground_track",

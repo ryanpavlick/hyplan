@@ -53,6 +53,12 @@ class Waypoint:
             self.name = f"({self.geometry.y:.2f}, {self.geometry.x:.2f})"
 
     def to_dict(self) -> Dict:
+        """
+        Convert the waypoint to a dictionary representation.
+
+        Returns:
+            Dict: Dictionary with latitude, longitude, heading, altitude_msl, and name.
+        """
         return {
             "latitude": self.latitude,
             "longitude": self.longitude,
@@ -97,7 +103,11 @@ class DubinsPath:
 
     def _calculate_path(self):
         """
-        Calculate the Dubins path and its properties.
+        Calculate the Dubins path geometry and length.
+
+        Converts waypoints to UTM, computes the minimum-length Dubins path
+        (combination of arcs and straight segments), then transforms the
+        sampled path back to geographic coordinates.
         """
         # Convert bank angle to radians
         bank_angle_rad = np.radians(self.bank_angle)
@@ -173,6 +183,13 @@ class DubinsPath:
     
 
     def to_dict(self) -> Dict:
+        """
+        Convert the Dubins path to a dictionary representation.
+
+        Returns:
+            Dict: Dictionary with geometry, start/end coordinates, altitudes
+                (meters), headings, and distance (nautical miles).
+        """
         return {
             "geometry": self.geometry,
             "start_lat": self.start.latitude,

@@ -28,7 +28,18 @@ df_runways: pd.DataFrame = None
 
 
 class Airport:
-    """Class to represent an airport with Shapely Point geometry."""
+    """
+    An airport looked up by ICAO code from the OurAirports dataset.
+
+    Lazily initializes global airport data on first instantiation.
+    Properties provide access to location, elevation, and runway information.
+
+    Args:
+        icao (str): ICAO code of the airport (e.g., "KJFK").
+
+    Raises:
+        ValueError: If the ICAO code is not found in the dataset.
+    """
     def __init__(self, icao: str):
         global gdf_airports
         if gdf_airports is None:
@@ -123,15 +134,46 @@ class Airport:
 
 
 def _filter_airports_by_country(df_airports: pd.DataFrame, countries: List[str]) -> pd.DataFrame:
-    """Filter airports by country codes."""
+    """
+    Filter airports DataFrame to only include airports in the specified countries.
+
+    Args:
+        df_airports (pd.DataFrame): DataFrame of airport data.
+        countries (List[str]): ISO country codes to keep (e.g., ["US", "CA"]).
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame.
+    """
     return df_airports[df_airports['iso_country'].isin(countries)]
 
 def _filter_airports_by_type(df_airports: pd.DataFrame, airport_types: List[str]) -> pd.DataFrame:
-    """Filter airports by type."""
+    """
+    Filter airports DataFrame to only include specified airport types.
+
+    Args:
+        df_airports (pd.DataFrame): DataFrame of airport data.
+        airport_types (List[str]): Types to keep (e.g., ["large_airport", "medium_airport"]).
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame.
+    """
     return df_airports[df_airports['type'].isin(airport_types)]
 
 def _filter_runways(df_runways: pd.DataFrame, length_ft: int = None, surface: Union[str, List[str]] = None, partial_match: bool = False) -> pd.DataFrame:
-    """Filter runways based on length and/or surface type with optional partial matching."""
+    """
+    Filter runways based on minimum length and/or surface type.
+
+    Args:
+        df_runways (pd.DataFrame): DataFrame of runway data.
+        length_ft (int, optional): Minimum runway length in feet.
+        surface (Union[str, List[str]], optional): Surface type(s) to filter by
+            (e.g., "ASP", ["ASP", "CON"]).
+        partial_match (bool): If True, use substring matching for surface types
+            instead of exact match.
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame.
+    """
     if length_ft:
         df_runways = df_runways[df_runways['length_ft'] >= length_ft]
     if surface:
@@ -152,7 +194,25 @@ def load_airports(
     airport_types: List[str] = None,
     runways_filepath: str = None
 ) -> gpd.GeoDataFrame:
-    """Load and preprocess airport data with filters for country codes, runway length, surface type, and airport types."""
+    """
+    Load and preprocess airport data from a CSV file with optional filters.
+
+    Args:
+        filepath (str): Path to the airports CSV file.
+        countries (List[str], optional): ISO country codes to filter by.
+        min_runway_length (int, optional): Minimum runway length in feet.
+        runway_surface (Union[str, List[str]], optional): Runway surface type(s) to filter by.
+        airport_types (List[str], optional): Airport types to include
+            (default: large_airport, medium_airport, small_airport).
+        runways_filepath (str, optional): Path to runways CSV. Defaults to
+            runways.csv in the same directory as the airports file.
+
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame of airports with spatial index.
+
+    Raises:
+        FileNotFoundError: If the airports CSV file does not exist.
+    """
     try:
         df_airports = pd.read_csv(filepath, encoding="ISO-8859-1")
     except FileNotFoundError:
@@ -186,7 +246,22 @@ def load_airports(
     return gdf
 
 def load_runways(filepath: str) -> pd.DataFrame:
-    """Load and preprocess runway data."""
+    """
+    Load and preprocess runway data from a CSV file.
+
+    Retains only the columns needed for flight planning: airport identifier,
+    runway dimensions, surface type, and heading information.
+
+    Args:
+        filepath (str): Path to the runways CSV file.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns airport_ident, length_ft, width_ft,
+            surface, le_heading_degT, he_heading_degT.
+
+    Raises:
+        FileNotFoundError: If the runways CSV file does not exist.
+    """
     try:
         df_runways = pd.read_csv(filepath, encoding="ISO-8859-1")
     except FileNotFoundError:

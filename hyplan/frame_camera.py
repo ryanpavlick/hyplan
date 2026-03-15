@@ -7,7 +7,22 @@ from .units import ureg
 from .sensors import Sensor
 
 class FrameCamera(Sensor):
-    """Class to represent a frame camera."""
+    """
+    A frame (area-array) camera sensor.
+
+    Unlike line scanners, frame cameras capture a full 2D image per frame.
+    The footprint is determined by both horizontal and vertical fields of view.
+
+    Args:
+        name (str): Sensor name.
+        sensor_width (Quantity): Physical sensor width in mm.
+        sensor_height (Quantity): Physical sensor height in mm.
+        focal_length (Quantity): Lens focal length in mm.
+        resolution_x (int): Number of pixels across-track (horizontal).
+        resolution_y (int): Number of pixels along-track (vertical).
+        frame_rate (Quantity): Frame acquisition rate in Hz.
+        f_speed (float): Lens f-number (focal length / aperture diameter).
+    """
 
     def __init__(
         self,

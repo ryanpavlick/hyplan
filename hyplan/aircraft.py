@@ -139,8 +139,16 @@ class Aircraft:
 
     def rate_of_climb(self, altitude):
         """
-        Compute the rate of climb at a given altitude assuming a linear decrease
-        from best rate of climb at sea level to roc_at_service_ceiling at service ceiling.
+        Compute the rate of climb at a given altitude.
+
+        Assumes a linear decrease from best_rate_of_climb at sea level
+        to roc_at_service_ceiling at the service ceiling.
+
+        Args:
+            altitude (Quantity): Current altitude (feet or convertible).
+
+        Returns:
+            Quantity: Rate of climb at the given altitude (feet per minute).
         """
         if altitude >= self.service_ceiling:
             return self.roc_at_service_ceiling
@@ -169,7 +177,17 @@ class Aircraft:
         return self.low_altitude_speed + fraction * (self.cruise_speed - self.low_altitude_speed)
 
     def descent_speed_at(self, altitude: Quantity) -> Quantity:
-        """TAS during descent at a given altitude."""
+        """
+        Compute true airspeed during descent at a given altitude.
+
+        Returns the cruise speed at that altitude minus the descent_speed_reduction.
+
+        Args:
+            altitude (Quantity): Current altitude (feet or convertible).
+
+        Returns:
+            Quantity: Descent TAS in knots.
+        """
         return self.cruise_speed_at(altitude) - self.descent_speed_reduction
 
     def _climb(self, start_altitude, end_altitude, true_air_speed=None):
@@ -410,6 +428,19 @@ class Aircraft:
     def _descend(self, start_altitude, end_altitude, true_air_speed=None):
         """
         Estimate the time and horizontal distance traveled during descent.
+
+        Uses a constant descent rate and computes horizontal distance from
+        the descent angle and true airspeed.
+
+        Args:
+            start_altitude (Quantity): Starting altitude (feet or convertible).
+            end_altitude (Quantity): Target altitude (feet or convertible).
+            true_air_speed (Quantity, optional): TAS override. Defaults to
+                descent_speed_at the average of start and end altitudes.
+
+        Returns:
+            tuple: (time_to_descend, horizontal_distance) as Quantity objects
+                in minutes and nautical miles respectively.
         """
         try:
             start_altitude = start_altitude.to(ureg.feet)
@@ -511,13 +542,19 @@ class Aircraft:
             raise
 
 #%% Aircraft Definitions
-# 🚀 NASA Aircraft
+
 class NASA_ER2(Aircraft):
     """
     NASA ER-2 high-altitude research aircraft.
 
+    Operates at 70,000 ft, acquiring data above 95% of the Earth's atmosphere.
+    Based at NASA Armstrong Flight Research Center (AFRC).
+
     Speed profile from Moving Lines: TAS = 70 + alt_m * 0.0071 (m/s).
     Linear increase to ceiling with no cap (cap altitude exceeds ceiling).
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC
     """
     def __init__(self):
         super().__init__(
@@ -544,6 +581,15 @@ class NASA_ER2(Aircraft):
         )
 
 class NASA_GIII(Aircraft):
+    """
+    NASA Gulfstream III (NASA 520) research aircraft.
+
+    Operated by NASA Langley Research Center (LaRC) for earth science
+    research and remote sensing missions.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Gulfstream_III_-_LaRC
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="Gulfstream III",
@@ -569,6 +615,15 @@ class NASA_GIII(Aircraft):
         )
 
 class NASA_GIV(Aircraft):
+    """
+    NASA Gulfstream IV (NASA 817) research aircraft.
+
+    Twin turbofan business-class aircraft operated by NASA Armstrong
+    Flight Research Center (AFRC). Useful payload of 5,610 lbs.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="Gulfstream IV",
@@ -594,6 +649,17 @@ class NASA_GIV(Aircraft):
         )
 
 class NASA_C20A(Aircraft):
+    """
+    NASA C-20A (Gulfstream III variant, NASA 502) research aircraft.
+
+    A business jet structurally modified and instrumented by NASA Armstrong
+    Flight Research Center to serve as a multi-role cooperative research
+    platform. Obtained from the U.S. Air Force in 2003. Primary platform
+    for UAVSAR missions.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="C-20A",
@@ -620,10 +686,19 @@ class NASA_C20A(Aircraft):
 
 class NASA_P3(Aircraft):
     """
-    NASA P-3 Orion maritime patrol / research aircraft.
+    NASA P-3 Orion (NASA 426) airborne science laboratory.
+
+    A four-engine turboprop aircraft capable of long-duration flights
+    (8-14 hours) and large payloads up to 14,700 lbs. Operated by
+    NASA Wallops Flight Facility (WFF). Supports ecology, geography,
+    hydrology, meteorology, oceanography, atmospheric chemistry,
+    cryospheric research, and satellite calibration/validation.
 
     Speed profile from Moving Lines: TAS = 110 + alt_m * 0.007 (m/s),
     capped at 155 m/s (~301 kt) above ~21,000 ft.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/P-3_Orion
     """
     def __init__(self):
         super().__init__(
@@ -652,9 +727,16 @@ class NASA_P3(Aircraft):
 
 class NASA_WB57(Aircraft):
     """
-    NASA WB-57 high-altitude research aircraft.
+    NASA WB-57 (NASA 927) high-altitude research aircraft.
 
-    Similar performance envelope to ER-2. Speed profile assumed similar.
+    Based at NASA Johnson Space Center (JSC), Ellington Field. Three
+    WB-57 aircraft have been flying research missions since the early
+    1970s. Operates up to 60,000 ft with 8,800 lbs useful payload.
+
+    Speed profile assumed similar to ER-2 (linear increase to ceiling).
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC
     """
     def __init__(self):
         super().__init__(
@@ -681,6 +763,13 @@ class NASA_WB57(Aircraft):
         )
 
 class NASA_B777(Aircraft):
+    """
+    NASA Boeing 777 long-range research aircraft.
+
+    Operated by NASA Langley Research Center (LaRC). Very large payload
+    capacity (75,000 lbs) and long endurance (18 hours), suitable for
+    global-scale remote sensing missions.
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="B777",
@@ -705,8 +794,17 @@ class NASA_B777(Aircraft):
             ],
         )
 
-# 🚀 Dynamic Aviation Aircraft
 class DynamicAviation_DH8(Aircraft):
+    """
+    Dynamic Aviation DHC-8 Dash 8 twin-turboprop aircraft.
+
+    Operated by Dynamic Aviation Group Inc. under contract to NASA's
+    Airborne Science Program. Medium-lift platform suitable for both
+    high and low altitude missions with 15,000 lbs useful payload.
+
+    See also:
+        https://www.dynamicaviation.com/fleet-dash-8
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="Dash 8",
@@ -732,6 +830,16 @@ class DynamicAviation_DH8(Aircraft):
         )
 
 class DynamicAviation_A90(Aircraft):
+    """
+    Dynamic Aviation Beechcraft King Air A90 twin-turboprop aircraft.
+
+    Operated by Dynamic Aviation Group Inc. under contract to NASA's
+    Airborne Science Program. Two-engine turboprop used for sensor
+    integration, flight testing, and airborne science support.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="King Air 90",
@@ -757,6 +865,18 @@ class DynamicAviation_A90(Aircraft):
         )
 
 class DynamicAviation_B200(Aircraft):
+    """
+    Dynamic Aviation Beechcraft King Air B200 twin-turboprop aircraft.
+
+    Operated by Dynamic Aviation Group Inc. under contract to NASA's
+    Airborne Science Program. An all-metal twin-turboprop capable of
+    operating from a wide variety of civilian and military airports.
+    Well suited for aerial remote sensing, chase aircraft support,
+    and technology demonstration missions.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A200
+    """
     def __init__(self):
         super().__init__(
             aircraft_type="King Air 200",
@@ -783,11 +903,18 @@ class DynamicAviation_B200(Aircraft):
 
 class C130(Aircraft):
     """
-    C-130H Hercules tactical transport / research aircraft.
+    C-130H Hercules four-engine turboprop transport / research aircraft.
 
-    Used by multiple agencies (NSF/NCAR, NOAA, etc.) for airborne science.
+    Used by multiple agencies (NSF/NCAR, NASA WFF, NOAA) for airborne
+    science. In a typical research configuration carries 13,000 lbs of
+    payload with 8-9 hour endurance. The NASA C-130H (N436NA) at Wallops
+    Flight Facility supports airborne scientific research and cargo.
+
     Speed profile from Moving Lines: TAS = 130 + alt_m * 0.0075 (m/s),
     capped at 175 m/s (~340 kt) above ~19,685 ft.
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF
     """
     def __init__(self):
         super().__init__(
@@ -816,12 +943,20 @@ class C130(Aircraft):
 
 class BAe146(Aircraft):
     """
-    BAe-146-301 atmospheric research aircraft.
+    BAe-146-301 atmospheric research aircraft (G-LUXE).
 
-    Platform: FAAM BAe-146 (UK Facility for Airborne Atmospheric Measurements).
+    Operated by the UK Facility for Airborne Atmospheric Measurements
+    (FAAM). Can fly with up to 4 tonnes of scientific instruments,
+    from 50 ft over the sea to 35,000 ft, with flights lasting 1-6
+    hours covering up to 2,000 nautical miles. Has completed 1,400+
+    science flights across 30 countries.
+
     Speed profile from Moving Lines: TAS = 130 + alt_m * 0.002 (m/s),
     capped at 150 m/s (~292 kt) above ~32,808 ft (above ceiling, so
     effectively linear to ceiling).
+
+    See also:
+        https://faam.ac.uk/
     """
     def __init__(self):
         super().__init__(
@@ -849,10 +984,16 @@ class BAe146(Aircraft):
 
 class Learjet(Aircraft):
     """
-    Learjet research aircraft.
+    Learjet high-altitude research aircraft.
 
-    Used for atmospheric and remote sensing research.
+    Used for atmospheric and remote sensing research by various
+    operators. NASA has operated multiple Learjet variants (23, 24D,
+    25, 35) for high-altitude atmospheric science.
+
     Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Learjet_25
     """
     def __init__(self):
         super().__init__(
@@ -880,10 +1021,18 @@ class Learjet(Aircraft):
 
 class TwinOtter(Aircraft):
     """
-    DHC-6 Twin Otter STOL utility aircraft.
+    DHC-6 Twin Otter STOL twin-turboprop utility aircraft.
 
-    Common low-altitude research platform (e.g., NPS CIRPAS).
-    Speed profile from Moving Lines (https://github.com/samuelleblanc/fp)
+    Common low-altitude research platform. The NPS CIRPAS Twin Otter
+    (based at Naval Postgraduate School, Monterey, CA) has supported
+    atmospheric and oceanographic research since 1998 for ONR, NSF,
+    DOE, NOAA, NASA, and others. Twin Otter International Ltd. (TOIL)
+    also operates a fleet for medium-lift, slow-flight research.
+
+    Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
+
+    See also:
+        https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS
     """
     def __init__(self):
         super().__init__(
