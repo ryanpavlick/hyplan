@@ -16,5 +16,10 @@ rtree
 shapely
 simplekml
 skyfield
+sunposition
 typing
 tabulate
+dubins
+folium
+matplotlib
+networkx
