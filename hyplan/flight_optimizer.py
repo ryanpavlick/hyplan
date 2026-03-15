@@ -47,7 +47,7 @@ def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
 
 def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine) -> float:
     """Compute time in hours to fly along a flight line at cruise speed."""
-    return (flight_line.length / aircraft.cruise_speed).to(ureg.hour).magnitude
+    return (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude)).to(ureg.hour).magnitude
 
 
 def build_graph(

@@ -1,3 +1,4 @@
+import numpy as np
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -55,7 +56,7 @@ def compute_flight_plan(
             segment_distance = distances[-1] if len(distances) > 0 else 0
 
             # Calculate time_to_segment using the computed segment_distance.
-            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed).to(ureg.minute).magnitude
+            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude)).to(ureg.minute).magnitude
 
             # Use the FlightLine's own heading properties.
             start_heading = segment.waypoint1.heading  # From FlightLine.az12
@@ -121,7 +122,7 @@ def create_flight_line_record(flight_line, aircraft):
         "end_altitude": flight_line.altitude.to(ureg.foot).magnitude,
         "start_heading": flight_line.waypoint1.heading,
         "end_heading": flight_line.waypoint2.heading,
-        "time_to_segment": (flight_line.length / aircraft.cruise_speed).to(ureg.minute).magnitude,
+        "time_to_segment": (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude)).to(ureg.minute).magnitude,
         "segment_type": "flight_line",
         "segment_name": flight_line.site_name,
         "distance": flight_line.length.to(ureg.nautical_mile).magnitude
@@ -144,8 +145,23 @@ def process_flight_phase(start, end, phase_info, segment_name):
     """
     records = []
     dubins_path = phase_info["dubins_path"]
+    full_geom = dubins_path.geometry
+    total_geom_length = full_geom.length  # in geometry units (degrees)
 
-    for phase, details in phase_info["phases"].items():
+    # Split geometry proportionally by time (which aligns with the plot x-axis).
+    # Phase distances can exceed the Dubins path length (e.g. IFR approach extends
+    # beyond the horizontal track), so time is a more reliable splitting key.
+    phase_items = list(phase_info["phases"].items())
+    phase_times = []
+    for phase, details in phase_items:
+        dt = (details["end_time"] - details["start_time"]).to(ureg.minute).magnitude
+        phase_times.append(dt)
+
+    total_time = sum(phase_times)
+    can_split = total_time > 0
+
+    cumulative_frac = 0.0
+    for i, (phase, details) in enumerate(phase_items):
         # Determine the segment type based on altitude information.
         if details["start_altitude"] < details["end_altitude"]:
             seg_type = "takeoff" if segment_name == "Departure" else "climb"
@@ -154,25 +170,44 @@ def process_flight_phase(start, end, phase_info, segment_name):
         else:
             seg_type = "transit"
 
-        # Use the heading provided in details if available; otherwise, fall back.
         start_heading = details.get("start_heading", getattr(start, "heading", None))
         end_heading   = details.get("end_heading", getattr(end, "heading", None))
 
-        # Use the phase's distance if provided; otherwise, default to dubins_path.length.
         if "distance" in details:
             phase_distance_nm = details["distance"].to(ureg.nautical_mile).magnitude
         else:
             phase_distance_nm = None
-            # phase_distance_nm = dubins_path.length.to(ureg.nautical_mile).magnitude
 
-        # TODO: Split dubins_path.geometry into per-phase sub-segments using
-        # phase distances so each sub-phase has its own distinct geometry.
+        # Split geometry along the path by cumulative time fraction
+        if can_split and phase_times[i] > 0:
+            from shapely.geometry import LineString as _LineString
+            frac_start = cumulative_frac
+            frac_end = min(1.0, cumulative_frac + phase_times[i] / total_time)
+
+            start_dist = frac_start * total_geom_length
+            end_dist = frac_end * total_geom_length
+
+            # Extract sub-linestring using interpolation
+            n_sample = max(2, int((frac_end - frac_start) * len(full_geom.coords)))
+            dists = np.linspace(start_dist, end_dist, n_sample)
+            points = [full_geom.interpolate(d) for d in dists]
+            phase_geom = _LineString(points)
+
+            cumulative_frac = frac_end
+        else:
+            phase_geom = full_geom
+
+        # Get actual start/end coords from the sub-geometry
+        geom_coords = list(phase_geom.coords)
+        start_lon_g, start_lat_g = geom_coords[0][0], geom_coords[0][1]
+        end_lon_g, end_lat_g = geom_coords[-1][0], geom_coords[-1][1]
+
         records.append({
-            "geometry": dubins_path.geometry,
-            "start_lat": start.latitude,
-            "start_lon": start.longitude,
-            "end_lat": end.latitude,
-            "end_lon": end.longitude,
+            "geometry": phase_geom,
+            "start_lat": start_lat_g,
+            "start_lon": start_lon_g,
+            "end_lat": end_lat_g,
+            "end_lon": end_lon_g,
             "start_altitude": details["start_altitude"].to(ureg.foot).magnitude,
             "end_altitude": details["end_altitude"].to(ureg.foot).magnitude,
             "start_heading": start_heading,
@@ -182,7 +217,7 @@ def process_flight_phase(start, end, phase_info, segment_name):
             "segment_name": segment_name,
             "distance": phase_distance_nm
         })
-    
+
     return records
 
 
@@ -213,24 +248,129 @@ def plot_flight_plan(flight_plan_gdf, takeoff_airport, return_airport, flight_se
     plt.show()
 
 
-def plot_altitude_trajectory(flight_plan_gdf):
+def terrain_profile_along_track(flight_plan_gdf, dem_file=None):
     """
-    Plot altitude vs. time trajectory.
+    Sample terrain elevation along the flight plan track.
+
+    Extracts lat/lon points from each segment geometry, queries DEM
+    elevation, and returns arrays of cumulative time and terrain height.
+
+    Args:
+        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
+        dem_file (str, optional): Path to DEM file. If None, one is auto-downloaded.
+
+    Returns:
+        tuple: (times, elevations) where times is cumulative minutes and
+            elevations is terrain height in feet MSL, both as numpy arrays.
     """
-    plt.figure(figsize=(10, 5))
+    from .terrain import get_elevations, generate_demfile
+
+    all_lats, all_lons, all_times = [], [], []
+    cumulative_time = 0.0
+
+    for _, row in flight_plan_gdf.iterrows():
+        geom = row["geometry"]
+        seg_time = row["time_to_segment"]
+
+        if geom is None or geom.is_empty or seg_time == 0:
+            cumulative_time += seg_time
+            continue
+
+        coords = np.array(geom.coords)
+        lons = coords[:, 0]
+        lats = coords[:, 1]
+        n_pts = len(lats)
+
+        # Distribute time linearly along the segment's geometry points
+        seg_times = cumulative_time + np.linspace(0, seg_time, n_pts)
+
+        all_lats.append(lats)
+        all_lons.append(lons)
+        all_times.append(seg_times)
+        cumulative_time += seg_time
+
+    if not all_lats:
+        return np.array([]), np.array([])
+
+    all_lats = np.concatenate(all_lats)
+    all_lons = np.concatenate(all_lons)
+    all_times = np.concatenate(all_times)
+
+    if dem_file is None:
+        dem_file = generate_demfile(all_lats, all_lons)
+
+    elevations_m = get_elevations(all_lats, all_lons, dem_file)
+    elevations_ft = elevations_m * 3.28084
+
+    return all_times, elevations_ft
+
+
+def plot_altitude_trajectory(flight_plan_gdf, aircraft=None, dem_file=None, show_terrain=True):
+    """
+    Plot altitude vs. time trajectory with optional terrain profile.
+
+    If an Aircraft is provided, climb/takeoff segments are drawn with the
+    realistic curved profile (ROC decreases with altitude). Otherwise all
+    segments are drawn as straight lines.
+
+    Args:
+        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
+        aircraft (Aircraft, optional): Aircraft used for the flight plan.
+        dem_file (str, optional): Path to DEM file for terrain. If None, auto-downloaded.
+        show_terrain (bool): If True, overlay terrain elevation beneath the flight path.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Plot terrain profile first (underneath)
+    if show_terrain:
+        try:
+            terrain_times, terrain_elevations = terrain_profile_along_track(
+                flight_plan_gdf, dem_file=dem_file
+            )
+            if len(terrain_times) > 0:
+                ax.fill_between(
+                    terrain_times, 0, terrain_elevations,
+                    color="saddlebrown", alpha=0.3, label="Terrain"
+                )
+                ax.plot(terrain_times, terrain_elevations, color="saddlebrown",
+                        linewidth=0.8, alpha=0.6)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not load terrain profile: {e}")
+
+    # Plot aircraft altitude segments
     cumulative_time = 0
     for _, row in flight_plan_gdf.iterrows():
-        plt.plot(
-            [cumulative_time, cumulative_time + row["time_to_segment"]],
-            [row["start_altitude"], row["end_altitude"]],
-            marker="o",
-            label=row["segment_name"]
-        )
-        cumulative_time += row["time_to_segment"]
+        seg_type = row["segment_type"]
+        t_seg = row["time_to_segment"]
+        h_start = row["start_altitude"]
+        h_end = row["end_altitude"]
 
-    plt.xlabel("Time (minutes)")
-    plt.ylabel("Altitude (feet MSL)")
-    plt.title("Altitude vs. Time Trajectory")
-    plt.legend()
-    plt.grid(True)
+        # Use curved profile for climb/takeoff if aircraft is available
+        if aircraft is not None and seg_type in ("climb", "takeoff") and h_end > h_start:
+            profile_t, profile_h = aircraft.climb_altitude_profile(
+                h_start * ureg.feet, h_end * ureg.feet
+            )
+            # Scale profile time to match the segment time (accounts for horizontal travel)
+            if profile_t[-1] > 0:
+                profile_t = profile_t * (t_seg / profile_t[-1])
+            ax.plot(
+                cumulative_time + profile_t, profile_h,
+                marker="o", markevery=[0, -1],
+                label=row["segment_name"]
+            )
+        else:
+            ax.plot(
+                [cumulative_time, cumulative_time + t_seg],
+                [h_start, h_end],
+                marker="o",
+                label=row["segment_name"]
+            )
+        cumulative_time += t_seg
+
+    ax.set_xlabel("Time (minutes)")
+    ax.set_ylabel("Altitude (feet MSL)")
+    ax.set_title("Altitude vs. Time Trajectory")
+    ax.legend()
+    ax.grid(True)
     plt.show()
