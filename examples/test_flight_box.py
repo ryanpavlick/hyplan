@@ -80,7 +80,7 @@ def plot_flight_lines_and_swaths(
 logging.info("Testing box_around_center_line...")
 center_lines = box_around_center_line(
     instrument=instrument,
-    altitude=altitude,
+    altitude_msl=altitude,
     lat0=34.0,
     lon0=-118.5,
     azimuth=45.0,
@@ -105,7 +105,7 @@ plot_flight_lines_and_swaths(
 logging.info("Testing box_around_minimum_rectangle...")
 min_rect_lines = box_around_polygon(
     instrument=instrument,
-    altitude=altitude,
+    altitude_msl=altitude,
     polygon=polygon,
     box_name="MinRectTest",
     overlap=20.0,
@@ -126,7 +126,7 @@ plot_flight_lines_and_swaths(
 logging.info("Testing box_around_rotated_rectangle...")
 rotated_rect_lines = box_around_polygon(
     instrument=instrument,
-    altitude=altitude,
+    altitude_msl=altitude,
     polygon=polygon,
     azimuth=160.0,
     box_name="RotatedRectTest",

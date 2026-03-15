@@ -57,30 +57,30 @@ class LineScanner(Sensor):
         """Calculate and return the frame period in seconds."""
         return (1.0 / self.frame_rate).to(ureg.s)
 
-    def swath_width(self, altitude: Quantity) -> Quantity:
-        """Calculate swath width (m) for a given altitude."""
-        altitude = self._validate_quantity(altitude, ureg.meter)
-        return 2 * altitude * np.tan(np.radians(self.fov / 2))
+    def swath_width(self, altitude_agl: Quantity) -> Quantity:
+        """Calculate swath width (m) for a given altitude above ground level."""
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        return 2 * altitude_agl * np.tan(np.radians(self.fov / 2))
 
-    def ground_sample_distance(self, altitude: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the ground sample distance (GSD) for a given altitude."""
-        altitude = self._validate_quantity(altitude, ureg.meter)
+    def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
+        """Calculate the ground sample distance (GSD) for a given altitude above ground level."""
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
-            return 2 * altitude * np.tan(np.radians(self.ifov / 2))
+            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
         elif mode == "average":
-            return self.swath_width(altitude) / self.across_track_pixels
+            return self.swath_width(altitude_agl) / self.across_track_pixels
 
         elif mode == "edge":
             edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
-            return 2 * altitude * np.tan(np.radians(edge_ifov / 2))
+            return 2 * altitude_agl * np.tan(np.radians(edge_ifov / 2))
 
         else:
-            return 2 * altitude * np.tan(np.radians(self.ifov / 2))
+            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
-    def altitude_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the required altitude for a given ground sample distance (GSD)."""
+    def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
+        """Calculate the required altitude AGL for a given ground sample distance (GSD)."""
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
@@ -96,19 +96,19 @@ class LineScanner(Sensor):
         else:
             return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
 
-    def critical_ground_speed(self, altitude: Quantity, along_track_sampling: float = 1.0) -> Quantity:
+    def critical_ground_speed(self, altitude_agl: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
         Calculate the maximum allowable aircraft ground speed (m/s) to maintain proper along-track sampling.
 
         Args:
-            altitude (Quantity): Altitude of the sensor in meters.
+            altitude_agl (Quantity): Altitude above ground level in meters.
             along_track_sampling (float): The oversampling factor (default = 1.0).
 
         Returns:
             Quantity: Maximum allowable ground speed in meters per second.
         """
-        altitude = self._validate_quantity(altitude, ureg.meter)
-        return self.ground_sample_distance(altitude, mode="nadir") / (self.frame_period * along_track_sampling)
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        return self.ground_sample_distance(altitude_agl, mode="nadir") / (self.frame_period * along_track_sampling)
 
     def along_track_pixel_size(self, aircraft_speed: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
@@ -259,7 +259,7 @@ def create_sensor(sensor_type: str) -> Sensor:
     Factory function to create and return an instance of a sensor.
 
     Args:
-        sensor_type (str): The name of the sensor class to instantiate. 
+        sensor_type (str): The name of the sensor class to instantiate.
                            Must be one of the keys in SENSOR_REGISTRY.
 
     Returns:
@@ -268,12 +268,17 @@ def create_sensor(sensor_type: str) -> Sensor:
     Raises:
         ValueError: If the specified sensor_type is not found in SENSOR_REGISTRY.
     """
+    # Lazy registration of sensors from other modules to avoid circular imports
+    if "LVIS" not in SENSOR_REGISTRY:
+        from .lvis import LVIS
+        SENSOR_REGISTRY["LVIS"] = LVIS
+
     if sensor_type not in SENSOR_REGISTRY:
         raise ValueError(f"Unknown sensor type: {sensor_type}")
-    return SENSOR_REGISTRY[sensor_type]()  # ✅ Ensure class is instantiated!
+    return SENSOR_REGISTRY[sensor_type]()
 
 
-SENSOR_REGISTRY: Dict[str, Type[LineScanner]] = {
+SENSOR_REGISTRY: Dict[str, Type[Sensor]] = {
     "AVIRISClassic": AVIRISClassic,
     "AVIRISNextGen": AVIRISNextGen,
     "AVIRIS3": AVIRIS3,
@@ -287,5 +292,5 @@ SENSOR_REGISTRY: Dict[str, Type[LineScanner]] = {
     "GCAS_UV_Vis": GCAS_UV_Vis,
     "GCAS_VNIR": GCAS_VNIR,
     "eMAS": eMAS,
-    "PICARD": PICARD
+    "PICARD": PICARD,
 }

@@ -82,7 +82,7 @@ def _validate_inputs(**kwargs) -> None:
         
 def box_around_center_line(
     instrument: object,
-    altitude: ureg.Quantity,
+    altitude_msl: ureg.Quantity,
     lat0: float,
     lon0: float,
     azimuth: float,
@@ -99,9 +99,11 @@ def box_around_center_line(
     Create a series of flight lines around a center line based on the given box dimensions and instrument properties.
 
     Args:
-        instrument (object): An object with a method `swath_width_at(altitude: Quantity) -> Quantity`
-            that returns the swath width at a given altitude.
-        altitude (ureg.Quantity): Altitude for the flight lines. Must be a positive length Quantity.
+        instrument (object): An object with a ``swath_width(altitude_agl)`` method.
+        altitude_msl (ureg.Quantity): Flight altitude MSL. Must be a positive length Quantity.
+            Note: this is passed directly to ``instrument.swath_width()`` which expects
+            AGL. Over flat terrain near sea level the difference is negligible; for
+            mountainous terrain, consider adjusting for mean terrain elevation.
         lat0 (float): Latitude of the box center in decimal degrees (-90 to 90).
         lon0 (float): Longitude of the box center in decimal degrees (-180 to 180).
         azimuth (float): Orientation of the box in degrees. Will be wrapped to [-180, 180].
@@ -126,7 +128,7 @@ def box_around_center_line(
     """
     # Validate inputs
     _validate_inputs(
-        altitude=altitude,
+        altitude=altitude_msl,
         box_length=box_length,
         box_width=box_width,
         overlap=overlap,
@@ -135,10 +137,11 @@ def box_around_center_line(
     )
 
     if not hasattr(instrument, "swath_width") or not callable(instrument.swath_width):
-        raise ValueError("Instrument must have a callable method `swath_width(altitude)`.")
+        raise ValueError("Instrument must have a callable method `swath_width(altitude_agl)`.")
 
     # Compute swath spacing and number of lines
-    swath = instrument.swath_width(altitude)
+    # Note: swath_width expects AGL; using MSL as approximation
+    swath = instrument.swath_width(altitude_msl)
     if not isinstance(swath, ureg.Quantity):
         swath = ureg.Quantity(swath, "meter")
     if swath <= 0:
@@ -163,14 +166,14 @@ def box_around_center_line(
 
     if starting_point == "edge":
         first_line = flight_line.FlightLine.start_length_azimuth(
-            lat1=lat0, lon1=lon0, length=box_length, az=azimuth, altitude=altitude
+            lat1=lat0, lon1=lon0, length=box_length, az=azimuth, altitude_msl=altitude_msl
         )
     elif starting_point == "center":
         first_line = flight_line.FlightLine.center_length_azimuth(
-            lat=lat0, lon=lon0, length=box_length, az=azimuth, altitude=altitude
+            lat=lat0, lon=lon0, length=box_length, az=azimuth, altitude_msl=altitude_msl
         )
 
-    flight_level = altitude_to_flight_level(altitude)
+    flight_level = altitude_to_flight_level(altitude_msl)
     lines = []
 
     for idx, dist in enumerate(dists_from_center):
@@ -198,7 +201,7 @@ def box_around_center_line(
 
 def box_around_polygon(
     instrument: object,
-    altitude: ureg.Quantity,
+    altitude_msl: ureg.Quantity,
     polygon: Polygon,
     azimuth: Optional[float] = None,
     box_name: str = "Line",
@@ -211,11 +214,10 @@ def box_around_polygon(
     Generate flight lines based on either:
     - The minimum rotated rectangle of a polygon (if `azimuth=None`)
     - A rotated rectangle at a specified azimuth (if `azimuth` is given)
-    
+
     Args:
-        instrument (object): Object with `swath_width(altitude: Quantity) -> Quantity`
-            to compute swath width at a given altitude.
-        altitude (ureg.Quantity): Altitude for the flight lines.
+        instrument (object): Object with ``swath_width(altitude_agl)`` method.
+        altitude_msl (ureg.Quantity): Flight altitude MSL.
         polygon (Polygon): Input polygon to generate flight lines within.
         azimuth (Optional[float]): If provided, uses a user-defined azimuth instead of the minimum rotated rectangle.
         box_name (str): Prefix for flight line names.
@@ -280,7 +282,7 @@ def box_around_polygon(
     # Call `box_around_center_line` to generate flight lines
     return box_around_center_line(
         instrument=instrument,
-        altitude=altitude,
+        altitude_msl=altitude_msl,
         lat0=lat0,
         lon0=lon0,
         azimuth=azimuth,

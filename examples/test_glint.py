@@ -55,7 +55,7 @@ flight_line = FlightLine.start_length_azimuth(
     lon1=lon0,
     length=length,
     az=azimuth,
-    altitude=altitude,
+    altitude_msl=altitude,
 )
 
 # Initialize sensor

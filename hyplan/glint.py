@@ -88,9 +88,9 @@ def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, obser
     Returns:
         GeoDataFrame: Results containing target locations and glint angles.
     """
-    # Get track coordinates, altitude, and azimuth
-    latitudes, longitudes, azimuths, along_track_distance = process_linestring(flight_line.track())  # Get latitudes, longitudes, azimuths
-    altitude = flight_line.altitude.magnitude  # Extract altitude magnitude
+    # Get track coordinates, altitude (MSL), and azimuth
+    latitudes, longitudes, azimuths, along_track_distance = process_linestring(flight_line.track())
+    altitude_msl = flight_line.altitude_msl.magnitude
 
     # Define tilt angles from -half_angle to +half_angle in 1-degree increments
     half_angle = sensor.half_angle  # Extract half angle from sensor
@@ -115,7 +115,7 @@ def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, obser
     # Repeat latitudes, longitudes, and altitudes to match the number of angle combinations
     latitudes = np.repeat(latitudes, len(tilt_angles) // len(latitudes))
     longitudes = np.repeat(longitudes, len(tilt_angles) // len(longitudes))
-    altitudes = np.full_like(latitudes, altitude)
+    altitudes = np.full_like(latitudes, altitude_msl)
     along_track_distance = np.repeat(along_track_distance, len(tilt_angles) // len(along_track_distance))
     
     # Expand observation_datetime to match the shape of latitudes
