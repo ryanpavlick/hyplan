@@ -53,6 +53,31 @@ autodoc_default_options = {
 autodoc_typehints = "description"
 autodoc_class_signature = "separated"
 
+# Mock imports that may not be available in the docs build environment
+autodoc_mock_imports = [
+    "dubins",
+    "ee",
+    "folium",
+    "geopandas",
+    "matplotlib",
+    "networkx",
+    "numba",
+    "osgeo",
+    "pandas",
+    "pymap3d",
+    "pyproj",
+    "requests",
+    "rtree",
+    "seaborn",
+    "shapely",
+    "simplekml",
+    "skyfield",
+    "sunposition",
+    "tabulate",
+    "pydantic",
+    "pydantic_pint",
+]
+
 # Intersphinx mappings
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
