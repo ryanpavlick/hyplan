@@ -46,7 +46,7 @@ def map_flight_lines(
             f"<b>{fl.site_name}</b><br>"
             f"Investigator: {fl.investigator}<br>"
             f"Site Description: {fl.site_description}<br>"
-            f"Altitude: {fl.altitude:.2f}<br>"
+            f"Altitude MSL: {fl.altitude_msl:.2f}<br>"
             f"Length: {fl.length:.2f}<br>"
             f"Azimuth: {fl.az12:.2f}<br>"
             f"Start: {fl.lat1:.4f}, {fl.lon1:.4f}<br>"

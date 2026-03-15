@@ -282,13 +282,13 @@ class Aircraft:
         """
         try:
             airport_altitude = airport.elevation.to(ureg.feet)
-            waypoint_altitude = waypoint.altitude.to(ureg.feet)
+            waypoint_altitude = waypoint.altitude_msl.to(ureg.feet)
 
             # Climb phase
             climb_time, climb_distance = self._climb(airport_altitude, waypoint_altitude, true_air_speed=self.vy)
 
             _, departure_heading = pymap3d.vincenty.vdist(airport.latitude, airport.longitude, waypoint.latitude, waypoint.longitude)
-            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=departure_heading, altitude=airport_altitude)
+            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=departure_heading, altitude_msl=airport_altitude)
             # Cruise phase
             dubins_path = DubinsPath(
                 start=airport_waypoint,
@@ -339,7 +339,7 @@ class Aircraft:
         """
         try:
             _, arrival_heading = pymap3d.vincenty.vdist(waypoint.latitude, waypoint.longitude, airport.latitude, airport.longitude)
-            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=(arrival_heading + 180.0) % 360.0, altitude=airport.elevation)
+            airport_waypoint = Waypoint(latitude=airport.latitude, longitude=airport.longitude, heading=(arrival_heading + 180.0) % 360.0, altitude_msl=airport.elevation)
             dubins_path = DubinsPath(
                 start=waypoint,
                 end=airport_waypoint,
@@ -350,7 +350,7 @@ class Aircraft:
             total_distance = dubins_path.length.to(ureg.nautical_mile)
 
             # Cruise phase
-            cruise_altitude = waypoint.altitude.to(ureg.feet)
+            cruise_altitude = waypoint.altitude_msl.to(ureg.feet)
             approach_altitude = min(airport.elevation.to(ureg.feet) + 5_000 * ureg.feet, cruise_altitude)
             descent_altitude = cruise_altitude - approach_altitude
             descent_distance = 3 * (descent_altitude.to(ureg.feet).magnitude / 1_000) * ureg.nautical_mile
@@ -442,10 +442,10 @@ class Aircraft:
         """
         try:
             # Default true airspeed is altitude-dependent cruise speed
-            true_air_speed = true_air_speed or self.cruise_speed_at(end_waypoint.altitude)
+            true_air_speed = true_air_speed or self.cruise_speed_at(end_waypoint.altitude_msl_msl)
 
-            start_altitude = start_waypoint.altitude.to(ureg.feet)
-            end_altitude = end_waypoint.altitude.to(ureg.feet)
+            start_altitude = start_waypoint.altitude_msl_msl.to(ureg.feet)
+            end_altitude = end_waypoint.altitude_msl_msl.to(ureg.feet)
 
             climb_time, climb_distance = (0 * ureg.minute, 0 * ureg.nautical_mile)
             descent_time, descent_distance = (0 * ureg.minute, 0 * ureg.nautical_mile)

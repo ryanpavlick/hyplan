@@ -21,7 +21,7 @@ flight_line_1 = FlightLine.start_length_azimuth(
     lat1=34.50, lon1=-118.20,
     length=ureg.Quantity(50000, "meter"),
     az=90.0,
-    altitude=ureg.Quantity(15000, "feet"),
+    altitude_msl=ureg.Quantity(15000, "feet"),
     site_name="Line_A"
 )
 
@@ -29,7 +29,7 @@ flight_line_2 = FlightLine.start_length_azimuth(
     lat1=34.65, lon1=-118.10,
     length=ureg.Quantity(70000, "meter"),
     az=125.0,
-    altitude=ureg.Quantity(18000, "feet"),
+    altitude_msl=ureg.Quantity(18000, "feet"),
     site_name="Line_B"
 )
 
@@ -37,7 +37,7 @@ flight_line_3 = FlightLine.start_length_azimuth(
     lat1=34.30, lon1=-117.80,
     length=ureg.Quantity(40000, "meter"),
     az=45.0,
-    altitude=ureg.Quantity(15000, "feet"),
+    altitude_msl=ureg.Quantity(15000, "feet"),
     site_name="Line_C"
 )
 

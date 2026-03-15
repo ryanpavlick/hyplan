@@ -56,7 +56,7 @@ def compute_flight_plan(
             segment_distance = distances[-1] if len(distances) > 0 else 0
 
             # Calculate time_to_segment using the computed segment_distance.
-            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude)).to(ureg.minute).magnitude
+            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude_msl)).to(ureg.minute).magnitude
 
             # Use the FlightLine's own heading properties.
             start_heading = segment.waypoint1.heading  # From FlightLine.az12
@@ -68,8 +68,8 @@ def compute_flight_plan(
                 "start_lon": longitudes[0],
                 "end_lat": latitudes[-1],
                 "end_lon": longitudes[-1],
-                "start_altitude": segment.altitude.to(ureg.foot).magnitude,
-                "end_altitude": segment.altitude.to(ureg.foot).magnitude,
+                "start_altitude": segment.altitude_msl.to(ureg.foot).magnitude,
+                "end_altitude": segment.altitude_msl.to(ureg.foot).magnitude,
                 "segment_type": "flight_line",
                 "segment_name": segment.site_name,
                 "distance": ureg.Quantity(segment_distance, 'meter').to(ureg.nautical_mile).magnitude,
@@ -118,11 +118,11 @@ def create_flight_line_record(flight_line, aircraft):
         "start_lon": flight_line.lon1,
         "end_lat": flight_line.lat2,
         "end_lon": flight_line.lon2,
-        "start_altitude": flight_line.altitude.to(ureg.foot).magnitude,
-        "end_altitude": flight_line.altitude.to(ureg.foot).magnitude,
+        "start_altitude": flight_line.altitude_msl.to(ureg.foot).magnitude,
+        "end_altitude": flight_line.altitude_msl.to(ureg.foot).magnitude,
         "start_heading": flight_line.waypoint1.heading,
         "end_heading": flight_line.waypoint2.heading,
-        "time_to_segment": (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude)).to(ureg.minute).magnitude,
+        "time_to_segment": (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude_msl)).to(ureg.minute).magnitude,
         "segment_type": "flight_line",
         "segment_name": flight_line.site_name,
         "distance": flight_line.length.to(ureg.nautical_mile).magnitude

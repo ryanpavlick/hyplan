@@ -70,7 +70,7 @@ flight_line_1 = FlightLine.start_length_azimuth(
     lon1=-118.25,
     length=ureg.Quantity(50000, "meter"),
     az=45.0,
-    altitude=ureg.Quantity(1000, "meter"),
+    altitude_msl=ureg.Quantity(1000, "meter"),
     site_name="LA Northeast",
     investigator="Dr. Smith"
 )
@@ -82,7 +82,7 @@ flight_line_2 = FlightLine.center_length_azimuth(
     lon=-118.55,
     length=ureg.Quantity(80000, "meter"),
     az=80.0,
-    altitude=ureg.Quantity(1200, "meter"),
+    altitude_msl=ureg.Quantity(1200, "meter"),
     site_name="LA East-West",
     investigator="Dr. Jones"
 )

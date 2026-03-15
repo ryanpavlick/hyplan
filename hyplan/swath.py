@@ -28,8 +28,8 @@ def generate_swath_polygon(
     Returns:
         Polygon: A Shapely Polygon representing the swath.
     """
-    # Get flight line altitude
-    altitude = flight_line.altitude.magnitude
+    # Get flight line altitude (MSL) — ray_terrain_intersection expects MSL
+    altitude_msl = flight_line.altitude_msl.magnitude
 
     # Interpolate points along the flight line
     lats, lons, azimuths, *_ = process_linestring(flight_line.track(precision=along_precision))
@@ -45,13 +45,13 @@ def generate_swath_polygon(
 
     # Perform ray-terrain intersection for port side 
     port_lats, port_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude, az=az_port, tilt=half_angle, 
+        lats, lons, altitude_msl, az=az_port, tilt=half_angle, 
         precision=across_precision, dem_file=dem_file
     )
 
     # Perform ray-terrain intersection for starboard side 
     starboard_lats, starboard_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude, az=az_starboard, tilt=half_angle, 
+        lats, lons, altitude_msl, az=az_starboard, tilt=half_angle, 
         precision=across_precision, dem_file=dem_file
     )
 
