@@ -57,7 +57,20 @@ def calculate_target_and_glint_vectorized(
 
 def glint_angle(solar_azimuth, solar_zenith, view_azimuth, view_zenith):
     """
-    Calculates glint angles for each pixel based on solar and sensor angles.
+    Calculate the specular glint angle between the sun and sensor viewing directions.
+
+    The glint angle is the angular difference between the specular reflection
+    direction and the sensor viewing direction, assuming a flat surface. A glint
+    angle of 0 degrees indicates perfect specular reflection (sun glint).
+
+    Args:
+        solar_azimuth (np.ndarray): Solar azimuth angles in degrees.
+        solar_zenith (np.ndarray): Solar zenith angles in degrees.
+        view_azimuth (np.ndarray): Sensor viewing azimuth angles in degrees.
+        view_zenith (np.ndarray): Sensor viewing zenith angles in degrees (from nadir).
+
+    Returns:
+        np.ndarray: Glint angles in degrees. Values near 0 indicate strong sun glint.
     """
     solar_zenith_rad = np.deg2rad(solar_zenith)
     solar_azimuth_rad = np.deg2rad(solar_azimuth)
