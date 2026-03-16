@@ -473,10 +473,10 @@ class Aircraft:
         """
         try:
             # Default true airspeed is altitude-dependent cruise speed
-            true_air_speed = true_air_speed or self.cruise_speed_at(end_waypoint.altitude_msl_msl)
+            true_air_speed = true_air_speed or self.cruise_speed_at(end_waypoint.altitude_msl)
 
-            start_altitude = start_waypoint.altitude_msl_msl.to(ureg.feet)
-            end_altitude = end_waypoint.altitude_msl_msl.to(ureg.feet)
+            start_altitude = start_waypoint.altitude_msl.to(ureg.feet)
+            end_altitude = end_waypoint.altitude_msl.to(ureg.feet)
 
             climb_time, climb_distance = (0 * ureg.minute, 0 * ureg.nautical_mile)
             descent_time, descent_distance = (0 * ureg.minute, 0 * ureg.nautical_mile)
