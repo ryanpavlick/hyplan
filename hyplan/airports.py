@@ -335,8 +335,12 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
         raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
-    _, tree_idxs = gdf_airports.sindex.nearest(point, max_items=n)
-    return gdf_airports.iloc[tree_idxs]['icao_code'].tolist()
+    _, tree_idxs = gdf_airports.sindex.nearest(point, return_all=False)
+    # nearest with return_all=False returns only 1 result per input;
+    # to get n results, compute distances and sort
+    distances = gdf_airports.geometry.distance(point)
+    nearest_idxs = distances.nsmallest(n).index
+    return gdf_airports.loc[nearest_idxs, 'icao_code'].tolist()
 
 def airports_within_radius(
     lat: float, lon: float, radius: float, unit: str = "kilometers",

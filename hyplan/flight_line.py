@@ -471,7 +471,7 @@ class FlightLine:
             "lat2": self.lat2,
             "lon2": self.lon2,
             "length": self.length.magnitude,
-            "altitude_m": self.altitude_msl.magnitude,
+            "altitude_msl": self.altitude_msl.magnitude,
             "site_name": self.site_name,
             "site_description": self.site_description,
             "investigator": self.investigator,
@@ -492,7 +492,7 @@ class FlightLine:
                 "coordinates": list(self.geometry.coords),
             },
             "properties": {
-                "altitude_m": self.altitude_msl.magnitude,
+                "altitude_msl": self.altitude_msl.magnitude,
                 "site_name": self.site_name,
                 "site_description": self.site_description,
                 "investigator": self.investigator,

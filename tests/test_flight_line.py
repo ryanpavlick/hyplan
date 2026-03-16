@@ -77,7 +77,7 @@ class TestFlightLineOperations:
         d = sample_flight_line.to_dict()
         assert "lat1" in d
         assert "lon1" in d
-        assert "altitude_m" in d
+        assert "altitude_msl" in d
 
     def test_to_geojson(self, sample_flight_line):
         gj = sample_flight_line.to_geojson()
