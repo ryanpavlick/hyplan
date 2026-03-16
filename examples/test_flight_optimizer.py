@@ -64,11 +64,19 @@ result = greedy_optimize(
     airports=airports,
     takeoff_airport=departure_airport,
     return_airport=return_airport,
+    max_endurance=4.0,
+    max_daily_flight_time=8.0,
+    max_days=3,
 )
 
 print(f"\nRoute: {result['route']}")
 print(f"Total time: {result['total_time']:.2f} hours")
+print(f"Days used: {result['days_used']}")
+for i, dt in enumerate(result['daily_times'], 1):
+    print(f"  Day {i}: {dt:.2f} hours")
 print(f"Lines covered: {result['lines_covered']}/{len(flight_lines)}")
+if result['lines_skipped']:
+    print(f"Lines skipped: {result['lines_skipped']}")
 print(f"Refuel stops: {result['refuel_stops']}")
 
 #%% Feed optimized sequence into compute_flight_plan
