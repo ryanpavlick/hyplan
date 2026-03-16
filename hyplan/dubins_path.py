@@ -196,8 +196,8 @@ class DubinsPath:
             "start_lon": self.start.longitude,
             "end_lat": self.end.latitude,
             "end_lon": self.end.longitude,
-            "start_altitude": self.start.altitude_msl.to(ureg.meter).magnitude,
-            "end_altitude": self.end.altitude_msl.to(ureg.meter).magnitude,
+            "start_altitude": self.start.altitude_msl.to(ureg.meter).magnitude if self.start.altitude_msl is not None else None,
+            "end_altitude": self.end.altitude_msl.to(ureg.meter).magnitude if self.end.altitude_msl is not None else None,
             "start_heading": self.start.heading,
             "end_heading": self.end.heading,
             "distance": self.length.to(ureg.nautical_mile).magnitude

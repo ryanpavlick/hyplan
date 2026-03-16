@@ -1,6 +1,58 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-scm"]
+requires = ["setuptools>=64", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyplan"
+dynamic = ["version"]
+description = "Planning software for airborne remote sensing science campaigns"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+authors = [
+    {name = "Ryan Pavlick", email = "ryan.p.pavlick@nasa.gov"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "geopandas",
+    "numpy",
+    "pandas",
+    "pint",
+    "pydantic",
+    "pydantic_pint",
+    "pymap3d",
+    "pyproj",
+    "requests",
+    "rtree",
+    "shapely",
+    "simplekml",
+    "skyfield",
+    "sunposition",
+    "tabulate",
+    "dubins",
+    "folium",
+    "matplotlib",
+    "networkx",
+]
+
+[project.optional-dependencies]
+clouds = ["earthengine-api"]
+parallel = ["ray"]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/ryanpavlick/hyplan"
+Documentation = "https://ryanpavlick.github.io/hyplan/"
+Repository = "https://github.com/ryanpavlick/hyplan"
+Issues = "https://github.com/ryanpavlick/hyplan/issues"
+
+[tool.setuptools.packages.find]
+include = ["hyplan*"]
 
 [tool.setuptools_scm]
 version_file = "hyplan/_version.py"
