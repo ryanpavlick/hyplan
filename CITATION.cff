@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "HyPlan: Planning Software for Airborne Remote Sensing Campaigns"
+type: software
+authors:
+  - family-names: Pavlick
+    given-names: Ryan
+    email: ryan.p.pavlick@nasa.gov
+    affiliation: "NASA Jet Propulsion Laboratory"
+repository-code: "https://github.com/ryanpavlick/hyplan"
+license: Apache-2.0
+keywords:
+  - remote sensing
+  - flight planning
+  - airborne science
+  - hyperspectral
+  - Earth observation
