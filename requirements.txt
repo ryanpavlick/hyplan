@@ -1,8 +1,5 @@
-#hyplan depedencies
-datetime
+# hyplan dependencies
 geopandas
-logging
-numba
 numpy
 gdal
 pandas
@@ -17,7 +14,6 @@ shapely
 simplekml
 skyfield
 sunposition
-typing
 tabulate
 dubins
 folium
