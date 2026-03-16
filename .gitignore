@@ -167,6 +167,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# setuptools-scm generated version file
+hyplan/_version.py
+
 # PyPI configuration file
 .pypirc
 
