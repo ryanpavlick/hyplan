@@ -449,8 +449,10 @@ class FlightLine:
                     end_lat, end_lon, gap_length_m, self.az12.magnitude
                 )
                 current_start_lon = wrap_to_180(current_start_lon)
+            elif gap_length:
+                break  # remaining length is less than the gap
             else:
-                break
+                current_start_lat, current_start_lon = end_lat, end_lon
 
         return segments
 
