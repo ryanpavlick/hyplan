@@ -66,10 +66,6 @@ Open an [issue](https://github.com/ryanpavlick/hyplan/issues) with:
 
 Feature requests are welcome! Please open an [issue](https://github.com/ryanpavlick/hyplan/issues) describing the use case and proposed behavior.
 
-## Code of Conduct
-
-This project follows a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold it.
-
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE.md).
