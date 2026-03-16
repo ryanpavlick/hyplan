@@ -72,6 +72,28 @@ is interpolated from these breakpoints using {func}`numpy.interp`. This
 captures the variation between low-altitude maneuvering speeds and
 high-altitude cruise speeds.
 
+## Imports
+
+Core classes and functions are re-exported from the top-level `hyplan` package
+for convenience:
+
+```python
+from hyplan import FlightLine, Airport, AVIRIS3, DynamicAviation_B200, ureg
+```
+
+Specialized modules with heavier or optional dependencies should be imported
+directly from their submodules:
+
+```python
+from hyplan.clouds import create_cloud_data_array_with_limit
+from hyplan.terrain import download_dem
+from hyplan.satellites import get_satellite_overpass_times
+from hyplan.glint import compute_glint_vectorized
+from hyplan.sun import solar_threshold_times
+```
+
+See the API Reference for the full list of available classes and functions.
+
 ## Units
 
 HyPlan uses [Pint](https://pint.readthedocs.io/) for physical quantities.
