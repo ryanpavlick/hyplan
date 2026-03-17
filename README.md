@@ -8,17 +8,32 @@ An open-source Python library for planning airborne remote sensing campaigns.
 
 HyPlan helps scientists and engineers design remote sensing flight missions. It handles flight line generation, sensor modeling, swath coverage, solar glint prediction, cloud analysis, terrain-aware calculations, and mission logistics including airport selection and aircraft performance.
 
+```
+ Study Area          Flight Lines         Sensor Swaths         Mission Plan
+ ┌─────────┐        ┌─────────┐         ┌─────────┐          ┌─────────┐
+ │ ▓▓▓▓▓▓▓ │        │ ──────► │         │▒──────►▒│          │ ✈ ─ ─ ► │
+ │ ▓▓▓▓▓▓▓ │  ───►  │ ◄────── │  ───►   │▒◄──────▒│  ───►   │ ──────► │
+ │ ▓▓▓▓▓▓▓ │        │ ──────► │         │▒──────►▒│          │ ◄────── │
+ └─────────┘        └─────────┘         └─────────┘          │ ─ ─ ✈ ◄│
+  define area      generate lines     compute coverage       └─────────┘
+                                                             plan & optimize
+```
+
 ## Features
 
 - **Flight planning** — Define flight lines, generate multi-line coverage patterns, and compute complete mission plans with takeoff, transit, data collection, and landing segments
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
-- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-NG, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
+- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-4, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
+- **Lidar & radar** — LVIS full-waveform lidar and UAVSAR L/P/Ka-band SAR sensor models
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
+- **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
 - **Terrain-aware analysis** — Download DEM data and compute where the sensor field of view intersects the ground
 - **Cloud cover analysis** — Estimate clear-sky probability from MODIS imagery via Google Earth Engine
-- **Aircraft performance** — Pre-configured aircraft models (NASA ER-2, G-III, B200, and others) with climb/cruise/descent calculations
-- **Airport logistics** — Search and filter airports by location, runway length, and other criteria
-- **Geospatial export** — Output to GeoJSON, KML, and interactive Folium maps
+- **Aircraft performance** — 14 pre-configured aircraft models (NASA ER-2, WB-57, G-III, B200, Twin Otter, and others) with climb/cruise/descent profiles
+- **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
+- **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
+- **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
+- **Geospatial export** — Output to GeoJSON, KML, shapefiles, and interactive Folium maps
 
 ---
 
@@ -76,9 +91,9 @@ from hyplan import FlightLine, ureg
 
 flight_line = FlightLine.start_length_azimuth(
     lat1=34.05, lon1=-118.25,
-    length=ureg.Quantity(50000, "meter"),
+    length=ureg.Quantity(50, "km"),
     az=45.0,
-    altitude_msl=ureg.Quantity(1000, "meter"),
+    altitude_msl=ureg.Quantity(20000, "feet"),
     site_name="LA Northeast",
 )
 ```
@@ -132,14 +147,38 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 
 ## Modules
 
+```
+                          ┌──────────────────────┐
+                          │     Flight Planning   │
+                          ├──────────────────────┤
+                          │  flight_line          │
+                          │  flight_box           │
+                          │  flight_plan          │
+                          │  flight_optimizer     │
+                          │  dubins_path          │
+                          └────────┬─────────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              ▼                    ▼                    ▼
+   ┌──────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+   │   Instruments    │  │    Environment   │  │    Logistics    │
+   ├──────────────────┤  ├─────────────────┤  ├─────────────────┤
+   │  sensors         │  │  sun            │  │  aircraft       │
+   │  frame_camera    │  │  glint          │  │  airports       │
+   │  lvis            │  │  terrain        │  │  satellites     │
+   │  radar           │  │  clouds         │  │  units          │
+   │  swath           │  │  geometry       │  │  plotting       │
+   └──────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
 | Module | Description |
 |--------|-------------|
 | `flight_line` | Create, modify, split, clip, and export individual flight lines |
 | `flight_box` | Generate parallel flight lines covering a geographic area |
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
-| `aircraft` | Aircraft performance models (NASA ER-2, G-III, B200, and others) |
-| `sensors` | Sensor definitions (AVIRIS-3, AVIRIS-NG, HyTES, PRISM, MASTER, etc.) |
+| `aircraft` | Aircraft performance models (14 pre-configured research aircraft) |
+| `sensors` | Sensor definitions (AVIRIS-3, AVIRIS-4, HyTES, PRISM, MASTER, etc.) |
 | `frame_camera` | Frame camera modeling with ground footprint calculations |
 | `lvis` | LVIS full-waveform scanning lidar sensor model |
 | `radar` | Side-looking SAR sensor models (UAVSAR L/P/Ka-band) |
@@ -153,32 +192,53 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `dubins_path` | Minimum-radius turning trajectories between waypoints |
 | `geometry` | Geospatial utilities (haversine, coordinate transforms, polygons) |
 | `units` | Unit conversions using Pint (meters, feet, knots, etc.) |
-| `plotting` | Interactive Folium map generation |
-| `download` | File download with caching and retry |
+| `plotting` | Interactive Folium map generation and altitude profiles |
 
 ---
 
-## Examples
+## Notebooks
 
-The [`examples/`](examples/) directory contains runnable scripts demonstrating each module:
+The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interactive tutorials and visualizations covering every HyPlan module:
 
-- [`test_flight_line.py`](examples/test_flight_line.py) — Flight line creation, clipping, rotation, splitting
-- [`test_flight_box.py`](examples/test_flight_box.py) — Multi-line coverage patterns
-- [`test_flight_plan.py`](examples/test_flight_plan.py) — Full mission planning with airports
-- [`test_flight_optimizer.py`](examples/test_flight_optimizer.py) — Multi-day flight line optimization with refueling
-- [`test_aircraft.py`](examples/test_aircraft.py) — Aircraft performance calculations
-- [`test_sensors.py`](examples/test_sensors.py) — Sensor instantiation and GSD calculations
-- [`test_glint.py`](examples/test_glint.py) — Solar glint prediction and visualization
-- [`test_swath.py`](examples/test_swath.py) — Swath polygon generation
-- [`test_terrain.py`](examples/test_terrain.py) — DEM handling and ray-terrain intersection
-- [`test_sun.py`](examples/test_sun.py) — Solar position calculations
-- [`test_clouds.py`](examples/test_clouds.py) — Cloud cover analysis (requires Google Earth Engine)
-- [`test_airports.py`](examples/test_airports.py) — Airport search and filtering
-- [`test_dubins.py`](examples/test_dubins.py) — Dubins path trajectories
-- [`test_frame_camera.py`](examples/test_frame_camera.py) — Frame camera footprint calculations
-- [`test_geometry.py`](examples/test_geometry.py) — Geometric utilities
-- [`test_units.py`](examples/test_units.py) — Unit conversions
-- [`test_satellites.py`](examples/test_satellites.py) — Satellite overpass prediction
+### Getting Started
+
+| Notebook | Description |
+|----------|-------------|
+| [tutorial.ipynb](notebooks/tutorial.ipynb) | End-to-end workflow: sensor setup, flight box generation, solar checks, airport selection, optimization, flight planning, and map visualization |
+| [validation.ipynb](notebooks/validation.ipynb) | Validates HyPlan calculations against reference values (Vincenty, NOAA solar, analytical swath/GSD) |
+
+### Flight Planning
+
+| Notebook | Description |
+|----------|-------------|
+| [flight_line_operations.ipynb](notebooks/flight_line_operations.ipynb) | Creating, clipping, splitting, offsetting, rotating, and exporting flight lines |
+| [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Minimum-radius turn trajectories, speed/bank effects, and flight line integration |
+| [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
+
+### Instruments & Sensors
+
+| Notebook | Description |
+|----------|-------------|
+| [sensor_comparison.ipynb](notebooks/sensor_comparison.ipynb) | Comparing GSD, swath width, and critical speed across imaging spectrometers |
+| [frame_camera_planning.ipynb](notebooks/frame_camera_planning.ipynb) | Frame camera FOV, footprints, GSD, and along-track sampling |
+| [lidar_lvis_planning.ipynb](notebooks/lidar_lvis_planning.ipynb) | LVIS lens options, swath geometry, contiguous coverage, and coverage rates |
+| [radar_sar_missions.ipynb](notebooks/radar_sar_missions.ipynb) | UAVSAR L/P/Ka-band swath geometry, resolution, and InSAR line spacing |
+
+### Environment & Conditions
+
+| Notebook | Description |
+|----------|-------------|
+| [solar_planning.ipynb](notebooks/solar_planning.ipynb) | Solar azimuth/elevation, daily collection windows, seasonal and cross-site comparisons |
+| [glint_analysis.ipynb](notebooks/glint_analysis.ipynb) | Glint angle prediction, heading optimization, and time-of-day effects for aquatic missions |
+| [terrain_aware_planning.ipynb](notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
+| [cloud_analysis.ipynb](notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
+
+### Aircraft & Satellites
+
+| Notebook | Description |
+|----------|-------------|
+| [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
+| [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
 
 ---
 
@@ -210,7 +270,7 @@ Contributions are welcome! To get started:
 
 1. Fork the repository and create a feature branch
 2. Install in development mode: `pip install -e .`
-3. Run the example scripts in `examples/` to verify your changes
+3. Run the notebooks in `notebooks/` to verify your changes
 4. Submit a pull request
 
 Please open an [issue](https://github.com/ryanpavlick/hyplan/issues) for bug reports, feature requests, or questions.
