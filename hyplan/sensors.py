@@ -194,7 +194,7 @@ class AVIRISClassic(LineScanner):
             name="AVIRIS Classic",
             fov=34.0,
             across_track_pixels=677,
-            frame_rate=100 * ureg.Hz
+            frame_rate=12 * ureg.Hz
         )
 
 class AVIRISNextGen(LineScanner):
@@ -209,7 +209,7 @@ class AVIRISNextGen(LineScanner):
         )
 
 class AVIRIS3(LineScanner):
-    """AVIRIS-3 imaging spectrometer (40.2° FOV, 1240 pixels, 216 Hz)."""
+    """AVIRIS-3 imaging spectrometer (39.6° FOV, 1234 pixels, 216 Hz)."""
 
     def __init__(self):
         super().__init__(
@@ -220,18 +220,18 @@ class AVIRIS3(LineScanner):
         )
 
 class AVIRIS4(LineScanner):
-    """AVIRIS-4 imaging spectrometer (39.5° FOV, 1240 pixels, 215 Hz)."""
+    """AVIRIS-4 imaging spectrometer (39.6° FOV, 1234 pixels, 216 Hz)."""
 
     def __init__(self):
         super().__init__(
             name="AVIRIS 4",
             fov=39.6,
             across_track_pixels=1234,
-            frame_rate=215 * ureg.Hz
+            frame_rate=216 * ureg.Hz
         )
 
 class AVIRIS5(LineScanner):
-    """AVIRIS-5 imaging spectrometer (39.5° FOV, 1240 pixels, 215 Hz)."""
+    """AVIRIS-5 imaging spectrometer (40.2° FOV, 1239 pixels, 148 Hz)."""
 
     def __init__(self):
         super().__init__(
