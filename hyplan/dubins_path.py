@@ -8,6 +8,7 @@ from dubins import path_sample
 
 from .geometry import get_utm_transforms, wrap_to_360
 from .units import ureg
+from .exceptions import HyPlanTypeError, HyPlanValueError
 
 
 class Waypoint:
@@ -24,9 +25,9 @@ class Waypoint:
         """
         # Validate latitude and longitude and process geometry
         if not (-90.0 <= latitude <= 90.0):
-            raise ValueError("Latitude must be between -90 and 90 degrees")
+            raise HyPlanValueError("Latitude must be between -90 and 90 degrees")
         if not (-180.0 <= longitude <= 180.0):
-            raise ValueError("Longitude must be between -180 and 180 degrees")
+            raise HyPlanValueError("Longitude must be between -180 and 180 degrees")
         self.geometry = Point(longitude, latitude)
 
         self.latitude = latitude
@@ -35,7 +36,7 @@ class Waypoint:
         if isinstance(heading, (int, float)):
             self.heading = wrap_to_360(float(heading))
         else:
-            raise TypeError("Heading must be a float or an int")
+            raise HyPlanTypeError("Heading must be a float or an int")
 
         # Validate and process altitude (MSL)
         if altitude_msl is None:
@@ -45,7 +46,7 @@ class Waypoint:
         elif hasattr(altitude_msl, 'units') and altitude_msl.check('[length]'):
             self.altitude_msl = altitude_msl.to(ureg.meter)
         else:
-            raise TypeError("altitude_msl must be None, a float (meters), or a pint Quantity with length units")
+            raise HyPlanTypeError("altitude_msl must be None, a float (meters), or a pint Quantity with length units")
 
         if name is not None:
             self.name = str(name)
@@ -81,7 +82,7 @@ class DubinsPath:
             step_size (float): Step size for sampling the trajectory.
         """
         if not isinstance(start, Waypoint) or not isinstance(end, Waypoint):
-            raise TypeError("start and end must be Waypoint objects")
+            raise HyPlanTypeError("start and end must be Waypoint objects")
 
         self.start = start
         self.end = end
@@ -91,7 +92,7 @@ class DubinsPath:
         elif hasattr(speed, 'units') and speed.check('[speed]'):
             self.speed_mps = speed.to(ureg.meter / ureg.second).magnitude
         else:
-            raise TypeError("speed must be a pint Quantity with speed units or a float (meters per second)")
+            raise HyPlanTypeError("speed must be a pint Quantity with speed units or a float (meters per second)")
 
         self.bank_angle = bank_angle
         self.step_size = step_size

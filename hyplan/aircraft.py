@@ -1,10 +1,16 @@
-import numpy as np
+from __future__ import annotations
+
 import logging
+from typing import Optional
+
+import numpy as np
 import pymap3d.vincenty
-from .units import ureg
+from pint import Quantity
+
 from .airports import Airport
 from .dubins_path import Waypoint, DubinsPath
-from pint import Quantity
+from .exceptions import HyPlanTypeError, HyPlanValueError
+from .units import ureg
 
 class Aircraft:
     """
@@ -69,13 +75,13 @@ class Aircraft:
 
         # **Validation: Ensure correct types**
         if not isinstance(aircraft_type, str):
-            raise TypeError("Aircraft type must be a string.")
+            raise HyPlanTypeError("Aircraft type must be a string.")
         if not isinstance(tail_number, str):
-            raise TypeError("Tail number must be a string.")
+            raise HyPlanTypeError("Tail number must be a string.")
         if not isinstance(operator, str):
-            raise TypeError("Operator must be a string.")
+            raise HyPlanTypeError("Operator must be a string.")
         if not isinstance(max_bank_angle, (int, float)):
-            raise TypeError("Max bank angle must be a float or int.")
+            raise HyPlanTypeError("Max bank angle must be a float or int.")
 
         # **Automatic Unit Conversion**
         self.service_ceiling = self._convert_to_unit(service_ceiling, ureg.feet)
@@ -132,12 +138,12 @@ class Aircraft:
             TypeError: If the input is not a Quantity.
         """
         if not isinstance(value, Quantity):
-            raise TypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
+            raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
 
         # Convert to the expected unit
         return value.to(expected_unit)
 
-    def rate_of_climb(self, altitude):
+    def rate_of_climb(self, altitude: Quantity) -> Quantity:
         """
         Compute the rate of climb at a given altitude.
 
@@ -190,7 +196,12 @@ class Aircraft:
         """
         return self.cruise_speed_at(altitude) - self.descent_speed_reduction
 
-    def _climb(self, start_altitude, end_altitude, true_air_speed=None):
+    def _climb(
+        self,
+        start_altitude: Quantity,
+        end_altitude: Quantity,
+        true_air_speed: Optional[Quantity] = None,
+    ) -> tuple[Quantity, Quantity]:
         """
         Estimate the time and horizontal distance traveled during a Vy climb.
 
@@ -215,7 +226,7 @@ class Aircraft:
             true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
 
             if end_altitude > self.service_ceiling:
-                raise ValueError("End altitude cannot exceed the service ceiling.")
+                raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
             if end_altitude <= start_altitude:
                 return 0 * ureg.minute, 0 * ureg.nautical_mile
 
@@ -247,7 +258,9 @@ class Aircraft:
             logging.error(f"Error in time_to_climb: {e}")
             raise
 
-    def climb_altitude_profile(self, start_altitude, end_altitude, n_points=50):
+    def climb_altitude_profile(
+        self, start_altitude: Quantity, end_altitude: Quantity, n_points: int = 50
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Generate the altitude-vs-time curve during a climb.
 
@@ -293,10 +306,21 @@ class Aircraft:
 
         return times, altitudes
 
-    def time_to_takeoff(self, airport: Airport, waypoint: Waypoint):
+    def time_to_takeoff(self, airport: Airport, waypoint: Waypoint) -> dict:
         """
-        Calculate the total time needed to take off from an airport and reach a waypoint at cruise altitude,
-        with detailed altitude and time information for each phase.
+        Calculate the time to take off from an airport and reach a waypoint.
+
+        Computes climb and cruise phases from the airport to the first
+        waypoint, returning detailed altitude and time information for
+        each phase.
+
+        Args:
+            airport (Airport): Departure airport.
+            waypoint (Waypoint): First flight waypoint at cruise altitude.
+
+        Returns:
+            dict: Keys ``total_time``, ``phases`` (with ``takeoff_climb``
+            and ``takeoff_cruise`` sub-dicts), and ``dubins_path``.
         """
         try:
             airport_altitude = airport.elevation.to(ureg.feet)
@@ -350,10 +374,21 @@ class Aircraft:
             raise
 
 
-    def time_to_return(self, waypoint: Waypoint, airport: Airport):
+    def time_to_return(self, waypoint: Waypoint, airport: Airport) -> dict:
         """
-        Calculate the total time needed to return to an airport during an IFR landing,
-        with detailed altitude and time information for each phase.
+        Calculate the time to return from a waypoint to an airport.
+
+        Models an IFR return with cruise, descent, and approach phases,
+        returning detailed altitude and time information for each phase.
+
+        Args:
+            waypoint (Waypoint): Last flight waypoint at cruise altitude.
+            airport (Airport): Destination airport.
+
+        Returns:
+            dict: Keys ``total_time``, ``phases`` (with ``return_cruise``,
+            ``return_descent``, and ``return_approach`` sub-dicts), and
+            ``dubins_path``.
         """
         try:
             _, arrival_heading = pymap3d.vincenty.vdist(waypoint.latitude, waypoint.longitude, airport.latitude, airport.longitude)
@@ -425,7 +460,12 @@ class Aircraft:
             logging.error(f"Error in time_to_return: {e}")
             raise
 
-    def _descend(self, start_altitude, end_altitude, true_air_speed=None):
+    def _descend(
+        self,
+        start_altitude: Quantity,
+        end_altitude: Quantity,
+        true_air_speed: Optional[Quantity] = None,
+    ) -> tuple[Quantity, Quantity]:
         """
         Estimate the time and horizontal distance traveled during descent.
 
@@ -466,10 +506,28 @@ class Aircraft:
             logging.error(f"Error in time_to_descend: {e}")
             raise
 
-    def time_to_cruise(self, start_waypoint: Waypoint, end_waypoint: Waypoint, true_air_speed=None):
+    def time_to_cruise(
+        self,
+        start_waypoint: Waypoint,
+        end_waypoint: Waypoint,
+        true_air_speed: Optional[Quantity] = None,
+    ) -> dict:
         """
-        Calculate the time required to travel between two waypoints using DubinsPath.
-        Returns a structure similar to time_to_takeoff and time_to_return.
+        Calculate the time to cruise between two waypoints.
+
+        Accounts for any altitude change (climb or descent) between the
+        waypoints, returning detailed phase information.
+
+        Args:
+            start_waypoint (Waypoint): Starting waypoint.
+            end_waypoint (Waypoint): Ending waypoint.
+            true_air_speed (Quantity, optional): TAS override. Defaults to
+                the altitude-dependent cruise speed at the end waypoint.
+
+        Returns:
+            dict: Keys ``total_time``, ``phases`` (with optional
+            ``cruise_climb``, ``cruise_descent``, and ``cruise`` sub-dicts),
+            and ``dubins_path``.
         """
         try:
             # Default true airspeed is altitude-dependent cruise speed

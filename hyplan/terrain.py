@@ -12,6 +12,7 @@ import pymap3d.los
 import pymap3d.aer
 
 from .download import download_file
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def clear_cache() -> None:
     """Clears the entire cache directory after confirming it is safe to do so."""
     cache_dir = get_cache_root()
     if not cache_dir.startswith(tempfile.gettempdir()):
-        raise ValueError(f"Refusing to clear unsafe cache directory: {cache_dir}")
+        raise HyPlanValueError(f"Refusing to clear unsafe cache directory: {cache_dir}")
     if os.path.exists(cache_dir):
         shutil.rmtree(cache_dir)
         logger.info(f"Cache directory {cache_dir} cleared.")
@@ -65,7 +66,7 @@ def clear_localdem_cache(confirm: bool = True) -> None:
 
     cache_root = get_cache_root()
     if not os.path.commonpath([localdem_dir, cache_root]) == cache_root:
-        raise ValueError(f"Refusing to clear unsafe directory: {localdem_dir}")
+        raise HyPlanValueError(f"Refusing to clear unsafe directory: {localdem_dir}")
 
     if confirm:
         user_input = input(f"Are you sure you want to delete all files in {localdem_dir}? (yes/no): ").strip().lower()
@@ -180,11 +181,11 @@ def merge_tiles(output_filename, tile_file_list) -> None:
         RuntimeError: If GDAL merge operation fails.
     """
     if not tile_file_list:
-        raise ValueError("No tiles provided for merging.")
+        raise HyPlanValueError("No tiles provided for merging.")
 
     invalid_tiles = [tile for tile in tile_file_list if not tile or not os.path.exists(tile)]
     if invalid_tiles:
-        raise ValueError(f"Invalid or missing raster files: {invalid_tiles}")
+        raise HyPlanValueError(f"Invalid or missing raster files: {invalid_tiles}")
 
     try:
         logger.info(f"Merging {len(tile_file_list)} tiles into {output_filename}")
@@ -196,7 +197,7 @@ def merge_tiles(output_filename, tile_file_list) -> None:
         logger.info(f"Successfully merged tiles into {output_filename}")
     except Exception as e:
         logger.error(f"Failed to merge tiles: {e}")
-        raise RuntimeError(f"Tile merging failed: {e}")
+        raise HyPlanRuntimeError(f"Tile merging failed: {e}")
 
 
 def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str = "https://copernicus-dem-30m.s3.amazonaws.com/") -> str:
@@ -232,12 +233,12 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
     """
     dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
     if not dataset:
-        raise RuntimeError(f"Could not open DEM file: {dem_file}")
+        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
 
     geotransform = dataset.GetGeoTransform()
     band = dataset.GetRasterBand(1)
     if not band:
-        raise RuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
+        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
 
     raster = band.ReadAsArray()
     dataset = None  # Close the dataset
@@ -271,11 +272,11 @@ def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
     """
     dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
     if not dataset:
-        raise RuntimeError(f"Could not open DEM file: {dem_file}")
+        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
 
     band = dataset.GetRasterBand(1)
     if not band:
-        raise RuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
+        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
 
     min_val, max_val = band.ComputeRasterMinMax()
     dataset = None  # Close the dataset
@@ -320,13 +321,13 @@ def ray_terrain_intersection(
     n_obs = len(lat0)
 
     if np.any((tilt < -90) | (tilt > 90)):
-        raise ValueError("Tilt angles must be between -90 and 90 degrees.")
+        raise HyPlanValueError("Tilt angles must be between -90 and 90 degrees.")
     if np.any((az < 0) | (az > 360)):
-        raise ValueError("Azimuth angle must be between 0 and 360 degrees.")
+        raise HyPlanValueError("Azimuth angle must be between 0 and 360 degrees.")
 
     cos_tilt = np.cos(np.radians(tilt))
     if np.any(np.abs(cos_tilt) < _COS_TILT_MIN):
-        raise ValueError(
+        raise HyPlanValueError(
             "One or more tilt angles are too close to ±90° (horizontal). "
             "Ray-terrain intersection is undefined for near-horizontal rays."
         )
@@ -340,7 +341,7 @@ def ray_terrain_intersection(
     min_elev, max_elev = get_min_max_elevations(dem_file)
     max_elev = min(h0, max_elev)
     if np.any(min_elev > h0):
-        raise ValueError("Observer altitude is below the minimum terrain elevation.")
+        raise HyPlanValueError("Observer altitude is below the minimum terrain elevation.")
 
     # Per-observer slant range bounds
     upper_bound = np.ceil((rng_ell - (min_elev / cos_tilt)) / precision) * precision

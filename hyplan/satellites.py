@@ -17,6 +17,7 @@ import pymap3d.vincenty
 from .terrain import get_cache_root
 from .download import download_file
 from .geometry import wrap_to_180
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ def get_satellite(name: str) -> SatelliteInfo:
     for sat in SATELLITE_REGISTRY.values():
         if name in sat.aliases or name == sat.name:
             return sat
-    raise ValueError(
+    raise HyPlanValueError(
         f"Unknown satellite: {name}. "
         f"Available: {list(SATELLITE_REGISTRY.keys())}"
     )
@@ -154,7 +155,7 @@ def fetch_tle(
         lines = [line.strip() for line in f.readlines() if line.strip()]
 
     if len(lines) < 2:
-        raise RuntimeError(
+        raise HyPlanRuntimeError(
             f"TLE file for {satellite.name} has fewer than 2 lines: {cache_path}"
         )
 

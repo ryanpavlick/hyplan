@@ -9,6 +9,7 @@ from typing import List, Union
 from .units import convert_distance, ureg
 from .download import download_file
 from .geometry import haversine
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 __all__ = [
     "Airport", "initialize_data", "find_nearest_airport", "find_nearest_airports",
@@ -45,18 +46,18 @@ class Airport:
         if gdf_airports is None:
             initialize_data()
         if icao not in gdf_airports.index:
-            raise ValueError(f"Airport ICAO code {icao} not found in the dataset.")
+            raise HyPlanValueError(f"Airport ICAO code {icao} not found in the dataset.")
 
         airport_data = gdf_airports.loc[icao]
 
         longitude = airport_data.get("longitude")
         latitude = airport_data.get("latitude")
         if pd.isna(longitude) or pd.isna(latitude):
-            raise ValueError(f"Longitude or latitude is missing for airport {icao}")
+            raise HyPlanValueError(f"Longitude or latitude is missing for airport {icao}")
         try:
             self._geometry = Point(float(longitude), float(latitude))
         except (TypeError, ValueError):
-            raise ValueError(f"Invalid longitude/latitude for airport {icao}: {longitude}, {latitude}")
+            raise HyPlanValueError(f"Invalid longitude/latitude for airport {icao}: {longitude}, {latitude}")
 
         self._icao = airport_data['icao_code']
         self._iata = airport_data['iata_code']
@@ -129,7 +130,7 @@ class Airport:
         """Runway details for this airport as a DataFrame."""
         global df_runways
         if df_runways is None:
-            raise RuntimeError("Runways data has not been initialized. Please run initialize_data().")
+            raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
         return df_runways[df_runways['airport_ident'] == self._icao]
 
 
@@ -318,7 +319,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     """
     global gdf_airports
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
     _, tree_idx = gdf_airports.sindex.nearest(point)
@@ -332,7 +333,7 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     """
     global gdf_airports
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
     _, tree_idxs = gdf_airports.sindex.nearest(point, return_all=False)
@@ -361,7 +362,7 @@ def airports_within_radius(
     """
     global gdf_airports
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
 
     point = Point(lon, lat)
     radius_m = convert_distance(radius, unit, "meters")
@@ -382,14 +383,14 @@ def get_airports() -> gpd.GeoDataFrame:
     """Get the globally initialized GeoDataFrame of airports."""
     global gdf_airports
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
     return gdf_airports
 
 def get_runways() -> pd.DataFrame:
     """Get the globally initialized DataFrame of runways."""
     global df_runways
     if df_runways is None:
-        raise RuntimeError("Runway data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Runway data has not been initialized. Please run initialize_data().")
     return df_runways
 
 def get_airport_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
@@ -398,7 +399,7 @@ def get_airport_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
     if isinstance(icao_codes, str):
         icao_codes = [icao_codes]
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
     return gdf_airports[gdf_airports['icao_code'].isin(icao_codes)]
 
 def get_longest_runway(icao: str) -> float:
@@ -409,7 +410,7 @@ def get_longest_runway(icao: str) -> float:
     """
     global df_runways
     if df_runways is None:
-        raise RuntimeError("Runways data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
     rows = df_runways[df_runways['airport_ident'] == icao]
     if rows.empty:
         return None
@@ -425,7 +426,7 @@ def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, 
     """
     global gdf_airports
     if gdf_airports is None:
-        raise RuntimeError("Airports data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
 
     if icao_codes:
         if isinstance(icao_codes, str):
@@ -455,7 +456,7 @@ def get_runway_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
     """
     global df_runways
     if df_runways is None:
-        raise RuntimeError("Runways data has not been initialized. Please run initialize_data().")
+        raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
 
     if isinstance(icao_codes, str):
         icao_codes = [icao_codes]
