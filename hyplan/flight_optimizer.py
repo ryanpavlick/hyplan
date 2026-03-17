@@ -1,5 +1,6 @@
 import itertools
 import logging
+from typing import Optional, Tuple
 
 import networkx as nx
 import pymap3d.vincenty
@@ -12,9 +13,21 @@ from .flight_line import FlightLine
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "build_graph",
+    "greedy_optimize",
+]
+
 
 def _waypoint_from_airport(airport: Airport) -> Waypoint:
-    """Create a Waypoint from an Airport (heading=0, used as placeholder)."""
+    """Create a Waypoint from an Airport (heading=0, used as placeholder).
+
+    Args:
+        airport: Airport to convert.
+
+    Returns:
+        Waypoint at the airport's location with heading=0 and MSL elevation.
+    """
     return Waypoint(
         latitude=airport.latitude,
         longitude=airport.longitude,
@@ -25,28 +38,63 @@ def _waypoint_from_airport(airport: Airport) -> Waypoint:
 
 
 def _transit_time(aircraft: Aircraft, start_wp: Waypoint, end_wp: Waypoint) -> float:
-    """
-    Compute transit time in hours between two waypoints using the aircraft's
-    cruise performance model (includes Dubins path and climb/descent).
+    """Compute transit time in hours between two waypoints.
+
+    Uses the aircraft's cruise performance model (includes Dubins path
+    and climb/descent).
+
+    Args:
+        aircraft: Aircraft performance model.
+        start_wp: Origin waypoint.
+        end_wp: Destination waypoint.
+
+    Returns:
+        Transit time in hours.
     """
     info = aircraft.time_to_cruise(start_wp, end_wp)
     return info["total_time"].to(ureg.hour).magnitude
 
 
 def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float:
-    """Compute takeoff + climb + cruise time in hours from airport to waypoint."""
+    """Compute takeoff + climb + cruise time in hours from airport to waypoint.
+
+    Args:
+        aircraft: Aircraft performance model.
+        airport: Departure airport.
+        wp: Target waypoint.
+
+    Returns:
+        Total departure time in hours.
+    """
     info = aircraft.time_to_takeoff(airport, wp)
     return info["total_time"].to(ureg.hour).magnitude
 
 
 def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
-    """Compute cruise + descent + approach time in hours from waypoint to airport."""
+    """Compute cruise + descent + approach time in hours from waypoint to airport.
+
+    Args:
+        aircraft: Aircraft performance model.
+        wp: Current waypoint.
+        airport: Destination airport.
+
+    Returns:
+        Total return time in hours.
+    """
     info = aircraft.time_to_return(wp, airport)
     return info["total_time"].to(ureg.hour).magnitude
 
 
 def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine) -> float:
-    """Compute time in hours to fly along a flight line at cruise speed."""
+    """Compute time in hours to fly along a flight line at cruise speed.
+
+    Args:
+        aircraft: Aircraft performance model.
+        flight_line: Flight line to traverse.
+
+    Returns:
+        Flight line traversal time in hours.
+    """
     return (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude_msl)).to(ureg.hour).magnitude
 
 
@@ -176,7 +224,7 @@ def _find_closest_unvisited_line(
     airports=None, time_since_refuel=0.0, time_elapsed=0.0,
     max_endurance=float("inf"), max_daily_flight_time=float("inf"),
     takeoff_landing_overhead=0.0,
-):
+) -> Tuple[Optional[str], Optional[str], Optional[float]]:
     """
     Find the closest unvisited flight line that is feasible within constraints.
 
@@ -229,7 +277,7 @@ def _find_closest_unvisited_line(
     return best_key, best_node, best_time
 
 
-def _find_closest_airport(G, current_node, airports):
+def _find_closest_airport(G, current_node, airports) -> Tuple[Optional[str], float]:
     """
     Find the closest airport from the current node.
 
@@ -254,7 +302,7 @@ def _find_best_refuel_airport(
     G, current_node, airports, visited_lines, line_keys,
     time_since_refuel, time_elapsed, max_endurance, max_daily_flight_time,
     refuel_time, takeoff_landing_overhead,
-):
+) -> Tuple[Optional[str], float]:
     """
     Find the best airport to refuel at, ensuring that refueling there
     actually enables reaching at least one more unvisited flight line.
@@ -309,8 +357,18 @@ def _find_best_refuel_airport(
     return best_icao, best_time
 
 
-def _opposite_endpoint(node):
-    """Given 'key_start', return 'key_end' and vice versa."""
+def _opposite_endpoint(node) -> str:
+    """Given 'key_start', return 'key_end' and vice versa.
+
+    Args:
+        node: Graph node name ending in '_start' or '_end'.
+
+    Returns:
+        The complementary endpoint node name.
+
+    Raises:
+        ValueError: If node does not end with '_start' or '_end'.
+    """
     if node.endswith("_start"):
         return node[:-6] + "_end"
     elif node.endswith("_end"):

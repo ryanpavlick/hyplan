@@ -15,6 +15,19 @@ from .download import download_file
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "get_cache_root",
+    "clear_cache",
+    "clear_localdem_cache",
+    "build_tile_index",
+    "download_dem_files",
+    "merge_tiles",
+    "generate_demfile",
+    "get_elevations",
+    "get_min_max_elevations",
+    "ray_terrain_intersection",
+]
+
 # Minimum cos(tilt) magnitude below which ray-terrain intersection is undefined
 _COS_TILT_MIN = 1e-6
 
@@ -23,7 +36,7 @@ def get_cache_root(custom_path: str = None) -> str:
     """Get the root directory for caching files."""
     return custom_path or os.environ.get("HYPLAN_CACHE_ROOT", f"{tempfile.gettempdir()}/hyplan")
 
-def clear_cache():
+def clear_cache() -> None:
     """Clears the entire cache directory after confirming it is safe to do so."""
     cache_dir = get_cache_root()
     if not cache_dir.startswith(tempfile.gettempdir()):
@@ -34,7 +47,7 @@ def clear_cache():
     else:
         logger.info(f"Cache directory {cache_dir} does not exist.")
 
-def clear_localdem_cache(confirm: bool = True):
+def clear_localdem_cache(confirm: bool = True) -> None:
     """
     Clears the local DEM cache directory.
 
@@ -154,7 +167,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     return downloaded_files
 
 
-def merge_tiles(output_filename, tile_file_list):
+def merge_tiles(output_filename, tile_file_list) -> None:
     """
     Merge multiple DEM tile files into a single GeoTIFF using GDAL Warp.
 

@@ -4,7 +4,7 @@ import time
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -19,6 +19,20 @@ from .download import download_file
 from .geometry import wrap_to_180
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "SatelliteInfo",
+    "SATELLITE_REGISTRY",
+    "get_satellite",
+    "fetch_tle",
+    "clear_tle_cache",
+    "compute_ground_track",
+    "compute_swath_footprint",
+    "find_overpasses",
+    "find_all_overpasses",
+    "compute_overpass_overlap",
+    "overpasses_to_kml",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +119,7 @@ def _is_tle_stale(cache_path: str, max_age_hours: float = 24.0) -> bool:
 def fetch_tle(
     satellite: Union[str, SatelliteInfo],
     max_age_hours: float = 24.0,
-):
+) -> "EarthSatellite":
     """Fetch the TLE for a satellite, using cache when available.
 
     Downloads from CelesTrak if the cache is missing or stale.
@@ -272,7 +286,7 @@ def compute_ground_track(
 # Swath footprint
 # ---------------------------------------------------------------------------
 
-def _compute_headings(lats, lons):
+def _compute_headings(lats, lons) -> np.ndarray:
     """
     Compute forward azimuths between consecutive ground track points.
 
@@ -293,7 +307,7 @@ def _compute_headings(lats, lons):
     return headings
 
 
-def _segment_passes(lats, timestamps, time_step_s):
+def _segment_passes(lats, timestamps, time_step_s) -> List[Tuple[int, int]]:
     """Split a ground track into individual passes.
 
     A new pass starts when there is a time gap > 2 * time_step_s or when the
@@ -796,7 +810,7 @@ def _empty_overpass_gdf() -> gpd.GeoDataFrame:
     )
 
 
-def _merge_time_windows(timestamps, margin_s=120.0):
+def _merge_time_windows(timestamps, margin_s=120.0) -> List[Tuple[datetime, datetime]]:
     """Merge nearby timestamps into contiguous time windows.
 
     Args:

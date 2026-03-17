@@ -3,6 +3,28 @@ import numpy as np
 from pint import Quantity
 from .units import ureg
 
+__all__ = [
+    "Sensor",
+    "LineScanner",
+    "AVIRISClassic",
+    "AVIRISNextGen",
+    "AVIRIS3",
+    "AVIRIS4",
+    "HyTES",
+    "PRISM",
+    "MASTER",
+    "GLiHT_VNIR",
+    "GLiHT_Thermal",
+    "GLiHT_SIF",
+    "GCAS_UV_Vis",
+    "GCAS_VNIR",
+    "eMAS",
+    "PICARD",
+    "create_sensor",
+    "SENSOR_REGISTRY",
+]
+
+
 class Sensor:
     """Base class to represent a generic sensor.
 
@@ -85,12 +107,12 @@ class LineScanner(Sensor):
         return (1.0 / self.frame_rate).to(ureg.s)
 
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
-        """Calculate swath width (m) for a given altitude above ground level."""
+        """Calculate swath width (m) for a given altitude above ground level (AGL)."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         return 2 * altitude_agl * np.tan(np.radians(self.fov / 2))
 
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the ground sample distance (GSD) for a given altitude above ground level."""
+        """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
@@ -107,7 +129,7 @@ class LineScanner(Sensor):
             return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the required altitude AGL for a given ground sample distance (GSD)."""
+        """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
@@ -155,6 +177,8 @@ class LineScanner(Sensor):
 
 
 class AVIRISClassic(LineScanner):
+    """AVIRIS Classic imaging spectrometer (34° FOV, 677 pixels, 100 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="AVIRIS Classic",
@@ -164,6 +188,8 @@ class AVIRISClassic(LineScanner):
         )
 
 class AVIRISNextGen(LineScanner):
+    """AVIRIS Next Generation imaging spectrometer (36° FOV, 600 pixels, 100 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="AVIRIS Next Gen",
@@ -173,6 +199,8 @@ class AVIRISNextGen(LineScanner):
         )
 
 class AVIRIS3(LineScanner):
+    """AVIRIS-3 imaging spectrometer (40.2° FOV, 1240 pixels, 216 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="AVIRIS 3",
@@ -182,6 +210,8 @@ class AVIRIS3(LineScanner):
         )
 
 class AVIRIS4(LineScanner):
+    """AVIRIS-4 imaging spectrometer (39.5° FOV, 1240 pixels, 215 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="AVIRIS 4",
@@ -191,6 +221,8 @@ class AVIRIS4(LineScanner):
         )
 
 class HyTES(LineScanner):
+    """Hyperspectral Thermal Emission Spectrometer (50° FOV, 512 pixels, 36 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="HyTES",
@@ -200,6 +232,8 @@ class HyTES(LineScanner):
         )
 
 class PRISM(LineScanner):
+    """Portable Remote Imaging Spectrometer (30.7° FOV, 608 pixels, 176 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="PRISM",
@@ -209,6 +243,8 @@ class PRISM(LineScanner):
         )
 
 class MASTER(LineScanner):
+    """MODIS/ASTER Airborne Simulator (85.92° FOV, 716 pixels, 25 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="MASTER",
@@ -218,6 +254,8 @@ class MASTER(LineScanner):
         )
 
 class GLiHT_VNIR(LineScanner):
+    """G-LiHT Visible/Near-Infrared spectrometer (64° FOV, 1600 pixels, 250 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="G-LiHT VNIR",
@@ -227,6 +265,8 @@ class GLiHT_VNIR(LineScanner):
         )
 
 class GLiHT_Thermal(LineScanner):
+    """G-LiHT Thermal infrared imager (42.6° FOV, 640 pixels, 50 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="G-LiHT Thermal",
@@ -236,6 +276,8 @@ class GLiHT_Thermal(LineScanner):
         )
 
 class GLiHT_SIF(LineScanner):
+    """G-LiHT Solar-Induced Fluorescence spectrometer (23.5° FOV, 1600 pixels, 37.6 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="G-LiHT SIF",
@@ -246,6 +288,8 @@ class GLiHT_SIF(LineScanner):
 
 
 class GCAS_UV_Vis(LineScanner):
+    """GEO-CAPE Airborne Simulator UV-Vis spectrometer (45° FOV, 1024 pixels, 12 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="GCAS UV-Vis Spectrometer",
@@ -255,6 +299,8 @@ class GCAS_UV_Vis(LineScanner):
         )
 
 class GCAS_VNIR(LineScanner):
+    """GEO-CAPE Airborne Simulator VNIR spectrometer (70° FOV, 1024 pixels, 12 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="GCAS Visible Near-Infrared (VNIR) Spectrometer",
@@ -264,6 +310,8 @@ class GCAS_VNIR(LineScanner):
         )
 
 class eMAS(LineScanner):
+    """Enhanced MODIS Airborne Simulator (85.92° FOV, 716 pixels, 6.25 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="eMAS",
@@ -273,6 +321,8 @@ class eMAS(LineScanner):
         )
 
 class PICARD(LineScanner):
+    """PICARD imaging spectrometer (50° FOV, 412 pixels, 100 Hz)."""
+
     def __init__(self):
         super().__init__(
             name="PICARD",
