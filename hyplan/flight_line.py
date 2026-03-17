@@ -13,6 +13,11 @@ from .dubins_path import Waypoint
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "FlightLine",
+    "to_gdf",
+]
+
 
 class FlightLine:
     """
@@ -62,43 +67,52 @@ class FlightLine:
         return altitude
 
     @property
-    def lat1(self):
+    def lat1(self) -> float:
+        """Latitude of the start point in decimal degrees."""
         return self.geometry.coords[0][1]
 
     @property
-    def lon1(self):
+    def lon1(self) -> float:
+        """Longitude of the start point in decimal degrees."""
         return self.geometry.coords[0][0]
 
     @property
-    def lat2(self):
+    def lat2(self) -> float:
+        """Latitude of the end point in decimal degrees."""
         return self.geometry.coords[-1][1]
 
     @property
-    def lon2(self):
+    def lon2(self) -> float:
+        """Longitude of the end point in decimal degrees."""
         return self.geometry.coords[-1][0]
 
     @property
     def length(self) -> Quantity:
+        """Geodesic length of the flight line (Vincenty formula) in meters."""
         length, _ = pymap3d.vincenty.vdist(self.lat1, self.lon1, self.lat2, self.lon2)
         return ureg.Quantity(round(length, 2), "meter")
 
     @property
     def az12(self) -> Quantity:
+        """Forward azimuth from start to end point in degrees."""
         _, az12 = pymap3d.vincenty.vdist(self.lat1, self.lon1, self.lat2, self.lon2)
         return ureg.Quantity(az12, "degree")
 
     @property
     def az21(self) -> Quantity:
+        """Forward azimuth from end to start point in degrees."""
         _, az21 = pymap3d.vincenty.vdist(self.lat2, self.lon2, self.lat1, self.lon1)
         return ureg.Quantity(az21, "degree")
 
     @property
     def waypoint1(self) -> Waypoint:
+        """Start point as a Waypoint with heading along the flight direction."""
         name = f"{self.site_name}_start" if self.site_name else "start"
         return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude_msl=self.altitude_msl, name=name)
 
     @property
     def waypoint2(self) -> Waypoint:
+        """End point as a Waypoint with heading along the flight direction."""
         heading = (self.az21.magnitude + 180.0) % 360.0
         name = f"{self.site_name}_end" if self.site_name else "end"
         return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude_msl=self.altitude_msl, name=name)
@@ -112,6 +126,19 @@ class FlightLine:
         az: float,
         **kwargs,
     ) -> "FlightLine":
+        """Create a flight line from a start point, length, and azimuth.
+
+        Args:
+            lat1: Start latitude in decimal degrees.
+            lon1: Start longitude in decimal degrees.
+            length: Line length as a Quantity with distance units.
+            az: Forward azimuth in degrees from true north.
+            **kwargs: Additional arguments passed to the FlightLine constructor
+                (altitude_msl, site_name, etc.).
+
+        Returns:
+            A new FlightLine extending from (lat1, lon1) along the given azimuth.
+        """
         if not isinstance(length, Quantity) or not length.check("[length]"):
             raise ValueError("Length must be a Quantity with units of distance.")
         if not isinstance(az, (int, float)):
@@ -133,6 +160,19 @@ class FlightLine:
         az: float,
         **kwargs,
     ) -> "FlightLine":
+        """Create a flight line centered on a point, extending equally in both directions.
+
+        Args:
+            lat: Center latitude in decimal degrees.
+            lon: Center longitude in decimal degrees.
+            length: Total line length as a Quantity with distance units.
+            az: Forward azimuth in degrees from true north.
+            **kwargs: Additional arguments passed to the FlightLine constructor
+                (altitude_msl, site_name, etc.).
+
+        Returns:
+            A new FlightLine centered on (lat, lon) along the given azimuth.
+        """
         if not isinstance(length, Quantity) or not length.check("[length]"):
             raise ValueError("Length must be a Quantity with units of distance.")
         if not isinstance(az, (int, float)):

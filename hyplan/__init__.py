@@ -89,11 +89,11 @@ from .dubins_path import Waypoint, DubinsPath
 from .swath import generate_swath_polygon, calculate_swath_widths
 
 # Flight planning and optimization
-from .flight_plan import compute_flight_plan, plot_flight_plan, plot_altitude_trajectory
+from .flight_plan import compute_flight_plan
 from .flight_optimizer import build_graph, greedy_optimize
 
 # Plotting
-from .plotting import map_flight_lines
+from .plotting import map_flight_lines, plot_flight_plan, plot_altitude_trajectory, terrain_profile_along_track
 
 __all__ = [
     # Units
@@ -125,5 +125,5 @@ __all__ = [
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
     "build_graph", "greedy_optimize",
     # Plotting
-    "map_flight_lines",
+    "map_flight_lines", "terrain_profile_along_track",
 ]
