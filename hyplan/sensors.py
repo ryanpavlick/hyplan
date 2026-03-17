@@ -122,17 +122,7 @@ class LineScanner(Sensor):
         return 2 * altitude_agl * np.tan(np.radians(self.fov / 2))
 
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the ground sample distance (GSD) for a given altitude AGL.
-
-        Args:
-            altitude_agl (Quantity): Altitude above ground level.
-            mode (str): One of ``"nadir"`` (default), ``"average"``, or
-                ``"edge"``. Controls which pixel in the cross-track swath
-                is used for the GSD calculation.
-
-        Returns:
-            Quantity: Ground sample distance in meters.
-        """
+        """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
@@ -149,16 +139,7 @@ class LineScanner(Sensor):
             return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the required altitude AGL for a given ground sample distance.
-
-        Args:
-            gsd (Quantity): Desired ground sample distance.
-            mode (str): One of ``"nadir"`` (default), ``"average"``, or
-                ``"edge"``. Must match the mode used for GSD calculation.
-
-        Returns:
-            Quantity: Required altitude above ground level in meters.
-        """
+        """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
@@ -233,8 +214,8 @@ class AVIRIS3(LineScanner):
     def __init__(self):
         super().__init__(
             name="AVIRIS 3",
-            fov=40.2,
-            across_track_pixels=1240,
+            fov=39.6,
+            across_track_pixels=1234,
             frame_rate=216 * ureg.Hz
         )
 
@@ -244,9 +225,20 @@ class AVIRIS4(LineScanner):
     def __init__(self):
         super().__init__(
             name="AVIRIS 4",
-            fov=39.5,
-            across_track_pixels=1240,
+            fov=39.6,
+            across_track_pixels=1234,
             frame_rate=215 * ureg.Hz
+        )
+
+class AVIRIS5(LineScanner):
+    """AVIRIS-5 imaging spectrometer (39.5° FOV, 1240 pixels, 215 Hz)."""
+
+    def __init__(self):
+        super().__init__(
+            name="AVIRIS 4",
+            fov=40.2,
+            across_track_pixels=1239,
+            frame_rate=148 * ureg.Hz
         )
 
 class HyTES(LineScanner):
