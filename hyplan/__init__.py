@@ -22,6 +22,14 @@ except ImportError:
 
 # --- Core re-exports ---
 
+# Exceptions
+from .exceptions import (
+    HyPlanError,
+    HyPlanValueError,
+    HyPlanTypeError,
+    HyPlanRuntimeError,
+)
+
 # Units
 from .units import ureg, convert_distance, convert_speed, altitude_to_flight_level
 
@@ -96,6 +104,8 @@ from .flight_optimizer import build_graph, greedy_optimize
 from .plotting import map_flight_lines, plot_flight_plan, plot_altitude_trajectory, terrain_profile_along_track
 
 __all__ = [
+    # Exceptions
+    "HyPlanError", "HyPlanValueError", "HyPlanTypeError", "HyPlanRuntimeError",
     # Units
     "ureg", "convert_distance", "convert_speed", "altitude_to_flight_level",
     # Flight geometry

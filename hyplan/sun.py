@@ -3,6 +3,7 @@ import numpy as np
 from sunposition import sunpos
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+from .exceptions import HyPlanValueError
 
 
 def solar_threshold_times(latitude, longitude, start_date, end_date, thresholds, timezone_offset=0):
@@ -22,7 +23,7 @@ def solar_threshold_times(latitude, longitude, start_date, end_date, thresholds,
     """
     # Ensure thresholds is a list of 1 or 2 elements
     if not (1 <= len(thresholds) <= 2):
-        raise ValueError("Thresholds must be a list with 1 or 2 elements.")
+        raise HyPlanValueError("Thresholds must be a list with 1 or 2 elements.")
 
     # Generate all timestamps at 1-minute intervals in UTC
     start_datetime = datetime.strptime(start_date, '%Y-%m-%d')

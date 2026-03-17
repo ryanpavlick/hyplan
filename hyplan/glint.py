@@ -11,6 +11,7 @@ from sunposition import sunpos
 from .flight_line import FlightLine
 from .sensors import LineScanner
 from .geometry import process_linestring
+from .exceptions import HyPlanValueError
 
 __all__ = [
     "calculate_target_and_glint_vectorized",
@@ -119,7 +120,7 @@ def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, obser
     tilt_angles = np.arange(-half_angle, half_angle + 1, 1)  # Shape: (T,)
 
     if len(tilt_angles) == 0:
-        raise ValueError(f"Sensor half_angle {half_angle} produced an empty tilt angle array.")
+        raise HyPlanValueError(f"Sensor half_angle {half_angle} produced an empty tilt angle array.")
 
     # Cross-track line scanner: the scan is perpendicular to the flight direction.
     # Positive tilt looks starboard (azimuth + 90°), negative tilt looks port (azimuth - 90°).
@@ -170,6 +171,6 @@ def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, obser
         geometry = [Point(tilt_angles, along_track_distance) for tilt_angles,along_track_distance  in zip(tilt_angles,along_track_distance)]
         gdf = gpd.GeoDataFrame(data, geometry=geometry, crs=None)  # Assuming WGS84 CRS
     else:
-        raise ValueError("Invalid output_geometry parameter. Must be 'geographic' or 'along_track'.")
+        raise HyPlanValueError("Invalid output_geometry parameter. Must be 'geographic' or 'along_track'.")
 
     return gdf

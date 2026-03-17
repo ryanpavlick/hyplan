@@ -13,6 +13,7 @@ from pyproj.database import query_utm_crs_info
 from pyproj import Transformer
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
+from .exceptions import HyPlanTypeError, HyPlanValueError
 
 
 def wrap_to_180(lon):
@@ -68,21 +69,21 @@ def _validate_polygon(polygon: Optional[Polygon]) -> None:
 
     if not isinstance(polygon, Polygon):
         if isinstance(polygon, MultiPolygon):
-            raise ValueError(
+            raise HyPlanValueError(
                 "MultiPolygon input is not supported. Provide a single Polygon."
             )
-        raise ValueError(f"Input must be a Shapely Polygon. Received type: {type(polygon)}.")
+        raise HyPlanValueError(f"Input must be a Shapely Polygon. Received type: {type(polygon)}.")
 
     if polygon.is_empty:
-        raise ValueError("Input polygon is empty.")
+        raise HyPlanValueError("Input polygon is empty.")
 
     if len(polygon.exterior.coords) < 4:
-        raise ValueError(
+        raise HyPlanValueError(
             "Input polygon has insufficient points to form a valid geometry."
         )
 
     if not polygon.is_valid:
-        raise ValueError(
+        raise HyPlanValueError(
             f"Input polygon is invalid: {polygon.explain_validity()}"
         )
 
@@ -107,7 +108,7 @@ def calculate_geographic_mean(geometry):
     elif isinstance(geometry, list) and all(isinstance(geom, (LineString, Polygon, Point)) for geom in geometry):
         geometries = geometry
     else:
-        raise TypeError("Input must be a Shapely geometry or a list of Shapely geometries.")
+        raise HyPlanTypeError("Input must be a Shapely geometry or a list of Shapely geometries.")
 
     # Collect all coordinates from the geometries
     coords = []
@@ -120,7 +121,7 @@ def calculate_geographic_mean(geometry):
             coords.extend(list(geom.exterior.coords))
 
     if not coords:
-        raise ValueError("No valid coordinates found in the provided geometries.")
+        raise HyPlanValueError("No valid coordinates found in the provided geometries.")
 
     # Separate latitudes and longitudes
     lats = [coord[1] for coord in coords]
@@ -154,7 +155,7 @@ def get_utm_crs(lon: float, lat: float) -> CRS:
 
     # Return the first matching UTM CRS
     if not utm_crs_list:
-        raise ValueError(f"No UTM CRS found for the coordinate ({lon}, {lat}).")
+        raise HyPlanValueError(f"No UTM CRS found for the coordinate ({lon}, {lat}).")
     
     return CRS.from_epsg(utm_crs_list[0].code)
 
@@ -178,9 +179,9 @@ def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tup
     # Ensure the input is valid
     if isinstance(geometry, list):
         if not all(isinstance(geom, (Point, LineString, Polygon)) for geom in geometry):
-            raise TypeError("All elements in the list must be Shapely geometries.")
+            raise HyPlanTypeError("All elements in the list must be Shapely geometries.")
     elif not isinstance(geometry, BaseGeometry):
-        raise TypeError("Input must be a Shapely geometry or a list of geometries.")
+        raise HyPlanTypeError("Input must be a Shapely geometry or a list of geometries.")
 
     # Calculate the geographic mean
     centroid = calculate_geographic_mean(geometry)
@@ -190,7 +191,7 @@ def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tup
     try:
         utm_crs = get_utm_crs(lon, lat)
     except ValueError as e:
-        raise ValueError(f"Failed to determine UTM CRS for centroid ({lon}, {lat}): {e}")
+        raise HyPlanValueError(f"Failed to determine UTM CRS for centroid ({lon}, {lat}): {e}")
 
     # Define transformation functions
     wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
@@ -292,7 +293,7 @@ def minimum_rotated_rectangle(polygon: Polygon) -> tuple:
         mrr_wgs84 = transform(utm_to_wgs84, mrr)
 
     except Exception as e:
-        raise ValueError(f"Failed to calculate minimum rotated rectangle: {e}")
+        raise HyPlanValueError(f"Failed to calculate minimum rotated rectangle: {e}")
 
     return mrr_wgs84
 
@@ -348,7 +349,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
         rotated_bbox_wgs84 = transform(utm_to_wgs84, rotated_bbox_utm)
 
     except Exception as e:
-        raise ValueError(f"Failed to compute rotated bounding rectangle: {e}")
+        raise HyPlanValueError(f"Failed to compute rotated bounding rectangle: {e}")
 
     return rotated_bbox_wgs84
 
@@ -405,9 +406,9 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
 
     for key, value in {'along_track_distance': along_track_distance, 'across_track_distance': across_track_distance}.items():
         if not isinstance(value, float):
-            raise ValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
+            raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
         if value <= 0:
-            raise ValueError("Distance must be greater than 0.")
+            raise HyPlanValueError("Distance must be greater than 0.")
 
     azimuth = wrap_to_180(azimuth)
 
@@ -431,7 +432,7 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
         buffered_polygon_wgs84 = transform(utm_to_wgs84, polygon_utm)
 
     except Exception as e:
-        raise ValueError(f"Failed to buffer polygon along azimuth: {e}")
+        raise HyPlanValueError(f"Failed to buffer polygon along azimuth: {e}")
 
     return buffered_polygon_wgs84
 
@@ -451,7 +452,7 @@ def process_linestring(linestring):
             - numpy.ndarray: Cumulative along-track distances in meters.
     """
     if not isinstance(linestring, LineString):
-        raise ValueError("Input must be a LineString object.")
+        raise HyPlanValueError("Input must be a LineString object.")
 
     # Extract coordinates
     coordinates = np.array(linestring.coords)

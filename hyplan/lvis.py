@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pint import Quantity
 from .units import ureg
 from .sensors import Sensor
+from .exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "LVISLens",
@@ -97,14 +98,14 @@ class LVIS(Sensor):
             self.lens = LVIS_LENS_WIDE
         elif isinstance(lens, str):
             if lens not in LVIS_LENSES:
-                raise ValueError(
+                raise HyPlanValueError(
                     f"Unknown lens '{lens}'. Choose from: {list(LVIS_LENSES.keys())}"
                 )
             self.lens = LVIS_LENSES[lens]
         elif isinstance(lens, LVISLens):
             self.lens = lens
         else:
-            raise TypeError(f"lens must be a LVISLens, str, or None, got {type(lens)}")
+            raise HyPlanTypeError(f"lens must be a LVISLens, str, or None, got {type(lens)}")
 
     # ------------------------------------------------------------------
     # Standard Sensor interface (used by swath.py, flight_box.py, glint.py)

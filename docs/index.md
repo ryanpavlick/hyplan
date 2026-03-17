@@ -33,10 +33,12 @@ api/glint
 api/terrain
 api/sun
 api/clouds
+api/satellites
 api/airports
 api/dubins_path
 api/geometry
 api/units
 api/plotting
 api/download
+api/exceptions
 ```

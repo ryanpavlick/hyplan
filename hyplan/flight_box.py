@@ -7,6 +7,7 @@ import logging
 from . import flight_line
 from .units import ureg, altitude_to_flight_level
 from .geometry import wrap_to_180, rotated_rectangle, minimum_rotated_rectangle, buffer_polygon_along_azimuth, _validate_polygon
+from .exceptions import HyPlanValueError
 
 
 logger = logging.getLogger(__name__)
@@ -51,18 +52,18 @@ def _validate_inputs(**kwargs) -> None:
             # Validate and process length-related parameters
             if isinstance(value, ureg.Quantity):
                 if not value.check("[length]"):
-                    raise ValueError(f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}.")
+                    raise HyPlanValueError(f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}.")
                 value = value.to("meter").magnitude  # Convert to meters
             elif not isinstance(value, float):
-                raise ValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
+                raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
             
             if value <= 0:
-                raise ValueError(f"Invalid value for '{key}': {value}. Must be greater than 0.")
+                raise HyPlanValueError(f"Invalid value for '{key}': {value}. Must be greater than 0.")
 
         elif key == 'azimuth':
             # Validate and wrap azimuth
             if not isinstance(value, float):
-                raise ValueError(f"Invalid type for 'azimuth': Expected float. Got {type(value)}.")
+                raise HyPlanValueError(f"Invalid type for 'azimuth': Expected float. Got {type(value)}.")
             kwargs[key] = wrap_to_180(value)
 
         # elif key == 'polygon' and value is not None:
@@ -72,7 +73,7 @@ def _validate_inputs(**kwargs) -> None:
         elif key in rules:
             # Validate other parameters using rules
             if not rules[key](value):
-                raise ValueError(f"Invalid value for '{key}': {value}. Check documentation for valid inputs.")
+                raise HyPlanValueError(f"Invalid value for '{key}': {value}. Check documentation for valid inputs.")
         else:
             # Warn about unknown parameters
             logger.warning(f"Unknown parameter '{key}' provided. No validation rule exists.")
@@ -137,7 +138,7 @@ def box_around_center_line(
     )
 
     if not hasattr(instrument, "swath_width") or not callable(instrument.swath_width):
-        raise ValueError("Instrument must have a callable method `swath_width(altitude_agl)`.")
+        raise HyPlanValueError("Instrument must have a callable method `swath_width(altitude_agl)`.")
 
     # Compute swath spacing and number of lines
     # Note: swath_width expects AGL; using MSL as approximation
@@ -145,11 +146,11 @@ def box_around_center_line(
     if not isinstance(swath, ureg.Quantity):
         swath = ureg.Quantity(swath, "meter")
     if swath <= 0:
-        raise ValueError(f"Invalid swath width {swath}. Must be positive.")
+        raise HyPlanValueError(f"Invalid swath width {swath}. Must be positive.")
 
     swath_spacing = swath * (1 - (overlap / 100))
     if swath_spacing <= 0:
-        raise ValueError(f"Invalid swath spacing {swath_spacing}. Adjust overlap or instrument parameters.")
+        raise HyPlanValueError(f"Invalid swath spacing {swath_spacing}. Adjust overlap or instrument parameters.")
 
     if polygon:
         along_track_buffer = 2000.0
@@ -240,7 +241,7 @@ def box_around_polygon(
 
     # Validate inputs
     if not isinstance(polygon, Polygon):
-        raise ValueError("Input must be a Shapely Polygon.")
+        raise HyPlanValueError("Input must be a Shapely Polygon.")
 
     # Compute bounding rectangle based on the provided azimuth
     try:
@@ -251,7 +252,7 @@ def box_around_polygon(
             logger.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
             bounding_box = rotated_rectangle(polygon, azimuth)
     except Exception as e:
-        raise ValueError(f"Failed to calculate bounding box: {e}")
+        raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
 
     # Extract centroid, dimensions, and azimuth
     lon0, lat0 = bounding_box.centroid.coords[0]
