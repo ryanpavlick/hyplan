@@ -26,7 +26,8 @@ Key Features:
     - Generates heatmaps of cloud conditions, visit days, and rest days for each simulated year.
     - Produces cumulative distribution function (CDF) plots to estimate the likelihood of completing visits.
 
-TODO: Currently, it is not possible to span years (a campaign can not include dates in both December and January).
+Campaigns that cross a year boundary (e.g. December to February) are supported:
+set day_start > day_stop (e.g. day_start=335, day_stop=60).
 """
 
 # Core Libraries
@@ -135,6 +136,11 @@ def create_date_ranges(day_start, day_stop, year_start, year_stop):
     """
     Creates date ranges for filtering Earth Engine image collections.
 
+    Supports year-boundary crossings (e.g., day_start=335, day_stop=60 for a
+    December-to-February campaign). When day_start > day_stop, each year-pair
+    produces two date ranges: one from day_start to Dec 31 and one from Jan 1
+    to day_stop in the following year.
+
     Parameters:
         day_start (int): Start day of the year (1-365).
         day_stop (int): End day of the year (1-365).
@@ -142,11 +148,24 @@ def create_date_ranges(day_start, day_stop, year_start, year_stop):
         year_stop (int): End year for the ranges.
 
     Returns:
-        list of tuples: A list of date range tuples (start_date, end_date) in YYYY-DDD format.
+        list of tuples: A list of date range tuples (start_date, end_date) in
+            YYYY-DDD or YYYY-MM-DD format suitable for Earth Engine filterDate.
     """
     date_ranges = []
-    for year in range(year_start, year_stop + 1):
-        date_ranges.append((f"{year}-{day_start:03}", f"{year}-{day_stop + 1:03}"))
+
+    if day_start <= day_stop:
+        # Normal case: campaign within a single calendar year
+        for year in range(year_start, year_stop + 1):
+            date_ranges.append((f"{year}-{day_start:03}", f"{year}-{day_stop + 1:03}"))
+    else:
+        # Year-boundary crossing: day_start (e.g., 335) > day_stop (e.g., 60)
+        # Each "season" spans from day_start of year N to day_stop of year N+1
+        for year in range(year_start, year_stop + 1):
+            # Part 1: day_start to Dec 31 of current year
+            date_ranges.append((f"{year}-{day_start:03}", f"{year + 1}-001"))
+            # Part 2: Jan 1 to day_stop of following year
+            date_ranges.append((f"{year + 1}-001", f"{year + 1}-{day_stop + 1:03}"))
+
     return date_ranges
 
 def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_start, day_stop, limit=5000):
@@ -253,6 +272,10 @@ def simulate_visits(
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Build the day sequence. When day_start > day_stop the campaign
+    # crosses a year boundary (e.g. Dec 1 through Feb 28).
+    crosses_year = day_start > day_stop
+
     visit_days = []
     visit_tracker = {}
     rest_days = {}
@@ -262,21 +285,32 @@ def simulate_visits(
         remaining_polygons = set(df['polygon_id'].unique())
         visit_tracker[year] = {}
         rest_days[year] = []
-        current_day_of_year = day_start
         total_days = 0
         consecutive_visits = 0
 
-        while current_day_of_year <= day_stop:
+        if crosses_year:
+            # e.g. day 335..365 in *year*, then day 1..day_stop in *year+1*
+            last_day_of_year = (datetime(year + 1, 1, 1) - datetime(year, 1, 1)).days
+            day_sequence = list(range(day_start, last_day_of_year + 1)) + list(range(1, day_stop + 1))
+        else:
+            day_sequence = list(range(day_start, day_stop + 1))
+
+        for seq_idx, current_day_of_year in enumerate(day_sequence):
+            # Determine which calendar year this day falls in
+            if crosses_year and current_day_of_year < day_start:
+                current_year = year + 1
+            else:
+                current_year = year
+
             total_days += 1
-            current_date = datetime(year, 1, 1) + timedelta(days=current_day_of_year - 1)
+            current_date = datetime(current_year, 1, 1) + timedelta(days=current_day_of_year - 1)
 
             if exclude_weekends and current_date.weekday() >= 5:
-                logger.debug(f"Skipping weekend on day {current_day_of_year} of year {year}")
-                current_day_of_year += 1
+                logger.debug(f"Skipping weekend on day {current_day_of_year} of year {current_year}")
                 consecutive_visits = 0
                 continue
 
-            daily_df = df[(df['year'] == year) & (df['day_of_year'] == current_day_of_year)]
+            daily_df = df[(df['year'] == current_year) & (df['day_of_year'] == current_day_of_year)]
             daily_df = daily_df[~daily_df['polygon_id'].isin(visited_polygons)]
             visitable_polygons = daily_df[daily_df['cloud_fraction'] <= cloud_fraction_threshold]
 
@@ -292,21 +326,19 @@ def simulate_visits(
                         visit_tracker[year][polygon_id] = []
                     visit_tracker[year][polygon_id].append(current_day_of_year)
 
-                    logger.debug(f"Visiting polygon {polygon_id} on day {current_day_of_year} of year {year}")
+                    logger.debug(f"Visiting polygon {polygon_id} on day {current_day_of_year} of year {current_year}")
                     consecutive_visits += 1
                 else:
                     rest_days[year].append(current_day_of_year)
-                    logger.info(f"Rest day added on day {current_day_of_year} of year {year}")
+                    logger.info(f"Rest day added on day {current_day_of_year} of year {current_year}")
                     consecutive_visits = 0
             else:
-                logger.debug(f"No visitable polygons on day {current_day_of_year} of year {year}")
+                logger.debug(f"No visitable polygons on day {current_day_of_year} of year {current_year}")
                 consecutive_visits = 0
 
             if not remaining_polygons:
                 logger.info(f"All polygons visited for year {year}.")
                 break
-
-            current_day_of_year += 1
 
         visit_days.append({'year': year, 'days': total_days})
 

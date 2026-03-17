@@ -8,6 +8,13 @@ from .sensors import LineScanner
 from .terrain import ray_terrain_intersection
 from .geometry import process_linestring
 
+__all__ = [
+    "generate_swath_polygon",
+    "calculate_swath_widths",
+    "export_polygon_to_kml",
+]
+
+
 def generate_swath_polygon(
     flight_line: FlightLine,
     sensor: LineScanner,
@@ -19,7 +26,7 @@ def generate_swath_polygon(
     Generate a swath polygon for a given flight line and line scanning imager.
 
     Args:
-        flight_line (FlightLine): The flight line object containing geometry and altitude.
+        flight_line (FlightLine): The flight line object containing geometry and altitude (MSL).
         sensor (LineScanner): The LineScanner object with field of view (FOV).
         along_precision (float): Precision of the interpolation along the flight line in meters.
         across_precision (float): Precision of the ray-terrain intersection sampling in meters.
@@ -108,7 +115,7 @@ def calculate_swath_widths(swath_polygon: Polygon) -> dict:
         "max_width": np.max(valid_distances),
     }
 
-def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name="Swath Polygon"):
+def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name="Swath Polygon") -> None:
     """
     Export a Shapely polygon to a KML file with an unfilled style using simplekml.
 

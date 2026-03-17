@@ -5,6 +5,13 @@ from typing import Optional
 from .units import ureg
 from .sensors import Sensor
 
+__all__ = [
+    "SidelookingRadar",
+    "UAVSAR_Lband",
+    "UAVSAR_Pband",
+    "UAVSAR_Kaband",
+]
+
 
 class SidelookingRadar(Sensor):
     """

@@ -1,7 +1,7 @@
 # HyPlan
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-green.svg)](https://ryanpavlick.github.io/hyplan/)
 
 An open-source Python library for planning airborne remote sensing campaigns.
@@ -26,7 +26,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 
 ### Requirements
 
-- Python 3.7+
+- Python 3.9+
 - GDAL (must be installed at the system level before `pip install`)
 
 On macOS:
@@ -198,7 +198,6 @@ make html
 
 ## Known Limitations
 
-- **Cloud analysis** — Campaign date ranges cannot span a year boundary (e.g., December to January)
 - **Flight optimizer** — Uses a greedy nearest-neighbor heuristic; does not guarantee globally optimal ordering; still experimental
 - **Terrain module** — DEM downloads require internet access and may be slow for large areas
 - **Google Earth Engine** — The `clouds` module requires a Google Earth Engine account and authentication

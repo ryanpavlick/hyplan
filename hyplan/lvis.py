@@ -19,6 +19,15 @@ from pint import Quantity
 from .units import ureg
 from .sensors import Sensor
 
+__all__ = [
+    "LVISLens",
+    "LVIS_LENS_NARROW",
+    "LVIS_LENS_MEDIUM",
+    "LVIS_LENS_WIDE",
+    "LVIS_LENSES",
+    "LVIS",
+]
+
 
 # Max swath = 0.2 * altitude  →  half-scan angle = atan(0.1) ≈ 5.71°
 _MAX_SWATH_FRACTION = 0.2

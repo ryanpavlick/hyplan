@@ -6,6 +6,11 @@ from .terrain import ray_terrain_intersection
 from .units import ureg
 from .sensors import Sensor
 
+__all__ = [
+    "FrameCamera",
+]
+
+
 class FrameCamera(Sensor):
     """
     A frame (area-array) camera sensor.

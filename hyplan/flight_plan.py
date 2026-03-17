@@ -1,13 +1,20 @@
+from typing import List
+
 import numpy as np
 import geopandas as gpd
 import pandas as pd
-import matplotlib.pyplot as plt
 from .units import ureg
 from .aircraft import Aircraft
 from .airports import Airport
 from .dubins_path import Waypoint
 from .flight_line import FlightLine
 from .geometry import process_linestring
+
+__all__ = [
+    "compute_flight_plan",
+    "create_flight_line_record",
+    "process_flight_phase",
+]
 
 
 def compute_flight_plan(
@@ -108,7 +115,7 @@ def compute_flight_plan(
     return flight_plan_gdf
 
 
-def create_flight_line_record(flight_line, aircraft):
+def create_flight_line_record(flight_line, aircraft) -> dict:
     """
     Create a flight line record dictionary for inclusion in a flight plan DataFrame.
 
@@ -117,7 +124,7 @@ def create_flight_line_record(flight_line, aircraft):
         aircraft (Aircraft): Aircraft used to compute segment timing.
 
     Returns:
-        dict: Record with geometry, endpoints, altitudes (feet), headings,
+        dict: Record with geometry, endpoints, altitudes (feet MSL), headings,
             time (minutes), segment type, and distance (nautical miles).
     """
     return {
@@ -137,7 +144,7 @@ def create_flight_line_record(flight_line, aircraft):
     }
 
 
-def process_flight_phase(start, end, phase_info, segment_name):
+def process_flight_phase(start, end, phase_info, segment_name) -> List[dict]:
     """
     Process a flight phase using the detailed phase_info.
 
@@ -229,162 +236,5 @@ def process_flight_phase(start, end, phase_info, segment_name):
     return records
 
 
-def plot_flight_plan(flight_plan_gdf, takeoff_airport, return_airport, flight_sequence):
-    """
-    Plot the computed flight plan on a 2D map with airports, waypoints, and flight lines.
-
-    Args:
-        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
-        takeoff_airport (Airport): Departure airport (plotted as red star).
-        return_airport (Airport): Arrival airport (plotted as blue star).
-        flight_sequence (list): Sequence of FlightLine and Waypoint objects.
-    """
-    fig, ax = plt.subplots(figsize=(10, 6))
-    flight_plan_gdf.plot(ax=ax, column="segment_type", legend=True, cmap="viridis")
-
-    # Plot takeoff and return airports.
-    ax.scatter(takeoff_airport.longitude, takeoff_airport.latitude, color='red', marker='*', s=200, label='Takeoff Airport')
-    ax.scatter(return_airport.longitude, return_airport.latitude, color='blue', marker='*', s=200, label='Return Airport')
-
-    # Plot waypoints and flight lines from the flight sequence.
-    for item in flight_sequence:
-        if isinstance(item, Waypoint):
-            ax.scatter(item.longitude, item.latitude, color='green', marker='o', s=100, label=item.name)
-        elif isinstance(item, FlightLine):
-            x, y = zip(*item.geometry.coords)
-            ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=item.site_name)
-
-    ax.set_title("Flight Plan")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-
-def terrain_profile_along_track(flight_plan_gdf, dem_file=None):
-    """
-    Sample terrain elevation along the flight plan track.
-
-    Extracts lat/lon points from each segment geometry, queries DEM
-    elevation, and returns arrays of cumulative time and terrain height.
-
-    Args:
-        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
-        dem_file (str, optional): Path to DEM file. If None, one is auto-downloaded.
-
-    Returns:
-        tuple: (times, elevations) where times is cumulative minutes and
-            elevations is terrain height in feet MSL, both as numpy arrays.
-    """
-    from .terrain import get_elevations, generate_demfile
-
-    all_lats, all_lons, all_times = [], [], []
-    cumulative_time = 0.0
-
-    for _, row in flight_plan_gdf.iterrows():
-        geom = row["geometry"]
-        seg_time = row["time_to_segment"]
-
-        if geom is None or geom.is_empty or seg_time == 0:
-            cumulative_time += seg_time
-            continue
-
-        coords = np.array(geom.coords)
-        lons = coords[:, 0]
-        lats = coords[:, 1]
-        n_pts = len(lats)
-
-        # Distribute time linearly along the segment's geometry points
-        seg_times = cumulative_time + np.linspace(0, seg_time, n_pts)
-
-        all_lats.append(lats)
-        all_lons.append(lons)
-        all_times.append(seg_times)
-        cumulative_time += seg_time
-
-    if not all_lats:
-        return np.array([]), np.array([])
-
-    all_lats = np.concatenate(all_lats)
-    all_lons = np.concatenate(all_lons)
-    all_times = np.concatenate(all_times)
-
-    if dem_file is None:
-        dem_file = generate_demfile(all_lats, all_lons)
-
-    elevations_m = get_elevations(all_lats, all_lons, dem_file)
-    elevations_ft = elevations_m * 3.28084
-
-    return all_times, elevations_ft
-
-
-def plot_altitude_trajectory(flight_plan_gdf, aircraft=None, dem_file=None, show_terrain=True):
-    """
-    Plot altitude vs. time trajectory with optional terrain profile.
-
-    If an Aircraft is provided, climb/takeoff segments are drawn with the
-    realistic curved profile (ROC decreases with altitude). Otherwise all
-    segments are drawn as straight lines.
-
-    Args:
-        flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
-        aircraft (Aircraft, optional): Aircraft used for the flight plan.
-        dem_file (str, optional): Path to DEM file for terrain. If None, auto-downloaded.
-        show_terrain (bool): If True, overlay terrain elevation beneath the flight path.
-    """
-    fig, ax = plt.subplots(figsize=(10, 5))
-
-    # Plot terrain profile first (underneath)
-    if show_terrain:
-        try:
-            terrain_times, terrain_elevations = terrain_profile_along_track(
-                flight_plan_gdf, dem_file=dem_file
-            )
-            if len(terrain_times) > 0:
-                ax.fill_between(
-                    terrain_times, 0, terrain_elevations,
-                    color="saddlebrown", alpha=0.3, label="Terrain"
-                )
-                ax.plot(terrain_times, terrain_elevations, color="saddlebrown",
-                        linewidth=0.8, alpha=0.6)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Could not load terrain profile: {e}")
-
-    # Plot aircraft altitude segments
-    cumulative_time = 0
-    for _, row in flight_plan_gdf.iterrows():
-        seg_type = row["segment_type"]
-        t_seg = row["time_to_segment"]
-        h_start = row["start_altitude"]
-        h_end = row["end_altitude"]
-
-        # Use curved profile for climb/takeoff if aircraft is available
-        if aircraft is not None and seg_type in ("climb", "takeoff") and h_end > h_start:
-            profile_t, profile_h = aircraft.climb_altitude_profile(
-                h_start * ureg.feet, h_end * ureg.feet
-            )
-            # Scale profile time to match the segment time (accounts for horizontal travel)
-            if profile_t[-1] > 0:
-                profile_t = profile_t * (t_seg / profile_t[-1])
-            ax.plot(
-                cumulative_time + profile_t, profile_h,
-                marker="o", markevery=[0, -1],
-                label=row["segment_name"]
-            )
-        else:
-            ax.plot(
-                [cumulative_time, cumulative_time + t_seg],
-                [h_start, h_end],
-                marker="o",
-                label=row["segment_name"]
-            )
-        cumulative_time += t_seg
-
-    ax.set_xlabel("Time (minutes)")
-    ax.set_ylabel("Altitude (feet MSL)")
-    ax.set_title("Altitude vs. Time Trajectory")
-    ax.legend()
-    ax.grid(True)
-    plt.show()
+# Backward-compatible re-exports — these functions now live in hyplan.plotting
+from .plotting import plot_flight_plan, terrain_profile_along_track, plot_altitude_trajectory
