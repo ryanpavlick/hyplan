@@ -6,12 +6,17 @@ authors:
   - family-names: Pavlick
     given-names: Ryan
     email: ryan.p.pavlick@nasa.gov
-    affiliation: "NASA Jet Propulsion Laboratory"
+    affiliation: "National Aeronautics and Space Administration"
+    orcid: https://orcid.org/0000-0001-8772-3508
 repository-code: "https://github.com/ryanpavlick/hyplan"
 license: Apache-2.0
+version: 2.0.4
 keywords:
-  - remote sensing
-  - flight planning
-  - airborne science
+  - "remote sensing"
+  - "flight planning"
+  - "airborne science"
   - hyperspectral
-  - Earth observation
+  - "Earth observation"
+  - lidar
+  - radar
+  - multispectral
