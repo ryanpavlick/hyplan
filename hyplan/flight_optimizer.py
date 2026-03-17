@@ -10,6 +10,7 @@ from .aircraft import Aircraft
 from .airports import Airport
 from .dubins_path import Waypoint, DubinsPath
 from .flight_line import FlightLine
+from .exceptions import HyPlanValueError
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +374,7 @@ def _opposite_endpoint(node) -> str:
         return node[:-6] + "_end"
     elif node.endswith("_end"):
         return node[:-4] + "_start"
-    raise ValueError(f"Node {node} is not a flight line endpoint")
+    raise HyPlanValueError(f"Node {node} is not a flight line endpoint")
 
 
 def greedy_optimize(

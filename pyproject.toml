@@ -49,7 +49,7 @@ dependencies = [
 [project.optional-dependencies]
 clouds = ["earthengine-api"]
 parallel = ["ray"]
-dev = ["pytest"]
+dev = ["pytest", "nbstripout"]
 
 [project.urls]
 Homepage = "https://github.com/ryanpavlick/hyplan"

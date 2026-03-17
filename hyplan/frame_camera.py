@@ -5,6 +5,7 @@ import numpy as np
 from .terrain import ray_terrain_intersection
 from .units import ureg
 from .sensors import Sensor
+from .exceptions import HyPlanTypeError
 
 __all__ = [
     "FrameCamera",
@@ -50,7 +51,7 @@ class FrameCamera(Sensor):
 
         # Validate integer resolution values
         if not isinstance(resolution_x, int) or not isinstance(resolution_y, int):
-            raise TypeError(f"Resolution values must be integers, got ({type(resolution_x)}, {type(resolution_y)})")
+            raise HyPlanTypeError(f"Resolution values must be integers, got ({type(resolution_x)}, {type(resolution_y)})")
         
         self.resolution_x = resolution_x
         self.resolution_y = resolution_y
@@ -128,7 +129,7 @@ class FrameCamera(Sensor):
     def _validate_quantity(self, value: Quantity, expected_unit: Quantity) -> Quantity:
         """Validates and converts a quantity to the expected unit."""
         if not isinstance(value, Quantity):
-            raise TypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
+            raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
         return value.to(expected_unit)
 
 

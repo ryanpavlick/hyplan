@@ -10,6 +10,7 @@ import logging
 from .units import ureg
 from .geometry import wrap_to_180
 from .dubins_path import Waypoint
+from .exceptions import HyPlanTypeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +46,14 @@ class FlightLine:
     @staticmethod
     def _validate_geometry(geometry: LineString):
         if not isinstance(geometry, LineString):
-            raise ValueError("Geometry must be a Shapely LineString.")
+            raise HyPlanValueError("Geometry must be a Shapely LineString.")
         if len(geometry.coords) != 2:
-            raise ValueError("LineString must have exactly two points.")
+            raise HyPlanValueError("LineString must have exactly two points.")
         for lon, lat in geometry.coords:
             if not (-90 <= lat <= 90):
-                raise ValueError(f"Latitude {lat} is out of bounds (-90 to 90).")
+                raise HyPlanValueError(f"Latitude {lat} is out of bounds (-90 to 90).")
             if not (-180 <= lon <= 180):
-                raise ValueError(f"Longitude {lon} is out of bounds (-180 to 180).")
+                raise HyPlanValueError(f"Longitude {lon} is out of bounds (-180 to 180).")
 
     @staticmethod
     def _validate_altitude(altitude: Quantity) -> Quantity:
@@ -140,9 +141,9 @@ class FlightLine:
             A new FlightLine extending from (lat1, lon1) along the given azimuth.
         """
         if not isinstance(length, Quantity) or not length.check("[length]"):
-            raise ValueError("Length must be a Quantity with units of distance.")
+            raise HyPlanValueError("Length must be a Quantity with units of distance.")
         if not isinstance(az, (int, float)):
-            raise ValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
+            raise HyPlanValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
         length_m = length.to("meter").magnitude
         lat2, lon2 = pymap3d.vincenty.vreckon(lat1, lon1, length_m, az)
@@ -174,9 +175,9 @@ class FlightLine:
             A new FlightLine centered on (lat, lon) along the given azimuth.
         """
         if not isinstance(length, Quantity) or not length.check("[length]"):
-            raise ValueError("Length must be a Quantity with units of distance.")
+            raise HyPlanValueError("Length must be a Quantity with units of distance.")
         if not isinstance(az, (int, float)):
-            raise ValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
+            raise HyPlanValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
         length_m = length.to("meter").magnitude
 
@@ -238,7 +239,7 @@ class FlightLine:
             return results
 
         logger.error(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
-        raise TypeError(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
+        raise HyPlanTypeError(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
 
     def track(self, precision: Union[Quantity, float] = 100.0) -> LineString:
         """
@@ -410,7 +411,7 @@ class FlightLine:
             FlightLine: A new FlightLine object rotated around its midpoint.
         """
         if not isinstance(angle, (int, float)):
-            raise ValueError(f"Angle must be a number. Received: {angle}")
+            raise HyPlanValueError(f"Angle must be a number. Received: {angle}")
 
         angle_rad = np.radians(angle)
         midpoint = self.geometry.interpolate(0.5, normalized=True)
@@ -451,9 +452,9 @@ class FlightLine:
         gap_length_m = gap_length.to("meter").magnitude if gap_length else 0
 
         if max_length_m <= 0:
-            raise ValueError("Maximum length must be greater than 0.")
+            raise HyPlanValueError("Maximum length must be greater than 0.")
         if gap_length and gap_length_m < 0:
-            raise ValueError("Gap length cannot be negative.")
+            raise HyPlanValueError("Gap length cannot be negative.")
         if max_length_m + gap_length_m > total_length_m:
             return [self]
 

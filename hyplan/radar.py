@@ -4,6 +4,7 @@ from typing import Optional
 
 from .units import ureg
 from .sensors import Sensor
+from .exceptions import HyPlanValueError
 
 __all__ = [
     "SidelookingRadar",
@@ -49,11 +50,11 @@ class SidelookingRadar(Sensor):
         self.antenna_length = self._validate_quantity(antenna_length, ureg.meter) if antenna_length else None
 
         if look_direction not in ("left", "right"):
-            raise ValueError("look_direction must be 'left' or 'right'")
+            raise HyPlanValueError("look_direction must be 'left' or 'right'")
         self.look_direction = look_direction
 
         if self.near_range_angle >= self.far_range_angle:
-            raise ValueError("near_range_angle must be less than far_range_angle")
+            raise HyPlanValueError("near_range_angle must be less than far_range_angle")
 
     @property
     def wavelength(self) -> Quantity:

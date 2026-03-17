@@ -1,4 +1,5 @@
 from pint import UnitRegistry, set_application_registry
+from .exceptions import HyPlanValueError
 
 ureg = UnitRegistry()
 
@@ -25,7 +26,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
         "feet": ureg.foot
     }
     if from_unit not in units or to_unit not in units:
-        raise ValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
+        raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
     return (distance * units[from_unit]).to(units[to_unit]).magnitude
 
@@ -49,7 +50,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
         "fps": ureg.foot / ureg.second,    # Feet per second
     }
     if from_unit not in units or to_unit not in units:
-        raise ValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
+        raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     return (speed * units[from_unit]).to(units[to_unit]).magnitude
 
@@ -71,23 +72,23 @@ def altitude_to_flight_level(altitude, pressure=1013.25):
     # Validate altitude
     if isinstance(altitude, ureg.Quantity):
         if not altitude.check("[length]"):
-            raise ValueError("Altitude must have units of length.")
+            raise HyPlanValueError("Altitude must have units of length.")
         altitude_ft = altitude.to("feet").magnitude
     elif isinstance(altitude, (int, float)):
         # Assume numeric value is in meters
         altitude_ft = (altitude * ureg.meter).to("feet").magnitude
     else:
-        raise ValueError("Altitude must be a pint length or a number (assumed meters).")
+        raise HyPlanValueError("Altitude must be a pint length or a number (assumed meters).")
 
     # Validate pressure
     if isinstance(pressure, ureg.Quantity):
         if not pressure.check("[pressure]"):
-            raise ValueError("Pressure must have units of pressure.")
+            raise HyPlanValueError("Pressure must have units of pressure.")
         pressure_hpa = pressure.to("hPa").magnitude
     elif isinstance(pressure, (int, float)):
         pressure_hpa = pressure  # Assume numeric value is in hPa
     else:
-        raise ValueError("Pressure must be a pint pressure unit or a number (assumed hPa).")
+        raise HyPlanValueError("Pressure must be a pint pressure unit or a number (assumed hPa).")
 
     # Adjust altitude for atmospheric pressure deviation
     if pressure_hpa != 1013.25:

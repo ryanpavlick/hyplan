@@ -1,6 +1,9 @@
 from typing import Dict, Type
+
 import numpy as np
 from pint import Quantity
+
+from .exceptions import HyPlanTypeError, HyPlanValueError
 from .units import ureg
 
 __all__ = [
@@ -52,7 +55,7 @@ class Sensor:
             TypeError: If value is not a pint Quantity.
         """
         if not isinstance(value, Quantity):
-            raise TypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
+            raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
         return value.to(expected_unit)
 
 class LineScanner(Sensor):
@@ -80,12 +83,12 @@ class LineScanner(Sensor):
 
         # Validate FOV
         if not isinstance(fov, (int, float)):
-            raise TypeError(f"fov must be a number, got {type(fov)}.")
+            raise HyPlanTypeError(f"fov must be a number, got {type(fov)}.")
         self.fov = float(fov)
 
         # Validate across_track_pixels
         if not isinstance(across_track_pixels, int):
-            raise TypeError(f"across_track_pixels must be an integer, got {type(across_track_pixels)}.")
+            raise HyPlanTypeError(f"across_track_pixels must be an integer, got {type(across_track_pixels)}.")
         self.across_track_pixels = across_track_pixels
 
         # Validate frame_rate
@@ -107,12 +110,29 @@ class LineScanner(Sensor):
         return (1.0 / self.frame_rate).to(ureg.s)
 
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
-        """Calculate swath width (m) for a given altitude above ground level (AGL)."""
+        """Calculate swath width for a given altitude above ground level (AGL).
+
+        Args:
+            altitude_agl (Quantity): Altitude above ground level.
+
+        Returns:
+            Quantity: Swath width in meters.
+        """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         return 2 * altitude_agl * np.tan(np.radians(self.fov / 2))
 
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
+        """Calculate the ground sample distance (GSD) for a given altitude AGL.
+
+        Args:
+            altitude_agl (Quantity): Altitude above ground level.
+            mode (str): One of ``"nadir"`` (default), ``"average"``, or
+                ``"edge"``. Controls which pixel in the cross-track swath
+                is used for the GSD calculation.
+
+        Returns:
+            Quantity: Ground sample distance in meters.
+        """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
@@ -129,7 +149,16 @@ class LineScanner(Sensor):
             return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
+        """Calculate the required altitude AGL for a given ground sample distance.
+
+        Args:
+            gsd (Quantity): Desired ground sample distance.
+            mode (str): One of ``"nadir"`` (default), ``"average"``, or
+                ``"edge"``. Must match the mode used for GSD calculation.
+
+        Returns:
+            Quantity: Required altitude above ground level in meters.
+        """
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
@@ -351,7 +380,7 @@ def create_sensor(sensor_type: str) -> Sensor:
         SENSOR_REGISTRY["LVIS"] = LVIS
 
     if sensor_type not in SENSOR_REGISTRY:
-        raise ValueError(f"Unknown sensor type: {sensor_type}")
+        raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
     return SENSOR_REGISTRY[sensor_type]()
 
 

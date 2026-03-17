@@ -47,6 +47,7 @@ import matplotlib.colors as mcolors
 
 # Google Earth Engine (imported lazily via _get_ee())
 import ee
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 __all__ = [
     "get_binary_cloud", "calculate_cloud_fraction", "create_date_ranges",
@@ -76,7 +77,7 @@ def _init_ee():
             ee.Initialize()
             _ee_initialized = True
         except Exception as e:
-            raise RuntimeError("Earth Engine initialization failed. Check your authentication.") from e
+            raise HyPlanRuntimeError("Earth Engine initialization failed. Check your authentication.") from e
 
 
 def _drop_z(geom):
@@ -189,12 +190,12 @@ def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_
     try:
         gdf = gpd.read_file(polygon_file)
         if gdf.empty:
-            raise ValueError("Polygon file is empty or invalid.")
+            raise HyPlanValueError("Polygon file is empty or invalid.")
     except Exception as e:
-        raise RuntimeError(f"Failed to load polygon file: {polygon_file}") from e
+        raise HyPlanRuntimeError(f"Failed to load polygon file: {polygon_file}") from e
 
     if 'Name' not in gdf.columns:
-        raise ValueError(f"Polygon file must contain a 'Name' column. Found columns: {list(gdf.columns)}")
+        raise HyPlanValueError(f"Polygon file must contain a 'Name' column. Found columns: {list(gdf.columns)}")
 
     gdf = gdf[['Name', 'geometry']].copy()
     gdf['geometry'] = gdf['geometry'].apply(_drop_z)
@@ -210,7 +211,7 @@ def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_
             cloud_data = cloud_data.merge(cloud_terra).merge(cloud_aqua)
         cloud_data = cloud_data.map(get_binary_cloud)
     except Exception as e:
-        raise RuntimeError("Error occurred while processing MODIS data.") from e
+        raise HyPlanRuntimeError("Error occurred while processing MODIS data.") from e
 
     for _, row in gdf.iterrows():
         polygon_name = row['Name']
@@ -366,7 +367,7 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
     """
     required_columns = {'polygon_id', 'year', 'day_of_year', 'cloud_fraction'}
     if not required_columns.issubset(cloud_data_df.columns):
-        raise ValueError(f"Input DataFrame must contain columns: {required_columns}")
+        raise HyPlanValueError(f"Input DataFrame must contain columns: {required_columns}")
 
     # Define a custom colormap: lightgrey (no data), white (clear), black (cloudy), grey (visited), purple (weekend), orange (rest days)
     cmap = mcolors.ListedColormap(['lightgrey', 'white', 'black', 'grey', 'purple', 'orange'])
