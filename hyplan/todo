@@ -1,61 +1,134 @@
+================================================================================
+HYPLAN — IMPROVEMENT IDEAS
+================================================================================
+
+--- PACKAGE-WIDE ---
+* Consistent logging configuration across all modules (some still use basicConfig)
+* Add type stubs or py.typed marker for downstream IDE support
+* Publish to PyPI / conda-forge
+* Add CLI entry point for common tasks (generate flight lines, export plan)
+* Increase test coverage — many modules have no dedicated test file
+
+--- POSSIBLE NEW MODULES ---
+
 export.py:
-* export to trackair
-* export to KML
-* export to GeoJSON
-
-airports.py:
-* remove duplicate functions
-
-dubins.py:
-* 3D dubins
-* compare 2D and 3D dubins output and performance
-
-
-
-flight_lines.py:
-* curved lines for glint CH4
-* spiral
+* Consolidated export module for flight plans and lines
+* Export to TrackAir format
+* Export to KML (flight lines, swath polygons, full plans)
+* Export to GeoJSON (flight lines with metadata)
+* Export to CSV / Excel for field team use
+* Import flight lines from KML / shapefile
 
 weather.py:
-* API for GMAO forecast
-* wind data for wind barbs
-* cloud data
-* TOD would be even better
+* API for GMAO forecast data
+* Wind data for wind barbs on map
+* Real-time cloud / visibility forecasts
+* Time-on-deck (TOD) predictions for data collection windows
 
-glint.py:
-* calculate percentage of line with glint above threshold
-* map predicted glint
+gui.py (interactive planning tool):
+* Map-based line selection with box or ad hoc polygon
+* Hover to reveal solar elevation rise/set times
+* Copy / delete / rotate / nudge individual lines
+* Draw a polygon and generate flight lines interactively
+* Aircraft icons on map
+* Wind barbs overlay
 
-gui.py:
-* map lines
-* select lines with a box or ad hoc polygon
-* hover to reveal solar elevation rise/set times
-* copy a line
-* delete a line
-* rotate a line
-* nudge a line
-* draw a polygon and calculate flight lines
-* need to find icons for various aircraft
-* wind barbs on map
+--- EXISTING MODULES ---
+
+units.py:
+* Support angular units (degrees, radians) in conversion helpers
+* Add time unit conversions (seconds, minutes, hours)
 
 geometry.py:
-* regionate by UTM zone
+* Regionate geometries by UTM zone for large study areas
+* Get time zone from lat/lon
+* Add polygon area calculation in metric units
 
+flight_line.py:
+* Curved flight lines for glint / CH4 mapping
+* Spiral flight patterns
+* Multi-point flight lines (> 2 vertices)
+* Merge adjacent collinear flight lines
 
+flight_box.py:
+* Accept target GSD as input instead of raw overlap percentage
+* Return daily_lines grouping from optimizer-aware box generation
 
-* get time zone based on lat lon
+flight_plan.py:
+* Account for wind in transit time estimates
+* Add fuel burn estimation per segment
+* Support multiple altitude levels within a single plan
+* Export plan as pilot-ready briefing sheet
+
+flight_optimizer.py:
+* Replace greedy heuristic with 2-opt or simulated annealing
+* Return daily_lines grouping directly in result dict
+* Support time-window constraints (e.g., solar elevation, satellite overpass)
+* Multi-aircraft scheduling
+* Weight graph edges by fuel burn in addition to time
+
+dubins_path.py:
+* 3D Dubins paths (climb/descent during turns)
+* Compare 2D vs 3D Dubins output and performance
+* Wind-corrected Dubins paths
+
+aircraft.py:
+* Altitude-dependent fuel burn model
+* Weight-dependent performance (payload vs range tradeoff)
+* Turboprop vs jet engine modeling differences
+
+airports.py:
+* Cache downloaded CSV data to avoid re-downloading
+* Add fuel availability and FBO information
+* Filter by airport services (hangars, maintenance)
+
+sensors.py:
+* Spectral band metadata (wavelength ranges, bit depth)
+* Add more sensor implementations 
+* Sensor data rate estimation for storage planning
+
+frame_camera.py:
+* Support oblique viewing angles
+* Stereo coverage planning (forward/nadir/backward)
+
+lvis.py:
+* Model shot density vs ground speed
+* Swath width variation with scan pattern
+
+radar.py:
+* Interferometric SAR baseline planning
+* Near/far range incidence angle maps
 
 swath.py:
-* calculate ground pixel size for a flight line
-* plot with ground pixel size
-* 2D plot with terrain and flight line
+* Calculate ground pixel size along a flight line
+* Plot swath colored by ground pixel size
+* 2D cross-section plot with terrain profile and swath geometry
+* Swath gap/overlap analysis between adjacent lines
 
+sun.py:
+* Integrate with flight_optimizer for solar-constrained scheduling
 
+glint.py:
+* Calculate percentage of line exceeding a glint angle threshold
+* Map predicted glint intensity along flight lines
+* Glint avoidance routing
 
+clouds.py:
+* Support non-GEE cloud data sources (ERA5, MERRA-2)
+* Probabilistic clear-sky forecasting for campaign scheduling
 
+terrain.py:
+* Support additional DEM sources (Copernicus GLO-30, ASTER GDEM)
+* Terrain slope / aspect maps for study area characterization
+* Obstacle clearance analysis along flight path
 
+satellites.py:
+* Multi-satellite coordinated overpass planning
+* Satellite revisit frequency maps for a study area
+* Underfly timing optimization (aircraft + satellite coincidence)
 
-
-
-
-
+plotting.py:
+* 3D flight trajectory visualization
+* Animated flight plan playback
+* Side-by-side multi-day plan comparison
+* Export figures to publication-quality formats
