@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 from sunposition import sunpos
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
+from typing import List, Union
 import matplotlib.pyplot as plt
 from .exceptions import HyPlanValueError
 
 
-def solar_threshold_times(latitude, longitude, start_date, end_date, thresholds, timezone_offset=0):
+def solar_threshold_times(latitude: float, longitude: float, start_date: str, end_date: str, thresholds: List[float], timezone_offset: int = 0) -> pd.DataFrame:
     """
     Find times when the solar elevation crosses specified thresholds.
 
@@ -95,7 +96,7 @@ def solar_threshold_times(latitude, longitude, start_date, end_date, thresholds,
     return pd.DataFrame(results, columns=columns)
 
 
-def solar_azimuth(latitude, longitude, dt, elevation=0):
+def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: float = 0) -> float:
     """
     Return the solar azimuth (in degrees) at a given latitude, longitude, and datetime.
     
@@ -113,7 +114,7 @@ def solar_azimuth(latitude, longitude, dt, elevation=0):
     return azimuth[0]
 
 
-def solar_position_increments(latitude, longitude, date, min_elevation, timezone_offset=0, increment='10min'):
+def solar_position_increments(latitude: float, longitude: float, date: Union[str, date, datetime], min_elevation: float, timezone_offset: int = 0, increment: str = '10min') -> pd.DataFrame:
     """
     Return the solar azimuth and solar elevation at user-specified increments for a given date and location,
     but only for times when the solar elevation exceeds the specified minimum.
@@ -171,7 +172,7 @@ def solar_position_increments(latitude, longitude, date, min_elevation, timezone
     
     return df
 
-def plot_solar_positions(df_positions):
+def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     """
     Plot the solar azimuth and elevation for a given day.
     

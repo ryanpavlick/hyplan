@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import simplekml
 from shapely.geometry import Polygon
@@ -20,7 +22,7 @@ def generate_swath_polygon(
     sensor: LineScanner,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
-    dem_file=None,
+    dem_file: Optional[str] = None,
 ) -> Polygon:
     """
     Generate a swath polygon for a given flight line and line scanning imager.

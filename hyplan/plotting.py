@@ -1,7 +1,10 @@
 import folium
+import geopandas as gpd
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+from hyplan.aircraft import Aircraft
+from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
 from hyplan.dubins_path import Waypoint
 from hyplan.units import ureg
@@ -82,7 +85,7 @@ def map_flight_lines(
     return m
 
 
-def plot_flight_plan(flight_plan_gdf, takeoff_airport, return_airport, flight_sequence) -> None:
+def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport, return_airport: Airport, flight_sequence: list) -> None:
     """
     Plot the computed flight plan on a 2D map with airports, waypoints, and flight lines.
 
@@ -115,7 +118,7 @@ def plot_flight_plan(flight_plan_gdf, takeoff_airport, return_airport, flight_se
     plt.show()
 
 
-def terrain_profile_along_track(flight_plan_gdf, dem_file=None) -> Tuple[np.ndarray, np.ndarray]:
+def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray]:
     """
     Sample terrain elevation along the flight plan track.
 
@@ -172,7 +175,7 @@ def terrain_profile_along_track(flight_plan_gdf, dem_file=None) -> Tuple[np.ndar
     return all_times, elevations_ft
 
 
-def plot_altitude_trajectory(flight_plan_gdf, aircraft=None, dem_file=None, show_terrain=True) -> None:
+def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Optional[Aircraft] = None, dem_file: Optional[str] = None, show_terrain: bool = True) -> None:
     """
     Plot altitude vs. time trajectory with optional terrain profile.
 

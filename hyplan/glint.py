@@ -21,9 +21,9 @@ __all__ = [
 
 
 def calculate_target_and_glint_vectorized(
-    sensor_lat, sensor_lon, sensor_alt,
-    viewing_azimuth, tilt_angle,
-    observation_datetime
+    sensor_lat: np.ndarray, sensor_lon: np.ndarray, sensor_alt: np.ndarray,
+    viewing_azimuth: np.ndarray, tilt_angle: np.ndarray,
+    observation_datetime: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Vectorized calculation of target locations and glint angles for a set of sensors.
@@ -65,7 +65,7 @@ def calculate_target_and_glint_vectorized(
 
     return target_lat, target_lon, glint_angles
 
-def glint_angle(solar_azimuth, solar_zenith, view_azimuth, view_zenith) -> np.ndarray:
+def glint_angle(solar_azimuth: np.ndarray, solar_zenith: np.ndarray, view_azimuth: np.ndarray, view_zenith: np.ndarray) -> np.ndarray:
     """
     Calculate the specular glint angle between the sun and sensor viewing directions.
 
@@ -99,7 +99,7 @@ def glint_angle(solar_azimuth, solar_zenith, view_azimuth, view_zenith) -> np.nd
     glint_array = np.degrees(np.arccos(glint_cos))
     return glint_array
 
-def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, observation_datetime, output_geometry="geographic") -> gpd.GeoDataFrame:
+def compute_glint_vectorized(flight_line: FlightLine, sensor: LineScanner, observation_datetime: datetime, output_geometry: str = "geographic") -> gpd.GeoDataFrame:
     """
     Computes glint angles across a flight line and returns the results as a GeoDataFrame.
 

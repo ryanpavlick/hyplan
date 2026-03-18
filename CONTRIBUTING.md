@@ -38,7 +38,7 @@ pytest
 ### Documentation
 
 - Add docstrings (NumPy/Google style) to public functions and classes.
-- Update or add example scripts in `examples/` when introducing new features.
+- Update or add notebooks in `notebooks/` when introducing new features.
 - To build the docs locally:
   ```bash
   pip install sphinx myst-parser furo sphinx-autodoc-typehints

@@ -16,7 +16,7 @@ from pymap3d.vincenty import vdist
 from .exceptions import HyPlanTypeError, HyPlanValueError
 
 
-def wrap_to_180(lon):
+def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
     """
     Wrap angle(s) to the range [-180, 180) degrees.
 
@@ -30,7 +30,7 @@ def wrap_to_180(lon):
     return np.squeeze(lon)
 
 
-def wrap_to_360(angle):
+def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
     """
     Wrap angle(s) to the range [0, 360) degrees.
 
@@ -42,7 +42,7 @@ def wrap_to_360(angle):
     """
     return np.mod(np.array(angle), 360.0)
 
-def _validate_polygon(polygon: Optional[Polygon]) -> None:
+def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
     """
     Validate the input polygon and ensure it is a single, non-empty, valid Shapely Polygon.
 
@@ -91,7 +91,7 @@ def _validate_polygon(polygon: Optional[Polygon]) -> None:
     return True
 
 
-def calculate_geographic_mean(geometry):
+def calculate_geographic_mean(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Point:
     """
     Calculate the geographic mean of coordinates from a Shapely geometry
     or a list of Shapely geometries using pymap3d.lox.meanm.
@@ -223,7 +223,7 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float, radius: float 
 
     return radius * c
 
-def random_points_in_polygon(polygon, k):
+def random_points_in_polygon(polygon: Polygon, k: int) -> List[Point]:
     """
     Generate k points chosen uniformly at random inside a polygon.
 
@@ -256,7 +256,7 @@ def random_points_in_polygon(polygon, k):
 
 
 
-def minimum_rotated_rectangle(polygon: Polygon) -> tuple:
+def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
     """
     Calculate the minimum rotated rectangle of a polygon in WGS84 coordinates.
 
@@ -436,7 +436,7 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
 
     return buffered_polygon_wgs84
 
-def process_linestring(linestring):
+def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Process a LineString containing WGS84 coordinates to compute latitudes, longitudes, 
     azimuths, and cumulative along-track distances.

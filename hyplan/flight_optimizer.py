@@ -358,7 +358,7 @@ def _find_best_refuel_airport(
     return best_icao, best_time
 
 
-def _opposite_endpoint(node) -> str:
+def _opposite_endpoint(node: str) -> str:
     """Given 'key_start', return 'key_end' and vice versa.
 
     Args:

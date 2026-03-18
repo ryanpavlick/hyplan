@@ -1,4 +1,6 @@
-from pint import UnitRegistry, set_application_registry
+from typing import Union
+
+from pint import UnitRegistry, Quantity, set_application_registry
 from .exceptions import HyPlanValueError
 
 ureg = UnitRegistry()
@@ -54,7 +56,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
 
     return (speed * units[from_unit]).to(units[to_unit]).magnitude
 
-def altitude_to_flight_level(altitude, pressure=1013.25):
+def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
     """
     Converts altitude to flight level (FL), considering atmospheric pressure.
 
