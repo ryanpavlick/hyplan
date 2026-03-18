@@ -168,7 +168,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     return downloaded_files
 
 
-def merge_tiles(output_filename, tile_file_list) -> None:
+def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
     """
     Merge multiple DEM tile files into a single GeoTIFF using GDAL Warp.
 

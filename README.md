@@ -212,6 +212,9 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [flight_line_operations.ipynb](notebooks/flight_line_operations.ipynb) | Creating, clipping, splitting, offsetting, rotating, and exporting flight lines |
+| [flight_box_generation.ipynb](notebooks/flight_box_generation.ipynb) | Generating parallel flight lines over study areas with swath overlap control |
+| [flight_plan_computation.ipynb](notebooks/flight_plan_computation.ipynb) | Segment-by-segment flight plans with altitude profiles and map visualization |
+| [flight_optimizer_demo.ipynb](notebooks/flight_optimizer_demo.ipynb) | Greedy line ordering with endurance constraints, refueling, and multi-day scheduling |
 | [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Minimum-radius turn trajectories, speed/bank effects, and flight line integration |
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
 

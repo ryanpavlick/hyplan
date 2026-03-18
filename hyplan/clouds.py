@@ -61,7 +61,7 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 _ee_initialized = False
 
 
-def _init_ee():
+def _init_ee() -> None:
     """
     Initialize Google Earth Engine on first use.
 
@@ -80,7 +80,7 @@ def _init_ee():
             raise HyPlanRuntimeError("Earth Engine initialization failed. Check your authentication.") from e
 
 
-def _drop_z(geom):
+def _drop_z(geom: "BaseGeometry") -> "BaseGeometry":
     """
     Strip Z coordinates from a Shapely geometry, returning a 2D geometry.
 
@@ -93,7 +93,7 @@ def _drop_z(geom):
     return wkb.loads(wkb.dumps(geom, output_dimension=2))
 
 
-def get_binary_cloud(image):
+def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     """
     Generates a binary cloud mask for a given MODIS image.
 
@@ -113,7 +113,7 @@ def get_binary_cloud(image):
     date_char = image.date().format('yyyy-MM-dd')
     return clouds.set("date_char", date_char)
 
-def calculate_cloud_fraction(image, polygon_geometry):
+def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry") -> "ee.Feature":
     """
     Calculates the cloud fraction over a given polygon for a MODIS image.
 
@@ -133,7 +133,7 @@ def calculate_cloud_fraction(image, polygon_geometry):
     cloud_fraction = reduction.get('state_1km')
     return ee.Feature(None, {'date_char': image.get('date_char'), 'cloud_fraction': cloud_fraction})
 
-def create_date_ranges(day_start, day_stop, year_start, year_stop):
+def create_date_ranges(day_start: int, day_stop: int, year_start: int, year_stop: int) -> list:
     """
     Creates date ranges for filtering Earth Engine image collections.
 
@@ -169,7 +169,7 @@ def create_date_ranges(day_start, day_stop, year_start, year_stop):
 
     return date_ranges
 
-def create_cloud_data_array_with_limit(polygon_file, year_start, year_stop, day_start, day_stop, limit=5000):
+def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_stop: int, day_start: int, day_stop: int, limit: int = 5000) -> pd.DataFrame:
     """
     Processes MODIS cloud data for polygons and calculates daily cloud fractions.
 
@@ -346,10 +346,10 @@ def simulate_visits(
     return pd.DataFrame(visit_days), visit_tracker, rest_days
 
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
-    cloud_data_df, visit_tracker, rest_days,
-    cloud_fraction_threshold=0.10, exclude_weekends=False,
-    day_start=1, day_stop=365
-):
+    cloud_data_df: pd.DataFrame, visit_tracker: Dict[int, Dict[str, list]], rest_days: Dict[int, list],
+    cloud_fraction_threshold: float = 0.10, exclude_weekends: bool = False,
+    day_start: int = 1, day_stop: int = 365
+) -> None:
     """
     Generates heatmaps of cloud fraction for each year, including visit markers and rest day highlights.
 

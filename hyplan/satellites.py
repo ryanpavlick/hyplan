@@ -287,7 +287,7 @@ def compute_ground_track(
 # Swath footprint
 # ---------------------------------------------------------------------------
 
-def _compute_headings(lats, lons) -> np.ndarray:
+def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """
     Compute forward azimuths between consecutive ground track points.
 
@@ -308,7 +308,7 @@ def _compute_headings(lats, lons) -> np.ndarray:
     return headings
 
 
-def _segment_passes(lats, timestamps, time_step_s) -> List[Tuple[int, int]]:
+def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float) -> List[Tuple[int, int]]:
     """Split a ground track into individual passes.
 
     A new pass starts when there is a time gap > 2 * time_step_s or when the
