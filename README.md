@@ -23,7 +23,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 
 - **Flight planning** — Define flight lines, generate multi-line coverage patterns, and compute complete mission plans with takeoff, transit, data collection, and landing segments
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
-- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-4, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
+- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
 - **Lidar & radar** — LVIS full-waveform lidar and UAVSAR L/P/Ka-band SAR sensor models
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
@@ -178,7 +178,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
 | `aircraft` | Aircraft performance models (14 pre-configured research aircraft) |
-| `sensors` | Sensor definitions (AVIRIS-3, AVIRIS-4, HyTES, PRISM, MASTER, etc.) |
+| `sensors` | Sensor definitions (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.) |
 | `frame_camera` | Frame camera modeling with ground footprint calculations |
 | `lvis` | LVIS full-waveform scanning lidar sensor model |
 | `radar` | Side-looking SAR sensor models (UAVSAR L/P/Ka-band) |

@@ -12,7 +12,7 @@ __all__ = [
     "AVIRISClassic",
     "AVIRISNextGen",
     "AVIRIS3",
-    "AVIRIS4",
+    "AVIRIS5",
     "HyTES",
     "PRISM",
     "MASTER",
@@ -219,23 +219,12 @@ class AVIRIS3(LineScanner):
             frame_rate=216 * ureg.Hz
         )
 
-class AVIRIS4(LineScanner):
-    """AVIRIS-4 imaging spectrometer (39.6° FOV, 1234 pixels, 216 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="AVIRIS 4",
-            fov=39.6,
-            across_track_pixels=1234,
-            frame_rate=216 * ureg.Hz
-        )
-
 class AVIRIS5(LineScanner):
     """AVIRIS-5 imaging spectrometer (40.2° FOV, 1239 pixels, 148 Hz)."""
 
     def __init__(self):
         super().__init__(
-            name="AVIRIS 4",
+            name="AVIRIS 5",
             fov=40.2,
             across_track_pixels=1239,
             frame_rate=148 * ureg.Hz
@@ -378,9 +367,13 @@ def create_sensor(sensor_type: str) -> Sensor:
 
 SENSOR_REGISTRY: Dict[str, Type[Sensor]] = {
     "AVIRISClassic": AVIRISClassic,
+    "AVIRIS Classic": AVIRISClassic,
     "AVIRISNextGen": AVIRISNextGen,
+    "AVIRIS-NG": AVIRISNextGen,
     "AVIRIS3": AVIRIS3,
-    "AVIRIS4": AVIRIS4,
+    "AVIRIS-3": AVIRIS3,
+    "AVIRIS5": AVIRIS5,
+    "AVIRIS-5": AVIRIS5,
     "HyTES": HyTES,
     "PRISM": PRISM,
     "MASTER": MASTER,

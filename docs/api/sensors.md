@@ -16,7 +16,7 @@
 .. autoclass:: hyplan.sensors.AVIRISClassic
 .. autoclass:: hyplan.sensors.AVIRISNextGen
 .. autoclass:: hyplan.sensors.AVIRIS3
-.. autoclass:: hyplan.sensors.AVIRIS4
+.. autoclass:: hyplan.sensors.AVIRIS5
 .. autoclass:: hyplan.sensors.HyTES
 .. autoclass:: hyplan.sensors.PRISM
 .. autoclass:: hyplan.sensors.MASTER

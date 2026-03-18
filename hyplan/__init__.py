@@ -72,7 +72,7 @@ from .sensors import (
     AVIRISClassic,
     AVIRISNextGen,
     AVIRIS3,
-    AVIRIS4,
+    AVIRIS5,
     HyTES,
     PRISM,
     MASTER,
@@ -121,7 +121,7 @@ __all__ = [
     "find_nearest_airport", "find_nearest_airports", "airports_within_radius",
     # Sensors
     "Sensor", "LineScanner",
-    "AVIRISClassic", "AVIRISNextGen", "AVIRIS3", "AVIRIS4",
+    "AVIRISClassic", "AVIRISNextGen", "AVIRIS3", "AVIRIS5",
     "HyTES", "PRISM", "MASTER",
     "GLiHT_VNIR", "GLiHT_Thermal", "GLiHT_SIF",
     "GCAS_UV_Vis", "GCAS_VNIR", "eMAS", "PICARD",
