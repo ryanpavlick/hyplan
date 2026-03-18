@@ -9,7 +9,7 @@ An open-source Python library for planning airborne remote sensing campaigns.
 HyPlan helps scientists and engineers design remote sensing flight missions. It handles flight line generation, sensor modeling, swath coverage, solar glint prediction, cloud analysis, terrain-aware calculations, and mission logistics including airport selection and aircraft performance.
 
 ```
- Study Area          Flight Lines         Sensor Swaths         Mission Plan
+ Study Area          Flight Lines      Sensor Swaths         Mission Plan
  ┌─────────┐        ┌─────────┐         ┌─────────┐          ┌─────────┐
  │ ▓▓▓▓▓▓▓ │        │ ──────► │         │▒──────►▒│          │ ✈ ─ ─ ► │
  │ ▓▓▓▓▓▓▓ │  ───►  │ ◄────── │  ───►   │▒◄──────▒│  ───►    │ ──────► │
