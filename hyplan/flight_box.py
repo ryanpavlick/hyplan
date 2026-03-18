@@ -157,13 +157,13 @@ def box_around_center_line(
         polygon = buffer_polygon_along_azimuth(polygon, along_track_buffer, swath.magnitude/2, azimuth)
         box_length += ureg.Quantity(along_track_buffer, "meter")
 
-    nlines = max(1, int(np.ceil(box_width / swath_spacing)))
+    nlines = max(1, int(np.ceil((box_width / swath_spacing).to("dimensionless").magnitude)))
 
     logger.info(f"Calculated swath spacing: {swath_spacing:.2f} meters.")
     logger.info(f"Number of lines: {nlines}.")
 
     # Generate flight lines
-    dists_from_center = np.arange(-nlines // 2, nlines // 2 + 1) * swath_spacing
+    dists_from_center = np.arange(-(nlines // 2), nlines // 2 + 1) * swath_spacing
 
     if starting_point == "edge":
         first_line = flight_line.FlightLine.start_length_azimuth(
@@ -254,25 +254,34 @@ def box_around_polygon(
     except Exception as e:
         raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
 
-    # Extract centroid, dimensions, and azimuth
+    # Extract centroid and rectangle edge dimensions
     lon0, lat0 = bounding_box.centroid.coords[0]
-    minx, miny, maxx, maxy = bounding_box.bounds
-    box_length = pymap3d.vincenty.vdist(miny, minx, maxy, minx)[0] * ureg.meter
-    box_width = pymap3d.vincenty.vdist(miny, minx, miny, maxx)[0] * ureg.meter
+    lons, lats = list(bounding_box.exterior.coords.xy)
+
+    # Compute distances and azimuths along both rectangle axes
+    length1, az1 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[1], lons[1])
+    length2, az2 = pymap3d.vincenty.vdist(lats[1], lons[1], lats[2], lons[2])
 
     if azimuth is None:
-        # Get exterior coordinates of the bounding box
-        lons, lats = list(bounding_box.exterior.coords.xy)
-
-        # Compute distances along both rectangle axes
-        length1, az1 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[3], lons[3])
-        length2, az2 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[1], lons[1])
-
         # Use the azimuth corresponding to the longer side
         if length1 >= length2:
             azimuth = wrap_to_180(az1)
+            box_length = float(length1) * ureg.meter
+            box_width = float(length2) * ureg.meter
         else:
             azimuth = wrap_to_180(az2)
+            box_length = float(length2) * ureg.meter
+            box_width = float(length1) * ureg.meter
+    else:
+        # Assign box_length to the edge most aligned with the user azimuth
+        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
+        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
+        if az1_diff <= az2_diff:
+            box_length = float(length1) * ureg.meter
+            box_width = float(length2) * ureg.meter
+        else:
+            box_length = float(length2) * ureg.meter
+            box_width = float(length1) * ureg.meter
 
 
     logger.info(

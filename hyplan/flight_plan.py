@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional, Union
 
 import numpy as np
 import geopandas as gpd
@@ -19,11 +19,11 @@ __all__ = [
 
 def compute_flight_plan(
     aircraft: Aircraft,
-    flight_sequence: list,
-    takeoff_airport: Airport = None,
-    return_airport: Airport = None,
-    start_offset=5,
-    end_offset=1
+    flight_sequence: List[Union[FlightLine, Waypoint]],
+    takeoff_airport: Optional[Airport] = None,
+    return_airport: Optional[Airport] = None,
+    start_offset: float = 5,
+    end_offset: float = 1
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -115,7 +115,7 @@ def compute_flight_plan(
     return flight_plan_gdf
 
 
-def create_flight_line_record(flight_line, aircraft) -> dict:
+def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> dict:
     """
     Create a flight line record dictionary for inclusion in a flight plan DataFrame.
 
@@ -144,7 +144,7 @@ def create_flight_line_record(flight_line, aircraft) -> dict:
     }
 
 
-def process_flight_phase(start, end, phase_info, segment_name) -> List[dict]:
+def process_flight_phase(start: Union[Airport, Waypoint], end: Union[Airport, Waypoint], phase_info: dict, segment_name: str) -> List[dict]:
     """
     Process a flight phase using the detailed phase_info.
 
