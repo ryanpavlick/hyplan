@@ -149,19 +149,19 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 
 ```
                           ┌──────────────────────┐
-                          │     Flight Planning   │
+                          │     Flight Planning  │
                           ├──────────────────────┤
-                          │  flight_line          │
-                          │  flight_box           │
-                          │  flight_plan          │
-                          │  flight_optimizer     │
-                          │  dubins_path          │
+                          │  flight_line         │
+                          │  flight_box          │
+                          │  flight_plan         │
+                          │  flight_optimizer    │
+                          │  dubins_path         │
                           └────────┬─────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
               ▼                    ▼                    ▼
    ┌──────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-   │   Instruments    │  │    Environment   │  │    Logistics    │
+   │   Instruments    │  │    Environment  │  │    Logistics    │
    ├──────────────────┤  ├─────────────────┤  ├─────────────────┤
    │  sensors         │  │  sun            │  │  aircraft       │
    │  frame_camera    │  │  glint          │  │  airports       │
