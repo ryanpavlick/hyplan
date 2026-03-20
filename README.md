@@ -70,9 +70,9 @@ pip install -e .
 ### Option 2: conda/mamba
 
 ```bash
-mamba env create --file hyplan/hyplan.yml
-mamba activate hyplan-env
-pip install -e hyplan
+mamba create -n hyplan -f environment.yml
+mamba activate hyplan
+pip install -e .
 ```
 
 ### Optional dependencies
