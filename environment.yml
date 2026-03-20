@@ -17,10 +17,10 @@ dependencies:
   - pydantic
   - requests
   - folium
+  - pymap3d
   - pip
   - pip:
       - pydantic-pint
-      - pymap3d
       - simplekml
       - skyfield
       - sunposition
