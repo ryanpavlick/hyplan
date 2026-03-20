@@ -27,7 +27,7 @@ HyPlan is an open-source Python library that provides a unified, reproducible fr
 
 # Statement of Need
 
-Airborne science campaigns represent major investments of resources, often costing millions of dollars and requiring months of coordination among scientists, pilots, instrument teams, and logistics personnel. A single deployment of a high-altitude aircraft such as the NASA ER-2 can cost tens of thousands of dollars per flight hour, and campaigns typically span weeks to months of field operations. Despite these costs, the flight planning process has remained largely manual and fragmented across disconnected tools.
+Airborne science campaigns represent major investments of resources, often costing millions of dollars and requiring months of coordination among scientists, pilots, instrument teams, and logistics personnel. A single deployment of a high-altitude aircraft such as the NASA ER-2 can cost over ten thousand dollars per flight hour, and campaigns typically span weeks to months of field operations. Despite these costs, the flight planning process has remained largely manual and fragmented across disconnected tools.
 
 Scientists planning airborne campaigns must simultaneously reason about several interacting domains:
 
