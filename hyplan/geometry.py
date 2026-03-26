@@ -1,3 +1,4 @@
+import datetime
 import numpy as np
 import math
 import random
@@ -492,3 +493,121 @@ def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, 
         np.array(azimuths),
         along_track_distance,
     )
+
+
+# ---------------------------------------------------------------------------
+# Magnetic declination
+# ---------------------------------------------------------------------------
+
+def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
+                         date: datetime.date = None) -> float:
+    """Return magnetic declination in degrees (positive = east).
+
+    Uses the ``geomag`` library (WMM model).
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees.
+        alt_m: Altitude in meters above WGS-84 ellipsoid (default 0).
+        date: Date for the calculation (default today).
+
+    Returns:
+        Declination in degrees.  Add to true heading to get magnetic heading
+        would give the wrong sign — use :func:`true_to_magnetic` instead.
+    """
+    import geomag
+    if date is None:
+        date = datetime.date.today()
+    return geomag.declination(lat, lon, alt_m / 1000.0, date)
+
+
+def true_to_magnetic(heading: float, declination: float) -> float:
+    """Convert true heading to magnetic heading.
+
+    ``magnetic = (360 + true - declination) % 360``
+
+    Args:
+        heading: True heading in degrees.
+        declination: Magnetic declination in degrees (positive = east).
+
+    Returns:
+        Magnetic heading in degrees [0, 360).
+    """
+    return (360.0 + heading - declination) % 360.0
+
+
+# ---------------------------------------------------------------------------
+# Coordinate formatting helpers  (MovingLines-compatible)
+# ---------------------------------------------------------------------------
+
+def dd_to_ddm(lat: float, lon: float) -> Tuple[str, str]:
+    """Decimal degrees → ``'DD MM.MM'`` (e.g. ``'37 24.21'``, ``'-122 03.45'``).
+
+    This is the MovingLines ``'DD MM'`` / ``pilot_format`` style.
+    """
+    def _fmt(val: float, is_lon: bool = False) -> str:
+        sign = -1 if val < 0 else 1
+        val = abs(val)
+        deg = int(val)
+        minutes = (val - deg) * 60.0
+        prefix = "-" if sign < 0 else ""
+        if is_lon:
+            return f"{prefix}{deg:03d} {minutes:05.2f}"
+        return f"{prefix}{deg:02d} {minutes:05.2f}"
+
+    return _fmt(lat, False), _fmt(lon, True)
+
+
+def dd_to_ddms(lat: float, lon: float) -> Tuple[str, str]:
+    """Decimal degrees → ``'DD MM SS.S'`` (e.g. ``'37 24 12.5'``)."""
+    def _fmt(val: float, is_lon: bool = False) -> str:
+        sign = -1 if val < 0 else 1
+        val = abs(val)
+        deg = int(val)
+        rem = (val - deg) * 60.0
+        minutes = int(rem)
+        sec = (rem - minutes) * 60.0
+        prefix = "-" if sign < 0 else ""
+        if is_lon:
+            return f"{prefix}{deg:03d} {minutes:02d} {sec:04.1f}"
+        return f"{prefix}{deg:02d} {minutes:02d} {sec:04.1f}"
+
+    return _fmt(lat, False), _fmt(lon, True)
+
+
+def dd_to_nddmm(lat: float, lon: float) -> Tuple[str, str]:
+    """Decimal degrees → ``'N37 24.21'`` / ``'W122 03.45'`` (Honeywell FMS style)."""
+    def _fmt_lat(val: float) -> str:
+        hemi = "N" if val >= 0 else "S"
+        val = abs(val)
+        deg = int(val)
+        minutes = (val - deg) * 60.0
+        return f"{hemi}{deg:02d} {minutes:05.2f}"
+
+    def _fmt_lon(val: float) -> str:
+        hemi = "E" if val >= 0 else "W"
+        val = abs(val)
+        deg = int(val)
+        minutes = (val - deg) * 60.0
+        return f"{hemi}{deg:03d} {minutes:05.2f}"
+
+    return _fmt_lat(lat), _fmt_lon(lon)
+
+
+def dd_to_foreflight_oneline(lat: float, lon: float) -> str:
+    """Decimal degrees → ``'N3724.210/W12203.450'`` (ForeFlight one-liner)."""
+    def _fmt_lat(val: float) -> str:
+        hemi = "N" if val >= 0 else "S"
+        val = abs(val)
+        deg = int(val)
+        minutes = (val - deg) * 60.0
+        return f"{hemi}{deg:02d}{minutes:06.3f}"
+
+    def _fmt_lon(val: float) -> str:
+        hemi = "E" if val >= 0 else "W"
+        val = abs(val)
+        deg = int(val)
+        minutes = (val - deg) * 60.0
+        return f"{hemi}{deg:03d}{minutes:06.3f}"
+
+    return f"{_fmt_lat(lat)}/{_fmt_lon(lon)}"

@@ -94,6 +94,9 @@ class LVIS(Sensor):
         else:
             self.rep_rate = float(rep_rate) * ureg.Hz
 
+        if self.rep_rate.magnitude <= 0:
+            raise HyPlanValueError("rep_rate must be positive")
+
         if lens is None:
             self.lens = LVIS_LENS_WIDE
         elif isinstance(lens, str):

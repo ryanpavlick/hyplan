@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd" version="1.1" creator="gpx.py -- https://github.com/tkrajina/gpxpy">
+  <rte>
+    <name>Flight Plan</name>
+    <rtept lat="34.910781" lon="-117.886391">
+      <ele>704.6975999999999</ele>
+      <name>WP#0</name>
+      <cmt>takeoff</cmt>
+    </rtept>
+    <rtept lat="35.067405195313725" lon="-117.71926657602535">
+      <ele>6095.999999999999</ele>
+      <name>WP#1</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="35.067405195313725" lon="-117.28073342397471">
+      <ele>6095.999999999999</ele>
+      <name>WP#2</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="35.022336686556834" lon="-117.28085381633628">
+      <ele>6095.999999999999</ele>
+      <name>WP#3</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="35.02233668655684" lon="-117.71914618366374">
+      <ele>6095.999999999999</ele>
+      <name>WP#4</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="34.97726784209116" lon="-117.71902605827201">
+      <ele>6095.999999999999</ele>
+      <name>WP#5</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="34.977267842091166" lon="-117.28097394172791">
+      <ele>6095.999999999999</ele>
+      <name>WP#6</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="34.93219866210637" lon="-117.281093800735">
+      <ele>6095.999999999999</ele>
+      <name>WP#7</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="34.932198662106366" lon="-117.71890619926506">
+      <ele>6095.999999999999</ele>
+      <name>WP#8</name>
+      <cmt>pattern</cmt>
+    </rtept>
+    <rtept lat="35.04506900582485" lon="-118.29999999999994">
+      <ele>6095.999999999999</ele>
+      <name>WP#9</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04438393595565" lon="-118.2904838694234">
+      <ele>6032.5</ele>
+      <name>WP#10</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04234957509949" lon="-118.28125734604247">
+      <ele>5969.0</ele>
+      <name>WP#11</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03902783200944" lon="-118.27260118132858">
+      <ele>5905.499999999999</ele>
+      <name>WP#12</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03451978279369" lon="-118.26477869119304">
+      <ele>5842.0</ele>
+      <name>WP#13</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02896258203515" lon="-118.25802771871155">
+      <ele>5778.5</ele>
+      <name>WP#14</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02252527368262" lon="-118.25255338804219">
+      <ele>5714.999999999999</ele>
+      <name>WP#15</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.01540363163494" lon="-118.24852187202795">
+      <ele>5651.5</ele>
+      <name>WP#16</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.007814189581964" lon="-118.24605536279638">
+      <ele>5588.0</ele>
+      <name>WP#17</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.999987644118974" lon="-118.24522839575913">
+      <ele>5524.499999999999</ele>
+      <name>WP#18</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.992161833696876" lon="-118.24606563423221">
+      <ele>5460.999999999999</ele>
+      <name>WP#19</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.98457450810999" lon="-118.24854117601501">
+      <ele>5397.5</ele>
+      <name>WP#20</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.977456108677075" lon="-118.25257939623782">
+      <ele>5333.999999999999</ele>
+      <name>WP#21</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.97102277798139" lon="-118.2580572941463">
+      <ele>5270.499999999999</ele>
+      <name>WP#22</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96546981015803" lon="-118.26480826663396">
+      <ele>5207.0</ele>
+      <name>WP#23</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96096573860142" lon="-118.27262718954007">
+      <ele>5143.499999999999</ele>
+      <name>WP#24</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.957647238129624" lon="-118.28127665004752">
+      <ele>5079.999999999999</ele>
+      <name>WP#25</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.955614993742635" lon="-118.29049414087108">
+      <ele>5016.5</ele>
+      <name>WP#26</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.95493065891555" lon="-118.29999999999994">
+      <ele>4953.0</ele>
+      <name>WP#27</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.95561499374264" lon="-118.30950585912888">
+      <ele>4889.499999999999</ele>
+      <name>WP#28</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.957647238129624" lon="-118.31872334995252">
+      <ele>4825.999999999999</ele>
+      <name>WP#29</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96096573860142" lon="-118.32737281046002">
+      <ele>4762.5</ele>
+      <name>WP#30</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96546981015803" lon="-118.335191733366">
+      <ele>4698.999999999999</ele>
+      <name>WP#31</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.97102277798138" lon="-118.3419427058538">
+      <ele>4635.5</ele>
+      <name>WP#32</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.977456108677075" lon="-118.34742060376215">
+      <ele>4572.0</ele>
+      <name>WP#33</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.984574508109986" lon="-118.35145882398501">
+      <ele>4508.500000000001</ele>
+      <name>WP#34</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.99216183369687" lon="-118.35393436576771">
+      <ele>4445.0</ele>
+      <name>WP#35</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.999987644118974" lon="-118.35477160424087">
+      <ele>4381.5</ele>
+      <name>WP#36</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.007814189581964" lon="-118.35394463720367">
+      <ele>4317.999999999999</ele>
+      <name>WP#37</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.01540363163494" lon="-118.3514781279721">
+      <ele>4254.499999999999</ele>
+      <name>WP#38</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02252527368261" lon="-118.34744661195782">
+      <ele>4191.0</ele>
+      <name>WP#39</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02896258203515" lon="-118.34197228128846">
+      <ele>4127.499999999999</ele>
+      <name>WP#40</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03451978279369" lon="-118.33522130880692">
+      <ele>4064.0</ele>
+      <name>WP#41</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03902783200944" lon="-118.32739881867145">
+      <ele>4000.4999999999995</ele>
+      <name>WP#42</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04234957509948" lon="-118.3187426539576">
+      <ele>3937.0</ele>
+      <name>WP#43</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04438393595565" lon="-118.30951613057651">
+      <ele>3873.5</ele>
+      <name>WP#44</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04506900582485" lon="-118.29999999999994">
+      <ele>3809.9999999999995</ele>
+      <name>WP#45</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04438393595565" lon="-118.2904838694234">
+      <ele>3746.5000000000005</ele>
+      <name>WP#46</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04234957509949" lon="-118.28125734604247">
+      <ele>3683.0</ele>
+      <name>WP#47</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03902783200944" lon="-118.27260118132858">
+      <ele>3619.4999999999995</ele>
+      <name>WP#48</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03451978279369" lon="-118.26477869119304">
+      <ele>3556.0</ele>
+      <name>WP#49</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02896258203515" lon="-118.25802771871155">
+      <ele>3492.5</ele>
+      <name>WP#50</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02252527368262" lon="-118.25255338804219">
+      <ele>3428.9999999999995</ele>
+      <name>WP#51</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.01540363163494" lon="-118.24852187202795">
+      <ele>3365.5</ele>
+      <name>WP#52</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.007814189581964" lon="-118.24605536279638">
+      <ele>3302.0</ele>
+      <name>WP#53</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.999987644118974" lon="-118.24522839575913">
+      <ele>3238.4999999999995</ele>
+      <name>WP#54</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.992161833696876" lon="-118.24606563423221">
+      <ele>3175.0</ele>
+      <name>WP#55</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.98457450810999" lon="-118.24854117601501">
+      <ele>3111.5</ele>
+      <name>WP#56</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.977456108677075" lon="-118.25257939623782">
+      <ele>3048.0</ele>
+      <name>WP#57</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.97102277798139" lon="-118.2580572941463">
+      <ele>2984.5</ele>
+      <name>WP#58</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96546981015803" lon="-118.26480826663396">
+      <ele>2921.0000000000005</ele>
+      <name>WP#59</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96096573860142" lon="-118.27262718954007">
+      <ele>2857.4999999999995</ele>
+      <name>WP#60</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.957647238129624" lon="-118.28127665004752">
+      <ele>2794.0</ele>
+      <name>WP#61</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.955614993742635" lon="-118.29049414087108">
+      <ele>2730.4999999999995</ele>
+      <name>WP#62</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.95493065891555" lon="-118.29999999999994">
+      <ele>2667.0</ele>
+      <name>WP#63</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.95561499374264" lon="-118.30950585912888">
+      <ele>2603.5</ele>
+      <name>WP#64</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.957647238129624" lon="-118.31872334995252">
+      <ele>2539.9999999999995</ele>
+      <name>WP#65</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96096573860142" lon="-118.32737281046002">
+      <ele>2476.5</ele>
+      <name>WP#66</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.96546981015803" lon="-118.335191733366">
+      <ele>2412.9999999999995</ele>
+      <name>WP#67</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.97102277798138" lon="-118.3419427058538">
+      <ele>2349.5000000000005</ele>
+      <name>WP#68</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.977456108677075" lon="-118.34742060376215">
+      <ele>2286.0</ele>
+      <name>WP#69</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.984574508109986" lon="-118.35145882398501">
+      <ele>2222.5</ele>
+      <name>WP#70</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.99216183369687" lon="-118.35393436576771">
+      <ele>2158.9999999999995</ele>
+      <name>WP#71</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.999987644118974" lon="-118.35477160424087">
+      <ele>2095.5</ele>
+      <name>WP#72</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.007814189581964" lon="-118.35394463720367">
+      <ele>2032.0000000000002</ele>
+      <name>WP#73</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.01540363163494" lon="-118.3514781279721">
+      <ele>1968.5000000000002</ele>
+      <name>WP#74</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02252527368261" lon="-118.34744661195782">
+      <ele>1905.0</ele>
+      <name>WP#75</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.02896258203515" lon="-118.34197228128846">
+      <ele>1841.5000000000002</ele>
+      <name>WP#76</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03451978279369" lon="-118.33522130880692">
+      <ele>1778.0000000000002</ele>
+      <name>WP#77</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.03902783200944" lon="-118.32739881867145">
+      <ele>1714.5</ele>
+      <name>WP#78</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04234957509948" lon="-118.3187426539576">
+      <ele>1651.0000000000002</ele>
+      <name>WP#79</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04438393595565" lon="-118.30951613057651">
+      <ele>1587.5</ele>
+      <name>WP#80</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="35.04506900582485" lon="-118.29999999999994">
+      <ele>1524.0</ele>
+      <name>WP#81</name>
+      <cmt>descent</cmt>
+    </rtept>
+    <rtept lat="34.910781" lon="-117.886391">
+      <ele>704.6976000000078</ele>
+      <name>WP#82</name>
+      <cmt></cmt>
+    </rtept>
+  </rte>
+</gpx>

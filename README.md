@@ -33,7 +33,9 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
-- **Geospatial export** — Output to GeoJSON, KML, shapefiles, and interactive Folium maps
+- **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, and polygon flight patterns for profiling and survey missions
+- **Geospatial export** — Output to Excel, KML, GPX, ForeFlight CSV, Honeywell FMS, ER-2, ICARTT, and interactive Folium maps
+- **Interactive planning** — Jupyter widget for map-based waypoint placement, pattern generation, and flight box creation
 
 ---
 
@@ -70,7 +72,7 @@ pip install -e .
 ### Option 2: conda/mamba
 
 ```bash
-mamba create -n hyplan -f environment.yml
+mamba env create --name hyplan --file environment.yml
 mamba activate hyplan
 pip install -e .
 ```
@@ -78,7 +80,7 @@ pip install -e .
 ### Optional dependencies
 
 - **Google Earth Engine** (`earthengine-api`) — required for `hyplan.clouds`
-- **Ray** — required for parallelized graph construction in `hyplan.flight_optimizer` (optional)
+- **Interactive planning** (`ipyleaflet`, `ipywidgets`, `ipydatagrid`) — install with `pip install hyplan[interactive]`
 
 ---
 
@@ -155,7 +157,9 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
                           │  flight_box          │
                           │  flight_plan         │
                           │  flight_optimizer    │
-                          │  dubins_path         │
+                          │  flight_patterns     │
+                          │  dubins3d            │
+                          │  waypoint            │
                           └────────┬─────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
@@ -168,7 +172,10 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
    │  lvis            │  │  terrain        │  │  satellites     │
    │  radar           │  │  clouds         │  │  units          │
    │  swath           │  │  geometry       │  │  plotting       │
-   └──────────────────┘  └─────────────────┘  └─────────────────┘
+   └──────────────────┘  └─────────────────┘  ├─────────────────┤
+                                              │  exports         │
+                                              │  interactive     │
+                                              └─────────────────┘
 ```
 
 | Module | Description |
@@ -189,7 +196,11 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `clouds` | Cloud cover analysis and clear-sky probability from MODIS |
 | `satellites` | Satellite overpass prediction and swath modeling |
 | `airports` | Airport database with search, filtering, and runway data |
-| `dubins_path` | Minimum-radius turning trajectories between waypoints |
+| `flight_patterns` | Flight pattern generators (racetrack, rosette, spiral, sawtooth, polygon) |
+| `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
+| `dubins3d` | 3D Dubins path planning with pitch constraints (Vana et al., ICRA 2020) |
+| `exports` | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT |
+| `interactive` | Interactive Jupyter map-based flight planning with ipyleaflet |
 | `geometry` | Geospatial utilities (haversine, coordinate transforms, polygons) |
 | `units` | Unit conversions using Pint (meters, feet, knots, etc.) |
 | `plotting` | Interactive Folium map generation and altitude profiles |
@@ -215,8 +226,10 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [flight_box_generation.ipynb](notebooks/flight_box_generation.ipynb) | Generating parallel flight lines over study areas with swath overlap control |
 | [flight_plan_computation.ipynb](notebooks/flight_plan_computation.ipynb) | Segment-by-segment flight plans with altitude profiles and map visualization |
 | [flight_optimizer_demo.ipynb](notebooks/flight_optimizer_demo.ipynb) | Greedy line ordering with endurance constraints, refueling, and multi-day scheduling |
-| [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Minimum-radius turn trajectories, speed/bank effects, and flight line integration |
+| [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
+| [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, and polygon flight patterns |
+| [interactive_planning.ipynb](notebooks/interactive_planning.ipynb) | Interactive map-based flight planning with waypoint editing and pattern generation |
 
 ### Instruments & Sensors
 
@@ -233,6 +246,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 |----------|-------------|
 | [solar_planning.ipynb](notebooks/solar_planning.ipynb) | Solar azimuth/elevation, daily collection windows, seasonal and cross-site comparisons |
 | [glint_analysis.ipynb](notebooks/glint_analysis.ipynb) | Glint angle prediction, heading optimization, and time-of-day effects for aquatic missions |
+| [glint_arc_planning.ipynb](notebooks/glint_arc_planning.ipynb) | GlintArc geometry for specular reflection flight paths over water |
 | [terrain_aware_planning.ipynb](notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
 | [cloud_analysis.ipynb](notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
 
@@ -242,6 +256,12 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 |----------|-------------|
 | [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
 | [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
+
+### Export & Integration
+
+| Notebook | Description |
+|----------|-------------|
+| [export_formats.ipynb](notebooks/export_formats.ipynb) | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT, and text formats |
 
 ---
 

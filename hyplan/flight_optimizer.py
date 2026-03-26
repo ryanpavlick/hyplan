@@ -8,7 +8,7 @@ import pymap3d.vincenty
 from .units import ureg
 from .aircraft import Aircraft
 from .airports import Airport
-from .dubins_path import Waypoint, DubinsPath
+from .waypoint import Waypoint
 from .flight_line import FlightLine
 from .exceptions import HyPlanValueError
 
