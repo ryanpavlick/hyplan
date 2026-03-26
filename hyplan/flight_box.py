@@ -166,8 +166,8 @@ def box_around_center_line(
     logger.info(f"Calculated swath spacing: {swath_spacing:.2f} meters.")
     logger.info(f"Number of lines: {nlines}.")
 
-    # Generate flight lines
-    dists_from_center = np.arange(-(nlines // 2), nlines // 2 + 1) * swath_spacing
+    # Generate flight lines — symmetric offsets centered at 0
+    dists_from_center = (np.arange(nlines) - (nlines - 1) / 2.0) * swath_spacing
 
     if starting_point == "edge":
         first_line = flight_line.FlightLine.start_length_azimuth(
@@ -199,7 +199,10 @@ def box_around_center_line(
             lines.append(line)
 
     if not lines:
-        logger.warning("No flight lines were generated after clipping.")
+        raise HyPlanValueError(
+            "All flight lines were clipped away by the polygon. "
+            "Check polygon coverage and orientation."
+        )
 
     return lines
 

@@ -90,11 +90,15 @@ from .frame_camera import FrameCamera
 from .lvis import LVIS
 from .radar import SidelookingRadar
 
-# Dubins path planning
-from .dubins_path import Waypoint, DubinsPath
+# Waypoint and Dubins path planning
+from .waypoint import Waypoint
+from .dubins3d import DubinsPath3D
 
 # Swath
 from .swath import generate_swath_polygon, calculate_swath_widths
+
+# Flight patterns
+from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path
 
 # Flight planning and optimization
 from .flight_plan import compute_flight_plan
@@ -102,6 +106,22 @@ from .flight_optimizer import build_graph, greedy_optimize
 
 # Plotting
 from .plotting import map_flight_lines, plot_flight_plan, plot_altitude_trajectory, terrain_profile_along_track
+
+# Exports
+from .exports import (
+    to_excel, to_pilot_excel, to_foreflight_csv,
+    to_honeywell_fms, to_er2_csv, to_icartt,
+    to_kml, to_gpx, to_txt,
+)
+
+# Airspace
+from .airspace import (
+    Airspace, AirspaceConflict, OpenAIPClient,
+    check_airspace_conflicts, fetch_and_check, clear_airspace_cache,
+)
+
+# Campaign
+from .campaign import Campaign
 
 __all__ = [
     # Exceptions
@@ -128,12 +148,23 @@ __all__ = [
     "SENSOR_REGISTRY", "create_sensor",
     "FrameCamera", "LVIS", "SidelookingRadar",
     # Dubins
-    "Waypoint", "DubinsPath",
+    "Waypoint", "DubinsPath3D",
     # Swath
     "generate_swath_polygon", "calculate_swath_widths",
+    # Flight patterns
+    "racetrack", "rosette", "polygon", "sawtooth", "spiral", "flight_lines_to_waypoint_path",
     # Flight planning
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
     "build_graph", "greedy_optimize",
     # Plotting
     "map_flight_lines", "terrain_profile_along_track",
+    # Exports
+    "to_excel", "to_pilot_excel", "to_foreflight_csv",
+    "to_honeywell_fms", "to_er2_csv", "to_icartt",
+    "to_kml", "to_gpx", "to_txt",
+    # Airspace
+    "Airspace", "AirspaceConflict", "OpenAIPClient",
+    "check_airspace_conflicts", "fetch_and_check", "clear_airspace_cache",
+    # Campaign
+    "Campaign",
 ]

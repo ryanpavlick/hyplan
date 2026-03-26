@@ -1,0 +1,775 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+    <Document id="1">
+        <Style id="171">
+            <LineStyle id="172">
+                <color>ff0000ff</color>
+                <colorMode>normal</colorMode>
+                <width>4.0</width>
+            </LineStyle>
+        </Style>
+        <LookAt>
+            <longitude>-117.886391</longitude>
+            <latitude>34.910781</latitude>
+            <altitude>3000</altitude>
+            <altitudeMode>relativeToGround</altitudeMode>
+            <range>50000</range>
+        </LookAt>
+        <Placemark id="4">
+            <name>H2100</name>
+            <description>WP# 0&lt;br&gt;UTC: 00:00&lt;br&gt;Name: H2100&lt;br&gt;CumDist: 0.0 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 0 deg&lt;br&gt;Alt: 2.3 kft&lt;br&gt;Type: takeoff</description>
+            <Point id="3">
+                <coordinates>-117.886391,34.910781,704.6975999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="6">
+            <name>H2101</name>
+            <description>WP# 1&lt;br&gt;UTC: 00:14&lt;br&gt;Name: H2101&lt;br&gt;CumDist: 54.6 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="5">
+                <coordinates>-117.71926657602535,35.067405195313725,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="8">
+            <name>H2102</name>
+            <description>WP# 2&lt;br&gt;UTC: 00:20&lt;br&gt;Name: H2102&lt;br&gt;CumDist: 76.2 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="7">
+                <coordinates>-117.28073342397471,35.067405195313725,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="10">
+            <name>H2103</name>
+            <description>WP# 3&lt;br&gt;UTC: 00:21&lt;br&gt;Name: H2103&lt;br&gt;CumDist: 80.3 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="9">
+                <coordinates>-117.28085381633628,35.022336686556834,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="12">
+            <name>H2104</name>
+            <description>WP# 4&lt;br&gt;UTC: 00:27&lt;br&gt;Name: H2104&lt;br&gt;CumDist: 101.9 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="11">
+                <coordinates>-117.71914618366374,35.02233668655684,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="14">
+            <name>H2105</name>
+            <description>WP# 5&lt;br&gt;UTC: 00:28&lt;br&gt;Name: H2105&lt;br&gt;CumDist: 106.0 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="13">
+                <coordinates>-117.71902605827201,34.97726784209116,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="16">
+            <name>H2106</name>
+            <description>WP# 6&lt;br&gt;UTC: 00:34&lt;br&gt;Name: H2106&lt;br&gt;CumDist: 127.6 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="15">
+                <coordinates>-117.28097394172791,34.977267842091166,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="18">
+            <name>H2107</name>
+            <description>WP# 7&lt;br&gt;UTC: 00:35&lt;br&gt;Name: H2107&lt;br&gt;CumDist: 131.7 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="17">
+                <coordinates>-117.281093800735,34.93219866210637,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="20">
+            <name>H2108</name>
+            <description>WP# 8&lt;br&gt;UTC: 00:41&lt;br&gt;Name: H2108&lt;br&gt;CumDist: 153.3 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: pattern</description>
+            <Point id="19">
+                <coordinates>-117.71890619926506,34.932198662106366,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="22">
+            <name>H2109</name>
+            <description>WP# 9&lt;br&gt;UTC: 00:50&lt;br&gt;Name: H2109&lt;br&gt;CumDist: 186.2 nm&lt;br&gt;Speed: 222 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 20.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="21">
+                <coordinates>-118.29999999999994,35.04506900582485,6095.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="24">
+            <name>H2110</name>
+            <description>WP# 10&lt;br&gt;UTC: 00:54&lt;br&gt;Name: H2110&lt;br&gt;CumDist: 201.3 nm&lt;br&gt;Speed: 221 kt&lt;br&gt;Bearing: 100 deg&lt;br&gt;Alt: 19.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="23">
+                <coordinates>-118.2904838694234,35.04438393595565,6032.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="26">
+            <name>H2111</name>
+            <description>WP# 11&lt;br&gt;UTC: 00:58&lt;br&gt;Name: H2111&lt;br&gt;CumDist: 216.3 nm&lt;br&gt;Speed: 221 kt&lt;br&gt;Bearing: 110 deg&lt;br&gt;Alt: 19.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="25">
+                <coordinates>-118.28125734604247,35.04234957509949,5969.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="28">
+            <name>H2112</name>
+            <description>WP# 12&lt;br&gt;UTC: 01:02&lt;br&gt;Name: H2112&lt;br&gt;CumDist: 231.4 nm&lt;br&gt;Speed: 221 kt&lt;br&gt;Bearing: 120 deg&lt;br&gt;Alt: 19.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="27">
+                <coordinates>-118.27260118132858,35.03902783200944,5905.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="30">
+            <name>H2113</name>
+            <description>WP# 13&lt;br&gt;UTC: 01:06&lt;br&gt;Name: H2113&lt;br&gt;CumDist: 246.5 nm&lt;br&gt;Speed: 220 kt&lt;br&gt;Bearing: 130 deg&lt;br&gt;Alt: 19.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="29">
+                <coordinates>-118.26477869119304,35.03451978279369,5842.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="32">
+            <name>H2114</name>
+            <description>WP# 14&lt;br&gt;UTC: 01:10&lt;br&gt;Name: H2114&lt;br&gt;CumDist: 261.6 nm&lt;br&gt;Speed: 220 kt&lt;br&gt;Bearing: 140 deg&lt;br&gt;Alt: 19.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="31">
+                <coordinates>-118.25802771871155,35.02896258203515,5778.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="34">
+            <name>H2115</name>
+            <description>WP# 15&lt;br&gt;UTC: 01:14&lt;br&gt;Name: H2115&lt;br&gt;CumDist: 276.7 nm&lt;br&gt;Speed: 219 kt&lt;br&gt;Bearing: 150 deg&lt;br&gt;Alt: 18.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="33">
+                <coordinates>-118.25255338804219,35.02252527368262,5714.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="36">
+            <name>H2116</name>
+            <description>WP# 16&lt;br&gt;UTC: 01:19&lt;br&gt;Name: H2116&lt;br&gt;CumDist: 291.8 nm&lt;br&gt;Speed: 219 kt&lt;br&gt;Bearing: 160 deg&lt;br&gt;Alt: 18.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="35">
+                <coordinates>-118.24852187202795,35.01540363163494,5651.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="38">
+            <name>H2117</name>
+            <description>WP# 17&lt;br&gt;UTC: 01:23&lt;br&gt;Name: H2117&lt;br&gt;CumDist: 306.9 nm&lt;br&gt;Speed: 219 kt&lt;br&gt;Bearing: 170 deg&lt;br&gt;Alt: 18.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="37">
+                <coordinates>-118.24605536279638,35.007814189581964,5588.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="40">
+            <name>H2118</name>
+            <description>WP# 18&lt;br&gt;UTC: 01:27&lt;br&gt;Name: H2118&lt;br&gt;CumDist: 322.0 nm&lt;br&gt;Speed: 218 kt&lt;br&gt;Bearing: 180 deg&lt;br&gt;Alt: 18.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="39">
+                <coordinates>-118.24522839575913,34.999987644118974,5524.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="42">
+            <name>H2119</name>
+            <description>WP# 19&lt;br&gt;UTC: 01:31&lt;br&gt;Name: H2119&lt;br&gt;CumDist: 337.1 nm&lt;br&gt;Speed: 218 kt&lt;br&gt;Bearing: 190 deg&lt;br&gt;Alt: 17.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="41">
+                <coordinates>-118.24606563423221,34.992161833696876,5460.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="44">
+            <name>H2120</name>
+            <description>WP# 20&lt;br&gt;UTC: 01:35&lt;br&gt;Name: H2120&lt;br&gt;CumDist: 352.2 nm&lt;br&gt;Speed: 218 kt&lt;br&gt;Bearing: 200 deg&lt;br&gt;Alt: 17.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="43">
+                <coordinates>-118.24854117601501,34.98457450810999,5397.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="46">
+            <name>H2121</name>
+            <description>WP# 21&lt;br&gt;UTC: 01:39&lt;br&gt;Name: H2121&lt;br&gt;CumDist: 367.3 nm&lt;br&gt;Speed: 217 kt&lt;br&gt;Bearing: 210 deg&lt;br&gt;Alt: 17.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="45">
+                <coordinates>-118.25257939623782,34.977456108677075,5333.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="48">
+            <name>H2122</name>
+            <description>WP# 22&lt;br&gt;UTC: 01:43&lt;br&gt;Name: H2122&lt;br&gt;CumDist: 382.4 nm&lt;br&gt;Speed: 217 kt&lt;br&gt;Bearing: 220 deg&lt;br&gt;Alt: 17.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="47">
+                <coordinates>-118.2580572941463,34.97102277798139,5270.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="50">
+            <name>H2123</name>
+            <description>WP# 23&lt;br&gt;UTC: 01:48&lt;br&gt;Name: H2123&lt;br&gt;CumDist: 397.5 nm&lt;br&gt;Speed: 216 kt&lt;br&gt;Bearing: 230 deg&lt;br&gt;Alt: 17.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="49">
+                <coordinates>-118.26480826663396,34.96546981015803,5207.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="52">
+            <name>H2124</name>
+            <description>WP# 24&lt;br&gt;UTC: 01:52&lt;br&gt;Name: H2124&lt;br&gt;CumDist: 412.6 nm&lt;br&gt;Speed: 216 kt&lt;br&gt;Bearing: 240 deg&lt;br&gt;Alt: 16.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="51">
+                <coordinates>-118.27262718954007,34.96096573860142,5143.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="54">
+            <name>H2125</name>
+            <description>WP# 25&lt;br&gt;UTC: 01:56&lt;br&gt;Name: H2125&lt;br&gt;CumDist: 427.7 nm&lt;br&gt;Speed: 216 kt&lt;br&gt;Bearing: 250 deg&lt;br&gt;Alt: 16.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="53">
+                <coordinates>-118.28127665004752,34.957647238129624,5079.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="56">
+            <name>H2126</name>
+            <description>WP# 26&lt;br&gt;UTC: 02:00&lt;br&gt;Name: H2126&lt;br&gt;CumDist: 442.8 nm&lt;br&gt;Speed: 215 kt&lt;br&gt;Bearing: 260 deg&lt;br&gt;Alt: 16.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="55">
+                <coordinates>-118.29049414087108,34.955614993742635,5016.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="58">
+            <name>H2127</name>
+            <description>WP# 27&lt;br&gt;UTC: 02:04&lt;br&gt;Name: H2127&lt;br&gt;CumDist: 457.9 nm&lt;br&gt;Speed: 215 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 16.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="57">
+                <coordinates>-118.29999999999994,34.95493065891555,4953.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="60">
+            <name>H2128</name>
+            <description>WP# 28&lt;br&gt;UTC: 02:09&lt;br&gt;Name: H2128&lt;br&gt;CumDist: 472.9 nm&lt;br&gt;Speed: 214 kt&lt;br&gt;Bearing: 280 deg&lt;br&gt;Alt: 16.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="59">
+                <coordinates>-118.30950585912888,34.95561499374264,4889.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="62">
+            <name>H2129</name>
+            <description>WP# 29&lt;br&gt;UTC: 02:13&lt;br&gt;Name: H2129&lt;br&gt;CumDist: 488.0 nm&lt;br&gt;Speed: 214 kt&lt;br&gt;Bearing: 290 deg&lt;br&gt;Alt: 15.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="61">
+                <coordinates>-118.31872334995252,34.957647238129624,4825.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="64">
+            <name>H2130</name>
+            <description>WP# 30&lt;br&gt;UTC: 02:17&lt;br&gt;Name: H2130&lt;br&gt;CumDist: 503.1 nm&lt;br&gt;Speed: 214 kt&lt;br&gt;Bearing: 300 deg&lt;br&gt;Alt: 15.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="63">
+                <coordinates>-118.32737281046002,34.96096573860142,4762.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="66">
+            <name>H2131</name>
+            <description>WP# 31&lt;br&gt;UTC: 02:21&lt;br&gt;Name: H2131&lt;br&gt;CumDist: 518.2 nm&lt;br&gt;Speed: 213 kt&lt;br&gt;Bearing: 310 deg&lt;br&gt;Alt: 15.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="65">
+                <coordinates>-118.335191733366,34.96546981015803,4698.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="68">
+            <name>H2132</name>
+            <description>WP# 32&lt;br&gt;UTC: 02:26&lt;br&gt;Name: H2132&lt;br&gt;CumDist: 533.3 nm&lt;br&gt;Speed: 213 kt&lt;br&gt;Bearing: 320 deg&lt;br&gt;Alt: 15.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="67">
+                <coordinates>-118.3419427058538,34.97102277798138,4635.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="70">
+            <name>H2133</name>
+            <description>WP# 33&lt;br&gt;UTC: 02:30&lt;br&gt;Name: H2133&lt;br&gt;CumDist: 548.4 nm&lt;br&gt;Speed: 212 kt&lt;br&gt;Bearing: 330 deg&lt;br&gt;Alt: 15.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="69">
+                <coordinates>-118.34742060376215,34.977456108677075,4572.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="72">
+            <name>H2134</name>
+            <description>WP# 34&lt;br&gt;UTC: 02:34&lt;br&gt;Name: H2134&lt;br&gt;CumDist: 563.5 nm&lt;br&gt;Speed: 212 kt&lt;br&gt;Bearing: 340 deg&lt;br&gt;Alt: 14.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="71">
+                <coordinates>-118.35145882398501,34.984574508109986,4508.500000000001</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="74">
+            <name>H2135</name>
+            <description>WP# 35&lt;br&gt;UTC: 02:38&lt;br&gt;Name: H2135&lt;br&gt;CumDist: 578.6 nm&lt;br&gt;Speed: 212 kt&lt;br&gt;Bearing: 350 deg&lt;br&gt;Alt: 14.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="73">
+                <coordinates>-118.35393436576771,34.99216183369687,4445.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="76">
+            <name>H2136</name>
+            <description>WP# 36&lt;br&gt;UTC: 02:43&lt;br&gt;Name: H2136&lt;br&gt;CumDist: 593.7 nm&lt;br&gt;Speed: 211 kt&lt;br&gt;Bearing: 0 deg&lt;br&gt;Alt: 14.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="75">
+                <coordinates>-118.35477160424087,34.999987644118974,4381.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="78">
+            <name>H2137</name>
+            <description>WP# 37&lt;br&gt;UTC: 02:47&lt;br&gt;Name: H2137&lt;br&gt;CumDist: 608.8 nm&lt;br&gt;Speed: 211 kt&lt;br&gt;Bearing: 10 deg&lt;br&gt;Alt: 14.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="77">
+                <coordinates>-118.35394463720367,35.007814189581964,4317.999999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="80">
+            <name>H2138</name>
+            <description>WP# 38&lt;br&gt;UTC: 02:51&lt;br&gt;Name: H2138&lt;br&gt;CumDist: 623.9 nm&lt;br&gt;Speed: 211 kt&lt;br&gt;Bearing: 20 deg&lt;br&gt;Alt: 14.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="79">
+                <coordinates>-118.3514781279721,35.01540363163494,4254.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="82">
+            <name>H2139</name>
+            <description>WP# 39&lt;br&gt;UTC: 02:56&lt;br&gt;Name: H2139&lt;br&gt;CumDist: 639.0 nm&lt;br&gt;Speed: 210 kt&lt;br&gt;Bearing: 30 deg&lt;br&gt;Alt: 13.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="81">
+                <coordinates>-118.34744661195782,35.02252527368261,4191.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="84">
+            <name>H2140</name>
+            <description>WP# 40&lt;br&gt;UTC: 03:00&lt;br&gt;Name: H2140&lt;br&gt;CumDist: 654.1 nm&lt;br&gt;Speed: 210 kt&lt;br&gt;Bearing: 40 deg&lt;br&gt;Alt: 13.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="83">
+                <coordinates>-118.34197228128846,35.02896258203515,4127.499999999999</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="86">
+            <name>H2141</name>
+            <description>WP# 41&lt;br&gt;UTC: 03:04&lt;br&gt;Name: H2141&lt;br&gt;CumDist: 669.2 nm&lt;br&gt;Speed: 209 kt&lt;br&gt;Bearing: 50 deg&lt;br&gt;Alt: 13.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="85">
+                <coordinates>-118.33522130880692,35.03451978279369,4064.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="88">
+            <name>H2142</name>
+            <description>WP# 42&lt;br&gt;UTC: 03:08&lt;br&gt;Name: H2142&lt;br&gt;CumDist: 684.3 nm&lt;br&gt;Speed: 209 kt&lt;br&gt;Bearing: 60 deg&lt;br&gt;Alt: 13.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="87">
+                <coordinates>-118.32739881867145,35.03902783200944,4000.4999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="90">
+            <name>H2143</name>
+            <description>WP# 43&lt;br&gt;UTC: 03:13&lt;br&gt;Name: H2143&lt;br&gt;CumDist: 699.4 nm&lt;br&gt;Speed: 209 kt&lt;br&gt;Bearing: 70 deg&lt;br&gt;Alt: 12.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="89">
+                <coordinates>-118.3187426539576,35.04234957509948,3937.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="92">
+            <name>H2144</name>
+            <description>WP# 44&lt;br&gt;UTC: 03:17&lt;br&gt;Name: H2144&lt;br&gt;CumDist: 714.4 nm&lt;br&gt;Speed: 208 kt&lt;br&gt;Bearing: 80 deg&lt;br&gt;Alt: 12.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="91">
+                <coordinates>-118.30951613057651,35.04438393595565,3873.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="94">
+            <name>H2145</name>
+            <description>WP# 45&lt;br&gt;UTC: 03:21&lt;br&gt;Name: H2145&lt;br&gt;CumDist: 729.5 nm&lt;br&gt;Speed: 208 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 12.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="93">
+                <coordinates>-118.29999999999994,35.04506900582485,3809.9999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="96">
+            <name>H2146</name>
+            <description>WP# 46&lt;br&gt;UTC: 03:26&lt;br&gt;Name: H2146&lt;br&gt;CumDist: 744.6 nm&lt;br&gt;Speed: 207 kt&lt;br&gt;Bearing: 100 deg&lt;br&gt;Alt: 12.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="95">
+                <coordinates>-118.2904838694234,35.04438393595565,3746.5000000000005</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="98">
+            <name>H2147</name>
+            <description>WP# 47&lt;br&gt;UTC: 03:30&lt;br&gt;Name: H2147&lt;br&gt;CumDist: 759.7 nm&lt;br&gt;Speed: 207 kt&lt;br&gt;Bearing: 110 deg&lt;br&gt;Alt: 12.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="97">
+                <coordinates>-118.28125734604247,35.04234957509949,3683.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="100">
+            <name>H2148</name>
+            <description>WP# 48&lt;br&gt;UTC: 03:35&lt;br&gt;Name: H2148&lt;br&gt;CumDist: 774.8 nm&lt;br&gt;Speed: 207 kt&lt;br&gt;Bearing: 120 deg&lt;br&gt;Alt: 11.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="99">
+                <coordinates>-118.27260118132858,35.03902783200944,3619.4999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="102">
+            <name>H2149</name>
+            <description>WP# 49&lt;br&gt;UTC: 03:39&lt;br&gt;Name: H2149&lt;br&gt;CumDist: 789.9 nm&lt;br&gt;Speed: 206 kt&lt;br&gt;Bearing: 130 deg&lt;br&gt;Alt: 11.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="101">
+                <coordinates>-118.26477869119304,35.03451978279369,3556.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="104">
+            <name>H2150</name>
+            <description>WP# 50&lt;br&gt;UTC: 03:43&lt;br&gt;Name: H2150&lt;br&gt;CumDist: 805.0 nm&lt;br&gt;Speed: 206 kt&lt;br&gt;Bearing: 140 deg&lt;br&gt;Alt: 11.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="103">
+                <coordinates>-118.25802771871155,35.02896258203515,3492.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="106">
+            <name>H2151</name>
+            <description>WP# 51&lt;br&gt;UTC: 03:48&lt;br&gt;Name: H2151&lt;br&gt;CumDist: 820.1 nm&lt;br&gt;Speed: 206 kt&lt;br&gt;Bearing: 150 deg&lt;br&gt;Alt: 11.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="105">
+                <coordinates>-118.25255338804219,35.02252527368262,3428.9999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="108">
+            <name>H2152</name>
+            <description>WP# 52&lt;br&gt;UTC: 03:52&lt;br&gt;Name: H2152&lt;br&gt;CumDist: 835.2 nm&lt;br&gt;Speed: 205 kt&lt;br&gt;Bearing: 160 deg&lt;br&gt;Alt: 11.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="107">
+                <coordinates>-118.24852187202795,35.01540363163494,3365.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="110">
+            <name>H2153</name>
+            <description>WP# 53&lt;br&gt;UTC: 03:57&lt;br&gt;Name: H2153&lt;br&gt;CumDist: 850.3 nm&lt;br&gt;Speed: 205 kt&lt;br&gt;Bearing: 170 deg&lt;br&gt;Alt: 10.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="109">
+                <coordinates>-118.24605536279638,35.007814189581964,3302.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="112">
+            <name>H2154</name>
+            <description>WP# 54&lt;br&gt;UTC: 04:01&lt;br&gt;Name: H2154&lt;br&gt;CumDist: 865.4 nm&lt;br&gt;Speed: 204 kt&lt;br&gt;Bearing: 180 deg&lt;br&gt;Alt: 10.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="111">
+                <coordinates>-118.24522839575913,34.999987644118974,3238.4999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="114">
+            <name>H2155</name>
+            <description>WP# 55&lt;br&gt;UTC: 04:05&lt;br&gt;Name: H2155&lt;br&gt;CumDist: 880.5 nm&lt;br&gt;Speed: 204 kt&lt;br&gt;Bearing: 190 deg&lt;br&gt;Alt: 10.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="113">
+                <coordinates>-118.24606563423221,34.992161833696876,3175.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="116">
+            <name>H2156</name>
+            <description>WP# 56&lt;br&gt;UTC: 04:10&lt;br&gt;Name: H2156&lt;br&gt;CumDist: 895.6 nm&lt;br&gt;Speed: 204 kt&lt;br&gt;Bearing: 200 deg&lt;br&gt;Alt: 10.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="115">
+                <coordinates>-118.24854117601501,34.98457450810999,3111.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="118">
+            <name>H2157</name>
+            <description>WP# 57&lt;br&gt;UTC: 04:14&lt;br&gt;Name: H2157&lt;br&gt;CumDist: 910.7 nm&lt;br&gt;Speed: 203 kt&lt;br&gt;Bearing: 210 deg&lt;br&gt;Alt: 10.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="117">
+                <coordinates>-118.25257939623782,34.977456108677075,3048.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="120">
+            <name>H2158</name>
+            <description>WP# 58&lt;br&gt;UTC: 04:19&lt;br&gt;Name: H2158&lt;br&gt;CumDist: 925.7 nm&lt;br&gt;Speed: 203 kt&lt;br&gt;Bearing: 220 deg&lt;br&gt;Alt: 9.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="119">
+                <coordinates>-118.2580572941463,34.97102277798139,2984.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="122">
+            <name>H2159</name>
+            <description>WP# 59&lt;br&gt;UTC: 04:23&lt;br&gt;Name: H2159&lt;br&gt;CumDist: 940.8 nm&lt;br&gt;Speed: 202 kt&lt;br&gt;Bearing: 230 deg&lt;br&gt;Alt: 9.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="121">
+                <coordinates>-118.26480826663396,34.96546981015803,2921.0000000000005</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="124">
+            <name>H2160</name>
+            <description>WP# 60&lt;br&gt;UTC: 04:28&lt;br&gt;Name: H2160&lt;br&gt;CumDist: 955.9 nm&lt;br&gt;Speed: 202 kt&lt;br&gt;Bearing: 240 deg&lt;br&gt;Alt: 9.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="123">
+                <coordinates>-118.27262718954007,34.96096573860142,2857.4999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="126">
+            <name>H2161</name>
+            <description>WP# 61&lt;br&gt;UTC: 04:32&lt;br&gt;Name: H2161&lt;br&gt;CumDist: 971.0 nm&lt;br&gt;Speed: 202 kt&lt;br&gt;Bearing: 250 deg&lt;br&gt;Alt: 9.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="125">
+                <coordinates>-118.28127665004752,34.957647238129624,2794.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="128">
+            <name>H2162</name>
+            <description>WP# 62&lt;br&gt;UTC: 04:37&lt;br&gt;Name: H2162&lt;br&gt;CumDist: 986.1 nm&lt;br&gt;Speed: 201 kt&lt;br&gt;Bearing: 260 deg&lt;br&gt;Alt: 9.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="127">
+                <coordinates>-118.29049414087108,34.955614993742635,2730.4999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="130">
+            <name>H2163</name>
+            <description>WP# 63&lt;br&gt;UTC: 04:41&lt;br&gt;Name: H2163&lt;br&gt;CumDist: 1001.2 nm&lt;br&gt;Speed: 201 kt&lt;br&gt;Bearing: 270 deg&lt;br&gt;Alt: 8.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="129">
+                <coordinates>-118.29999999999994,34.95493065891555,2667.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="132">
+            <name>H2164</name>
+            <description>WP# 64&lt;br&gt;UTC: 04:46&lt;br&gt;Name: H2164&lt;br&gt;CumDist: 1016.3 nm&lt;br&gt;Speed: 200 kt&lt;br&gt;Bearing: 280 deg&lt;br&gt;Alt: 8.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="131">
+                <coordinates>-118.30950585912888,34.95561499374264,2603.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="134">
+            <name>H2165</name>
+            <description>WP# 65&lt;br&gt;UTC: 04:50&lt;br&gt;Name: H2165&lt;br&gt;CumDist: 1031.4 nm&lt;br&gt;Speed: 200 kt&lt;br&gt;Bearing: 290 deg&lt;br&gt;Alt: 8.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="133">
+                <coordinates>-118.31872334995252,34.957647238129624,2539.9999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="136">
+            <name>H2166</name>
+            <description>WP# 66&lt;br&gt;UTC: 04:55&lt;br&gt;Name: H2166&lt;br&gt;CumDist: 1046.5 nm&lt;br&gt;Speed: 200 kt&lt;br&gt;Bearing: 300 deg&lt;br&gt;Alt: 8.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="135">
+                <coordinates>-118.32737281046002,34.96096573860142,2476.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="138">
+            <name>H2167</name>
+            <description>WP# 67&lt;br&gt;UTC: 04:59&lt;br&gt;Name: H2167&lt;br&gt;CumDist: 1061.6 nm&lt;br&gt;Speed: 199 kt&lt;br&gt;Bearing: 310 deg&lt;br&gt;Alt: 7.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="137">
+                <coordinates>-118.335191733366,34.96546981015803,2412.9999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="140">
+            <name>H2168</name>
+            <description>WP# 68&lt;br&gt;UTC: 05:04&lt;br&gt;Name: H2168&lt;br&gt;CumDist: 1076.7 nm&lt;br&gt;Speed: 199 kt&lt;br&gt;Bearing: 320 deg&lt;br&gt;Alt: 7.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="139">
+                <coordinates>-118.3419427058538,34.97102277798138,2349.5000000000005</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="142">
+            <name>H2169</name>
+            <description>WP# 69&lt;br&gt;UTC: 05:08&lt;br&gt;Name: H2169&lt;br&gt;CumDist: 1091.8 nm&lt;br&gt;Speed: 199 kt&lt;br&gt;Bearing: 330 deg&lt;br&gt;Alt: 7.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="141">
+                <coordinates>-118.34742060376215,34.977456108677075,2286.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="144">
+            <name>H2170</name>
+            <description>WP# 70&lt;br&gt;UTC: 05:13&lt;br&gt;Name: H2170&lt;br&gt;CumDist: 1106.9 nm&lt;br&gt;Speed: 198 kt&lt;br&gt;Bearing: 340 deg&lt;br&gt;Alt: 7.3 kft&lt;br&gt;Type: descent</description>
+            <Point id="143">
+                <coordinates>-118.35145882398501,34.984574508109986,2222.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="146">
+            <name>H2171</name>
+            <description>WP# 71&lt;br&gt;UTC: 05:18&lt;br&gt;Name: H2171&lt;br&gt;CumDist: 1122.0 nm&lt;br&gt;Speed: 198 kt&lt;br&gt;Bearing: 350 deg&lt;br&gt;Alt: 7.1 kft&lt;br&gt;Type: descent</description>
+            <Point id="145">
+                <coordinates>-118.35393436576771,34.99216183369687,2158.9999999999995</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="148">
+            <name>H2172</name>
+            <description>WP# 72&lt;br&gt;UTC: 05:22&lt;br&gt;Name: H2172&lt;br&gt;CumDist: 1137.1 nm&lt;br&gt;Speed: 197 kt&lt;br&gt;Bearing: 0 deg&lt;br&gt;Alt: 6.9 kft&lt;br&gt;Type: descent</description>
+            <Point id="147">
+                <coordinates>-118.35477160424087,34.999987644118974,2095.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="150">
+            <name>H2173</name>
+            <description>WP# 73&lt;br&gt;UTC: 05:27&lt;br&gt;Name: H2173&lt;br&gt;CumDist: 1152.2 nm&lt;br&gt;Speed: 197 kt&lt;br&gt;Bearing: 10 deg&lt;br&gt;Alt: 6.7 kft&lt;br&gt;Type: descent</description>
+            <Point id="149">
+                <coordinates>-118.35394463720367,35.007814189581964,2032.0000000000002</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="152">
+            <name>H2174</name>
+            <description>WP# 74&lt;br&gt;UTC: 05:31&lt;br&gt;Name: H2174&lt;br&gt;CumDist: 1167.3 nm&lt;br&gt;Speed: 197 kt&lt;br&gt;Bearing: 20 deg&lt;br&gt;Alt: 6.5 kft&lt;br&gt;Type: descent</description>
+            <Point id="151">
+                <coordinates>-118.3514781279721,35.01540363163494,1968.5000000000002</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="154">
+            <name>H2175</name>
+            <description>WP# 75&lt;br&gt;UTC: 05:36&lt;br&gt;Name: H2175&lt;br&gt;CumDist: 1182.4 nm&lt;br&gt;Speed: 196 kt&lt;br&gt;Bearing: 30 deg&lt;br&gt;Alt: 6.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="153">
+                <coordinates>-118.34744661195782,35.02252527368261,1905.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="156">
+            <name>H2176</name>
+            <description>WP# 76&lt;br&gt;UTC: 05:40&lt;br&gt;Name: H2176&lt;br&gt;CumDist: 1197.5 nm&lt;br&gt;Speed: 196 kt&lt;br&gt;Bearing: 40 deg&lt;br&gt;Alt: 6.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="155">
+                <coordinates>-118.34197228128846,35.02896258203515,1841.5000000000002</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="158">
+            <name>H2177</name>
+            <description>WP# 77&lt;br&gt;UTC: 05:45&lt;br&gt;Name: H2177&lt;br&gt;CumDist: 1212.5 nm&lt;br&gt;Speed: 195 kt&lt;br&gt;Bearing: 50 deg&lt;br&gt;Alt: 5.8 kft&lt;br&gt;Type: descent</description>
+            <Point id="157">
+                <coordinates>-118.33522130880692,35.03451978279369,1778.0000000000002</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="160">
+            <name>H2178</name>
+            <description>WP# 78&lt;br&gt;UTC: 05:50&lt;br&gt;Name: H2178&lt;br&gt;CumDist: 1227.6 nm&lt;br&gt;Speed: 195 kt&lt;br&gt;Bearing: 60 deg&lt;br&gt;Alt: 5.6 kft&lt;br&gt;Type: descent</description>
+            <Point id="159">
+                <coordinates>-118.32739881867145,35.03902783200944,1714.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="162">
+            <name>H2179</name>
+            <description>WP# 79&lt;br&gt;UTC: 05:54&lt;br&gt;Name: H2179&lt;br&gt;CumDist: 1242.7 nm&lt;br&gt;Speed: 195 kt&lt;br&gt;Bearing: 70 deg&lt;br&gt;Alt: 5.4 kft&lt;br&gt;Type: descent</description>
+            <Point id="161">
+                <coordinates>-118.3187426539576,35.04234957509948,1651.0000000000002</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="164">
+            <name>H2180</name>
+            <description>WP# 80&lt;br&gt;UTC: 05:59&lt;br&gt;Name: H2180&lt;br&gt;CumDist: 1257.8 nm&lt;br&gt;Speed: 194 kt&lt;br&gt;Bearing: 80 deg&lt;br&gt;Alt: 5.2 kft&lt;br&gt;Type: descent</description>
+            <Point id="163">
+                <coordinates>-118.30951613057651,35.04438393595565,1587.5</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="166">
+            <name>H2181</name>
+            <description>WP# 81&lt;br&gt;UTC: 06:04&lt;br&gt;Name: H2181&lt;br&gt;CumDist: 1272.9 nm&lt;br&gt;Speed: 189 kt&lt;br&gt;Bearing: 90 deg&lt;br&gt;Alt: 5.0 kft&lt;br&gt;Type: descent</description>
+            <Point id="165">
+                <coordinates>-118.29999999999994,35.04506900582485,1524.0</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="168">
+            <name>H2182</name>
+            <description>WP# 82&lt;br&gt;UTC: 06:12&lt;br&gt;Name: H2182&lt;br&gt;CumDist: 1297.7 nm&lt;br&gt;Speed: 0 kt&lt;br&gt;Bearing: 0 deg&lt;br&gt;Alt: 2.3 kft&lt;br&gt;Type: </description>
+            <Point id="167">
+                <coordinates>-117.886391,34.910781,704.6976000000078</coordinates>
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+            </Point>
+        </Placemark>
+        <Placemark id="170">
+            <name>Flight Plan</name>
+            <styleUrl>#171</styleUrl>
+            <LineString id="169">
+                <extrude>1</extrude>
+                <altitudeMode>relativeToGround</altitudeMode>
+                <coordinates>-117.886391,34.910781,704.6975999999999 -117.71926657602535,35.067405195313725,6095.999999999999 -117.28073342397471,35.067405195313725,6095.999999999999 -117.28085381633628,35.022336686556834,6095.999999999999 -117.71914618366374,35.02233668655684,6095.999999999999 -117.71902605827201,34.97726784209116,6095.999999999999 -117.28097394172791,34.977267842091166,6095.999999999999 -117.281093800735,34.93219866210637,6095.999999999999 -117.71890619926506,34.932198662106366,6095.999999999999 -118.29999999999994,35.04506900582485,6095.999999999999 -118.2904838694234,35.04438393595565,6032.5 -118.28125734604247,35.04234957509949,5969.0 -118.27260118132858,35.03902783200944,5905.499999999999 -118.26477869119304,35.03451978279369,5842.0 -118.25802771871155,35.02896258203515,5778.5 -118.25255338804219,35.02252527368262,5714.999999999999 -118.24852187202795,35.01540363163494,5651.5 -118.24605536279638,35.007814189581964,5588.0 -118.24522839575913,34.999987644118974,5524.499999999999 -118.24606563423221,34.992161833696876,5460.999999999999 -118.24854117601501,34.98457450810999,5397.5 -118.25257939623782,34.977456108677075,5333.999999999999 -118.2580572941463,34.97102277798139,5270.499999999999 -118.26480826663396,34.96546981015803,5207.0 -118.27262718954007,34.96096573860142,5143.499999999999 -118.28127665004752,34.957647238129624,5079.999999999999 -118.29049414087108,34.955614993742635,5016.5 -118.29999999999994,34.95493065891555,4953.0 -118.30950585912888,34.95561499374264,4889.499999999999 -118.31872334995252,34.957647238129624,4825.999999999999 -118.32737281046002,34.96096573860142,4762.5 -118.335191733366,34.96546981015803,4698.999999999999 -118.3419427058538,34.97102277798138,4635.5 -118.34742060376215,34.977456108677075,4572.0 -118.35145882398501,34.984574508109986,4508.500000000001 -118.35393436576771,34.99216183369687,4445.0 -118.35477160424087,34.999987644118974,4381.5 -118.35394463720367,35.007814189581964,4317.999999999999 -118.3514781279721,35.01540363163494,4254.499999999999 -118.34744661195782,35.02252527368261,4191.0 -118.34197228128846,35.02896258203515,4127.499999999999 -118.33522130880692,35.03451978279369,4064.0 -118.32739881867145,35.03902783200944,4000.4999999999995 -118.3187426539576,35.04234957509948,3937.0 -118.30951613057651,35.04438393595565,3873.5 -118.29999999999994,35.04506900582485,3809.9999999999995 -118.2904838694234,35.04438393595565,3746.5000000000005 -118.28125734604247,35.04234957509949,3683.0 -118.27260118132858,35.03902783200944,3619.4999999999995 -118.26477869119304,35.03451978279369,3556.0 -118.25802771871155,35.02896258203515,3492.5 -118.25255338804219,35.02252527368262,3428.9999999999995 -118.24852187202795,35.01540363163494,3365.5 -118.24605536279638,35.007814189581964,3302.0 -118.24522839575913,34.999987644118974,3238.4999999999995 -118.24606563423221,34.992161833696876,3175.0 -118.24854117601501,34.98457450810999,3111.5 -118.25257939623782,34.977456108677075,3048.0 -118.2580572941463,34.97102277798139,2984.5 -118.26480826663396,34.96546981015803,2921.0000000000005 -118.27262718954007,34.96096573860142,2857.4999999999995 -118.28127665004752,34.957647238129624,2794.0 -118.29049414087108,34.955614993742635,2730.4999999999995 -118.29999999999994,34.95493065891555,2667.0 -118.30950585912888,34.95561499374264,2603.5 -118.31872334995252,34.957647238129624,2539.9999999999995 -118.32737281046002,34.96096573860142,2476.5 -118.335191733366,34.96546981015803,2412.9999999999995 -118.3419427058538,34.97102277798138,2349.5000000000005 -118.34742060376215,34.977456108677075,2286.0 -118.35145882398501,34.984574508109986,2222.5 -118.35393436576771,34.99216183369687,2158.9999999999995 -118.35477160424087,34.999987644118974,2095.5 -118.35394463720367,35.007814189581964,2032.0000000000002 -118.3514781279721,35.01540363163494,1968.5000000000002 -118.34744661195782,35.02252527368261,1905.0 -118.34197228128846,35.02896258203515,1841.5000000000002 -118.33522130880692,35.03451978279369,1778.0000000000002 -118.32739881867145,35.03902783200944,1714.5 -118.3187426539576,35.04234957509948,1651.0000000000002 -118.30951613057651,35.04438393595565,1587.5 -118.29999999999994,35.04506900582485,1524.0 -117.886391,34.910781,704.6976000000078</coordinates>
+            </LineString>
+        </Placemark>
+    </Document>
+</kml>

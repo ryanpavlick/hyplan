@@ -2,26 +2,25 @@ name: hyplan
 channels:
   - conda-forge
 dependencies:
-  - python>=3.11
+  - python>=3.9
   - numpy
   - pandas
   - matplotlib
   - networkx
-  - tabulate
   - geopandas
   - shapely
   - pyproj
   - rtree
   - gdal
   - pint
-  - pydantic
   - requests
   - folium
   - pymap3d
+  - geomag
+  - gpxpy
+  - xlsxwriter
   - pip
   - pip:
-      - pydantic-pint
       - simplekml
       - skyfield
       - sunposition
-      - dubins

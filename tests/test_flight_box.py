@@ -90,6 +90,62 @@ class TestBoxAroundCenterLine:
         assert abs(sum(lons) / len(lons) - center_lon) < 0.01
 
 
+class TestFlightLineCount:
+    """Verify that nlines produces exactly nlines flight lines (no off-by-one)."""
+
+    def _make_lines(self, nlines_target):
+        """Helper: choose box_width so that nlines == nlines_target exactly."""
+        sensor = AVIRIS3()
+        altitude = ureg.Quantity(6000, "meter")
+        swath = sensor.swath_width(altitude)
+        spacing = swath * (1 - 20 / 100)
+        # box_width that makes ceil(box_width / spacing) == nlines_target
+        box_width = spacing * (nlines_target - 0.5)
+        return box_around_center_line(
+            instrument=sensor,
+            altitude_msl=altitude,
+            lat0=34.0,
+            lon0=-118.0,
+            azimuth=0.0,
+            box_length=ureg.Quantity(50000, "meter"),
+            box_width=box_width,
+            box_name="CountTest",
+            overlap=20.0,
+        )
+
+    def test_even_nlines_count(self):
+        """nlines=4 must produce exactly 4 flight lines."""
+        lines = self._make_lines(4)
+        assert len(lines) == 4
+
+    def test_odd_nlines_count(self):
+        """nlines=5 must produce exactly 5 flight lines."""
+        lines = self._make_lines(5)
+        assert len(lines) == 5
+
+    def test_single_line_centered(self):
+        """nlines=1 must produce exactly 1 flight line at the box center."""
+        sensor = AVIRIS3()
+        altitude = ureg.Quantity(6000, "meter")
+        swath = sensor.swath_width(altitude)
+        # box_width smaller than one swath spacing → nlines=1
+        box_width = swath * 0.5
+        lines = box_around_center_line(
+            instrument=sensor,
+            altitude_msl=altitude,
+            lat0=34.0,
+            lon0=-118.0,
+            azimuth=0.0,
+            box_length=ureg.Quantity(50000, "meter"),
+            box_width=box_width,
+            box_name="SingleLine",
+            overlap=20.0,
+        )
+        assert len(lines) == 1
+        # The single line should pass through the box center
+        assert abs(lines[0].lon1 - (-118.0)) < 0.01 or abs(lines[0].lon2 - (-118.0)) < 0.01
+
+
 class TestBoxAroundPolygon:
     def test_generates_lines(self):
         sensor = AVIRIS3()

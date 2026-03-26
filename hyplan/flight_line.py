@@ -9,7 +9,7 @@ import logging
 
 from .units import ureg
 from .geometry import wrap_to_180
-from .dubins_path import Waypoint
+from .waypoint import Waypoint, is_waypoint
 from .exceptions import HyPlanTypeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
@@ -24,68 +24,115 @@ class FlightLine:
     """
     Represents a geospatial flight line with properties, validations, and operations.
 
+    A FlightLine is defined by two Waypoint objects (start and end).  The
+    Shapely LineString geometry and geodesic properties (length, azimuths)
+    are derived from those waypoints.
+
     Altitude is stored as MSL (above mean sea level), which is the standard
     aviation reference. Sensor calculations that depend on height above ground
     (AGL) must account for terrain elevation separately.
     """
     def __init__(
         self,
-        geometry: LineString,
-        altitude_msl: Quantity,
+        waypoint1: Waypoint,
+        waypoint2: Waypoint,
         site_name: Optional[str] = None,
         site_description: Optional[str] = None,
         investigator: Optional[str] = None,
     ):
-        self._validate_geometry(geometry)
-        self.geometry = geometry
-        self.altitude_msl = self._validate_altitude(altitude_msl)
+        if not is_waypoint(waypoint1) or not is_waypoint(waypoint2):
+            raise HyPlanTypeError("waypoint1 and waypoint2 must be Waypoint objects.")
+
+        self._waypoint1 = waypoint1
+        self._waypoint2 = waypoint2
         self.site_name = site_name
         self.site_description = site_description
         self.investigator = investigator
 
-    @staticmethod
-    def _validate_geometry(geometry: LineString):
-        if not isinstance(geometry, LineString):
-            raise HyPlanValueError("Geometry must be a Shapely LineString.")
-        if len(geometry.coords) != 2:
-            raise HyPlanValueError("LineString must have exactly two points.")
-        for lon, lat in geometry.coords:
-            if not (-90 <= lat <= 90):
-                raise HyPlanValueError(f"Latitude {lat} is out of bounds (-90 to 90).")
-            if not (-180 <= lon <= 180):
-                raise HyPlanValueError(f"Longitude {lon} is out of bounds (-180 to 180).")
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _validate_altitude(altitude: Quantity) -> Quantity:
-        if not isinstance(altitude, Quantity):
-            altitude = ureg.Quantity(altitude, "meter")
-        else:
-            altitude = altitude.to("meter")
+    def _from_geometry(self, geometry: LineString, site_name: Optional[str] = None) -> "FlightLine":
+        """Create a new FlightLine from a LineString, inheriting metadata.
 
-        if altitude.magnitude < 0 or altitude.magnitude > 22000:
-            logger.warning(
-                f"Altitude {altitude.magnitude} meters is outside the typical range (0-22000 meters).")
-        return altitude
+        Altitude, speed, and segment_type propagate from the source.
+        Delay is reset to None (loiter is specific to a geographic point).
+        """
+        _validate_linestring(geometry)
+        coords = list(geometry.coords)
+        lon1, lat1 = coords[0]
+        lon2, lat2 = coords[-1]
+
+        _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+        _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
+
+        wp1 = Waypoint(
+            latitude=lat1, longitude=lon1,
+            heading=float(az12),
+            altitude_msl=self.altitude_msl,
+            name=f"{site_name}_start" if site_name else f"{self.site_name}_start" if self.site_name else "start",
+            speed=self._waypoint1.speed,
+            segment_type=self._waypoint1.segment_type,
+        )
+        wp2 = Waypoint(
+            latitude=lat2, longitude=lon2,
+            heading=(float(az21) + 180.0) % 360.0,
+            altitude_msl=self.altitude_msl,
+            name=f"{site_name}_end" if site_name else f"{self.site_name}_end" if self.site_name else "end",
+            speed=self._waypoint1.speed,
+            segment_type=self._waypoint1.segment_type,
+        )
+        return FlightLine(
+            waypoint1=wp1, waypoint2=wp2,
+            site_name=site_name or self.site_name,
+            site_description=self.site_description,
+            investigator=self.investigator,
+        )
+
+    # ------------------------------------------------------------------
+    # Properties — same external API as before
+    # ------------------------------------------------------------------
+
+    @property
+    def geometry(self) -> LineString:
+        """Shapely LineString derived from the two waypoints."""
+        return LineString([
+            (self._waypoint1.longitude, self._waypoint1.latitude),
+            (self._waypoint2.longitude, self._waypoint2.latitude),
+        ])
+
+    @property
+    def altitude_msl(self) -> Quantity:
+        """Flight altitude MSL (from waypoint1)."""
+        return self._waypoint1.altitude_msl
+
+    @altitude_msl.setter
+    def altitude_msl(self, value: Quantity):
+        """Set altitude on both waypoints."""
+        validated = self._validate_altitude(value)
+        self._waypoint1.altitude_msl = validated
+        self._waypoint2.altitude_msl = validated
 
     @property
     def lat1(self) -> float:
         """Latitude of the start point in decimal degrees."""
-        return self.geometry.coords[0][1]
+        return self._waypoint1.latitude
 
     @property
     def lon1(self) -> float:
         """Longitude of the start point in decimal degrees."""
-        return self.geometry.coords[0][0]
+        return self._waypoint1.longitude
 
     @property
     def lat2(self) -> float:
         """Latitude of the end point in decimal degrees."""
-        return self.geometry.coords[-1][1]
+        return self._waypoint2.latitude
 
     @property
     def lon2(self) -> float:
         """Longitude of the end point in decimal degrees."""
-        return self.geometry.coords[-1][0]
+        return self._waypoint2.longitude
 
     @property
     def length(self) -> Quantity:
@@ -107,16 +154,39 @@ class FlightLine:
 
     @property
     def waypoint1(self) -> Waypoint:
-        """Start point as a Waypoint with heading along the flight direction."""
-        name = f"{self.site_name}_start" if self.site_name else "start"
-        return Waypoint(latitude=self.lat1, longitude=self.lon1, heading=self.az12.magnitude, altitude_msl=self.altitude_msl, name=name)
+        """Start point Waypoint."""
+        return self._waypoint1
 
     @property
     def waypoint2(self) -> Waypoint:
-        """End point as a Waypoint with heading along the flight direction."""
-        heading = (self.az21.magnitude + 180.0) % 360.0
-        name = f"{self.site_name}_end" if self.site_name else "end"
-        return Waypoint(latitude=self.lat2, longitude=self.lon2, heading=heading, altitude_msl=self.altitude_msl, name=name)
+        """End point Waypoint."""
+        return self._waypoint2
+
+    # ------------------------------------------------------------------
+    # Validation helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_altitude(altitude: Quantity) -> Quantity:
+        if not isinstance(altitude, Quantity):
+            altitude = ureg.Quantity(altitude, "meter")
+        else:
+            altitude = altitude.to("meter")
+
+        if altitude.magnitude < 0:
+            raise HyPlanValueError(
+                f"Altitude must be non-negative, got {altitude.magnitude} meters"
+            )
+        if altitude.magnitude > 22000:
+            logger.warning(
+                f"Altitude {altitude.magnitude} meters is above 22,000 m. "
+                "Verify this is intended (ER-2/WB-57 range)."
+            )
+        return altitude
+
+    # ------------------------------------------------------------------
+    # Factory methods
+    # ------------------------------------------------------------------
 
     @classmethod
     def start_length_azimuth(
@@ -125,6 +195,10 @@ class FlightLine:
         lon1: float,
         length: Quantity,
         az: float,
+        altitude_msl: Quantity = None,
+        site_name: Optional[str] = None,
+        site_description: Optional[str] = None,
+        investigator: Optional[str] = None,
         **kwargs,
     ) -> "FlightLine":
         """Create a flight line from a start point, length, and azimuth.
@@ -134,8 +208,10 @@ class FlightLine:
             lon1: Start longitude in decimal degrees.
             length: Line length as a Quantity with distance units.
             az: Forward azimuth in degrees from true north.
-            **kwargs: Additional arguments passed to the FlightLine constructor
-                (altitude_msl, site_name, etc.).
+            altitude_msl: Flight altitude MSL.
+            site_name: Optional site name.
+            site_description: Optional site description.
+            investigator: Optional investigator name.
 
         Returns:
             A new FlightLine extending from (lat1, lon1) along the given azimuth.
@@ -149,8 +225,20 @@ class FlightLine:
         lat2, lon2 = pymap3d.vincenty.vreckon(lat1, lon1, length_m, az)
         lon2 = wrap_to_180(lon2)
 
-        geometry = LineString([(lon1, lat1), (lon2, lat2)])
-        return cls(geometry=geometry, **kwargs)
+        _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
+
+        alt = cls._validate_altitude(altitude_msl)
+        wp1 = Waypoint(latitude=lat1, longitude=lon1, heading=float(az) % 360,
+                       altitude_msl=alt,
+                       name=f"{site_name}_start" if site_name else "start")
+        wp2 = Waypoint(latitude=float(lat2), longitude=float(lon2),
+                       heading=(float(az21) + 180.0) % 360.0,
+                       altitude_msl=alt,
+                       name=f"{site_name}_end" if site_name else "end")
+
+        return cls(waypoint1=wp1, waypoint2=wp2,
+                   site_name=site_name, site_description=site_description,
+                   investigator=investigator)
 
     @classmethod
     def center_length_azimuth(
@@ -159,6 +247,10 @@ class FlightLine:
         lon: float,
         length: Quantity,
         az: float,
+        altitude_msl: Quantity = None,
+        site_name: Optional[str] = None,
+        site_description: Optional[str] = None,
+        investigator: Optional[str] = None,
         **kwargs,
     ) -> "FlightLine":
         """Create a flight line centered on a point, extending equally in both directions.
@@ -168,8 +260,10 @@ class FlightLine:
             lon: Center longitude in decimal degrees.
             length: Total line length as a Quantity with distance units.
             az: Forward azimuth in degrees from true north.
-            **kwargs: Additional arguments passed to the FlightLine constructor
-                (altitude_msl, site_name, etc.).
+            altitude_msl: Flight altitude MSL.
+            site_name: Optional site name.
+            site_description: Optional site description.
+            investigator: Optional investigator name.
 
         Returns:
             A new FlightLine centered on (lat, lon) along the given azimuth.
@@ -185,8 +279,27 @@ class FlightLine:
         lat1, lon1 = pymap3d.vincenty.vreckon(lat, lon, length_m / 2, az - 180)
 
         lon1, lon2 = wrap_to_180(lon1), wrap_to_180(lon2)
-        geometry = LineString([(lon1, lat1), (lon2, lat2)])
-        return cls(geometry=geometry, **kwargs)
+
+        _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+        _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
+
+        alt = cls._validate_altitude(altitude_msl)
+        wp1 = Waypoint(latitude=float(lat1), longitude=float(lon1),
+                       heading=float(az12) % 360,
+                       altitude_msl=alt,
+                       name=f"{site_name}_start" if site_name else "start")
+        wp2 = Waypoint(latitude=float(lat2), longitude=float(lon2),
+                       heading=(float(az21) + 180.0) % 360.0,
+                       altitude_msl=alt,
+                       name=f"{site_name}_end" if site_name else "end")
+
+        return cls(waypoint1=wp1, waypoint2=wp2,
+                   site_name=site_name, site_description=site_description,
+                   investigator=investigator)
+
+    # ------------------------------------------------------------------
+    # Transform methods
+    # ------------------------------------------------------------------
 
     def clip_to_polygon(
         self, clip_polygon: Union[Polygon, MultiPolygon]
@@ -212,30 +325,14 @@ class FlightLine:
                 return [self]
             else:
                 logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was clipped into a single segment.")
-                return [
-                    FlightLine(
-                        geometry=clipped_geometry,
-                        altitude_msl=self.altitude_msl,
-                        site_name=self.site_name,
-                        site_description=self.site_description,
-                        investigator=self.investigator,
-                    )
-                ]
+                return [self._from_geometry(clipped_geometry)]
 
         if isinstance(clipped_geometry, MultiLineString):
             results = []
             for i, segment in enumerate(clipped_geometry.geoms):
                 new_site_name = f"{self.site_name}_{i:02d}" if self.site_name else f"Segment_{i:02d}"
                 logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was split into segment: {new_site_name}")
-                results.append(
-                    FlightLine(
-                        geometry=segment,
-                        altitude_msl=self.altitude_msl,
-                        site_name=new_site_name,
-                        site_description=self.site_description,
-                        investigator=self.investigator,
-                    )
-                )
+                results.append(self._from_geometry(segment, site_name=new_site_name))
             return results
 
         logger.error(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
@@ -273,14 +370,8 @@ class FlightLine:
         Returns:
             FlightLine: A new FlightLine object with reversed direction.
         """
-        reversed_geometry = LineString(list(reversed(self.geometry.coords)))
-        return FlightLine(
-            geometry=reversed_geometry,
-            altitude_msl=self.altitude_msl,
-            site_name=self.site_name,
-            site_description=self.site_description,
-            investigator=self.investigator
-        )
+        reversed_geom = LineString(list(reversed(self.geometry.coords)))
+        return self._from_geometry(reversed_geom)
 
     def offset_north_east(self, offset_north: Quantity, offset_east: Quantity) -> "FlightLine":
         """
@@ -314,14 +405,7 @@ class FlightLine:
         new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
-
-        return FlightLine(
-            geometry=offset_geometry,
-            altitude_msl=self.altitude_msl,
-            site_name=self.site_name,
-            site_description=self.site_description,
-            investigator=self.investigator
-        )
+        return self._from_geometry(offset_geometry)
 
     def offset_across(self, offset_distance: Union[Quantity, float]) -> "FlightLine":
         """
@@ -350,14 +434,7 @@ class FlightLine:
         new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
-
-        return FlightLine(
-            geometry=offset_geometry,
-            altitude_msl=self.altitude_msl,
-            site_name=self.site_name,
-            site_description=self.site_description,
-            investigator=self.investigator
-        )
+        return self._from_geometry(offset_geometry)
 
     def offset_along(self, offset_start: Union[Quantity, float], offset_end: Union[Quantity, float]) -> "FlightLine":
         """
@@ -391,14 +468,7 @@ class FlightLine:
         new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
-
-        return FlightLine(
-            geometry=offset_geometry,
-            altitude_msl=self.altitude_msl,
-            site_name=self.site_name,
-            site_description=self.site_description,
-            investigator=self.investigator
-        )
+        return self._from_geometry(offset_geometry)
 
     def rotate_around_midpoint(self, angle: float) -> "FlightLine":
         """
@@ -428,13 +498,7 @@ class FlightLine:
             for x, y in self.geometry.coords
         ]
 
-        return FlightLine(
-            geometry=LineString(rotated_coords),
-            altitude_msl=self.altitude_msl,
-            site_name=self.site_name,
-            site_description=self.site_description,
-            investigator=self.investigator,
-        )
+        return self._from_geometry(LineString(rotated_coords))
 
     def split_by_length(self, max_length: Quantity, gap_length: Optional[Quantity] = None) -> List["FlightLine"]:
         """
@@ -473,15 +537,8 @@ class FlightLine:
             end_lon = wrap_to_180(end_lon)
 
             segment_geometry = LineString([(current_start_lon, current_start_lat), (end_lon, end_lat)])
-            segments.append(
-                FlightLine(
-                    geometry=segment_geometry,
-                    altitude_msl=self.altitude_msl,
-                    site_name=f"{self.site_name}_seg_{segment_index}" if self.site_name else f"Segment_{segment_index}",
-                    site_description=self.site_description,
-                    investigator=self.investigator,
-                )
-            )
+            seg_name = f"{self.site_name}_seg_{segment_index}" if self.site_name else f"Segment_{segment_index}"
+            segments.append(self._from_geometry(segment_geometry, site_name=seg_name))
             segment_index += 1
 
             if gap_length and remaining_length_m > gap_length_m:
@@ -496,6 +553,10 @@ class FlightLine:
                 current_start_lat, current_start_lon = end_lat, end_lon
 
         return segments
+
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
 
     def to_dict(self) -> Dict:
         """
@@ -539,6 +600,19 @@ class FlightLine:
                 "investigator": self.investigator,
             },
         }
+
+
+def _validate_linestring(geometry: LineString):
+    """Validate a LineString for use as FlightLine geometry."""
+    if not isinstance(geometry, LineString):
+        raise HyPlanValueError("Geometry must be a Shapely LineString.")
+    if len(geometry.coords) != 2:
+        raise HyPlanValueError("LineString must have exactly two points.")
+    for lon, lat in geometry.coords:
+        if not (-90 <= lat <= 90):
+            raise HyPlanValueError(f"Latitude {lat} is out of bounds (-90 to 90).")
+        if not (-180 <= lon <= 180):
+            raise HyPlanValueError(f"Longitude {lon} is out of bounds (-180 to 180).")
 
 
 def to_gdf(flight_lines: List[FlightLine], crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
