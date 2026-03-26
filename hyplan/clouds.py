@@ -56,7 +56,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 _ee_initialized = False
 

@@ -29,8 +29,8 @@ dependencies = [
     "numpy",
     "pandas",
     "pint",
-    "pydantic",
-    "pydantic_pint",
+    # Note: GDAL/osgeo is required but must be installed at the system level
+    # (via conda, brew, or apt). It cannot be pip-installed directly.
     "pymap3d",
     "pyproj",
     "requests",
@@ -39,16 +39,17 @@ dependencies = [
     "simplekml",
     "skyfield",
     "sunposition",
-    "tabulate",
-    "dubins",
     "folium",
+    "geomag",
+    "gpxpy",
     "matplotlib",
     "networkx",
+    "xlsxwriter",
 ]
 
 [project.optional-dependencies]
 clouds = ["earthengine-api"]
-parallel = ["ray"]
+interactive = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "nbstripout"]
 
 [project.urls]

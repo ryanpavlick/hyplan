@@ -4,8 +4,6 @@ numpy
 gdal
 pandas
 pint
-pydantic
-pydantic_pint
 pymap3d
 pyproj
 requests
@@ -14,8 +12,9 @@ shapely
 simplekml
 skyfield
 sunposition
-tabulate
-dubins
 folium
+geomag
+gpxpy
 matplotlib
 networkx
+xlsxwriter

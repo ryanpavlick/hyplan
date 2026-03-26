@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
-from hyplan.dubins_path import Waypoint
+from hyplan.waypoint import Waypoint, is_waypoint
 from hyplan.units import ureg
 
 __all__ = [
@@ -104,7 +104,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
 
     # Plot waypoints and flight lines from the flight sequence.
     for item in flight_sequence:
-        if isinstance(item, Waypoint):
+        if is_waypoint(item):
             ax.scatter(item.longitude, item.latitude, color='green', marker='o', s=100, label=item.name)
         elif isinstance(item, FlightLine):
             x, y = zip(*item.geometry.coords)

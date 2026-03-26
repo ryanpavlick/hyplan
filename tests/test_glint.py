@@ -4,8 +4,15 @@ import pytest
 import numpy as np
 import geopandas as gpd
 from datetime import datetime, timezone
+from shapely.geometry import LineString
 
-from hyplan.glint import glint_angle, calculate_target_and_glint_vectorized, compute_glint_vectorized
+from hyplan.glint import (
+    glint_angle,
+    calculate_target_and_glint_vectorized,
+    compute_glint_vectorized,
+    GlintArc,
+    compute_glint_arc,
+)
 from hyplan.sensors import AVIRIS3
 from hyplan.units import ureg
 from hyplan.flight_line import FlightLine
@@ -135,3 +142,224 @@ class TestComputeGlintVectorized:
 
         with pytest.raises(ValueError, match="Invalid output_geometry"):
             compute_glint_vectorized(fl, sensor, obs_time, output_geometry="invalid")
+
+
+# --- GlintArc tests ---
+
+# Gulf of Mexico platform, midday UTC (morning local) — SZA around 30-50°
+ARC_TARGET_LAT = 28.0
+ARC_TARGET_LON = -90.0
+ARC_OBS_TIME = datetime(2025, 6, 15, 17, 0, tzinfo=timezone.utc)
+ARC_ALTITUDE = ureg.Quantity(10000, "foot")
+ARC_SPEED = ureg.Quantity(145, "knot")
+
+
+class TestGlintArc:
+    def test_creation(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        assert isinstance(arc.geometry, LineString)
+        assert arc.bank_angle == arc.solar_zenith
+        assert arc.bank_direction == "right"
+        assert arc.arc_extent == 30.0
+        assert 5.0 < arc.solar_zenith < 75.0
+
+    def test_bank_direction_left(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            bank_direction="left",
+        )
+        assert arc.bank_direction == "left"
+        assert isinstance(arc.geometry, LineString)
+
+    def test_invalid_bank_direction(self):
+        with pytest.raises(ValueError, match="bank_direction"):
+            GlintArc(
+                target_lat=ARC_TARGET_LAT,
+                target_lon=ARC_TARGET_LON,
+                observation_datetime=ARC_OBS_TIME,
+                altitude_msl=ARC_ALTITUDE,
+                speed=ARC_SPEED,
+                bank_direction="up",
+            )
+
+    def test_turn_radius_positive(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        assert arc.turn_radius.magnitude > 0
+
+    def test_arc_length(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            arc_extent=30.0,
+        )
+        expected = arc.turn_radius.magnitude * np.radians(30.0)
+        assert arc.length.magnitude == pytest.approx(expected, rel=0.01)
+
+    def test_waypoints(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        wp1 = arc.waypoint1
+        wp2 = arc.waypoint2
+        assert -90 <= wp1.latitude <= 90
+        assert -90 <= wp2.latitude <= 90
+        assert wp1.altitude_msl is not None
+        assert wp2.altitude_msl is not None
+
+    def test_track_returns_linestring(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        track = arc.track(precision=50.0)
+        assert isinstance(track, LineString)
+        assert len(track.coords) >= 3
+
+    def test_to_dict(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            site_name="TestPlatform",
+        )
+        d = arc.to_dict()
+        assert d["site_name"] == "TestPlatform"
+        assert d["target_lat"] == ARC_TARGET_LAT
+        assert d["bank_angle"] == arc.solar_zenith
+
+    def test_to_geojson(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        gj = arc.to_geojson()
+        assert gj["type"] == "Feature"
+        assert gj["geometry"]["type"] == "LineString"
+        assert len(gj["geometry"]["coordinates"]) > 0
+
+    def test_sun_near_zenith_raises(self):
+        """Solar zenith < 5° should raise an error."""
+        # Near equator at local noon in June — SZA very small
+        with pytest.raises(ValueError, match="sun near zenith"):
+            GlintArc(
+                target_lat=0.0,
+                target_lon=0.0,
+                observation_datetime=datetime(2025, 3, 20, 12, 0, tzinfo=timezone.utc),
+                altitude_msl=ARC_ALTITUDE,
+                speed=ARC_SPEED,
+            )
+
+    def test_custom_arc_extent(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            arc_extent=60.0,
+        )
+        assert arc.arc_extent == 60.0
+        expected = arc.turn_radius.magnitude * np.radians(60.0)
+        assert arc.length.magnitude == pytest.approx(expected, rel=0.01)
+
+
+class TestComputeGlintArc:
+    def test_returns_geodataframe(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        sensor = AVIRIS3()
+        gdf = compute_glint_arc(arc, sensor)
+        assert isinstance(gdf, gpd.GeoDataFrame)
+        assert "glint_angle" in gdf.columns
+        assert "tilt_angle" in gdf.columns
+        assert "view_zenith" in gdf.columns
+        assert len(gdf) > 0
+        assert gdf["glint_angle"].min() >= 0
+        assert gdf["glint_angle"].max() <= 180
+
+    def test_minimum_glint_near_center(self):
+        """The minimum glint angle should occur near the arc midpoint."""
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        sensor = AVIRIS3()
+        gdf = compute_glint_arc(arc, sensor)
+
+        # Find the row with minimum glint angle
+        min_idx = gdf["glint_angle"].idxmin()
+        min_glint = gdf.loc[min_idx, "glint_angle"]
+
+        # Glint angle at best point should be very small (< 5°)
+        assert min_glint < 5.0
+
+        # The minimum should be near the center of along_track_distance
+        atd = gdf["along_track_distance"]
+        mid_atd = (atd.max() + atd.min()) / 2.0
+        min_atd = gdf.loc[min_idx, "along_track_distance"]
+        # Within 20% of the arc length from center
+        assert abs(min_atd - mid_atd) < 0.2 * (atd.max() - atd.min())
+
+    def test_along_track_output(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        sensor = AVIRIS3()
+        gdf = compute_glint_arc(arc, sensor, output_geometry="along_track")
+        assert isinstance(gdf, gpd.GeoDataFrame)
+        assert len(gdf) > 0
+
+    def test_invalid_output_geometry(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+        )
+        sensor = AVIRIS3()
+        with pytest.raises(ValueError, match="Invalid output_geometry"):
+            compute_glint_arc(arc, sensor, output_geometry="invalid")
