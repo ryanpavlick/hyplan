@@ -332,20 +332,38 @@ def ray_terrain_intersection(
             "Ray-terrain intersection is undefined for near-horizontal rays."
         )
 
-    # Compute slant range to ellipsoid for each observer
+    # Compute slant range to ellipsoid for each observer.
     lat_ell, lon_ell, rng_ell = pymap3d.los.lookAtSpheroid(lat0, lon0, h0, az, tilt)
+    rng_ell = np.atleast_1d(rng_ell)
 
-    if dem_file is None:
-        dem_file = generate_demfile(lat_ell, lon_ell)
+    # For steep depression angles (near-nadir), lookAtSpheroid returns
+    # extremely large ranges because the ray grazes along the ellipsoid
+    # surface.  Cap the range at a flat-earth estimate with a generous
+    # safety factor to keep the search window reasonable.
+    sin_tilt = np.sin(np.radians(tilt))
+    rng_flat = h0 / sin_tilt
+    rng_capped = np.minimum(rng_ell, rng_flat * 2.0)
+
+    auto_dem = dem_file is None
+
+    if auto_dem:
+        # Include both observer and ellipsoid-hit positions so the DEM
+        # covers the full ray-march extent.
+        dem_lats = np.concatenate([lat0, np.atleast_1d(lat_ell)])
+        dem_lons = np.concatenate([lon0, np.atleast_1d(lon_ell)])
+        dem_file = generate_demfile(dem_lats, dem_lons)
 
     min_elev, max_elev = get_min_max_elevations(dem_file)
     max_elev = min(h0, max_elev)
     if np.any(min_elev > h0):
         raise HyPlanValueError("Observer altitude is below the minimum terrain elevation.")
 
-    # Per-observer slant range bounds
-    upper_bound = np.ceil((rng_ell - (min_elev / cos_tilt)) / precision) * precision
-    lower_bound = np.floor((rng_ell - (max_elev / cos_tilt)) / precision) * precision
+    # Per-observer slant range bounds using capped range
+    upper_bound = np.ceil((rng_capped - (min_elev / cos_tilt)) / precision) * precision
+    lower_bound = np.maximum(
+        0.0,
+        np.floor((rng_capped - (max_elev / cos_tilt)) / precision) * precision,
+    )
 
     # Global range array spanning the worst-case window across all observers.
     # A per-observer validity mask (below) ensures each observer's intersection
@@ -359,6 +377,22 @@ def ray_terrain_intersection(
         az[np.newaxis, :], tilt_el[np.newaxis, :], rs[:, np.newaxis],
         lat0[np.newaxis, :], lon0[np.newaxis, :], h0
     )
+
+    # If the DEM was auto-downloaded, check whether the ray-march grid
+    # extends beyond it and re-download a wider DEM if necessary.
+    if auto_dem:
+        grid_lat_min, grid_lat_max = float(lats.min()), float(lats.max())
+        grid_lon_min, grid_lon_max = float(lons.min()), float(lons.max())
+        dem_lat_min = float(dem_lats.min()) - 0.1
+        dem_lon_min = float(dem_lons.min()) - 0.1
+        dem_lat_max = float(dem_lats.max()) + 0.1
+        dem_lon_max = float(dem_lons.max()) + 0.1
+
+        if (grid_lat_min < dem_lat_min or grid_lat_max > dem_lat_max or
+                grid_lon_min < dem_lon_min or grid_lon_max > dem_lon_max):
+            wider_lats = np.array([grid_lat_min, grid_lat_max])
+            wider_lons = np.array([grid_lon_min, grid_lon_max])
+            dem_file = generate_demfile(wider_lats, wider_lons)
 
     lats_flat = lats.ravel()
     lons_flat = lons.ravel()

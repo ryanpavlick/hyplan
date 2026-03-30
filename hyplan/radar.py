@@ -175,8 +175,10 @@ class SidelookingRadar(Sensor):
             matches swath.py: port = left of track, starboard = right of track.
         """
         if self.look_direction == "left":
-            return self.near_range_angle, self.far_range_angle
+            # Swath on port side: negative angles (left of track)
+            return -self.far_range_angle, -self.near_range_angle
         else:
+            # Swath on starboard side: positive angles (right of track)
             return self.near_range_angle, self.far_range_angle
 
     def interferometric_line_spacing(self, altitude_agl: Quantity, overlap_fraction: float = 0.0) -> Quantity:

@@ -86,7 +86,7 @@ from .sensors import (
     SENSOR_REGISTRY,
     create_sensor,
 )
-from .frame_camera import FrameCamera
+from .frame_camera import FrameCamera, MultiCameraRig
 from .lvis import LVIS
 from .radar import SidelookingRadar
 
@@ -146,7 +146,7 @@ __all__ = [
     "GLiHT_VNIR", "GLiHT_Thermal", "GLiHT_SIF",
     "GCAS_UV_Vis", "GCAS_VNIR", "eMAS", "PICARD",
     "SENSOR_REGISTRY", "create_sensor",
-    "FrameCamera", "LVIS", "SidelookingRadar",
+    "FrameCamera", "MultiCameraRig", "LVIS", "SidelookingRadar",
     # Dubins
     "Waypoint", "DubinsPath3D",
     # Swath

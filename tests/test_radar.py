@@ -205,10 +205,31 @@ class TestSwathOffsetAngles:
         assert isinstance(angles, tuple)
         assert len(angles) == 2
 
-    def test_values(self, lband):
+    def test_values_left_looking(self, lband):
         near, far = lband.swath_offset_angles()
-        assert near == lband.near_range_angle
-        assert far == lband.far_range_angle
+        # Left-looking: swath on port side (negative angles)
+        assert near == -lband.far_range_angle
+        assert far == -lband.near_range_angle
+
+    def test_left_right_differ(self):
+        from hyplan.radar import SidelookingRadar
+        left = SidelookingRadar(
+            name="test", frequency=1.26 * ureg.GHz, bandwidth=80 * ureg.MHz,
+            near_range_angle=25.0, far_range_angle=65.0,
+            azimuth_resolution=5.0 * ureg.meter, polarization="HH",
+            look_direction="left",
+        )
+        right = SidelookingRadar(
+            name="test", frequency=1.26 * ureg.GHz, bandwidth=80 * ureg.MHz,
+            near_range_angle=25.0, far_range_angle=65.0,
+            azimuth_resolution=5.0 * ureg.meter, polarization="HH",
+            look_direction="right",
+        )
+        l_angles = left.swath_offset_angles()
+        r_angles = right.swath_offset_angles()
+        # Left and right should be on opposite sides
+        assert l_angles[0] < 0 and l_angles[1] < 0
+        assert r_angles[0] > 0 and r_angles[1] > 0
 
 
 class TestInterferometricLineSpacing:
