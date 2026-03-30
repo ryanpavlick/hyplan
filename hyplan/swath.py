@@ -6,7 +6,6 @@ from shapely.geometry import Polygon
 import pymap3d.vincenty
 
 from .flight_line import FlightLine
-from .sensors import LineScanner
 from .terrain import ray_terrain_intersection
 from .geometry import process_linestring
 
@@ -19,17 +18,23 @@ __all__ = [
 
 def generate_swath_polygon(
     flight_line: FlightLine,
-    sensor: LineScanner,
+    sensor,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
     dem_file: Optional[str] = None,
 ) -> Polygon:
     """
-    Generate a swath polygon for a given flight line and line scanning imager.
+    Generate a swath polygon for a given flight line and sensor.
+
+    Works with any sensor that implements ``swath_offset_angles()``
+    returning ``(port_edge_angle, starboard_edge_angle)`` in degrees
+    from nadir (negative = port, positive = starboard). This includes
+    nadir-looking line scanners, tilted line scanners, LVIS, and
+    side-looking radar.
 
     Args:
         flight_line (FlightLine): The flight line object containing geometry and altitude (MSL).
-        sensor (LineScanner): The LineScanner object with field of view (FOV).
+        sensor: A sensor with a ``swath_offset_angles()`` method.
         along_precision (float): Precision of the interpolation along the flight line in meters.
         across_precision (float): Precision of the ray-terrain intersection sampling in meters.
         dem_file (str, optional): Path to the DEM file. If None, it will be generated.
@@ -37,41 +42,47 @@ def generate_swath_polygon(
     Returns:
         Polygon: A Shapely Polygon representing the swath.
     """
-    # Get flight line altitude (MSL) — ray_terrain_intersection expects MSL
     altitude_msl = flight_line.altitude_msl.magnitude
+    lats, lons, azimuths, *_ = process_linestring(
+        flight_line.track(precision=along_precision)
+    )
 
-    # Interpolate points along the flight line
-    lats, lons, azimuths, *_ = process_linestring(flight_line.track(precision=along_precision))
+    port_angle, starboard_angle = sensor.swath_offset_angles()
 
-    # Calculate the half-angle for port and starboard.
-    # half_angle is a scalar; ray_terrain_intersection broadcasts it
-    # across all along-track points via np.atleast_1d.
-    half_angle = sensor.half_angle
+    # Azimuths perpendicular to track
+    az_port = (azimuths + 270.0) % 360.0      # left of track
+    az_starboard = (azimuths + 90.0) % 360.0   # right of track
 
-    # Compute azimuths for port and starboard sides
-    az_port = (azimuths + 270.0) % 360.0
-    az_starboard = (azimuths + 90.0) % 360.0
+    # Each swath edge angle is measured from nadir.
+    # Negative = port side, positive = starboard side.
+    # Map each edge to (azimuth_array, tilt_from_nadir).
+    def _edge_ray(angle):
+        if angle < 0:
+            return az_port, abs(angle)
+        else:
+            return az_starboard, angle
 
-    # Perform ray-terrain intersection for port side 
-    port_lats, port_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude_msl, az=az_port, tilt=half_angle, 
+    edge1_az, edge1_tilt = _edge_ray(port_angle)
+    edge2_az, edge2_tilt = _edge_ray(starboard_angle)
+
+    edge1_lats, edge1_lons, _ = ray_terrain_intersection(
+        lats, lons, altitude_msl, az=edge1_az, tilt=edge1_tilt,
+        precision=across_precision, dem_file=dem_file
+    )
+    edge2_lats, edge2_lons, _ = ray_terrain_intersection(
+        lats, lons, altitude_msl, az=edge2_az, tilt=edge2_tilt,
         precision=across_precision, dem_file=dem_file
     )
 
-    # Perform ray-terrain intersection for starboard side 
-    starboard_lats, starboard_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude_msl, az=az_starboard, tilt=half_angle, 
-        precision=across_precision, dem_file=dem_file
-    )
+    # Filter out NaN values from failed terrain intersections
+    valid1 = ~(np.isnan(edge1_lats) | np.isnan(edge1_lons))
+    valid2 = ~(np.isnan(edge2_lats) | np.isnan(edge2_lons))
+    edge1_lats, edge1_lons = edge1_lats[valid1], edge1_lons[valid1]
+    edge2_lats, edge2_lons = edge2_lats[valid2], edge2_lons[valid2]
 
-    # Concatenate the two sides
-    swath_lats = np.concatenate([port_lats, starboard_lats[::-1]])
-    swath_lons = np.concatenate([port_lons, starboard_lons[::-1]])
-
-    # Create a Shapely polygon
-    swath_polygon = Polygon(zip(swath_lons, swath_lats))
-
-    return swath_polygon
+    swath_lats = np.concatenate([edge1_lats, edge2_lats[::-1]])
+    swath_lons = np.concatenate([edge1_lons, edge2_lons[::-1]])
+    return Polygon(zip(swath_lons, swath_lats))
 
 def calculate_swath_widths(swath_polygon: Polygon) -> dict:
     """Calculate the minimum, mean, and maximum width of a swath polygon.

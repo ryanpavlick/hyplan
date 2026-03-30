@@ -25,7 +25,17 @@ class TestRacetrack:
     def test_single_leg(self):
         wps = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"))
         assert len(wps) == 2
-        assert all(wp.segment_type == "pattern" for wp in wps)
+        assert wps[0].segment_type == "pattern"
+        assert wps[1].segment_type == "pattern_turn"
+
+    def test_segment_types(self):
+        """Start waypoints are 'pattern', end waypoints are 'pattern_turn'."""
+        wps = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"),
+                        n_legs=3, offset=ureg.Quantity(5, "km"))
+        assert len(wps) == 6
+        for i in range(0, len(wps), 2):
+            assert wps[i].segment_type == "pattern"
+            assert wps[i + 1].segment_type == "pattern_turn"
 
     def test_two_legs_out_and_back(self):
         wps = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"),
@@ -90,7 +100,9 @@ class TestRosette:
         wps = rosette(CENTER, 0.0, ALT, ureg.Quantity(25, "km"))
         # 2 * 3 = 6 waypoints (each line = start tip + end tip)
         assert len(wps) == 6
-        assert all(wp.segment_type == "pattern" for wp in wps)
+        for i in range(0, len(wps), 2):
+            assert wps[i].segment_type == "pattern"
+            assert wps[i + 1].segment_type == "pattern_turn"
 
     def test_lines_cross_center(self):
         """Each line should cross through center (start and end are on opposite sides)."""
@@ -193,7 +205,7 @@ class TestSawtooth:
                        n_cycles=3)
         # 2*3 + 1 = 7
         assert len(wps) == 7
-        assert all(wp.segment_type == "pattern" for wp in wps)
+        assert all(wp.segment_type == "pattern_turn" for wp in wps)
 
     def test_altitude_alternation(self):
         alt_min = ureg.Quantity(5000, "feet")
@@ -234,7 +246,8 @@ class TestFlightLinesToWaypointPath:
         )
         wps = flight_lines_to_waypoint_path([fl])
         assert len(wps) == 2
-        assert all(wp.segment_type == "pattern" for wp in wps)
+        assert wps[0].segment_type == "pattern"
+        assert wps[1].segment_type == "pattern_turn"
         assert wps[0].altitude_msl.to(ureg.foot).magnitude == pytest.approx(20000, rel=1e-2)
 
     def test_altitude_override(self):

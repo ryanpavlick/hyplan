@@ -1,3 +1,20 @@
+"""Geodesic geometry utilities.
+
+Coordinate conversions, distance calculations, and geometric operations
+on the WGS84 ellipsoid. All distance and bearing calculations use
+Vincenty's inverse and direct formulae via the ``pymap3d`` library.
+
+References
+----------
+Vincenty, T. (1975). Direct and inverse solutions of geodesics on the
+ellipsoid with application of nested equations. *Survey Review*, 23(176),
+88-93. doi:10.1179/sre.1975.23.176.88
+
+Hirsch, M. (2018). PyMap3D: 3-D coordinate conversions for terrestrial
+and geospace environments. *Journal of Open Source Software*, 3(23), 580.
+doi:10.21105/joss.00580
+"""
+
 import datetime
 import numpy as np
 import math

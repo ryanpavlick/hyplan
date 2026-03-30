@@ -12,6 +12,11 @@ Typical usage::
     plan = compute_flight_plan(aircraft, waypoints, ...)
     to_pilot_excel(plan, "flight_plan_for_pilots.xlsx", aircraft=aircraft)
     to_foreflight_csv(plan, "flight_plan_FOREFLIGHT.csv")
+
+References
+----------
+LeBlanc, S.E. (2018). Moving Lines: NASA airborne research flight
+planning tool. Zenodo. doi:10.5281/zenodo.1478126
 """
 
 import datetime
@@ -76,17 +81,17 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
 
     for i, row in plan.iterrows():
         alt_ft = _safe_float(row.get("start_altitude"), default=0.0, field="start_altitude")
-        alt_m = alt_ft * 0.3048
+        alt_m = (alt_ft * ureg.foot).to(ureg.meter).magnitude
         alt_kft = alt_ft / 1000.0
 
         dist_nm = row.get("distance", 0.0) or 0.0
-        dist_km = dist_nm * 1.852
+        dist_km = (dist_nm * ureg.nautical_mile).to(ureg.kilometer).magnitude
         leg_time = row.get("time_to_segment", 0.0) or 0.0
 
         # Derive speed from distance and time
         if leg_time > 0 and dist_nm > 0:
             speed_kt = dist_nm / (leg_time / 60.0)
-            speed_mps = speed_kt * 0.5144
+            speed_mps = (speed_kt * ureg.knot).to(ureg("m/s")).magnitude
         else:
             speed_kt = 0.0
             speed_mps = 0.0

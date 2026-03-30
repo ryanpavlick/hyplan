@@ -56,6 +56,80 @@ class TestLineScanner:
         assert s.swath_width(ureg.Quantity(8000, "meter")).magnitude > 0
 
 
+class TestSwathOffsetAngles:
+    def test_nadir_symmetric(self):
+        """Default cross_track_tilt=0 gives symmetric angles."""
+        s = AVIRIS3()
+        port, starboard = s.swath_offset_angles()
+        assert port == pytest.approx(-s.half_angle)
+        assert starboard == pytest.approx(s.half_angle)
+
+    def test_tilted_starboard(self):
+        """Starboard tilt shifts both angles positive."""
+        from hyplan.sensors import LineScanner
+        s = LineScanner("Tilted", fov=30.0, across_track_pixels=600,
+                        frame_rate=100.0 * ureg.Hz, cross_track_tilt=10.0)
+        port, starboard = s.swath_offset_angles()
+        assert port == pytest.approx(-5.0)   # 10 - 15
+        assert starboard == pytest.approx(25.0)  # 10 + 15
+
+    def test_tilted_port(self):
+        """Port tilt shifts both angles negative."""
+        from hyplan.sensors import LineScanner
+        s = LineScanner("Tilted", fov=30.0, across_track_pixels=600,
+                        frame_rate=100.0 * ureg.Hz, cross_track_tilt=-10.0)
+        port, starboard = s.swath_offset_angles()
+        assert port == pytest.approx(-25.0)
+        assert starboard == pytest.approx(5.0)
+
+    def test_swath_width_unchanged_at_nadir(self):
+        """Swath width with tilt=0 matches the original formula."""
+        s = AVIRIS3()
+        alt = ureg.Quantity(6000, "meter")
+        import numpy as np
+        expected = 2 * 6000 * np.tan(np.radians(s.fov / 2))
+        assert s.swath_width(alt).magnitude == pytest.approx(expected, rel=1e-6)
+
+    def test_swath_width_with_tilt(self):
+        """Tilted sensor has different (wider) swath than nadir."""
+        from hyplan.sensors import LineScanner
+        import numpy as np
+        s_nadir = LineScanner("N", fov=30.0, across_track_pixels=600,
+                              frame_rate=100.0 * ureg.Hz, cross_track_tilt=0.0)
+        s_tilted = LineScanner("T", fov=30.0, across_track_pixels=600,
+                               frame_rate=100.0 * ureg.Hz, cross_track_tilt=20.0)
+        alt = ureg.Quantity(6000, "meter")
+        # Tilted swath should be wider (tan is nonlinear)
+        assert s_tilted.swath_width(alt).magnitude > s_nadir.swath_width(alt).magnitude
+
+    def test_lvis_nadir(self):
+        """LVIS swath_offset_angles is symmetric about nadir."""
+        lvis = LVIS()
+        port, starboard = lvis.swath_offset_angles()
+        assert port == pytest.approx(-lvis.half_angle)
+        assert starboard == pytest.approx(lvis.half_angle)
+
+    def test_radar_left_looking(self):
+        """Left-looking radar has both angles negative (port side)."""
+        r = UAVSAR_Lband()
+        port, starboard = r.swath_offset_angles()
+        assert port < 0
+        assert starboard < 0
+        assert port < starboard  # far edge is more negative
+
+    def test_radar_right_looking(self):
+        """Right-looking radar has both angles positive (starboard side)."""
+        r = SidelookingRadar(
+            name="Test", frequency=1.0 * ureg.GHz, bandwidth=80 * ureg.MHz,
+            near_range_angle=20.0, far_range_angle=60.0,
+            azimuth_resolution=1.0 * ureg.meter, polarization="HH",
+            look_direction="right",
+        )
+        port, starboard = r.swath_offset_angles()
+        assert port > 0
+        assert starboard > 0
+
+
 class TestSensorRegistry:
     def test_registry_populated(self):
         assert len(SENSOR_REGISTRY) > 0
@@ -64,6 +138,15 @@ class TestSensorRegistry:
     def test_create_sensor(self):
         s = create_sensor("AVIRIS3")
         assert isinstance(s, AVIRIS3)
+
+    def test_create_uavsar(self):
+        s = create_sensor("UAVSAR_Lband")
+        assert isinstance(s, UAVSAR_Lband)
+
+    def test_create_glistin(self):
+        from hyplan.radar import UAVSAR_Kaband
+        s = create_sensor("GLISTIN-A")
+        assert isinstance(s, UAVSAR_Kaband)
 
 
 class TestFrameCamera:

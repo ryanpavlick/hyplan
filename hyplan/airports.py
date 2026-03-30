@@ -1,6 +1,20 @@
+"""Airport lookup and selection.
+
+Provides geographic search, filtering by proximity, country, type, and
+runway requirements using the OurAirports global database.
+
+Data source
+-----------
+OurAirports (https://ourairports.com), maintained by David Megginson.
+CSV data retrieved from
+https://github.com/davidmegginson/ourairports-data.
+Licensed under the Public Domain (CC0).
+"""
+
 import os
 import threading
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import logging
 from pathlib import Path
@@ -415,9 +429,13 @@ def airports_within_radius(
     buffer = point.buffer(radius_m / 111139.0)  # Approximate degree buffer
     possible_matches = gdf_airports[gdf_airports.intersects(buffer)].copy()
 
-    possible_matches['distance_m'] = possible_matches.apply(
-        lambda row: haversine(lat, lon, row.latitude, row.longitude), axis=1
-    )
+    # Vectorized haversine — avoids row-by-row Python loop
+    lat1 = np.radians(lat)
+    lat2 = np.radians(possible_matches['latitude'].values)
+    dlat = lat2 - lat1
+    dlon = np.radians(possible_matches['longitude'].values - lon)
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    possible_matches['distance_m'] = 6371e3 * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     within_radius = possible_matches[possible_matches['distance_m'] <= radius_m]
 
     if return_details:

@@ -1,3 +1,20 @@
+"""Terrain analysis using Copernicus DEM data.
+
+Downloads, caches, and queries 30-meter Copernicus GLO-30 DEM tiles
+from AWS. Provides bulk elevation lookup, DEM tile merging via GDAL,
+and a vectorized ray-terrain intersection algorithm for computing
+off-nadir ground intersection points.
+
+References
+----------
+GDAL/OGR contributors (2024). GDAL/OGR Geospatial Data Abstraction
+software Library. Open Source Geospatial Foundation.
+doi:10.5281/zenodo.5884351
+
+Data source: Copernicus DEM GLO-30, European Space Agency, distributed
+via AWS Open Data (s3://copernicus-dem-30m).
+"""
+
 import logging
 import os
 import tempfile
@@ -243,8 +260,8 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
     raster = band.ReadAsArray()
     dataset = None  # Close the dataset
 
-    xs = ((lons - geotransform[0]) / geotransform[1]).astype(int)
-    ys = ((lats - geotransform[3]) / geotransform[5]).astype(int)
+    xs = np.round((lons - geotransform[0]) / geotransform[1]).astype(int)
+    ys = np.round((lats - geotransform[3]) / geotransform[5]).astype(int)
 
     out_of_bounds = (xs < 0) | (xs >= raster.shape[1]) | (ys < 0) | (ys >= raster.shape[0])
     if np.any(out_of_bounds):

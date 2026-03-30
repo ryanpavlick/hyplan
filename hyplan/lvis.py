@@ -11,6 +11,14 @@ ground coverage depends on the laser repetition rate, lens divergence
 
 Formulas derived from NASA GSFC LVIS coverage planning spreadsheet
 (LVIScoveragecalcs-GVBioSCape.xlsx).
+
+References
+----------
+Blair, J.B., Rabine, D.L. and Hofton, M.A. (1999). The Laser Vegetation
+Imaging Sensor: a medium-altitude, digitisation-only, airborne laser
+altimeter for mapping vegetation and topography. *ISPRS Journal of
+Photogrammetry and Remote Sensing*, 54(2-3), 115-122.
+doi:10.1016/S0924-2716(99)00002-7
 """
 
 import numpy as np
@@ -118,6 +126,14 @@ class LVIS(Sensor):
     def half_angle(self) -> float:
         """Half-scan angle in degrees (≈5.71 deg)."""
         return _HALF_SCAN_ANGLE_DEG
+
+    def swath_offset_angles(self) -> tuple:
+        """Cross-track viewing angles for each swath edge (nadir-looking).
+
+        Returns:
+            Tuple of (port_edge_angle, starboard_edge_angle) in degrees.
+        """
+        return (-self.half_angle, self.half_angle)
 
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
         """Maximum swath width set by the scanner geometry.

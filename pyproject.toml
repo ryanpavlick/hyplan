@@ -48,7 +48,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-clouds = ["earthengine-api"]
+clouds = ["earthengine-api", "seaborn"]
 interactive = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "nbstripout"]
 

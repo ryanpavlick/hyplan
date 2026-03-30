@@ -70,6 +70,10 @@ class LineScanner(Sensor):
         fov (float): Total cross-track field of view in degrees.
         across_track_pixels (int): Number of pixels across the swath.
         frame_rate (Quantity): Frame acquisition rate in Hz.
+        cross_track_tilt (float): Cross-track tilt angle in degrees
+            (rotation about the along-track axis). Positive = starboard
+            (right of track), negative = port (left of track).
+            Default 0.0 (nadir-looking).
     """
 
     def __init__(
@@ -77,7 +81,8 @@ class LineScanner(Sensor):
         name: str,
         fov: float,  # Degrees (not a Quantity)
         across_track_pixels: int,
-        frame_rate: Quantity  # Hz
+        frame_rate: Quantity,  # Hz
+        cross_track_tilt: float = 0.0,  # Degrees
     ):
         super().__init__(name)
 
@@ -94,6 +99,8 @@ class LineScanner(Sensor):
         # Validate frame_rate
         self.frame_rate = self._validate_quantity(frame_rate, ureg.Hz)
 
+        self.cross_track_tilt = float(cross_track_tilt)
+
     @property
     def ifov(self) -> float:
         """Calculate the cross-track Instantaneous Field of View (IFOV) in degrees."""
@@ -109,8 +116,29 @@ class LineScanner(Sensor):
         """Calculate and return the frame period in seconds."""
         return (1.0 / self.frame_rate).to(ureg.s)
 
+    def swath_offset_angles(self) -> tuple:
+        """Cross-track viewing angles for each swath edge, measured from nadir.
+
+        Accounts for ``cross_track_tilt`` (rotation about the along-track axis).
+        Negative = port (left of track), positive = starboard (right of track).
+
+        Returns:
+            Tuple of (port_edge_angle, starboard_edge_angle) in degrees.
+
+        Examples:
+            Nadir sensor, 30° half-angle: ``(-30.0, 30.0)``
+            Same sensor with 10° starboard tilt: ``(-20.0, 40.0)``
+        """
+        return (
+            self.cross_track_tilt - self.half_angle,
+            self.cross_track_tilt + self.half_angle,
+        )
+
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
         """Calculate swath width for a given altitude above ground level (AGL).
+
+        Accounts for ``cross_track_tilt`` — when the sensor is tilted off-nadir
+        the swath is asymmetric and its total width changes.
 
         Args:
             altitude_agl (Quantity): Altitude above ground level.
@@ -119,7 +147,11 @@ class LineScanner(Sensor):
             Quantity: Swath width in meters.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return 2 * altitude_agl * np.tan(np.radians(self.fov / 2))
+        port, starboard = self.swath_offset_angles()
+        h = altitude_agl.magnitude
+        d_port = h * np.tan(np.radians(port))
+        d_starboard = h * np.tan(np.radians(starboard))
+        return abs(d_starboard - d_port) * ureg.meter
 
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
         """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
@@ -259,6 +291,15 @@ def create_sensor(sensor_type: str) -> Sensor:
     if "LVIS" not in SENSOR_REGISTRY:
         from .lvis import LVIS
         SENSOR_REGISTRY["LVIS"] = LVIS
+
+    if "UAVSAR_Lband" not in SENSOR_REGISTRY:
+        from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
+        SENSOR_REGISTRY["UAVSAR_Lband"] = UAVSAR_Lband
+        SENSOR_REGISTRY["UAVSAR L-band"] = UAVSAR_Lband
+        SENSOR_REGISTRY["UAVSAR_Pband"] = UAVSAR_Pband
+        SENSOR_REGISTRY["UAVSAR P-band"] = UAVSAR_Pband
+        SENSOR_REGISTRY["UAVSAR_Kaband"] = UAVSAR_Kaband
+        SENSOR_REGISTRY["GLISTIN-A"] = UAVSAR_Kaband
 
     if sensor_type not in SENSOR_REGISTRY:
         raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
