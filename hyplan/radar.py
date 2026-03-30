@@ -1,3 +1,17 @@
+"""Side-looking Synthetic Aperture Radar (SAR) sensor models.
+
+Models slant-range geometry for stripmap SAR instruments where the swath
+is offset from nadir, defined by near-range and far-range incidence angles.
+Pre-configured models are provided for UAVSAR in its L-band, P-band
+(AirMOSS), and Ka-band (GLISTIN-A) configurations.
+
+References
+----------
+Hensley, S. et al. (2008). Status of a UAVSAR designed for repeat pass
+interferometry for deformation measurements. *IEEE Aerospace Conference
+Proceedings*, 1-8. doi:10.1109/AERO.2008.4526385
+"""
+
 import numpy as np
 from pint import Quantity
 from typing import Optional

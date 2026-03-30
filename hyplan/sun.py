@@ -1,3 +1,15 @@
+"""Solar position and illumination timing.
+
+Computes solar elevation thresholds and data collection windows using
+the Solar Position Algorithm (SPA).
+
+References
+----------
+Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
+radiation applications. *Solar Energy*, 76(5), 577-589.
+doi:10.1016/j.solener.2003.12.003
+"""
+
 import pandas as pd
 import numpy as np
 from sunposition import sunpos

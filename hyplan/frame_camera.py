@@ -1,3 +1,12 @@
+"""Frame (area-array) camera sensor models.
+
+Computes ground footprint, GSD, and along-track sampling from focal
+length, sensor dimensions, pixel count, and frame rate. Supports
+nadir and oblique viewing geometries, terrain-aware footprint
+projection, and multi-camera rig configurations for stereo coverage
+planning.
+"""
+
 import warnings
 from typing import List, Tuple, Dict
 from pint import Quantity

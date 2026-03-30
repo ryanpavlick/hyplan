@@ -162,7 +162,7 @@ def racetrack(
             heading=wrap_to_360(fwd_az),
             altitude_msl=alt,
             name=f"Leg{i+1}_end",
-            segment_type="pattern",
+            segment_type="pattern_turn",
         ))
 
     return waypoints
@@ -230,7 +230,7 @@ def rosette(
         waypoints.append(Waypoint(
             latitude=wp2.latitude, longitude=wp2.longitude,
             heading=wp2.heading, altitude_msl=wp2.altitude_msl,
-            name=f"L{i+1}_end", segment_type="pattern",
+            name=f"L{i+1}_end", segment_type="pattern_turn",
         ))
 
     return waypoints
@@ -391,7 +391,7 @@ def sawtooth(
             heading=wp_heading,
             altitude_msl=alt,
             name=f"ST{i+1}",
-            segment_type="pattern",
+            segment_type="pattern_turn",
         ))
 
     return waypoints
@@ -520,10 +520,11 @@ def flight_lines_to_waypoint_path(
         for j, wp in enumerate([fl.waypoint1, fl.waypoint2]):
             alt = alt_override if alt_override is not None else wp.altitude_msl
             name = f"{fl.site_name or f'FL{i+1}'}_{['start', 'end'][j]}"
+            seg_type = "pattern_turn" if j == 1 else "pattern"
             waypoints.append(Waypoint(
                 latitude=wp.latitude, longitude=wp.longitude,
                 heading=wp.heading, altitude_msl=alt,
-                speed=wp.speed, name=name, segment_type="pattern",
+                speed=wp.speed, name=name, segment_type=seg_type,
             ))
 
     return waypoints

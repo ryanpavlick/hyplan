@@ -161,15 +161,17 @@ def compute_flight_plan(
             start_wp = segment.waypoint2 if isinstance(segment, FlightLine) else segment
             end_wp = end.waypoint1 if isinstance(end, FlightLine) else end
 
-            # For consecutive pattern waypoints (e.g. spiral, rosette),
-            # connect with a direct segment instead of a Dubins path so the
-            # original pattern geometry is preserved.
-            both_pattern = (
+            # For intra-pattern waypoints (e.g. spiral, polygon, within a
+            # racetrack leg), connect with a direct segment to preserve the
+            # original pattern geometry.  Inter-leg transitions (marked
+            # "pattern_turn") fall through to Dubins so the aircraft gets a
+            # realistic turn between legs.
+            departing_is_pattern = (
                 is_waypoint(segment) and is_waypoint(end)
                 and segment.segment_type == "pattern"
-                and end.segment_type == "pattern"
+                and end.segment_type in ("pattern", "pattern_turn")
             )
-            if both_pattern:
+            if departing_is_pattern:
                 records.append(_direct_segment_record(
                     start_wp, end_wp, aircraft, segment.segment_type,
                 ))

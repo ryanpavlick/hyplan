@@ -13,6 +13,17 @@ The geometry is derived from optics first, then kinematics:
 At the arc midpoint the view zenith equals SZA and the view azimuth
 opposes the solar azimuth, giving a glint angle of zero (perfect
 specular reflection).
+
+References
+----------
+Cox, C. and Munk, W. (1954). Measurement of the roughness of the sea
+surface from photographs of the sun's glitter. *Journal of the Optical
+Society of America*, 44(11), 838-850. doi:10.1364/JOSA.44.000838
+
+Solar position via the ``sunposition`` library:
+Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
+radiation applications. *Solar Energy*, 76(5), 577-589.
+doi:10.1016/j.solener.2003.12.003
 """
 
 import logging

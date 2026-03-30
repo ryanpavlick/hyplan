@@ -28,6 +28,15 @@ Key Features:
 
 Campaigns that cross a year boundary (e.g. December to February) are supported:
 set day_start > day_stop (e.g. day_start=335, day_stop=60).
+
+References
+----------
+Gorelick, N. et al. (2017). Google Earth Engine: Planetary-scale
+geospatial analysis for everyone. *Remote Sensing of Environment*, 202,
+18-27. doi:10.1016/j.rse.2017.06.031
+
+Data source: MODIS Terra (MOD09GA) and Aqua (MYD09GA) surface reflectance
+daily L2G products from NASA LP DAAC, accessed via Google Earth Engine.
 """
 
 # Core Libraries
@@ -42,11 +51,8 @@ from shapely import wkb
 
 # Visualization Libraries
 import matplotlib.pyplot as plt
-import seaborn as sns
 import matplotlib.colors as mcolors
 
-# Google Earth Engine (imported lazily via _get_ee())
-import ee
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 __all__ = [
@@ -58,25 +64,35 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 _ee_initialized = False
+_ee = None  # Populated by _get_ee()
 
 
-def _init_ee() -> None:
-    """
-    Initialize Google Earth Engine on first use.
-
-    Called automatically by functions that access Earth Engine. Requires
-    prior authentication via ``ee.Authenticate()``.
+def _get_ee():
+    """Return the ``ee`` module, importing and initializing on first call.
 
     Raises:
-        RuntimeError: If Earth Engine initialization fails.
+        HyPlanRuntimeError: If ``earthengine-api`` is not installed or
+            initialization fails.
     """
-    global _ee_initialized
+    global _ee_initialized, _ee
     if not _ee_initialized:
         try:
-            ee.Initialize()
-            _ee_initialized = True
+            import ee as _ee_mod
+        except ImportError:
+            raise HyPlanRuntimeError(
+                "earthengine-api is required for cloud analysis. "
+                "Install it with: pip install hyplan[clouds]"
+            )
+        try:
+            _ee_mod.Initialize()
         except Exception as e:
-            raise HyPlanRuntimeError("Earth Engine initialization failed. Check your authentication.") from e
+            raise HyPlanRuntimeError(
+                "Earth Engine initialization failed. "
+                "Run ee.Authenticate() first."
+            ) from e
+        _ee = _ee_mod
+        _ee_initialized = True
+    return _ee
 
 
 def _drop_z(geom: "BaseGeometry") -> "BaseGeometry":
@@ -106,7 +122,7 @@ def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     Returns:
         ee.Image: Binary cloud mask (1 for cloudy/mixed, 0 for clear) with an added "date_char" property.
     """
-    _init_ee()
+    _get_ee()
     qa = image.select("state_1km")
     clouds = qa.bitwiseAnd(3).gt(0)
     date_char = image.date().format('yyyy-MM-dd')
@@ -123,7 +139,7 @@ def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry")
     Returns:
         ee.Feature: A feature containing the date and calculated cloud fraction for the polygon.
     """
-    _init_ee()
+    ee = _get_ee()
     reduction = image.reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=polygon_geometry,
@@ -185,7 +201,7 @@ def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_
     Returns:
         pd.DataFrame: A DataFrame with columns 'polygon_id', 'year', 'day_of_year', and 'cloud_fraction'.
     """
-    _init_ee()
+    ee = _get_ee()
     try:
         gdf = gpd.read_file(polygon_file)
         if gdf.empty:
@@ -415,6 +431,13 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
                 if weekday >= 5:
                     status_data.loc[:, day] = 3
 
+        try:
+            import seaborn as sns
+        except ImportError:
+            raise HyPlanRuntimeError(
+                "seaborn is required for cloud heatmaps. "
+                "Install it with: pip install hyplan[clouds]"
+            )
         plt.figure(figsize=(16, 8))
         ax = sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False,
                          linewidths=0.5, linecolor='gray', square=True)

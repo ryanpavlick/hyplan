@@ -6,6 +6,12 @@ plus vertical altitude overlap).
 
 Requires an OpenAIP API key, set via the ``OPENAIP_API_KEY`` environment
 variable or passed directly to :class:`OpenAIPClient`.
+
+Data source
+-----------
+OpenAIP (https://www.openaip.net). Airspace boundaries and vertical
+limits retrieved via the OpenAIP REST API. An API key is required;
+see https://www.openaip.net/users/clients for registration.
 """
 
 import hashlib

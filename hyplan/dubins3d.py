@@ -8,6 +8,22 @@ problems linked by a curvature budget:
     1/rho_min² = 1/rho_h² + 1/rho_v²
 
 A 1D search over rho_h finds the shortest feasible 3D path.
+
+References
+----------
+Vana, P., Neto, A.A., Faigl, J. and Macharet, D.G. (2020). Minimal
+3D Dubins path with bounded curvature and pitch angle. *IEEE
+International Conference on Robotics and Automation (ICRA)*, 8497-8503.
+doi:10.1109/ICRA40945.2020.9197348
+
+Dubins, L.E. (1957). On curves of minimal length with a constraint on
+average curvature, and with prescribed initial and terminal positions
+and tangents. *American Journal of Mathematics*, 79(3), 497-516.
+doi:10.2307/2372560
+
+2D Dubins solver adapted from Andrew Walker's implementation:
+Walker, A. (2011). Hard Real-Time Motion Planning for Autonomous
+Vehicles. PhD thesis, Swinburne University of Technology.
 """
 
 import logging
