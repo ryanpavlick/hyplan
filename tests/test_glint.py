@@ -166,8 +166,8 @@ class TestGlintArc:
         assert isinstance(arc.geometry, LineString)
         assert arc.bank_angle == arc.solar_zenith
         assert arc.bank_direction == "right"
-        assert arc.arc_extent == 30.0
-        assert 5.0 < arc.solar_zenith < 75.0
+        assert arc.arc_extent == 180.0
+        assert 5.0 < arc.solar_zenith < 60.0
 
     def test_bank_direction_left(self):
         arc = GlintArc(
@@ -209,9 +209,8 @@ class TestGlintArc:
             observation_datetime=ARC_OBS_TIME,
             altitude_msl=ARC_ALTITUDE,
             speed=ARC_SPEED,
-            arc_extent=30.0,
         )
-        expected = arc.turn_radius.magnitude * np.radians(30.0)
+        expected = arc.turn_radius.magnitude * np.pi
         assert arc.length.magnitude == pytest.approx(expected, rel=0.01)
 
     def test_waypoints(self):
@@ -280,18 +279,61 @@ class TestGlintArc:
                 speed=ARC_SPEED,
             )
 
-    def test_custom_arc_extent(self):
+    def test_bank_angle_auto_from_sza(self):
         arc = GlintArc(
             target_lat=ARC_TARGET_LAT,
             target_lon=ARC_TARGET_LON,
             observation_datetime=ARC_OBS_TIME,
             altitude_msl=ARC_ALTITUDE,
             speed=ARC_SPEED,
-            arc_extent=60.0,
         )
-        assert arc.arc_extent == 60.0
-        expected = arc.turn_radius.magnitude * np.radians(60.0)
-        assert arc.length.magnitude == pytest.approx(expected, rel=0.01)
+        assert arc.bank_angle == pytest.approx(arc.solar_zenith)
+
+    def test_custom_bank_angle(self):
+        arc = GlintArc(
+            target_lat=ARC_TARGET_LAT,
+            target_lon=ARC_TARGET_LON,
+            observation_datetime=ARC_OBS_TIME,
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            bank_angle=45.0,
+        )
+        assert arc.bank_angle == 45.0
+        assert arc.arc_extent == 180.0
+
+    def test_high_sza_raises_without_override(self):
+        """SZA > 60° without explicit bank_angle should raise."""
+        with pytest.raises(ValueError, match="60°"):
+            GlintArc(
+                target_lat=60.0,
+                target_lon=0.0,
+                observation_datetime=datetime(2025, 12, 15, 12, 0, tzinfo=timezone.utc),
+                altitude_msl=ARC_ALTITUDE,
+                speed=ARC_SPEED,
+            )
+
+    def test_high_sza_with_bank_override(self):
+        """Explicit bank_angle allows flying when SZA > 60°."""
+        arc = GlintArc(
+            target_lat=60.0,
+            target_lon=0.0,
+            observation_datetime=datetime(2025, 12, 15, 12, 0, tzinfo=timezone.utc),
+            altitude_msl=ARC_ALTITUDE,
+            speed=ARC_SPEED,
+            bank_angle=45.0,
+        )
+        assert arc.bank_angle == 45.0
+
+    def test_invalid_bank_angle(self):
+        with pytest.raises(ValueError, match="bank_angle"):
+            GlintArc(
+                target_lat=ARC_TARGET_LAT,
+                target_lon=ARC_TARGET_LON,
+                observation_datetime=ARC_OBS_TIME,
+                altitude_msl=ARC_ALTITUDE,
+                speed=ARC_SPEED,
+                bank_angle=95.0,
+            )
 
 
 class TestComputeGlintArc:

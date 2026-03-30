@@ -10,7 +10,7 @@ from .aircraft import Aircraft
 from .airports import Airport
 from .waypoint import Waypoint
 from .flight_line import FlightLine
-from .exceptions import HyPlanValueError
+from .exceptions import HyPlanValueError, HyPlanRuntimeError
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def build_graph(
                 try:
                     t = _departure_time(aircraft, airport, wp)
                     G.add_edge(airport.icao_code, node, weight=t, edgetype="departure")
-                except Exception as e:
+                except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute departure {airport.icao_code} -> {node}: {e}")
 
     # --- Add return edges: flight line endpoints -> airport ---
@@ -178,7 +178,7 @@ def build_graph(
                 try:
                     t = _return_time(aircraft, wp, airport)
                     G.add_edge(node, airport.icao_code, weight=t, edgetype="return")
-                except Exception as e:
+                except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute return {node} -> {airport.icao_code}: {e}")
 
     # --- Add transit edges between airports ---
@@ -188,12 +188,12 @@ def build_graph(
         try:
             t = _transit_time(aircraft, wp1, wp2)
             G.add_edge(a1.icao_code, a2.icao_code, weight=t, edgetype="transit")
-        except Exception as e:
+        except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
             logger.warning(f"Could not compute transit {a1.icao_code} -> {a2.icao_code}: {e}")
         try:
             t = _transit_time(aircraft, wp2, wp1)
             G.add_edge(a2.icao_code, a1.icao_code, weight=t, edgetype="transit")
-        except Exception as e:
+        except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
             logger.warning(f"Could not compute transit {a2.icao_code} -> {a1.icao_code}: {e}")
 
     # --- Add transit edges between flight line endpoints ---
@@ -209,12 +209,12 @@ def build_graph(
                 try:
                     t = _transit_time(aircraft, wp1, wp2)
                     G.add_edge(node1, node2, weight=t, edgetype="transit")
-                except Exception as e:
+                except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute transit {node1} -> {node2}: {e}")
                 try:
                     t = _transit_time(aircraft, wp2, wp1)
                     G.add_edge(node2, node1, weight=t, edgetype="transit")
-                except Exception as e:
+                except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute transit {node2} -> {node1}: {e}")
 
     return G

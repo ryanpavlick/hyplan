@@ -26,31 +26,20 @@ __all__ = [
 ]
 
 
-def _to_meters(value, label="value"):
-    """Convert a length value (float in meters or pint Quantity) to float meters."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    if hasattr(value, 'units') and value.check('[length]'):
-        return value.to(ureg.meter).magnitude
-    raise TypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
+def _to_length_quantity(value, label="value"):
+    """Convert a length value to a pint Quantity.
 
+    Args:
+        value: Float (interpreted as meters) or pint Quantity with length units.
+        label: Parameter name for error messages.
 
-
-def _to_quantity_meters(value, label="value"):
-    """Convert a length value to a pint Quantity in meters."""
+    Returns:
+        pint Quantity in meters.
+    """
     if isinstance(value, (int, float)):
         return ureg.Quantity(float(value), "meter")
     if hasattr(value, 'units') and value.check('[length]'):
         return value.to(ureg.meter)
-    raise TypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
-
-
-def _to_quantity_altitude(value, label="value"):
-    """Convert an altitude value to a pint Quantity (preserving original units)."""
-    if isinstance(value, (int, float)):
-        return ureg.Quantity(float(value), "meter")
-    if hasattr(value, 'units') and value.check('[length]'):
-        return value
     raise TypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
 
 
@@ -86,7 +75,7 @@ def racetrack(
         List of Waypoint objects with segment_type="pattern".
     """
     center_lat, center_lon = center
-    half_len_m = _to_meters(leg_length, "leg_length") / 2.0
+    half_len_m = _to_length_quantity(leg_length, "leg_length").magnitude / 2.0
     if half_len_m <= 0:
         raise HyPlanValueError("leg_length must be positive")
     heading = float(heading)
@@ -95,23 +84,23 @@ def racetrack(
     if isinstance(offset, list):
         if len(offset) != n_legs:
             raise ValueError(f"offset list length ({len(offset)}) must equal n_legs ({n_legs})")
-        offsets_m = [_to_meters(o, "offset") for o in offset]
+        offsets_m = [_to_length_quantity(o, "offset").magnitude for o in offset]
     else:
-        spacing_m = _to_meters(offset, "offset")
+        spacing_m = _to_length_quantity(offset, "offset").magnitude
         # Center the legs: offsets are symmetric around 0
         offsets_m = [spacing_m * (i - (n_legs - 1) / 2.0) for i in range(n_legs)]
 
     # Build per-leg altitudes
     if stack_altitudes is not None:
         # Repeat pattern at each stack altitude
-        stack_alts = [_to_quantity_altitude(a, "stack_altitudes") for a in stack_altitudes]
+        stack_alts = [_to_length_quantity(a, "stack_altitudes") for a in stack_altitudes]
         all_offsets = []
         all_alts = []
         for sa in stack_alts:
             all_offsets.extend(offsets_m)
             if altitudes is not None:
                 # per-leg altitudes override stack altitude
-                all_alts.extend([_to_quantity_altitude(a, "altitudes") for a in altitudes])
+                all_alts.extend([_to_length_quantity(a, "altitudes") for a in altitudes])
             else:
                 all_alts.extend([sa] * n_legs)
         offsets_m = all_offsets
@@ -119,9 +108,9 @@ def racetrack(
     elif altitudes is not None:
         if len(altitudes) != n_legs:
             raise ValueError(f"altitudes length ({len(altitudes)}) must equal n_legs ({n_legs})")
-        leg_alts = [_to_quantity_altitude(a, "altitudes") for a in altitudes]
+        leg_alts = [_to_length_quantity(a, "altitudes") for a in altitudes]
     else:
-        default_alt = _to_quantity_altitude(altitude, "altitude")
+        default_alt = _to_length_quantity(altitude, "altitude")
         leg_alts = [default_alt] * n_legs
 
     # Perpendicular direction for crosstrack offsets
@@ -207,8 +196,10 @@ def rosette(
         List of Waypoint objects with segment_type="pattern".
     """
     center_lat, center_lon = center
-    diameter = _to_quantity_meters(radius, "radius") * 2
-    alt = _to_quantity_altitude(altitude, "altitude")
+    diameter = _to_length_quantity(radius, "radius") * 2
+    if diameter.magnitude <= 0:
+        raise HyPlanValueError("radius must be positive")
+    alt = _to_length_quantity(altitude, "altitude")
 
     if angles is not None:
         line_angles = [float(a) for a in angles]
@@ -273,8 +264,10 @@ def polygon(
         List of Waypoint objects with segment_type="pattern".
     """
     center_lat, center_lon = center
-    radius_m = _to_meters(radius, "radius")
-    alt = _to_quantity_altitude(altitude, "altitude")
+    radius_m = _to_length_quantity(radius, "radius").magnitude
+    if radius_m <= 0:
+        raise HyPlanValueError("radius must be positive")
+    alt = _to_length_quantity(altitude, "altitude")
     heading_rad = np.radians(heading)
 
     # Compute vertex positions on the circumscribed ellipse
@@ -356,9 +349,11 @@ def sawtooth(
         List of Waypoint objects with segment_type="pattern".
     """
     center_lat, center_lon = center
-    total_len_m = _to_meters(leg_length, "leg_length")
-    alt_min = _to_quantity_altitude(altitude_min, "altitude_min")
-    alt_max = _to_quantity_altitude(altitude_max, "altitude_max")
+    total_len_m = _to_length_quantity(leg_length, "leg_length").magnitude
+    if total_len_m <= 0:
+        raise HyPlanValueError("leg_length must be positive")
+    alt_min = _to_length_quantity(altitude_min, "altitude_min")
+    alt_max = _to_length_quantity(altitude_max, "altitude_max")
     heading = float(heading)
 
     n_points = 2 * n_cycles + 1
@@ -446,9 +441,11 @@ def spiral(
         raise ValueError(f"direction must be 'right' or 'left', got '{direction}'")
 
     center_lat, center_lon = center
-    radius_m = _to_meters(radius, "radius")
-    alt_start = _to_quantity_altitude(altitude_start, "altitude_start")
-    alt_end = _to_quantity_altitude(altitude_end, "altitude_end")
+    radius_m = _to_length_quantity(radius, "radius").magnitude
+    if radius_m <= 0:
+        raise HyPlanValueError("radius must be positive")
+    alt_start = _to_length_quantity(altitude_start, "altitude_start")
+    alt_end = _to_length_quantity(altitude_end, "altitude_end")
 
     # Total number of angular steps
     total_steps = int(n_turns * points_per_turn)
@@ -516,7 +513,7 @@ def flight_lines_to_waypoint_path(
     Returns:
         List of Waypoint objects with segment_type="pattern".
     """
-    alt_override = _to_quantity_altitude(altitude, "altitude") if altitude is not None else None
+    alt_override = _to_length_quantity(altitude, "altitude") if altitude is not None else None
 
     waypoints = []
     for i, fl in enumerate(flight_lines):

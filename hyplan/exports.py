@@ -15,8 +15,10 @@ Typical usage::
 """
 
 import datetime
+import logging
 import math
 import os
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -73,7 +75,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
     cum_time = 0.0
 
     for i, row in plan.iterrows():
-        alt_ft = _safe_float(row.get("start_altitude"), default=0.0)
+        alt_ft = _safe_float(row.get("start_altitude"), default=0.0, field="start_altitude")
         alt_m = alt_ft * 0.3048
         alt_kft = alt_ft / 1000.0
 
@@ -116,7 +118,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
     # Append the final waypoint (end of last segment)
     if len(plan) > 0:
         last = plan.iloc[-1]
-        alt_ft = _safe_float(last.get("end_altitude"), default=0.0)
+        alt_ft = _safe_float(last.get("end_altitude"), default=0.0, field="end_altitude")
         rows.append({
             "wp": len(plan),
             "lat": last["end_lat"],
@@ -161,13 +163,30 @@ def generate_wp_names(n: int, prefix: str = "H",
     return [f"{prefix[0]}{day:02d}{i:02d}" for i in range(n)]
 
 
-def _safe_float(val, default: float = 0.0) -> float:
-    """Convert a value to float, replacing None/NaN with *default*."""
+def _safe_float(val, default: float = 0.0, field: str = "") -> float:
+    """Convert a value to float, replacing None/NaN with *default*.
+
+    Emits a warning when substituting a default so that missing data
+    (especially altitude) does not silently produce zeros in pilot-facing
+    exports.
+    """
     if val is None:
+        if field:
+            warnings.warn(
+                f"Missing value for '{field}' replaced with {default}",
+                stacklevel=3,
+            )
         return default
     try:
         f = float(val)
-        return default if math.isnan(f) else f
+        if math.isnan(f):
+            if field:
+                warnings.warn(
+                    f"NaN value for '{field}' replaced with {default}",
+                    stacklevel=3,
+                )
+            return default
+        return f
     except (TypeError, ValueError):
         return default
 

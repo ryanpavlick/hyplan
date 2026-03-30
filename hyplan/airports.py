@@ -1,4 +1,5 @@
 import os
+import threading
 import geopandas as gpd
 import pandas as pd
 import logging
@@ -23,16 +24,82 @@ DEFAULT_CACHE_DIR = Path.home() / ".cache" / "hyplan"
 
 logger = logging.getLogger(__name__)
 
-# Global variables for airport and runway data
-gdf_airports: gpd.GeoDataFrame = None
-df_runways: pd.DataFrame = None
+
+class _AirportDB:
+    """Encapsulated airport and runway data with thread-safe lazy initialization."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.gdf_airports: gpd.GeoDataFrame = None
+        self.df_runways: pd.DataFrame = None
+
+    def load(
+        self,
+        countries: List[str] = None,
+        min_runway_length: int = None,
+        runway_surface: Union[str, List[str]] = None,
+        airport_types: List[str] = None,
+        cache_dir: Union[str, Path] = None,
+        refresh: bool = False,
+    ) -> None:
+        """Download (if needed) and load airport/runway data."""
+        with self._lock:
+            cache_path = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+            cache_path.mkdir(parents=True, exist_ok=True)
+
+            airports_file = str(cache_path / "airports.csv")
+            runways_file = str(cache_path / "runways.csv")
+
+            download_file(airports_file, OUR_AIRPORTS_URL, replace=refresh)
+            download_file(runways_file, RUNWAYS_URL, replace=refresh)
+
+            self.gdf_airports = load_airports(
+                airports_file,
+                countries=countries,
+                min_runway_length=min_runway_length,
+                runway_surface=runway_surface,
+                airport_types=airport_types,
+                runways_filepath=runways_file,
+            )
+            self.df_runways = load_runways(runways_file)
+
+    def ensure_loaded(self) -> None:
+        """Ensure data is loaded, initializing with defaults if needed."""
+        if self.gdf_airports is None:
+            self.load()
+
+    def reset(self) -> None:
+        """Clear loaded data (useful for testing)."""
+        with self._lock:
+            self.gdf_airports = None
+            self.df_runways = None
+
+    def require_airports(self) -> gpd.GeoDataFrame:
+        """Return airports GeoDataFrame, raising if not loaded."""
+        if self.gdf_airports is None:
+            raise HyPlanRuntimeError(
+                "Airports data has not been initialized. Please run initialize_data()."
+            )
+        return self.gdf_airports
+
+    def require_runways(self) -> pd.DataFrame:
+        """Return runways DataFrame, raising if not loaded."""
+        if self.df_runways is None:
+            raise HyPlanRuntimeError(
+                "Runways data has not been initialized. Please run initialize_data()."
+            )
+        return self.df_runways
+
+
+# Module-level singleton
+_db = _AirportDB()
 
 
 class Airport:
     """
     An airport looked up by ICAO code from the OurAirports dataset.
 
-    Lazily initializes global airport data on first instantiation.
+    Lazily initializes airport data on first instantiation.
     Properties provide access to location, elevation, and runway information.
 
     Args:
@@ -42,9 +109,9 @@ class Airport:
         ValueError: If the ICAO code is not found in the dataset.
     """
     def __init__(self, icao: str):
-        global gdf_airports
-        if gdf_airports is None:
-            initialize_data()
+        _db.ensure_loaded()
+        gdf_airports = _db.gdf_airports
+
         if icao not in gdf_airports.index:
             raise HyPlanValueError(f"Airport ICAO code {icao} not found in the dataset.")
 
@@ -128,10 +195,9 @@ class Airport:
     @property
     def runways(self) -> pd.DataFrame:
         """Runway details for this airport as a DataFrame."""
-        global df_runways
-        if df_runways is None:
-            raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
-        return df_runways[df_runways['airport_ident'] == self._icao]
+        return _db.require_runways()[
+            _db.df_runways['airport_ident'] == self._icao
+        ]
 
 
 def _filter_airports_by_country(df_airports: pd.DataFrame, countries: List[str]) -> pd.DataFrame:
@@ -281,7 +347,7 @@ def initialize_data(
     cache_dir: Union[str, Path] = None,
     refresh: bool = False
 ) -> None:
-    """Initialize global variables for airports and runways data with filtering options.
+    """Initialize airport and runway data with filtering options.
 
     Args:
         countries: ISO country codes to filter airports by.
@@ -291,25 +357,14 @@ def initialize_data(
         cache_dir: Directory to store downloaded data files. Defaults to ~/.cache/hyplan/.
         refresh: If True, re-download data files even if they already exist.
     """
-    global gdf_airports, df_runways
-    cache_path = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
-    cache_path.mkdir(parents=True, exist_ok=True)
-
-    airports_file = str(cache_path / "airports.csv")
-    runways_file = str(cache_path / "runways.csv")
-
-    download_file(airports_file, OUR_AIRPORTS_URL, replace=refresh)
-    download_file(runways_file, RUNWAYS_URL, replace=refresh)
-
-    gdf_airports = load_airports(
-        airports_file,
+    _db.load(
         countries=countries,
         min_runway_length=min_runway_length,
         runway_surface=runway_surface,
         airport_types=airport_types,
-        runways_filepath=runways_file
+        cache_dir=cache_dir,
+        refresh=refresh,
     )
-    df_runways = load_runways(runways_file)
 
 def find_nearest_airport(lat: float, lon: float) -> str:
     """Find the nearest airport to a given latitude and longitude.
@@ -317,9 +372,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     Returns:
         str: ICAO code of the nearest airport.
     """
-    global gdf_airports
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
+    gdf_airports = _db.require_airports()
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
     _, tree_idx = gdf_airports.sindex.nearest(point)
@@ -331,14 +384,8 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     Returns:
         List[str]: ICAO codes of the nearest airports, ordered by proximity.
     """
-    global gdf_airports
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
+    gdf_airports = _db.require_airports()
     point = Point(lon, lat)
-    # sindex.nearest returns (input_indices, tree_indices) arrays
-    _, tree_idxs = gdf_airports.sindex.nearest(point, return_all=False)
-    # nearest with return_all=False returns only 1 result per input;
-    # to get n results, compute distances and sort
     distances = gdf_airports.geometry.distance(point)
     nearest_idxs = distances.nsmallest(n).index
     return gdf_airports.loc[nearest_idxs, 'icao_code'].tolist()
@@ -360,9 +407,7 @@ def airports_within_radius(
     Returns:
         List of ICAO codes, or a GeoDataFrame if return_details is True.
     """
-    global gdf_airports
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
+    gdf_airports = _db.require_airports()
 
     point = Point(lon, lat)
     radius_m = convert_distance(radius, unit, "meters")
@@ -380,26 +425,18 @@ def airports_within_radius(
     return within_radius['icao_code'].tolist()
 
 def get_airports() -> gpd.GeoDataFrame:
-    """Get the globally initialized GeoDataFrame of airports."""
-    global gdf_airports
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
-    return gdf_airports
+    """Get the initialized GeoDataFrame of airports."""
+    return _db.require_airports()
 
 def get_runways() -> pd.DataFrame:
-    """Get the globally initialized DataFrame of runways."""
-    global df_runways
-    if df_runways is None:
-        raise HyPlanRuntimeError("Runway data has not been initialized. Please run initialize_data().")
-    return df_runways
+    """Get the initialized DataFrame of runways."""
+    return _db.require_runways()
 
 def get_airport_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
     """Get details of airports for given ICAO code(s)."""
-    global gdf_airports
+    gdf_airports = _db.require_airports()
     if isinstance(icao_codes, str):
         icao_codes = [icao_codes]
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
     return gdf_airports[gdf_airports['icao_code'].isin(icao_codes)]
 
 def get_longest_runway(icao: str) -> float:
@@ -408,9 +445,7 @@ def get_longest_runway(icao: str) -> float:
     Returns:
         float: Longest runway length in feet, or None if no runway data is available.
     """
-    global df_runways
-    if df_runways is None:
-        raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
+    df_runways = _db.require_runways()
     rows = df_runways[df_runways['airport_ident'] == icao]
     if rows.empty:
         return None
@@ -424,9 +459,7 @@ def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, 
         filepath (str): Path to save the GeoJSON file. Defaults to "airports.geojson".
         icao_codes (Union[str, List[str]]): List of ICAO codes to subset the GeoJSON. If None, export all airports.
     """
-    global gdf_airports
-    if gdf_airports is None:
-        raise HyPlanRuntimeError("Airports data has not been initialized. Please run initialize_data().")
+    gdf_airports = _db.require_airports()
 
     if icao_codes:
         if isinstance(icao_codes, str):
@@ -454,9 +487,7 @@ def get_runway_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
     Returns:
         pd.DataFrame: A DataFrame with runway details for the given airport(s).
     """
-    global df_runways
-    if df_runways is None:
-        raise HyPlanRuntimeError("Runways data has not been initialized. Please run initialize_data().")
+    df_runways = _db.require_runways()
 
     if isinstance(icao_codes, str):
         icao_codes = [icao_codes]

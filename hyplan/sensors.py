@@ -186,160 +186,60 @@ class LineScanner(Sensor):
 
 
 
-class AVIRISClassic(LineScanner):
-    """AVIRIS Classic imaging spectrometer (34° FOV, 677 pixels, 100 Hz)."""
+# ── Sensor Specifications ─────────────────────────────────────────────────────
+# Each entry maps class_name -> (display_name, fov_deg, across_track_pixels, frame_rate_hz)
 
+_SENSOR_SPECS = {
+    "AVIRISClassic":  ("AVIRIS Classic",                              34.0,  677,  12.0),
+    "AVIRISNextGen":  ("AVIRIS Next Gen",                             36.0,  600, 100.0),
+    "AVIRIS3":        ("AVIRIS 3",                                    39.6, 1234, 216.0),
+    "AVIRIS5":        ("AVIRIS 5",                                    40.2, 1239, 148.0),
+    "HyTES":          ("HyTES",                                       50.0,  512,  36.0),
+    "PRISM":          ("PRISM",                                       30.7,  608, 176.0),
+    "MASTER":         ("MASTER",                                      85.92, 716,  25.0),
+    "GLiHT_VNIR":     ("G-LiHT VNIR",                                64.0, 1600, 250.0),
+    "GLiHT_Thermal":  ("G-LiHT Thermal",                             42.6,  640,  50.0),
+    "GLiHT_SIF":      ("G-LiHT SIF",                                 23.5, 1600,  37.6),
+    "GCAS_UV_Vis":    ("GCAS UV-Vis Spectrometer",                    45.0, 1024,  12.0),
+    "GCAS_VNIR":      ("GCAS Visible Near-Infrared (VNIR) Spectrometer", 70.0, 1024, 12.0),
+    "eMAS":           ("eMAS",                                        85.92, 716,   6.25),
+    "PICARD":         ("PICARD",                                      50.0,  412, 100.0),
+}
+
+
+def _make_sensor_class(class_name, display_name, fov, across_track_pixels, frame_rate_hz):
+    """Create a LineScanner subclass from spec parameters."""
     def __init__(self):
-        super().__init__(
-            name="AVIRIS Classic",
-            fov=34.0,
-            across_track_pixels=677,
-            frame_rate=12 * ureg.Hz
+        LineScanner.__init__(
+            self,
+            name=display_name,
+            fov=fov,
+            across_track_pixels=across_track_pixels,
+            frame_rate=frame_rate_hz * ureg.Hz,
         )
-
-class AVIRISNextGen(LineScanner):
-    """AVIRIS Next Generation imaging spectrometer (36° FOV, 600 pixels, 100 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="AVIRIS Next Gen",
-            fov=36.0,
-            across_track_pixels=600,
-            frame_rate=100 * ureg.Hz
-        )
-
-class AVIRIS3(LineScanner):
-    """AVIRIS-3 imaging spectrometer (39.6° FOV, 1234 pixels, 216 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="AVIRIS 3",
-            fov=39.6,
-            across_track_pixels=1234,
-            frame_rate=216 * ureg.Hz
-        )
-
-class AVIRIS5(LineScanner):
-    """AVIRIS-5 imaging spectrometer (40.2° FOV, 1239 pixels, 148 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="AVIRIS 5",
-            fov=40.2,
-            across_track_pixels=1239,
-            frame_rate=148 * ureg.Hz
-        )
-
-class HyTES(LineScanner):
-    """Hyperspectral Thermal Emission Spectrometer (50° FOV, 512 pixels, 36 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="HyTES",
-            fov=50.0,
-            across_track_pixels=512,
-            frame_rate=36 * ureg.Hz
-        )
-
-class PRISM(LineScanner):
-    """Portable Remote Imaging Spectrometer (30.7° FOV, 608 pixels, 176 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="PRISM",
-            fov=30.7,
-            across_track_pixels=608,
-            frame_rate=176 * ureg.Hz
-        )
-
-class MASTER(LineScanner):
-    """MODIS/ASTER Airborne Simulator (85.92° FOV, 716 pixels, 25 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="MASTER",
-            fov=85.92,
-            across_track_pixels=716,
-            frame_rate=25 * ureg.Hz
-        )
-
-class GLiHT_VNIR(LineScanner):
-    """G-LiHT Visible/Near-Infrared spectrometer (64° FOV, 1600 pixels, 250 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="G-LiHT VNIR",
-            fov=64.0,
-            across_track_pixels=1600,
-            frame_rate=250 * ureg.Hz
-        )
-
-class GLiHT_Thermal(LineScanner):
-    """G-LiHT Thermal infrared imager (42.6° FOV, 640 pixels, 50 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="G-LiHT Thermal",
-            fov=42.6,
-            across_track_pixels=640,
-            frame_rate=50 * ureg.Hz
-        )
-
-class GLiHT_SIF(LineScanner):
-    """G-LiHT Solar-Induced Fluorescence spectrometer (23.5° FOV, 1600 pixels, 37.6 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="G-LiHT SIF",
-            fov=23.5,
-            across_track_pixels=1600,
-            frame_rate=37.6 * ureg.Hz
-        )
+    doc = f"{display_name} ({fov}° FOV, {across_track_pixels} pixels, {frame_rate_hz} Hz)."
+    return type(class_name, (LineScanner,), {"__init__": __init__, "__doc__": doc})
 
 
-class GCAS_UV_Vis(LineScanner):
-    """GEO-CAPE Airborne Simulator UV-Vis spectrometer (45° FOV, 1024 pixels, 12 Hz)."""
+# Dynamically create all sensor classes and inject into module namespace
+for _cls_name, (_disp, _fov, _pix, _hz) in _SENSOR_SPECS.items():
+    globals()[_cls_name] = _make_sensor_class(_cls_name, _disp, _fov, _pix, _hz)
 
-    def __init__(self):
-        super().__init__(
-            name="GCAS UV-Vis Spectrometer",
-            fov=45.0,
-            across_track_pixels=1024,
-            frame_rate=12.0 * ureg.Hz
-        )
-
-class GCAS_VNIR(LineScanner):
-    """GEO-CAPE Airborne Simulator VNIR spectrometer (70° FOV, 1024 pixels, 12 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="GCAS Visible Near-Infrared (VNIR) Spectrometer",
-            fov=70.0,
-            across_track_pixels=1024,
-            frame_rate=12.0* ureg.Hz
-        )
-
-class eMAS(LineScanner):
-    """Enhanced MODIS Airborne Simulator (85.92° FOV, 716 pixels, 6.25 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="eMAS",
-            fov=85.92,  # degrees
-            across_track_pixels=716,
-            frame_rate=6.25 * ureg.Hz
-        )
-
-class PICARD(LineScanner):
-    """PICARD imaging spectrometer (50° FOV, 412 pixels, 100 Hz)."""
-
-    def __init__(self):
-        super().__init__(
-            name="PICARD",
-            fov=50.0,  # degrees
-            across_track_pixels=412,  # Specific pixel count not provided
-            frame_rate=100 * ureg.Hz  # Specific frame rate not provided
-        )
+# Expose concrete names for static analysis / IDE autocomplete
+AVIRISClassic: type = globals()["AVIRISClassic"]
+AVIRISNextGen: type = globals()["AVIRISNextGen"]
+AVIRIS3: type = globals()["AVIRIS3"]
+AVIRIS5: type = globals()["AVIRIS5"]
+HyTES: type = globals()["HyTES"]
+PRISM: type = globals()["PRISM"]
+MASTER: type = globals()["MASTER"]
+GLiHT_VNIR: type = globals()["GLiHT_VNIR"]
+GLiHT_Thermal: type = globals()["GLiHT_Thermal"]
+GLiHT_SIF: type = globals()["GLiHT_SIF"]
+GCAS_UV_Vis: type = globals()["GCAS_UV_Vis"]
+GCAS_VNIR: type = globals()["GCAS_VNIR"]
+eMAS: type = globals()["eMAS"]
+PICARD: type = globals()["PICARD"]
 
 def create_sensor(sensor_type: str) -> Sensor:
     """
