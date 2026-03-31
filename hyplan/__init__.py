@@ -98,7 +98,7 @@ from .dubins3d import DubinsPath3D
 from .swath import generate_swath_polygon, calculate_swath_widths
 
 # Flight patterns
-from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path
+from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
 
 # Flight planning and optimization
 from .flight_plan import compute_flight_plan

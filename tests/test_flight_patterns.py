@@ -14,7 +14,9 @@ from hyplan.flight_patterns import (
     sawtooth,
     spiral,
     flight_lines_to_waypoint_path,
+    coordinated_line,
 )
+from hyplan.aircraft import NASA_ER2, NASA_P3
 
 
 CENTER = (34.0, -118.0)
@@ -367,3 +369,107 @@ class TestSpiral:
         from hyplan.exceptions import HyPlanValueError
         with pytest.raises(HyPlanValueError, match="points_per_turn"):
             spiral(CENTER, 0.0, ALT, ALT, ureg.Quantity(5, "km"), points_per_turn=2)
+
+
+class TestCoordinatedLine:
+    """Tests for the coordinated dual-aircraft line pattern."""
+
+    def _make_result(self, **kwargs):
+        defaults = dict(
+            center=CENTER, heading=0.0,
+            primary_leg_length=ureg.Quantity(200, "km"),
+            primary_aircraft=NASA_P3(),
+            secondary_aircraft=NASA_ER2(),
+            primary_altitude=ureg.Quantity(5000, "feet"),
+            secondary_altitude=ureg.Quantity(65000, "feet"),
+        )
+        defaults.update(kwargs)
+        return coordinated_line(**defaults)
+
+    def test_basic(self):
+        result = self._make_result(ground_speed_ratio=1.2)
+        assert len(result["primary"]) == 2
+        assert len(result["secondary"]) == 2
+        assert result["center"].latitude == CENTER[0]
+        assert result["center"].longitude == CENTER[1]
+        assert result["ground_speed_ratio"] == 1.2
+
+    def test_symmetry(self):
+        """Primary and secondary legs should be symmetric about center."""
+        result = self._make_result(ground_speed_ratio=1.3)
+        # Primary symmetry
+        d_p1, _ = pymap3d.vincenty.vdist(
+            CENTER[0], CENTER[1],
+            result["primary"][0].latitude, result["primary"][0].longitude)
+        d_p2, _ = pymap3d.vincenty.vdist(
+            CENTER[0], CENTER[1],
+            result["primary"][1].latitude, result["primary"][1].longitude)
+        assert float(d_p1) == pytest.approx(float(d_p2), rel=1e-3)
+        # Secondary symmetry
+        d_e1, _ = pymap3d.vincenty.vdist(
+            CENTER[0], CENTER[1],
+            result["secondary"][0].latitude, result["secondary"][0].longitude)
+        d_e2, _ = pymap3d.vincenty.vdist(
+            CENTER[0], CENTER[1],
+            result["secondary"][1].latitude, result["secondary"][1].longitude)
+        assert float(d_e1) == pytest.approx(float(d_e2), rel=1e-3)
+
+    def test_speed_ratio(self):
+        """Secondary leg length should equal primary leg length × ratio."""
+        ratio = 1.4
+        result = self._make_result(ground_speed_ratio=ratio)
+        d_pri, _ = pymap3d.vincenty.vdist(
+            result["primary"][0].latitude, result["primary"][0].longitude,
+            result["primary"][1].latitude, result["primary"][1].longitude)
+        d_sec, _ = pymap3d.vincenty.vdist(
+            result["secondary"][0].latitude, result["secondary"][0].longitude,
+            result["secondary"][1].latitude, result["secondary"][1].longitude)
+        assert float(d_sec) == pytest.approx(float(d_pri) * ratio, rel=1e-3)
+
+    def test_multi_ratio(self):
+        """List of ratios should produce list of secondary pairs."""
+        result = self._make_result(ground_speed_ratio=[1.2, 1.45])
+        assert isinstance(result["secondary"], list)
+        assert len(result["secondary"]) == 2
+        assert len(result["secondary"][0]) == 2
+        assert len(result["secondary"][1]) == 2
+        assert result["ground_speed_ratio"] == [1.2, 1.45]
+        # Second pair should be longer than first
+        d1, _ = pymap3d.vincenty.vdist(
+            result["secondary"][0][0].latitude, result["secondary"][0][0].longitude,
+            result["secondary"][0][1].latitude, result["secondary"][0][1].longitude)
+        d2, _ = pymap3d.vincenty.vdist(
+            result["secondary"][1][0].latitude, result["secondary"][1][0].longitude,
+            result["secondary"][1][1].latitude, result["secondary"][1][1].longitude)
+        assert float(d2) > float(d1)
+
+    def test_segment_types(self):
+        result = self._make_result(ground_speed_ratio=1.2)
+        assert result["primary"][0].segment_type == "pattern"
+        assert result["primary"][1].segment_type == "pattern_turn"
+        assert result["secondary"][0].segment_type == "pattern"
+        assert result["secondary"][1].segment_type == "pattern_turn"
+
+    def test_auto_ratio(self):
+        """With no ground_speed_ratio, should auto-compute from aircraft TAS."""
+        result = self._make_result()
+        assert isinstance(result["ground_speed_ratio"], float)
+        assert result["ground_speed_ratio"] > 1.0  # ER-2 is faster than P-3
+
+    def test_altitudes(self):
+        pri_alt = ureg.Quantity(5000, "feet")
+        sec_alt = ureg.Quantity(65000, "feet")
+        result = self._make_result(
+            primary_altitude=pri_alt, secondary_altitude=sec_alt,
+            ground_speed_ratio=1.2)
+        for wp in result["primary"]:
+            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(5000, rel=1e-3)
+        for wp in result["secondary"]:
+            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(65000, rel=1e-3)
+
+    def test_heading(self):
+        """Waypoint headings should be close to the requested heading."""
+        result = self._make_result(heading=45.0, ground_speed_ratio=1.2)
+        for wp in result["primary"] + result["secondary"]:
+            # Geodesic azimuth differs slightly from nominal heading
+            assert wp.heading == pytest.approx(45.0, abs=1.0)

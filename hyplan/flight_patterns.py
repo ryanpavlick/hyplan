@@ -15,6 +15,7 @@ from .exceptions import HyPlanValueError
 from .geometry import wrap_to_180, wrap_to_360
 from .waypoint import Waypoint
 from .flight_line import FlightLine
+from .aircraft import Aircraft
 
 __all__ = [
     "racetrack",
@@ -23,6 +24,7 @@ __all__ = [
     "sawtooth",
     "spiral",
     "flight_lines_to_waypoint_path",
+    "coordinated_line",
 ]
 
 
@@ -528,3 +530,106 @@ def flight_lines_to_waypoint_path(
             ))
 
     return waypoints
+
+
+def coordinated_line(
+    center: tuple,
+    heading: float,
+    primary_leg_length: Union[float, "ureg.Quantity"],
+    primary_aircraft: Aircraft,
+    secondary_aircraft: Aircraft,
+    primary_altitude: Union[float, "ureg.Quantity"],
+    secondary_altitude: Union[float, "ureg.Quantity"],
+    ground_speed_ratio: Union[float, List[float], None] = None,
+    primary_name: str = "P3",
+    secondary_name: str = "ER2",
+) -> dict:
+    """Generate a coordinated dual-aircraft line pattern (five-point line).
+
+    Two aircraft fly vertically stacked legs centered on a coordination
+    point. The secondary (faster) aircraft's leg is extended symmetrically
+    so both aircraft pass over the center point simultaneously.
+
+    Based on the IMPACTS sampling strategy (Yorks et al. 2025, BAMS).
+
+    Args:
+        center: (lat, lon) coordination point where both aircraft overlap.
+        heading: Bearing of the line in degrees from north.
+        primary_leg_length: Leg length of the primary (slower) aircraft.
+        primary_aircraft: Aircraft object for the primary (slower/sampling) platform.
+        secondary_aircraft: Aircraft object for the secondary (faster/remote-sensing) platform.
+        primary_altitude: Altitude MSL for the primary aircraft.
+        secondary_altitude: Altitude MSL for the secondary aircraft.
+        ground_speed_ratio: Ratio of secondary to primary ground speed.
+            If None, computed from TAS at each altitude. Can be a list for
+            multiple speed-ratio lines (e.g. [1.2, 1.45] for high/low P-3).
+        primary_name: Name prefix for primary waypoints (default "P3").
+        secondary_name: Name prefix for secondary waypoints (default "ER2").
+
+    Returns:
+        dict with keys:
+            "primary": list of 2 Waypoints [start, end] for the primary aircraft.
+            "secondary": list of 2 Waypoints [start, end] if single ratio,
+                or list of such pairs if multiple ratios.
+            "center": Waypoint at the coordination point.
+            "ground_speed_ratio": the ratio(s) used.
+    """
+    center_lat, center_lon = center
+    pri_len = _to_length_quantity(primary_leg_length, "primary_leg_length")
+    pri_alt = _to_length_quantity(primary_altitude, "primary_altitude")
+    sec_alt = _to_length_quantity(secondary_altitude, "secondary_altitude")
+    heading = float(heading)
+    fwd_az = wrap_to_360(heading)
+
+    # Compute or validate speed ratio(s)
+    if ground_speed_ratio is None:
+        sec_speed = secondary_aircraft.cruise_speed_at(sec_alt)
+        pri_speed = primary_aircraft.cruise_speed_at(pri_alt)
+        ratios = [float((sec_speed / pri_speed).magnitude)]
+    elif isinstance(ground_speed_ratio, (int, float)):
+        ratios = [float(ground_speed_ratio)]
+    else:
+        ratios = [float(r) for r in ground_speed_ratio]
+
+    for r in ratios:
+        if r <= 0:
+            raise HyPlanValueError("ground_speed_ratio must be positive")
+
+    # Primary flight line → waypoints
+    pri_fl = FlightLine.center_length_azimuth(
+        center_lat, center_lon, pri_len, heading,
+        altitude_msl=pri_alt, site_name=primary_name,
+    )
+    primary_wps = [
+        Waypoint(pri_fl.lat1, pri_fl.lon1, pri_fl.waypoint1.heading, pri_alt,
+                 name=f"{primary_name}_start", segment_type="pattern"),
+        Waypoint(pri_fl.lat2, pri_fl.lon2, pri_fl.waypoint1.heading, pri_alt,
+                 name=f"{primary_name}_end", segment_type="pattern_turn"),
+    ]
+
+    # Center waypoint (at secondary altitude for the overflying aircraft)
+    center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,
+                         name="C1", segment_type="pattern")
+
+    # Secondary flight lines for each ratio
+    secondary_pairs = []
+    for i, r in enumerate(ratios):
+        sec_len = pri_len * r
+        sec_fl = FlightLine.center_length_azimuth(
+            center_lat, center_lon, sec_len, heading,
+            altitude_msl=sec_alt, site_name=secondary_name,
+        )
+        suffix = f"_r{i+1}" if len(ratios) > 1 else ""
+        secondary_pairs.append([
+            Waypoint(sec_fl.lat1, sec_fl.lon1, sec_fl.waypoint1.heading, sec_alt,
+                     name=f"{secondary_name}_start{suffix}", segment_type="pattern"),
+            Waypoint(sec_fl.lat2, sec_fl.lon2, sec_fl.waypoint1.heading, sec_alt,
+                     name=f"{secondary_name}_end{suffix}", segment_type="pattern_turn"),
+        ])
+
+    return {
+        "primary": primary_wps,
+        "secondary": secondary_pairs[0] if len(ratios) == 1 else secondary_pairs,
+        "center": center_wp,
+        "ground_speed_ratio": ratios[0] if len(ratios) == 1 else ratios,
+    }
