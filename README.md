@@ -33,7 +33,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
-- **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, and polygon flight patterns for profiling and survey missions
+- **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, polygon, and coordinated dual-aircraft (five-point line) flight patterns for profiling, survey, and multi-platform missions
 - **Geospatial export** — Output to Excel, KML, GPX, ForeFlight CSV, Honeywell FMS, ER-2, ICARTT, and interactive Folium maps
 - **Interactive planning** — Jupyter widget for map-based waypoint placement, pattern generation, and flight box creation
 
@@ -196,7 +196,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `clouds` | Cloud cover analysis and clear-sky probability from MODIS |
 | `satellites` | Satellite overpass prediction and swath modeling |
 | `airports` | Airport database with search, filtering, and runway data |
-| `flight_patterns` | Flight pattern generators (racetrack, rosette, spiral, sawtooth, polygon) |
+| `flight_patterns` | Flight pattern generators (racetrack, rosette, spiral, sawtooth, polygon, coordinated line) |
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
 | `dubins3d` | 3D Dubins path planning with pitch constraints (Vana et al., ICRA 2020) |
 | `exports` | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT |

@@ -1,3 +1,12 @@
+"""Flight box generation — parallel flight lines covering a geographic area.
+
+Provides functions to lay out parallel, evenly-spaced flight lines over a
+study area.  Lines can be generated from a center line and swath overlap
+(:func:`box_around_center_line`), from an arbitrary polygon boundary
+(:func:`box_around_polygon`), or with terrain-aware altitude adjustments
+(:func:`box_around_center_terrain`).
+"""
+
 import numpy as np
 import pymap3d.vincenty
 from typing import Optional, List, Callable, Dict, Union

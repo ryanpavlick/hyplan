@@ -1,3 +1,13 @@
+"""Flight plan computation and segment classification.
+
+Assembles a sequence of flight lines and waypoints into a complete mission
+plan with takeoff, transit, data-collection, and landing phases.
+:func:`compute_flight_plan` connects segments using 3-D Dubins paths,
+classifies each phase (takeoff, climb, transit, descent, approach,
+flight_line), and returns a :class:`~geopandas.GeoDataFrame` with timing,
+distance, altitude, and geometry for every segment.
+"""
+
 from typing import List, Optional, Union
 
 import numpy as np

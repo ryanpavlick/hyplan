@@ -1,3 +1,12 @@
+"""Graph-based flight line ordering and multi-day scheduling.
+
+Builds a weighted directed graph where nodes are flight-line endpoints and
+airports, and edge weights are transit times computed from aircraft
+performance.  :func:`greedy_optimize` traverses this graph with a
+nearest-neighbour heuristic, respecting endurance limits, daily flight-time
+caps, and refueling constraints to produce a feasible multi-day schedule.
+"""
+
 import itertools
 import logging
 from typing import Optional, Tuple

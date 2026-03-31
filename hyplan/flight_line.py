@@ -1,3 +1,16 @@
+"""Flight line definition and manipulation.
+
+A :class:`FlightLine` represents a single straight-and-level data-collection
+segment defined by two geographic endpoints, an altitude, and metadata. The
+class provides factory constructors for common creation patterns
+(:meth:`~FlightLine.start_length_azimuth`,
+:meth:`~FlightLine.center_length_azimuth`) and methods for geometric
+operations such as splitting, clipping, rotating, and offsetting.
+
+Waypoint properties at each endpoint (heading, altitude, position) are
+derived automatically from the geodesic geometry via Vincenty's formulae.
+"""
+
 from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from pint import Quantity
 from typing import Optional, List, Dict, Union, Tuple

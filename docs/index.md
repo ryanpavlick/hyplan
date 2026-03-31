@@ -45,5 +45,6 @@ api/airports
 api/geometry
 api/units
 api/plotting
+api/download
 api/exceptions
 ```

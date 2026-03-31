@@ -1,6 +1,7 @@
 # Flight Patterns
 
-Generate common flight patterns as waypoint sequences.
+Generate common flight patterns as ordered waypoint sequences for use
+with {py:func}`~hyplan.flight_plan.compute_flight_plan`.
 
 ## Pattern generators
 
@@ -10,6 +11,12 @@ Generate common flight patterns as waypoint sequences.
 .. autofunction:: hyplan.flight_patterns.sawtooth
 .. autofunction:: hyplan.flight_patterns.spiral
 .. autofunction:: hyplan.flight_patterns.polygon
+```
+
+## Multi-aircraft coordination
+
+```{eval-rst}
+.. autofunction:: hyplan.flight_patterns.coordinated_line
 ```
 
 ## Utilities

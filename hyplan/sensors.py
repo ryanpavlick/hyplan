@@ -1,3 +1,12 @@
+"""Imaging spectrometer and line-scanner sensor models.
+
+Defines the :class:`Sensor` base class and :class:`LineScanner` subclass for
+computing ground sample distance (GSD), swath width, and critical speed from
+sensor optics, altitude, and aircraft parameters.  Pre-configured sensors
+include NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER) and
+others.  Use :func:`create_sensor` for name-based construction.
+"""
+
 from typing import Dict, Type
 
 import numpy as np

@@ -1,3 +1,11 @@
+"""Visualization utilities for flight plans and flight lines.
+
+Provides Folium interactive maps (:func:`map_flight_lines`), Matplotlib
+altitude profiles (:func:`plot_flight_plan`,
+:func:`plot_altitude_trajectory`), and terrain profile extraction
+(:func:`terrain_profile_along_track`).
+"""
+
 import folium
 import geopandas as gpd
 import numpy as np

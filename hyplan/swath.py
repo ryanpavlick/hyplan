@@ -1,3 +1,11 @@
+"""Sensor swath polygon generation and width analysis.
+
+Computes the ground footprint of a line-scanning sensor along a flight line,
+accounting for cross-track field of view and altitude.
+:func:`generate_swath_polygon` returns a Shapely polygon of the swath;
+:func:`calculate_swath_widths` measures port/starboard widths along the track.
+"""
+
 from typing import Optional
 
 import numpy as np
