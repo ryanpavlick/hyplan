@@ -173,8 +173,8 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
    │  radar           │  │  clouds         │  │  units          │
    │  swath           │  │  geometry       │  │  plotting       │
    └──────────────────┘  └─────────────────┘  ├─────────────────┤
-                                              │  exports         │
-                                              │  interactive     │
+                                              │  exports        │
+                                              │  interactive    │
                                               └─────────────────┘
 ```
 
