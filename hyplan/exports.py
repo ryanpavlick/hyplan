@@ -53,6 +53,7 @@ __all__ = [
     "to_kml",
     "to_gpx",
     "to_txt",
+    "to_trackair",
 ]
 
 
@@ -1039,3 +1040,81 @@ def to_txt(
 
     with open(filepath, "w") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def to_trackair(
+    plan: gpd.GeoDataFrame,
+    filepath: str,
+    sensor=None,
+    terrain_elevation_m: float = 0.0,
+    author: str = "",
+    mission_name: str = "",
+) -> None:
+    """Export flight plan to TrackAir scanner planning format.
+
+    TrackAir is an INI-style format used with HyMap and HySpex line-scanner
+    sensors.  The ``[strips]`` section lists each straight data-collection
+    segment as ``N=lat1,lon1,lat2,lon2`` in decimal degrees.
+
+    Args:
+        plan: GeoDataFrame returned by ``compute_flight_plan()``.
+        filepath: Output file path (typically ``*.txt``).
+        sensor: Optional ``LineScanner`` instance used to populate the
+            ``[spex]`` field-of-view and swath-width fields.
+        terrain_elevation_m: Terrain elevation in metres used to convert MSL
+            altitude to AGL.  Defaults to 0 (sea-level terrain).
+        author: Name written to ``Designed by`` fields.
+        mission_name: Written to ``Flight plan name``.
+    """
+    flight_line_rows = plan[plan["segment_type"] == "flight_line"]
+
+    # --- Altitude AGL from first flight-line segment ---
+    if len(flight_line_rows):
+        alt_msl_ft = float(flight_line_rows.iloc[0]["start_altitude"])
+        alt_agl_m = alt_msl_ft * 0.3048 - terrain_elevation_m
+    else:
+        alt_agl_m = 0.0
+
+    # --- Sensor-derived fields ---
+    if sensor is not None:
+        fov = sensor.half_angle * 2
+        swath_width = int(2 * np.tan(np.radians(sensor.half_angle)) * alt_agl_m)
+        fov_str = str(fov)
+        swath_str = str(swath_width)
+    else:
+        fov_str = ""
+        swath_str = ""
+
+    alt_agl_str = str(int(round(alt_agl_m))) if alt_agl_m else ""
+
+    output_lines = [
+        "[general]",
+        "Project name =",
+        "",
+        "Coordinate system = World geographic latitude-longitude",
+        "Datum =",
+        "",
+        f"Flight plan name = {mission_name}",
+        "Export flight plan = no",
+        f"Designed by = {author}",
+        "",
+        "[spex]",
+        "'DO NOT EDIT THESE PARAMETERS HERE, USE THE SCANNER MENU.",
+        "Type of planning = LINE SCANNER PLANNING",
+        f"Field of view = {fov_str}",
+        f"Flying height agl (meters) = {alt_agl_str}",
+        f"Swath width (meters) = {swath_str}",
+        "",
+        f"Designed by = {author}",
+        "",
+        "[strips]",
+    ]
+
+    for strip_n, (_, row) in enumerate(flight_line_rows.iterrows(), start=1):
+        output_lines.append(
+            f"{strip_n}={row['start_lat']},{row['start_lon']},"
+            f"{row['end_lat']},{row['end_lon']}"
+        )
+
+    with open(filepath, "w") as f:
+        f.write("\n".join(output_lines) + "\n")

@@ -405,3 +405,132 @@ class TestComputeGlintArc:
         sensor = AVIRIS3()
         with pytest.raises(ValueError, match="Invalid output_geometry"):
             compute_glint_arc(arc, sensor, output_geometry="invalid")
+
+
+class TestGlintArcCollectionLength:
+    def test_limits_arc_extent(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            collection_length=ureg.Quantity(5000, "meter"),
+        )
+        assert 0.0 < arc.arc_extent < 180.0
+
+    def test_caps_at_180(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            collection_length=ureg.Quantity(500_000, "meter"),
+        )
+        assert arc.arc_extent == pytest.approx(180.0)
+
+    def test_none_gives_180(self):
+        arc = GlintArc(ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED)
+        assert arc.arc_extent == pytest.approx(180.0)
+
+    def test_plain_float_collection_length(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            collection_length=5000.0,
+        )
+        assert 0.0 < arc.arc_extent < 180.0
+
+    def test_in_dict(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            collection_length=ureg.Quantity(5000, "meter"),
+        )
+        d = arc.to_dict()
+        assert "collection_length" in d
+        assert d["collection_length"] == pytest.approx(5000.0, rel=0.01)
+
+    def test_none_collection_length_in_dict(self):
+        arc = GlintArc(ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED)
+        assert arc.to_dict()["collection_length"] is None
+
+    def test_in_geojson(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            collection_length=ureg.Quantity(5000, "meter"),
+        )
+        props = arc.to_geojson()["properties"]
+        assert "collection_length" in props
+        assert props["collection_length"] == pytest.approx(5000.0, rel=0.01)
+
+
+class TestGlintArcApproachExitLines:
+    @pytest.fixture
+    def arc(self):
+        return GlintArc(ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED)
+
+    def test_approach_returns_flight_line(self, arc):
+        assert isinstance(arc.approach_line(ureg.Quantity(5000, "meter")), FlightLine)
+
+    def test_approach_ends_at_arc_start(self, arc):
+        fl = arc.approach_line(ureg.Quantity(5000, "meter"))
+        wp1 = arc.waypoint1
+        assert fl.waypoint2.latitude  == pytest.approx(wp1.latitude,  abs=1e-3)
+        assert fl.waypoint2.longitude == pytest.approx(wp1.longitude, abs=1e-3)
+
+    def test_approach_length(self, arc):
+        fl = arc.approach_line(ureg.Quantity(5000, "meter"))
+        assert fl.length.to("meter").magnitude == pytest.approx(5000.0, rel=0.01)
+
+    def test_exit_returns_flight_line(self, arc):
+        assert isinstance(arc.exit_line(ureg.Quantity(5000, "meter")), FlightLine)
+
+    def test_exit_starts_at_arc_end(self, arc):
+        fl = arc.exit_line(ureg.Quantity(5000, "meter"))
+        wp2 = arc.waypoint2
+        assert fl.waypoint1.latitude  == pytest.approx(wp2.latitude,  abs=1e-3)
+        assert fl.waypoint1.longitude == pytest.approx(wp2.longitude, abs=1e-3)
+
+    def test_exit_length(self, arc):
+        fl = arc.exit_line(ureg.Quantity(5000, "meter"))
+        assert fl.length.to("meter").magnitude == pytest.approx(5000.0, rel=0.01)
+
+    def test_plain_float_length(self, arc):
+        fl = arc.approach_line(3000.0)
+        assert fl.length.to("meter").magnitude == pytest.approx(3000.0, rel=0.01)
+
+    def test_approach_altitude_matches_arc(self, arc):
+        fl = arc.approach_line(ureg.Quantity(5000, "meter"))
+        assert fl.altitude_msl.to("meter").magnitude == pytest.approx(
+            arc.altitude_msl.magnitude, rel=0.001
+        )
+
+    def test_left_bank_approach(self):
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            bank_direction="left",
+        )
+        fl = arc.approach_line(ureg.Quantity(5000, "meter"))
+        wp1 = arc.waypoint1
+        assert fl.waypoint2.latitude  == pytest.approx(wp1.latitude,  abs=1e-3)
+        assert fl.waypoint2.longitude == pytest.approx(wp1.longitude, abs=1e-3)
+
+
+class TestGlintArcFootprint:
+    @pytest.fixture
+    def arc(self):
+        return GlintArc(ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED)
+
+    def test_returns_valid_polygon(self, arc):
+        from shapely.geometry import Polygon
+        poly = arc.footprint(AVIRIS3())
+        assert isinstance(poly, Polygon)
+        assert poly.is_valid
+
+    def test_contains_target(self, arc):
+        from shapely.geometry import Point
+        poly = arc.footprint(AVIRIS3())
+        assert poly.contains(Point(ARC_TARGET_LON, ARC_TARGET_LAT))
+
+    def test_left_bank_footprint(self):
+        from shapely.geometry import Point, Polygon
+        arc = GlintArc(
+            ARC_TARGET_LAT, ARC_TARGET_LON, ARC_OBS_TIME, ARC_ALTITUDE, ARC_SPEED,
+            bank_direction="left",
+        )
+        poly = arc.footprint(AVIRIS3())
+        assert isinstance(poly, Polygon)
+        assert poly.is_valid
+        assert poly.contains(Point(ARC_TARGET_LON, ARC_TARGET_LAT))

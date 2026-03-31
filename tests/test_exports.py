@@ -19,8 +19,11 @@ from hyplan.exports import (
     to_icartt,
     to_kml,
     to_pilot_excel,
+    to_trackair,
     to_txt,
 )
+from hyplan.flight_line import FlightLine
+from hyplan.sensors import AVIRIS3
 from hyplan.geometry import (
     dd_to_ddm,
     dd_to_ddms,
@@ -517,3 +520,109 @@ class TestExportContentValidation:
             # LON should start with E or W
             lon_field = parts[4].strip()
             assert lon_field[0] in ("E", "W")
+
+
+# -------------------------------------------------------------------------
+# TrackAir export tests
+# -------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def flight_plan_with_lines():
+    """Flight plan containing FlightLine segments for TrackAir testing."""
+    initialize_data(countries=["US"])
+    b200 = DynamicAviation_B200()
+    kedw = Airport("KEDW")
+    fl1 = FlightLine.start_length_azimuth(
+        lat1=34.5, lon1=-118.0,
+        length=ureg.Quantity(20000, "meter"),
+        az=90.0,
+        altitude_msl=ureg.Quantity(15000, "feet"),
+        site_name="Line1",
+    )
+    fl2 = FlightLine.start_length_azimuth(
+        lat1=34.6, lon1=-118.0,
+        length=ureg.Quantity(20000, "meter"),
+        az=90.0,
+        altitude_msl=ureg.Quantity(15000, "feet"),
+        site_name="Line2",
+    )
+    plan = compute_flight_plan(b200, [fl1, fl2],
+                               takeoff_airport=kedw, return_airport=kedw)
+    return plan, b200
+
+
+class TestToTrackAir:
+
+    def test_creates_file(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "plan.txt")
+        to_trackair(plan, path)
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 0
+
+    def test_required_sections(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "sections.txt")
+        to_trackair(plan, path, mission_name="TEST", author="R. Pavlick")
+        text = open(path).read()
+        assert "[general]" in text
+        assert "[spex]" in text
+        assert "[strips]" in text
+
+    def test_mission_and_author(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "meta.txt")
+        to_trackair(plan, path, mission_name="SCOAPE2", author="A. Chlus")
+        text = open(path).read()
+        assert "Flight plan name = SCOAPE2" in text
+        assert "Designed by = A. Chlus" in text
+
+    def test_strips_count(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "strips.txt")
+        to_trackair(plan, path)
+        n_lines = plan[plan["segment_type"] == "flight_line"].shape[0]
+        text = open(path).read()
+        for i in range(1, n_lines + 1):
+            assert f"\n{i}=" in text
+
+    def test_strips_format(self, flight_plan_with_lines, tmp_path):
+        """Each strip line should be N=lat,lon,lat,lon with four decimal values."""
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "fmt.txt")
+        to_trackair(plan, path)
+        text = open(path).read()
+        in_strips = False
+        for line in text.splitlines():
+            if line.strip() == "[strips]":
+                in_strips = True
+                continue
+            if in_strips and "=" in line:
+                _, coords = line.split("=", 1)
+                parts = coords.split(",")
+                assert len(parts) == 4
+                for part in parts:
+                    float(part)  # should not raise
+
+    def test_with_sensor(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "sensor.txt")
+        to_trackair(plan, path, sensor=AVIRIS3())
+        text = open(path).read()
+        # FOV and swath width should be non-empty numbers
+        for line in text.splitlines():
+            if line.startswith("Field of view ="):
+                assert line.split("=", 1)[1].strip() != ""
+            if line.startswith("Swath width (meters) ="):
+                assert line.split("=", 1)[1].strip() != ""
+
+    def test_without_sensor_leaves_fields_empty(self, flight_plan_with_lines, tmp_path):
+        plan, _ = flight_plan_with_lines
+        path = str(tmp_path / "nosensor.txt")
+        to_trackair(plan, path)
+        text = open(path).read()
+        for line in text.splitlines():
+            if line.startswith("Field of view ="):
+                assert line.split("=", 1)[1].strip() == ""
+            if line.startswith("Swath width (meters) ="):
+                assert line.split("=", 1)[1].strip() == ""

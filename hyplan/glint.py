@@ -33,7 +33,7 @@ import geopandas as gpd
 from datetime import datetime
 from typing import Optional, Tuple
 
-from shapely.geometry import Point, LineString
+from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import transform
 
 import pymap3d
@@ -44,10 +44,11 @@ from sunposition import sunpos
 
 from .units import ureg
 from .exceptions import HyPlanValueError, HyPlanTypeError
-from .geometry import process_linestring, get_utm_transforms, wrap_to_360
+from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
 from .sensors import LineScanner
 from .flight_line import FlightLine
 from .waypoint import Waypoint
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class GlintArc:
         bank_angle: Optional[float] = None,
         site_name: Optional[str] = None,
         bank_direction: str = "right",
+        collection_length=None,
     ):
         if bank_direction not in ("left", "right"):
             raise HyPlanValueError("bank_direction must be 'left' or 'right'")
@@ -100,6 +102,7 @@ class GlintArc:
         self.site_name = site_name
         self.bank_direction = bank_direction
         self._bank_angle_override = bank_angle
+        self._collection_length = collection_length
 
         self.altitude_msl = altitude_msl.to(ureg.meter)
         self.speed = speed
@@ -142,12 +145,20 @@ class GlintArc:
         else:
             self.bank_angle = self._bank_angle_override
 
-        self.arc_extent = 180.0
-
         # --- Turn radius ---
         g = 9.80665
         bank_rad = np.radians(self.bank_angle)
         self._turn_radius_m = self._speed_mps**2 / (g * np.tan(bank_rad))
+
+        # --- Arc extent ---
+        if self._collection_length is None:
+            self.arc_extent = 180.0
+        else:
+            if hasattr(self._collection_length, "to"):
+                cl_m = self._collection_length.to(ureg.meter).magnitude
+            else:
+                cl_m = float(self._collection_length)
+            self.arc_extent = min(np.degrees(cl_m / self._turn_radius_m), 180.0)
 
         # --- Aircraft midpoint (specular geometry) ---
         altitude_m = self.altitude_msl.magnitude
@@ -256,6 +267,52 @@ class GlintArc:
             name="arc_end",
         )
 
+    def approach_line(self, length) -> FlightLine:
+        """Straight FlightLine leading tangentially into the arc start.
+
+        Args:
+            length: Approach distance. Accepts a Quantity with length units or
+                a plain float (assumed meters).
+
+        Returns:
+            FlightLine from the entry point to the arc start waypoint.
+        """
+        length_m = length.to(ureg.meter).magnitude if hasattr(length, "to") else float(length)
+        wp1 = self.waypoint1
+        back_az = wrap_to_360(wp1.heading + 180.0)
+        start_lat, start_lon = pymap3d.vincenty.vreckon(
+            wp1.latitude, wp1.longitude, length_m, back_az
+        )
+        return FlightLine.start_length_azimuth(
+            float(start_lat),
+            float(wrap_to_180(start_lon)),
+            ureg.Quantity(length_m, "meter"),
+            wp1.heading,
+            altitude_msl=self.altitude_msl,
+            site_name=self.site_name,
+        )
+
+    def exit_line(self, length) -> FlightLine:
+        """Straight FlightLine departing tangentially from the arc end.
+
+        Args:
+            length: Exit distance. Accepts a Quantity with length units or
+                a plain float (assumed meters).
+
+        Returns:
+            FlightLine from the arc end waypoint to the exit point.
+        """
+        length_m = length.to(ureg.meter).magnitude if hasattr(length, "to") else float(length)
+        wp2 = self.waypoint2
+        return FlightLine.start_length_azimuth(
+            wp2.latitude,
+            wp2.longitude,
+            ureg.Quantity(length_m, "meter"),
+            wp2.heading,
+            altitude_msl=self.altitude_msl,
+            site_name=self.site_name,
+        )
+
     def track(self, precision=100.0) -> LineString:
         """Return the arc as a densified LineString.
 
@@ -301,6 +358,41 @@ class GlintArc:
         lons, lats = from_utm(xs, ys)
         return LineString(np.column_stack([lons, lats]))
 
+    def footprint(self, sensor: LineScanner) -> Polygon:
+        """Ground coverage polygon of the banked sensor swath across the arc.
+
+        Args:
+            sensor: LineScanner defining the sensor half-angle (half-FOV).
+
+        Returns:
+            Shapely Polygon in WGS84 (lon, lat) enclosing the swath footprint.
+        """
+        arc_track = self.track(precision=200.0)
+        latitudes, longitudes, azimuths, _ = process_linestring(arc_track)
+        altitude_m = self.altitude_msl.magnitude
+        half_ang = sensor.half_angle
+        near_pts, far_pts = [], []
+
+        for lat, lon, heading in zip(latitudes, longitudes, azimuths):
+            near_vz = self.bank_angle - half_ang
+            far_vz  = self.bank_angle + half_ang
+
+            if self.bank_direction == "right":
+                base_az = wrap_to_360(heading + 90.0)
+            else:
+                base_az = wrap_to_360(heading - 90.0)
+
+            near_az = base_az if near_vz >= 0 else wrap_to_360(base_az + 180.0)
+            far_az  = base_az
+
+            near_lat, near_lon, _ = los.lookAtSpheroid(lat, lon, altitude_m, near_az, abs(near_vz))
+            far_lat,  far_lon,  _ = los.lookAtSpheroid(lat, lon, altitude_m, far_az,  abs(far_vz))
+            near_pts.append((float(near_lon), float(near_lat)))
+            far_pts.append((float(far_lon),   float(far_lat)))
+
+        ring = near_pts + far_pts[::-1] + [near_pts[0]]
+        return Polygon(ring)
+
     def to_dict(self) -> dict:
         """Convert the glint arc to a dictionary representation."""
         return {
@@ -320,6 +412,11 @@ class GlintArc:
             "turn_radius": self._turn_radius_m,
             "arc_extent": self.arc_extent,
             "arc_length": self.length.magnitude,
+            "collection_length": (
+                self._collection_length.to(ureg.meter).magnitude
+                if hasattr(self._collection_length, "to")
+                else self._collection_length
+            ),
             "site_name": self.site_name,
         }
 
@@ -344,6 +441,11 @@ class GlintArc:
                 "heading_at_midpoint": self.heading_at_midpoint,
                 "turn_radius": self._turn_radius_m,
                 "arc_extent": self.arc_extent,
+                "collection_length": (
+                    self._collection_length.to(ureg.meter).magnitude
+                    if hasattr(self._collection_length, "to")
+                    else self._collection_length
+                ),
                 "site_name": self.site_name,
             },
         }

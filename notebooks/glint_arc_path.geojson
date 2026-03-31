@@ -1457,6 +1457,7 @@
     "heading_at_midpoint": 200.70572695028466,
     "turn_radius": 2296.3865144782917,
     "arc_extent": 180.0,
+    "collection_length": null,
     "site_name": "GOM Platform"
   }
 }
