@@ -12,9 +12,15 @@ interferometry for deformation measurements. *IEEE Aerospace Conference
 Proceedings*, 1-8. doi:10.1109/AERO.2008.4526385
 """
 
+import json
+import os
+from dataclasses import dataclass
+from typing import List, Optional, Union
+
 import numpy as np
 from pint import Quantity
-from typing import Optional
+from shapely.geometry import Polygon, shape
+from shapely import STRtree
 
 from .units import ureg
 from .sensors import Sensor
@@ -25,7 +31,119 @@ __all__ = [
     "UAVSAR_Lband",
     "UAVSAR_Pband",
     "UAVSAR_Kaband",
+    "RadarExclusionConflict",
+    "check_lband_radar_exclusions",
 ]
+
+_DEFAULT_EXCLUSION_ZONES_PATH = os.path.join(
+    os.path.dirname(__file__), "data", "faa_radar_exclusion_zones.geojson"
+)
+
+
+@dataclass
+class RadarExclusionConflict:
+    """A detected conflict between a UAVSAR swath and an FAA L-Band radar exclusion zone.
+
+    Attributes:
+        radar_name: Name of the FAA radar site.
+        swath_index: Index of the conflicting swath in the input list.
+        intersection: Shapely geometry of the overlap between the swath and exclusion zone.
+        exclusion_zone: Shapely Polygon of the full exclusion zone boundary.
+    """
+
+    radar_name: str
+    swath_index: int
+    intersection: object  # Shapely geometry
+    exclusion_zone: Polygon
+
+
+def check_lband_radar_exclusions(
+    swath_polygons: Union[Polygon, List[Polygon]],
+    geojson: Union[str, dict, None] = None,
+) -> List[RadarExclusionConflict]:
+    """Check UAVSAR swath polygons against FAA L-Band radar exclusion zones.
+
+    UAVSAR L-Band swaths must remain outside a 10 nautical mile radius of each
+    FAA long-range L-Band radar site.  The exclusion zone polygons are
+    pre-computed 10 NMI circles stored in a GeoJSON FeatureCollection.
+
+    Args:
+        swath_polygons: A single Shapely Polygon or a list of Shapely Polygons
+            representing UAVSAR swath footprints (e.g. from
+            :func:`~hyplan.swath.generate_swath_polygon`).
+        geojson: Exclusion zone data.  One of:
+
+            * ``None`` — load the bundled
+              ``hyplan/data/faa_lband_radar_exclusion_zones.geojson`` file.
+            * ``str`` — path to a GeoJSON FeatureCollection file on disk.
+            * ``dict`` — an already-parsed GeoJSON FeatureCollection.
+
+    Returns:
+        List of :class:`RadarExclusionConflict`, one for each swath/zone pair
+        that intersects.  An empty list means no conflicts.
+
+    Raises:
+        FileNotFoundError: If *geojson* is ``None`` and the bundled data file
+            does not exist, or if a path string is given that does not exist.
+        ValueError: If the GeoJSON is not a valid FeatureCollection.
+    """
+    # Normalise input to a list
+    if isinstance(swath_polygons, Polygon):
+        swath_polygons = [swath_polygons]
+
+    # Load exclusion zone GeoJSON
+    if geojson is None:
+        if not os.path.exists(_DEFAULT_EXCLUSION_ZONES_PATH):
+            raise FileNotFoundError(
+                "Bundled FAA radar exclusion zone data not found at "
+                f"{_DEFAULT_EXCLUSION_ZONES_PATH!r}. "
+                "Pass a geojson= path or dict to check_lband_radar_exclusions()."
+            )
+        with open(_DEFAULT_EXCLUSION_ZONES_PATH) as f:
+            geojson = json.load(f)
+    elif isinstance(geojson, str):
+        if not os.path.exists(geojson):
+            raise FileNotFoundError(f"GeoJSON file not found: {geojson!r}")
+        with open(geojson) as f:
+            geojson = json.load(f)
+
+    if geojson.get("type") != "FeatureCollection":
+        raise ValueError("geojson must be a GeoJSON FeatureCollection")
+
+    # Parse exclusion zone polygons
+    zone_names: List[str] = []
+    zone_geoms: List[Polygon] = []
+    for feature in geojson.get("features", []):
+        geom = shape(feature["geometry"])
+        if not isinstance(geom, Polygon):
+            continue
+        name = feature.get("properties", {}).get("name", "Unknown")
+        zone_names.append(name)
+        zone_geoms.append(geom)
+
+    if not zone_geoms:
+        return []
+
+    # Spatial index over exclusion zones for fast candidate lookup
+    tree = STRtree(zone_geoms)
+
+    conflicts: List[RadarExclusionConflict] = []
+    for swath_idx, swath in enumerate(swath_polygons):
+        candidate_indices = tree.query(swath, predicate="intersects")
+        for zone_idx in candidate_indices:
+            intersection = swath.intersection(zone_geoms[zone_idx])
+            if intersection.is_empty:
+                continue
+            conflicts.append(
+                RadarExclusionConflict(
+                    radar_name=zone_names[zone_idx],
+                    swath_index=swath_idx,
+                    intersection=intersection,
+                    exclusion_zone=zone_geoms[zone_idx],
+                )
+            )
+
+    return conflicts
 
 
 class SidelookingRadar(Sensor):
