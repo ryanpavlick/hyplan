@@ -58,7 +58,7 @@ def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
     Returns:
         numpy.ndarray: Angle(s) wrapped to [0, 360).
     """
-    return np.mod(np.array(angle), 360.0)
+    return np.squeeze(np.mod(np.array(angle), 360.0))
 
 def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
     """

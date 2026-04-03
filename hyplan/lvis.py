@@ -90,6 +90,11 @@ class LVIS(Sensor):
             ("narrow", "medium", "wide"), or None for wide (default).
     """
 
+    # Tolerance for floating-point error when comparing effective swath width to
+    # the geometric maximum. Accounts for rounding in footprint/speed calculations
+    # that can make a fully contiguous configuration appear fractionally short.
+    _CONTIGUITY_TOLERANCE = 0.999
+
     def __init__(
         self,
         rep_rate: Quantity = 4000 * ureg.Hz,
@@ -254,7 +259,7 @@ class LVIS(Sensor):
         """
         ms = self.swath_width(altitude_agl).magnitude
         esw = self.effective_swath_width(altitude_agl, speed).magnitude
-        return esw >= ms * 0.999  # tolerance for floating point
+        return esw >= ms * self._CONTIGUITY_TOLERANCE
 
     def summary(self, altitude_agl: Quantity, speed: Quantity) -> dict:
         """Compute all LVIS coverage parameters for a given flight configuration.

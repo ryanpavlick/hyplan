@@ -120,7 +120,7 @@ def compute_flight_plan(
         # Process FlightLine segments separately.
         if isinstance(segment, FlightLine):
             track_geometry = segment.track()
-            latitudes, longitudes, _, distances = process_linestring(track_geometry)
+            _, _, _, distances = process_linestring(track_geometry)
             segment_distance = distances[-1] if len(distances) > 0 else 0
 
             # Calculate time_to_segment using the computed segment_distance.

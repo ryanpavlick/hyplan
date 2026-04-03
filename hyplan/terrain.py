@@ -30,6 +30,7 @@ import pymap3d.aer
 
 from .download import download_file
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+from .geometry import process_linestring
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ __all__ = [
     "get_elevations",
     "get_min_max_elevations",
     "ray_terrain_intersection",
+    "terrain_elevation_along_track",
+    "terrain_aspect_azimuth",
 ]
 
 # Minimum cos(tilt) magnitude below which ray-terrain intersection is undefined
@@ -260,6 +263,7 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
     raster = band.ReadAsArray()
     dataset = None  # Close the dataset
 
+    # np.round() rounds to nearest pixel center before int conversion; no truncation occurs.
     xs = np.round((lons - geotransform[0]) / geotransform[1]).astype(int)
     ys = np.round((lats - geotransform[3]) / geotransform[5]).astype(int)
 
@@ -299,6 +303,87 @@ def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
     dataset = None  # Close the dataset
 
     return min_val, max_val
+
+
+def terrain_elevation_along_track(flight_line, dem_file: str,
+                                   precision: float = 100.0) -> dict:
+    """Min, mean, and max terrain elevation (m MSL) along a flight line's nadir track.
+
+    Samples the DEM at evenly-spaced points along the flight line and returns
+    summary statistics useful for Mode 3 per-line altitude planning.
+
+    Args:
+        flight_line: A FlightLine object with a ``track(precision)`` method.
+        dem_file: Path to a DEM GeoTIFF covering the flight line.
+        precision: Along-track sampling interval in meters. Default 100 m.
+
+    Returns:
+        Dict with keys ``"min"``, ``"mean"``, and ``"max"`` (all in meters MSL).
+    """
+    lats, lons, *_ = process_linestring(flight_line.track(precision=precision))
+    elevations = get_elevations(lats, lons, dem_file).astype(float)
+    return {
+        "min": float(np.nanmin(elevations)),
+        "mean": float(np.nanmean(elevations)),
+        "max": float(np.nanmax(elevations)),
+    }
+
+
+def terrain_aspect_azimuth(polygon, dem_file: str = None) -> float:
+    """Dominant terrain gradient direction (degrees from north) for a polygon.
+
+    Computes the dominant downslope azimuth from the DEM gradient over the
+    polygon area.  To minimise altitude variation along each flight line
+    (as recommended by Zhao et al. 2021 for Mode 3), orient flight lines
+    *perpendicular* to the returned azimuth::
+
+        flight_azimuth = (terrain_aspect_azimuth(polygon) + 90) % 360
+
+    Args:
+        polygon: Shapely Polygon defining the survey area (WGS84 lon/lat).
+        dem_file: Path to a DEM GeoTIFF.  If ``None``, one is downloaded and
+            cached from the Copernicus GLO-30 archive.
+
+    Returns:
+        Dominant downslope azimuth in degrees clockwise from true north
+        (range 0–360).
+    """
+    if dem_file is None:
+        coords = np.array(polygon.exterior.coords)
+        lons_poly = coords[:, 0]
+        lats_poly = coords[:, 1]
+        dem_file = generate_demfile(lats_poly, lons_poly)
+
+    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
+    if not dataset:
+        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
+
+    band = dataset.GetRasterBand(1)
+    if not band:
+        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
+    elevations = band.ReadAsArray().astype(float)
+    dataset = None
+
+    # np.gradient returns (d/d_row, d/d_col).  In a north-up GeoTIFF rows
+    # increase southward, so the north component is the *negative* row gradient.
+    dy, dx = np.gradient(elevations)
+    north_component = -dy   # positive = elevation increases going north
+    east_component = dx     # positive = elevation increases going east
+
+    # Aspect: direction of steepest ascent, clockwise from north.
+    aspect = np.degrees(np.arctan2(east_component, north_component))
+    downslope = (aspect + 180.0) % 360.0  # reverse to get downslope direction
+
+    # Circular mean, ignoring flat pixels (lowest quartile of gradient magnitude)
+    magnitude = np.sqrt(north_component ** 2 + east_component ** 2)
+    threshold = np.percentile(magnitude, 25)
+    significant = magnitude > threshold
+
+    downslope_rad = np.radians(downslope[significant])
+    mean_sin = float(np.nanmean(np.sin(downslope_rad)))
+    mean_cos = float(np.nanmean(np.cos(downslope_rad)))
+    return float(np.degrees(np.arctan2(mean_sin, mean_cos)) % 360.0)
+
 
 def ray_terrain_intersection(
     lat0: np.ndarray,

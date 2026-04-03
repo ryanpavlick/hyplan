@@ -340,14 +340,24 @@ def box_around_polygon_terrain(
     clip_polygon: Optional[Polygon] = None,
     safe_altitude: Quantity = ureg.Quantity(300, "meter"),
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
+    target_agl: Optional[Quantity] = None,
 ) -> List[flight_line.FlightLine]:
     """Generate terrain-aware flight lines covering a polygon.
 
     Works for both ``LineScanner`` and ``SidelookingRadar`` sensors.
-    The flight altitude MSL is provided explicitly by the caller.
-    Line spacing is computed by ray-terrain intersection at each
-    candidate line position, ensuring the requested overlap is
-    maintained even over variable terrain.
+    Supports two altitude modes:
+
+    **Mode 2 (default):** A fixed ``altitude_msl`` is used for every flight
+    line.  Line spacing is computed by ray-terrain intersection at each
+    candidate line position, ensuring the requested overlap is maintained even
+    over variable terrain.
+
+    **Mode 3:** Pass ``target_agl`` instead of relying solely on
+    ``altitude_msl``.  Each flight line is assigned an individual altitude
+    derived from the mean terrain elevation along its nadir track plus
+    ``target_agl``, so GSD and overlap remain stable across mountainous
+    terrain (Zhao et al. 2021).  Raise :class:`~hyplan.exceptions.HyPlanValueError`
+    if both ``altitude_msl`` and ``target_agl`` are provided.
 
     Unlike :func:`box_around_polygon`, which uses a flat-earth
     ``swath_width()`` for line spacing, this function calls
@@ -365,7 +375,8 @@ def box_around_polygon_terrain(
         instrument: Sensor with ``swath_width(altitude_agl)`` and
             ``swath_offset_angles()`` methods. Accepts both
             ``LineScanner`` and ``SidelookingRadar``.
-        altitude_msl: Flight altitude above mean sea level.
+        altitude_msl: Flight altitude above mean sea level (Mode 2).
+            Used as a reference altitude for box geometry in Mode 3.
         polygon: Study-area boundary polygon (WGS84 lon/lat).
         azimuth: Flight-line orientation in degrees from true north.
             If ``None``, uses the minimum rotated rectangle of the
@@ -378,17 +389,24 @@ def box_around_polygon_terrain(
         clip_polygon: If provided, clip lines to this polygon instead of
             ``polygon``. Useful when the bounding box and the clip boundary
             differ (e.g. when delegating from :func:`box_around_center_terrain`).
-        safe_altitude: Minimum required clearance above the highest
-            terrain point in the survey area.
+        safe_altitude: Minimum required clearance above terrain.  In Mode 2
+            this is checked globally; in Mode 3 it is checked per line against
+            the maximum terrain elevation along that line's nadir track.
         min_line_length: Drop clipped segments shorter than this value.
+        target_agl: Desired altitude above ground level for Mode 3.  When
+            provided each flight line receives an individual ``altitude_msl``
+            computed as ``mean nadir terrain + target_agl``.  Cannot be used
+            together with a custom ``altitude_msl`` — raise
+            :class:`~hyplan.exceptions.HyPlanValueError` if both are supplied.
 
     Returns:
         List of :class:`~hyplan.flight_line.FlightLine` objects with
-        terrain-aware spacing.
+        terrain-aware spacing.  In Mode 3 each line carries a distinct
+        ``altitude_msl`` derived from local terrain.
 
     Raises:
-        HyPlanValueError: For invalid inputs or if ``altitude_msl``
-            does not provide sufficient clearance above terrain.
+        HyPlanValueError: For invalid inputs, conflicting altitude arguments,
+            or insufficient terrain clearance.
     """
     if not isinstance(polygon, Polygon):
         raise HyPlanValueError("polygon must be a Shapely Polygon.")
@@ -446,33 +464,58 @@ def box_around_polygon_terrain(
     box_width_m       = box_width.to("meter").magnitude
     safe_altitude_m   = safe_altitude.to("meter").magnitude
     min_line_length_m = min_line_length.to("meter").magnitude
+    mode3             = target_agl is not None
+    target_agl_m      = target_agl.to("meter").magnitude if mode3 else None
 
     dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
 
-    _, max_elev = terrain.get_min_max_elevations(dem_file)
-    clearance = altitude_msl.to("meter").magnitude - max_elev
-    if clearance < safe_altitude_m:
-        raise HyPlanValueError(
-            f"Minimum clearance {clearance:.0f} m is below safe_altitude "
-            f"{safe_altitude_m:.0f} m. Increase altitude_msl or safe_altitude."
+    if not mode3:
+        # Mode 2: single fixed altitude — check global terrain clearance up front
+        _, max_elev = terrain.get_min_max_elevations(dem_file)
+        clearance = altitude_msl.to("meter").magnitude - max_elev
+        if clearance < safe_altitude_m:
+            raise HyPlanValueError(
+                f"Minimum clearance {clearance:.0f} m is below safe_altitude "
+                f"{safe_altitude_m:.0f} m. Increase altitude_msl or safe_altitude."
+            )
+        logger.info(
+            f"Altitude {altitude_msl:.0f}, max terrain {max_elev:.0f} m, clearance {clearance:.0f} m."
         )
-    logger.info(
-        f"Altitude {altitude_msl:.0f}, max terrain {max_elev:.0f} m, clearance {clearance:.0f} m."
-    )
 
     center_line = flight_line.FlightLine.center_length_azimuth(
         lat=lat0, lon=lon0, length=box_length, az=azimuth,
         altitude_msl=altitude_msl,
     )
     edge_line = center_line.offset_across(ureg.Quantity(-box_width_m / 2, "meter"))
-    flight_level = altitude_to_flight_level(altitude_msl)
 
     lines          = []
     current_offset = 0.0
     line_index     = 0
 
     while current_offset <= box_width_m:
-        candidate  = edge_line.offset_across(ureg.Quantity(current_offset, "meter"))
+        candidate = edge_line.offset_across(ureg.Quantity(current_offset, "meter"))
+
+        if mode3:
+            # Mode 3: compute per-line altitude from mean nadir terrain + target AGL
+            elev_stats = terrain.terrain_elevation_along_track(candidate, dem_file)
+            line_alt_m = elev_stats["mean"] + target_agl_m
+            candidate.altitude_msl = ureg.Quantity(line_alt_m, "meter")
+            clearance = line_alt_m - elev_stats["max"]
+            if clearance < safe_altitude_m:
+                logger.warning(
+                    f"Line {line_index + start_numbering:02d}: clearance {clearance:.0f} m "
+                    f"is below safe_altitude {safe_altitude_m:.0f} m "
+                    f"(mean terrain {elev_stats['mean']:.0f} m, "
+                    f"max terrain {elev_stats['max']:.0f} m). "
+                    "Consider increasing target_agl or safe_altitude."
+                )
+            logger.info(
+                f"Line {line_index + start_numbering:02d}: mean terrain "
+                f"{elev_stats['mean']:.0f} m, altitude_msl {line_alt_m:.0f} m."
+            )
+
+        flight_level = altitude_to_flight_level(candidate.altitude_msl)
+
         swath_poly = generate_swath_polygon(candidate, instrument, dem_file=dem_file)
         widths     = calculate_swath_widths(swath_poly)
         min_swath  = widths["min_width"]
@@ -630,6 +673,7 @@ def box_around_center_terrain(
     safe_altitude: Quantity = ureg.Quantity(300, "meter"),
     polygon: Optional[Polygon] = None,
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
+    target_agl: Optional[Quantity] = None,
 ) -> List[flight_line.FlightLine]:
     """Create terrain-aware flight lines around an explicit center point.
 
@@ -645,7 +689,8 @@ def box_around_center_terrain(
     Args:
         instrument: Sensor with ``swath_width(altitude_agl)`` and
             ``swath_offset_angles()`` methods.
-        altitude_msl: Flight altitude above mean sea level.
+        altitude_msl: Flight altitude above mean sea level (Mode 2).
+            Used as a reference altitude for box geometry in Mode 3.
         lat0: Latitude of the box center in decimal degrees.
         lon0: Longitude of the box center in decimal degrees.
         azimuth: Orientation of the box in degrees from true north.
@@ -655,9 +700,13 @@ def box_around_center_terrain(
         start_numbering: Starting number for flight line naming.
         overlap: Percentage overlap between adjacent swaths (0–100).
         alternate_direction: Whether to alternate flight line directions.
-        safe_altitude: Minimum clearance above the highest terrain point.
+        safe_altitude: Minimum clearance above terrain (Mode 2: global;
+            Mode 3: per-line against local max terrain).
         polygon: Optional polygon to clip flight lines to.
         min_line_length: Minimum flight line length after clipping.
+        target_agl: Desired altitude above ground level for Mode 3.
+            When provided each flight line receives an individual
+            ``altitude_msl`` computed as ``mean nadir terrain + target_agl``.
 
     Returns:
         A list of FlightLine objects with terrain-aware spacing.
@@ -695,4 +744,5 @@ def box_around_center_terrain(
         clip_polygon=polygon,
         safe_altitude=safe_altitude,
         min_line_length=min_line_length,
+        target_agl=target_agl,
     )
