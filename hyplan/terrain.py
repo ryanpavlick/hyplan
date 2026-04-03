@@ -357,8 +357,7 @@ def ray_terrain_intersection(
     # extremely large ranges because the ray grazes along the ellipsoid
     # surface.  Cap the range at a flat-earth estimate with a generous
     # safety factor to keep the search window reasonable.
-    sin_tilt = np.sin(np.radians(tilt))
-    rng_flat = h0 / sin_tilt
+    rng_flat = h0 / cos_tilt
     rng_capped = np.minimum(rng_ell, rng_flat * 2.0)
 
     auto_dem = dem_file is None

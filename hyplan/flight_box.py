@@ -323,6 +323,185 @@ def box_around_polygon(
     )
 
 
+def box_around_polygon_terrain(
+    instrument,
+    altitude_msl: Quantity,
+    polygon: Polygon,
+    azimuth: Optional[float] = None,
+    box_name: str = "Line",
+    start_numbering: int = 1,
+    overlap: float = 20,
+    alternate_direction: bool = True,
+    clip_to_polygon: bool = True,
+    safe_altitude: Quantity = ureg.Quantity(300, "meter"),
+    min_line_length: Quantity = ureg.Quantity(200, "meter"),
+) -> List[flight_line.FlightLine]:
+    """Generate terrain-aware flight lines covering a polygon.
+
+    Works for both ``LineScanner`` and ``SidelookingRadar`` sensors.
+    The flight altitude MSL is provided explicitly by the caller.
+    Line spacing is computed by ray-terrain intersection at each
+    candidate line position, ensuring the requested overlap is
+    maintained even over variable terrain.
+
+    Unlike :func:`box_around_polygon`, which uses a flat-earth
+    ``swath_width()`` for line spacing, this function calls
+    :func:`~hyplan.swath.generate_swath_polygon` with a DEM at each
+    candidate line to determine the actual terrain-projected swath
+    width before stepping to the next line.
+
+    Unlike :func:`box_around_center_terrain`, this function accepts a
+    polygon boundary (instead of explicit box dimensions), works with
+    any sensor that implements ``swath_width()`` and
+    ``swath_offset_angles()``, and always uses a caller-supplied
+    altitude rather than deriving one from a target pixel size.
+
+    Args:
+        instrument: Sensor with ``swath_width(altitude_agl)`` and
+            ``swath_offset_angles()`` methods. Accepts both
+            ``LineScanner`` and ``SidelookingRadar``.
+        altitude_msl: Flight altitude above mean sea level.
+        polygon: Study-area boundary polygon (WGS84 lon/lat).
+        azimuth: Flight-line orientation in degrees from true north.
+            If ``None``, uses the minimum rotated rectangle of the
+            polygon.
+        box_name: Prefix for flight-line site names.
+        start_numbering: First line number used in site names.
+        overlap: Swath overlap percentage between adjacent lines (0–100).
+        alternate_direction: Reverse every other line direction.
+        clip_to_polygon: Clip lines to the polygon boundary.
+        safe_altitude: Minimum required clearance above the highest
+            terrain point in the survey area.
+        min_line_length: Drop clipped segments shorter than this value.
+
+    Returns:
+        List of :class:`~hyplan.flight_line.FlightLine` objects with
+        terrain-aware spacing.
+
+    Raises:
+        HyPlanValueError: For invalid inputs or if ``altitude_msl``
+            does not provide sufficient clearance above terrain.
+    """
+    if not isinstance(polygon, Polygon):
+        raise HyPlanValueError("polygon must be a Shapely Polygon.")
+    if not (
+        hasattr(instrument, "swath_width") and callable(instrument.swath_width)
+        and hasattr(instrument, "swath_offset_angles") and callable(instrument.swath_offset_angles)
+    ):
+        raise HyPlanValueError(
+            "instrument must implement swath_width(altitude_agl) and swath_offset_angles()."
+        )
+    _validate_inputs(altitude=altitude_msl, overlap=overlap)
+
+    # Compute bounding rectangle from polygon
+    try:
+        if azimuth is None:
+            logger.info("Using minimum rotated rectangle for polygon bounding box.")
+            bounding_box = minimum_rotated_rectangle(polygon)
+        else:
+            logger.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
+            bounding_box = rotated_rectangle(polygon, azimuth)
+    except Exception as e:
+        raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
+
+    lon0, lat0 = bounding_box.centroid.coords[0]
+    lons, lats = list(bounding_box.exterior.coords.xy)
+
+    length1, az1 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[1], lons[1])
+    length2, az2 = pymap3d.vincenty.vdist(lats[1], lons[1], lats[2], lons[2])
+
+    if azimuth is None:
+        if length1 >= length2:
+            azimuth = wrap_to_180(az1)
+            box_length = float(length1) * ureg.meter
+            box_width  = float(length2) * ureg.meter
+        else:
+            azimuth = wrap_to_180(az2)
+            box_length = float(length2) * ureg.meter
+            box_width  = float(length1) * ureg.meter
+    else:
+        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
+        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
+        if az1_diff <= az2_diff:
+            box_length = float(length1) * ureg.meter
+            box_width  = float(length2) * ureg.meter
+        else:
+            box_length = float(length2) * ureg.meter
+            box_width  = float(length1) * ureg.meter
+
+    logger.info(
+        f"Bounding box: center=({lat0:.6f}, {lon0:.6f}), az={azimuth:.2f}°, "
+        f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."
+    )
+
+    box_length_m      = box_length.to("meter").magnitude
+    box_width_m       = box_width.to("meter").magnitude
+    safe_altitude_m   = safe_altitude.to("meter").magnitude
+    min_line_length_m = min_line_length.to("meter").magnitude
+
+    dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
+
+    _, max_elev = terrain.get_min_max_elevations(dem_file)
+    clearance = altitude_msl.to("meter").magnitude - max_elev
+    if clearance < safe_altitude_m:
+        raise HyPlanValueError(
+            f"Minimum clearance {clearance:.0f} m is below safe_altitude "
+            f"{safe_altitude_m:.0f} m. Increase altitude_msl or safe_altitude."
+        )
+    logger.info(
+        f"Altitude {altitude_msl:.0f}, max terrain {max_elev:.0f} m, clearance {clearance:.0f} m."
+    )
+
+    center_line = flight_line.FlightLine.center_length_azimuth(
+        lat=lat0, lon=lon0, length=box_length, az=azimuth,
+        altitude_msl=altitude_msl,
+    )
+    edge_line = center_line.offset_across(ureg.Quantity(-box_width_m / 2, "meter"))
+    flight_level = altitude_to_flight_level(altitude_msl)
+
+    lines          = []
+    current_offset = 0.0
+    line_index     = 0
+
+    while current_offset <= box_width_m:
+        candidate  = edge_line.offset_across(ureg.Quantity(current_offset, "meter"))
+        swath_poly = generate_swath_polygon(candidate, instrument, dem_file=dem_file)
+        widths     = calculate_swath_widths(swath_poly)
+        min_swath  = widths["min_width"]
+
+        step = min_swath * (1.0 - overlap / 100.0)
+        if step <= 0:
+            logger.warning(
+                f"Non-positive swath step ({step:.1f} m) at offset {current_offset:.0f} m. "
+                "Terrain may be too close to aircraft. Stopping walk."
+            )
+            break
+
+        if clip_to_polygon:
+            clipped = candidate.clip_to_polygon(polygon)
+            output_segments = (
+                [seg for seg in clipped
+                 if seg.length.to("meter").magnitude >= min_line_length_m]
+                if clipped else []
+            )
+        else:
+            output_segments = [candidate]
+
+        for seg in output_segments:
+            seg.site_name = f"{box_name}_L{line_index + start_numbering:02d}_{flight_level}"
+            if alternate_direction and line_index % 2 == 1:
+                seg = seg.reverse()
+            lines.append(seg)
+
+        current_offset += step
+        line_index += 1
+
+    if not lines:
+        logger.warning("No flight lines generated. Check polygon coverage and altitude.")
+
+    return lines
+
+
 def _generate_box_dem(
     lat0: float,
     lon0: float,

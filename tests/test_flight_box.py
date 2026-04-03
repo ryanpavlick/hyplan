@@ -4,7 +4,9 @@ import pytest
 from shapely.geometry import Polygon
 from hyplan.units import ureg
 from hyplan.sensors import AVIRIS3
-from hyplan.flight_box import box_around_center_line, box_around_polygon
+from hyplan.radar import UAVSAR_Lband
+from hyplan.exceptions import HyPlanValueError
+from hyplan.flight_box import box_around_center_line, box_around_polygon, box_around_polygon_terrain
 
 
 class TestBoxAroundCenterLine:
@@ -183,3 +185,56 @@ class TestBoxAroundPolygon:
         assert line_len_km > 30, f"Line length {line_len_km:.1f} km is too short for E-W polygon"
         # Should have few cross-track lines (~12 km / ~3.5 km spacing)
         assert len(lines) < 10, f"Too many lines ({len(lines)}) for a 12 km cross-track extent"
+
+
+class TestBoxAroundPolygonTerrain:
+    # Small, flat polygon over the Mojave Desert (low elevation, minimal terrain variation)
+    poly = Polygon([
+        (-116.1, 34.8), (-115.9, 34.8),
+        (-115.9, 35.0), (-116.1, 35.0),
+    ])
+    altitude = ureg.Quantity(6000, "meter")
+
+    def test_linescanner(self):
+        sensor = AVIRIS3()
+        lines = box_around_polygon_terrain(
+            instrument=sensor,
+            altitude_msl=self.altitude,
+            polygon=self.poly,
+            azimuth=0.0,
+            box_name="TerrainLS",
+            overlap=20,
+        )
+        assert len(lines) > 0
+        assert all("TerrainLS" in fl.site_name for fl in lines)
+
+    def test_sar(self):
+        lband = UAVSAR_Lband()
+        lines = box_around_polygon_terrain(
+            instrument=lband,
+            altitude_msl=self.altitude,
+            polygon=self.poly,
+            azimuth=0.0,
+            box_name="TerrainSAR",
+            overlap=10,
+        )
+        assert len(lines) > 0
+        assert all("TerrainSAR" in fl.site_name for fl in lines)
+
+    def test_invalid_sensor(self):
+        with pytest.raises(HyPlanValueError, match="swath_width"):
+            box_around_polygon_terrain(
+                instrument=object(),
+                altitude_msl=self.altitude,
+                polygon=self.poly,
+            )
+
+    def test_insufficient_clearance(self):
+        # Terrain in Mojave is ~600–900 m; 100 m MSL is below it
+        with pytest.raises(HyPlanValueError, match="clearance"):
+            box_around_polygon_terrain(
+                instrument=AVIRIS3(),
+                altitude_msl=ureg.Quantity(100, "meter"),
+                polygon=self.poly,
+                safe_altitude=ureg.Quantity(300, "meter"),
+            )
