@@ -35,7 +35,7 @@ from .units import ureg, convert_distance, convert_speed, altitude_to_flight_lev
 
 # Flight geometry
 from .flight_line import FlightLine
-from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain
+from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size
 
 # Aircraft
 from .aircraft import (
@@ -129,7 +129,7 @@ __all__ = [
     # Units
     "ureg", "convert_distance", "convert_speed", "altitude_to_flight_level",
     # Flight geometry
-    "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain",
+    "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
     "Aircraft",
     "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_C20A", "NASA_P3",

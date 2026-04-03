@@ -3,8 +3,12 @@
 Provides functions to lay out parallel, evenly-spaced flight lines over a
 study area.  Lines can be generated from a center line and swath overlap
 (:func:`box_around_center_line`), from an arbitrary polygon boundary
-(:func:`box_around_polygon`), or with terrain-aware altitude adjustments
-(:func:`box_around_center_terrain`).
+(:func:`box_around_polygon`), or with terrain-aware spacing
+(:func:`box_around_polygon_terrain`, :func:`box_around_center_terrain`).
+All planning functions accept any sensor that implements ``swath_width()``
+and ``swath_offset_angles()`` — including ``LineScanner``, ``SidelookingRadar``,
+and ``LVIS``.  The utility :func:`altitude_msl_for_pixel_size` is provided
+for ``LineScanner`` users who need to derive flight altitude from a target GSD.
 """
 
 import numpy as np
@@ -333,6 +337,7 @@ def box_around_polygon_terrain(
     overlap: float = 20,
     alternate_direction: bool = True,
     clip_to_polygon: bool = True,
+    clip_polygon: Optional[Polygon] = None,
     safe_altitude: Quantity = ureg.Quantity(300, "meter"),
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
 ) -> List[flight_line.FlightLine]:
@@ -370,6 +375,9 @@ def box_around_polygon_terrain(
         overlap: Swath overlap percentage between adjacent lines (0–100).
         alternate_direction: Reverse every other line direction.
         clip_to_polygon: Clip lines to the polygon boundary.
+        clip_polygon: If provided, clip lines to this polygon instead of
+            ``polygon``. Useful when the bounding box and the clip boundary
+            differ (e.g. when delegating from :func:`box_around_center_terrain`).
         safe_altitude: Minimum required clearance above the highest
             terrain point in the survey area.
         min_line_length: Drop clipped segments shorter than this value.
@@ -477,8 +485,9 @@ def box_around_polygon_terrain(
             )
             break
 
+        effective_clip = clip_polygon if clip_polygon is not None else polygon
         if clip_to_polygon:
-            clipped = candidate.clip_to_polygon(polygon)
+            clipped = candidate.clip_to_polygon(effective_clip)
             output_segments = (
                 [seg for seg in clipped
                  if seg.length.to("meter").magnitude >= min_line_length_m]
@@ -545,21 +554,58 @@ def _generate_box_dem(
     )
 
 
-def _compute_altitude_msl(
+def _rectangle_polygon(
+    lat0: float,
+    lon0: float,
+    azimuth: float,
+    box_length_m: float,
+    box_width_m: float,
+) -> Polygon:
+    """Build a Shapely Polygon for a georeferenced rectangle.
+
+    Args:
+        lat0: Center latitude in decimal degrees.
+        lon0: Center longitude in decimal degrees.
+        azimuth: Box orientation in degrees from true north.
+        box_length_m: Along-track length in meters.
+        box_width_m: Across-track width in meters.
+
+    Returns:
+        A Shapely Polygon with corners in WGS84 lon/lat.
+    """
+    half_len = box_length_m / 2
+    half_wid = box_width_m / 2
+
+    def _corner(along_az, across_az):
+        lat, lon = pymap3d.vincenty.vreckon(lat0, lon0, half_len, along_az)
+        lat, lon = pymap3d.vincenty.vreckon(float(lat), float(lon), half_wid, across_az)
+        return (wrap_to_180(float(lon)), float(lat))
+
+    return Polygon([
+        _corner(azimuth,       azimuth + 90),
+        _corner(azimuth,       azimuth - 90),
+        _corner(azimuth + 180, azimuth - 90),
+        _corner(azimuth + 180, azimuth + 90),
+    ])
+
+
+def altitude_msl_for_pixel_size(
     instrument: LineScanner,
     pixel_size: Quantity,
     dem_file: str,
 ) -> Quantity:
-    """Compute the MSL altitude that achieves the desired pixel size over terrain.
+    """Compute the MSL altitude for a ``LineScanner`` to achieve a target pixel size.
 
-    Sets altitude so the nadir GSD equals ``pixel_size`` at the lowest
-    terrain point in the DEM, guaranteeing the pixel size requirement
-    everywhere in the box.
+    Sets altitude so the nadir GSD equals ``pixel_size`` at the lowest terrain
+    point in the DEM, guaranteeing the pixel size requirement is met everywhere
+    in the survey area.  Use this to compute ``altitude_msl`` before calling
+    :func:`box_around_center_terrain` or :func:`box_around_polygon_terrain`.
 
     Args:
-        instrument: A LineScanner with ``altitude_agl_for_ground_sample_distance``.
-        pixel_size: Desired ground sample distance.
-        dem_file: Path to the DEM file covering the survey area.
+        instrument: A ``LineScanner`` with ``altitude_agl_for_ground_sample_distance``.
+        pixel_size: Desired nadir ground sample distance.
+        dem_file: Path to a DEM file covering the survey area (see
+            :func:`hyplan.terrain.generate_demfile`).
 
     Returns:
         Flight altitude MSL as a Quantity.
@@ -570,8 +616,8 @@ def _compute_altitude_msl(
 
 
 def box_around_center_terrain(
-    instrument: LineScanner,
-    pixel_size: Quantity,
+    instrument,
+    altitude_msl: Quantity,
     lat0: float,
     lon0: float,
     azimuth: float,
@@ -585,19 +631,21 @@ def box_around_center_terrain(
     polygon: Optional[Polygon] = None,
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
 ) -> List[flight_line.FlightLine]:
-    """Create flight lines around a center point with terrain-aware spacing.
+    """Create terrain-aware flight lines around an explicit center point.
 
-    Unlike ``box_around_center_line``, which uses a constant swath width,
-    this function uses ray-terrain intersection to compute the actual swath
-    width at each line position. Lines are spaced so that the minimum
-    terrain-aware swath width guarantees the requested overlap.
+    Constructs a rectangular survey box from the center coordinates and
+    dimensions, then delegates to :func:`box_around_polygon_terrain` for
+    terrain-aware line placement.  Works with any sensor that implements
+    ``swath_width()`` and ``swath_offset_angles()`` — including
+    ``LineScanner``, ``SidelookingRadar``, and ``LVIS``.
 
-    The flight altitude (MSL) is chosen so the nadir pixel size equals
-    ``pixel_size`` at the lowest terrain point in the survey box.
+    ``LineScanner`` users who need altitude derived from a target pixel size
+    should call :func:`altitude_msl_for_pixel_size` first.
 
     Args:
-        instrument: A LineScanner sensor object.
-        pixel_size: Desired nadir ground sample distance (e.g. ``ureg.Quantity(3, "meter")``).
+        instrument: Sensor with ``swath_width(altitude_agl)`` and
+            ``swath_offset_angles()`` methods.
+        altitude_msl: Flight altitude above mean sea level.
         lat0: Latitude of the box center in decimal degrees.
         lon0: Longitude of the box center in decimal degrees.
         azimuth: Orientation of the box in degrees from true north.
@@ -607,18 +655,19 @@ def box_around_center_terrain(
         start_numbering: Starting number for flight line naming.
         overlap: Percentage overlap between adjacent swaths (0–100).
         alternate_direction: Whether to alternate flight line directions.
-        safe_altitude: Minimum clearance above ground level.
+        safe_altitude: Minimum clearance above the highest terrain point.
         polygon: Optional polygon to clip flight lines to.
         min_line_length: Minimum flight line length after clipping.
 
     Returns:
-        A list of FlightLine objects with terrain-adjusted spacing.
+        A list of FlightLine objects with terrain-aware spacing.
 
     Raises:
-        HyPlanValueError: If inputs fail validation or terrain is too high
-            for the requested safe altitude.
+        HyPlanValueError: If inputs fail validation or altitude clearance
+            is insufficient.
     """
     _validate_inputs(
+        altitude=altitude_msl,
         box_length=box_length,
         box_width=box_width,
         overlap=overlap,
@@ -627,89 +676,23 @@ def box_around_center_terrain(
     )
     azimuth = wrap_to_180(azimuth)
 
-    if not isinstance(instrument, LineScanner):
-        raise HyPlanValueError("instrument must be a LineScanner instance.")
-
-    box_length_m = box_length.to("meter").magnitude
-    box_width_m = box_width.to("meter").magnitude
-    safe_altitude_m = safe_altitude.to("meter").magnitude
-    min_line_length_m = min_line_length.to("meter").magnitude
-
-    # 1. Generate DEM covering the survey area
-    dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
-
-    # 2. Compute altitude MSL for desired pixel size over terrain
-    altitude_msl = _compute_altitude_msl(instrument, pixel_size, dem_file)
-
-    # Check safe altitude against highest terrain
-    _, max_elev = terrain.get_min_max_elevations(dem_file)
-    clearance = altitude_msl.to("meter").magnitude - max_elev
-    if clearance < safe_altitude_m:
-        raise HyPlanValueError(
-            f"Minimum clearance {clearance:.0f} m is below the safe altitude "
-            f"of {safe_altitude_m:.0f} m. Increase pixel_size or safe_altitude."
-        )
-
-    logger.info(f"Terrain-adjusted altitude: {altitude_msl:.0f}")
-
-    # 3. Create the center line and left-edge reference line
-    center_line = flight_line.FlightLine.center_length_azimuth(
-        lat=lat0, lon=lon0, length=box_length, az=azimuth,
-        altitude_msl=altitude_msl,
+    rect = _rectangle_polygon(
+        lat0, lon0, azimuth,
+        box_length.to("meter").magnitude,
+        box_width.to("meter").magnitude,
     )
-    edge_line = center_line.offset_across(ureg.Quantity(-box_width_m / 2, "meter"))
 
-    flight_level = altitude_to_flight_level(altitude_msl)
-
-    # 4. Walk across the box, placing lines with terrain-aware spacing
-    lines = []
-    current_offset = 0.0
-    line_index = 0
-
-    while current_offset <= box_width_m:
-        candidate = edge_line.offset_across(ureg.Quantity(current_offset, "meter"))
-
-        # Compute terrain-aware swath width via ray-terrain intersection
-        swath_poly = generate_swath_polygon(
-            candidate, instrument, dem_file=dem_file
-        )
-        widths = calculate_swath_widths(swath_poly)
-        min_swath = widths["min_width"]
-
-        step = min_swath * (1.0 - overlap / 100.0)
-        if step <= 0:
-            logger.warning(
-                f"Swath step is non-positive ({step:.1f} m) at offset "
-                f"{current_offset:.0f} m. Terrain may be too close to aircraft."
-            )
-            break
-
-        # Clip to polygon if provided
-        if polygon:
-            clipped = candidate.clip_to_polygon(polygon)
-            if clipped:
-                output_segments = [
-                    seg for seg in clipped
-                    if seg.length.to("meter").magnitude >= min_line_length_m
-                ]
-            else:
-                output_segments = []
-        else:
-            output_segments = [candidate]
-
-        # Name and collect output lines
-        for seg in output_segments:
-            seg.site_name = (
-                f"{box_name}_L{line_index + start_numbering:02d}_{flight_level}"
-            )
-            if alternate_direction and line_index % 2 == 1:
-                seg = seg.reverse()
-            lines.append(seg)
-
-        current_offset += step
-        line_index += 1
-
-    if not lines:
-        logger.warning("No flight lines were generated.")
-
-    return lines
+    return box_around_polygon_terrain(
+        instrument=instrument,
+        altitude_msl=altitude_msl,
+        polygon=rect,
+        azimuth=azimuth,
+        box_name=box_name,
+        start_numbering=start_numbering,
+        overlap=overlap,
+        alternate_direction=alternate_direction,
+        clip_to_polygon=polygon is not None,
+        clip_polygon=polygon,
+        safe_altitude=safe_altitude,
+        min_line_length=min_line_length,
+    )
