@@ -22,9 +22,9 @@ from pint import Quantity
 from shapely.geometry import Polygon, shape
 from shapely import STRtree
 
-from .units import ureg
-from .sensors import Sensor
-from .exceptions import HyPlanValueError
+from ..units import ureg
+from ._base import Sensor
+from ..exceptions import HyPlanValueError
 
 __all__ = [
     "SidelookingRadar",
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 _DEFAULT_EXCLUSION_ZONES_PATH = os.path.join(
-    os.path.dirname(__file__), "data", "faa_radar_exclusion_zones.geojson"
+    os.path.dirname(os.path.dirname(__file__)), "data", "faa_radar_exclusion_zones.geojson"
 )
 
 

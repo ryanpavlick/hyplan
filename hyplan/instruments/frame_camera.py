@@ -13,10 +13,10 @@ from pint import Quantity
 import numpy as np
 from shapely.geometry import Polygon as ShapelyPolygon
 
-from .terrain import ray_terrain_intersection
-from .units import ureg
-from .sensors import Sensor
-from .exceptions import HyPlanTypeError, HyPlanValueError
+from ..terrain import ray_terrain_intersection
+from ..units import ureg
+from ._base import Sensor
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "FrameCamera",
@@ -443,7 +443,6 @@ class FrameCamera(Sensor):
             raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
         return value.to(expected_unit)
 
-
     @staticmethod
     def _corner_rotation(tilt_angle, tilt_direction, cross_track_offset):
         """Build the rotation matrix for camera corner ray projection."""
@@ -636,6 +635,7 @@ class FrameCamera(Sensor):
             corners.append((float(clat[0]), float(clon[0]), float(calt[0])))
 
         return corners
+
 
 class MultiCameraRig(Sensor):
     """A rig of multiple :class:`FrameCamera` instances with known orientations.

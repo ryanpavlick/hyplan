@@ -1,10 +1,10 @@
 """Imaging spectrometer and line-scanner sensor models.
 
-Defines the :class:`Sensor` base class and :class:`LineScanner` subclass for
-computing ground sample distance (GSD), swath width, and critical speed from
-sensor optics, altitude, and aircraft parameters.  Pre-configured sensors
-include NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER) and
-others.  Use :func:`create_sensor` for name-based construction.
+Defines the :class:`LineScanner` subclass for computing ground sample distance
+(GSD), swath width, and critical speed from sensor optics, altitude, and
+aircraft parameters.  Pre-configured sensors include NASA instruments
+(AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER) and others.  Use
+:func:`create_sensor` for name-based construction.
 """
 
 from typing import Dict, Type
@@ -12,11 +12,11 @@ from typing import Dict, Type
 import numpy as np
 from pint import Quantity
 
-from .exceptions import HyPlanTypeError, HyPlanValueError
-from .units import ureg
+from ..exceptions import HyPlanTypeError, HyPlanValueError
+from ..units import ureg
+from ._base import Sensor
 
 __all__ = [
-    "Sensor",
     "LineScanner",
     "AVIRISClassic",
     "AVIRISNextGen",
@@ -36,36 +36,6 @@ __all__ = [
     "SENSOR_REGISTRY",
 ]
 
-
-class Sensor:
-    """Base class to represent a generic sensor.
-
-    Args:
-        name (str): Human-readable name identifying the sensor.
-    """
-    def __init__(self, name: str):
-        self.name = name
-
-    def __str__(self) -> str:
-        return self.name
-
-    def _validate_quantity(self, value: Quantity, expected_unit: Quantity) -> Quantity:
-        """
-        Validate that a value is a pint Quantity and convert it to the expected unit.
-
-        Args:
-            value (Quantity): The value to validate.
-            expected_unit (Quantity): The target unit to convert to.
-
-        Returns:
-            Quantity: The value converted to the expected unit.
-
-        Raises:
-            TypeError: If value is not a pint Quantity.
-        """
-        if not isinstance(value, Quantity):
-            raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
-        return value.to(expected_unit)
 
 class LineScanner(Sensor):
     """
@@ -225,8 +195,6 @@ class LineScanner(Sensor):
         return aircraft_speed * self.frame_period / along_track_sampling
 
 
-
-
 # ── Sensor Specifications ─────────────────────────────────────────────────────
 # Each entry maps class_name -> (display_name, fov_deg, across_track_pixels, frame_rate_hz)
 
@@ -282,38 +250,6 @@ GCAS_VNIR: type = globals()["GCAS_VNIR"]
 eMAS: type = globals()["eMAS"]
 PICARD: type = globals()["PICARD"]
 
-def create_sensor(sensor_type: str) -> Sensor:
-    """
-    Factory function to create and return an instance of a sensor.
-
-    Args:
-        sensor_type (str): The name of the sensor class to instantiate.
-                           Must be one of the keys in SENSOR_REGISTRY.
-
-    Returns:
-        Sensor: An instance of the requested sensor type.
-
-    Raises:
-        ValueError: If the specified sensor_type is not found in SENSOR_REGISTRY.
-    """
-    # Lazy registration of sensors from other modules to avoid circular imports
-    if "LVIS" not in SENSOR_REGISTRY:
-        from .lvis import LVIS
-        SENSOR_REGISTRY["LVIS"] = LVIS
-
-    if "UAVSAR_Lband" not in SENSOR_REGISTRY:
-        from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
-        SENSOR_REGISTRY["UAVSAR_Lband"] = UAVSAR_Lband
-        SENSOR_REGISTRY["UAVSAR L-band"] = UAVSAR_Lband
-        SENSOR_REGISTRY["UAVSAR_Pband"] = UAVSAR_Pband
-        SENSOR_REGISTRY["UAVSAR P-band"] = UAVSAR_Pband
-        SENSOR_REGISTRY["UAVSAR_Kaband"] = UAVSAR_Kaband
-        SENSOR_REGISTRY["GLISTIN-A"] = UAVSAR_Kaband
-
-    if sensor_type not in SENSOR_REGISTRY:
-        raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
-    return SENSOR_REGISTRY[sensor_type]()
-
 
 SENSOR_REGISTRY: Dict[str, Type[Sensor]] = {
     "AVIRISClassic": AVIRISClassic,
@@ -335,3 +271,36 @@ SENSOR_REGISTRY: Dict[str, Type[Sensor]] = {
     "eMAS": eMAS,
     "PICARD": PICARD,
 }
+
+
+def create_sensor(sensor_type: str) -> Sensor:
+    """
+    Factory function to create and return an instance of a sensor.
+
+    Args:
+        sensor_type (str): The name of the sensor class to instantiate.
+                           Must be one of the keys in SENSOR_REGISTRY.
+
+    Returns:
+        Sensor: An instance of the requested sensor type.
+
+    Raises:
+        HyPlanValueError: If the specified sensor_type is not found in SENSOR_REGISTRY.
+    """
+    from .lvis import LVIS
+    from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
+
+    _extra = {
+        "LVIS": LVIS,
+        "UAVSAR_Lband": UAVSAR_Lband,
+        "UAVSAR L-band": UAVSAR_Lband,
+        "UAVSAR_Pband": UAVSAR_Pband,
+        "UAVSAR P-band": UAVSAR_Pband,
+        "UAVSAR_Kaband": UAVSAR_Kaband,
+        "GLISTIN-A": UAVSAR_Kaband,
+    }
+    registry = {**SENSOR_REGISTRY, **_extra}
+
+    if sensor_type not in registry:
+        raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
+    return registry[sensor_type]()

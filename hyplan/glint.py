@@ -45,7 +45,7 @@ from sunposition import sunpos
 from .units import ureg
 from .exceptions import HyPlanValueError, HyPlanTypeError
 from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
-from .sensors import LineScanner
+from .instruments import LineScanner
 from .flight_line import FlightLine
 from .waypoint import Waypoint
 

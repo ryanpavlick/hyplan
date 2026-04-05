@@ -24,9 +24,9 @@ doi:10.1016/S0924-2716(99)00002-7
 import numpy as np
 from dataclasses import dataclass
 from pint import Quantity
-from .units import ureg
-from .sensors import Sensor
-from .exceptions import HyPlanTypeError, HyPlanValueError
+from ..units import ureg
+from ._base import Sensor
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "LVISLens",

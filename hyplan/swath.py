@@ -14,6 +14,7 @@ from shapely.geometry import Polygon
 import pymap3d.vincenty
 
 from .flight_line import FlightLine
+from .instruments import Sensor
 from .terrain import ray_terrain_intersection
 from .geometry import process_linestring
 
@@ -26,7 +27,7 @@ __all__ = [
 
 def generate_swath_polygon(
     flight_line: FlightLine,
-    sensor,
+    sensor: Sensor,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
     dem_file: Optional[str] = None,

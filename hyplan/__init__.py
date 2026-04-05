@@ -66,7 +66,7 @@ from .airports import (
 )
 
 # Sensors
-from .sensors import (
+from .instruments import (
     Sensor,
     LineScanner,
     AVIRISClassic,
@@ -85,10 +85,21 @@ from .sensors import (
     PICARD,
     SENSOR_REGISTRY,
     create_sensor,
+    FrameCamera,
+    MultiCameraRig,
+    LVISLens,
+    LVIS_LENS_NARROW,
+    LVIS_LENS_MEDIUM,
+    LVIS_LENS_WIDE,
+    LVIS_LENSES,
+    LVIS,
+    RadarExclusionConflict,
+    check_lband_radar_exclusions,
+    SidelookingRadar,
+    UAVSAR_Lband,
+    UAVSAR_Pband,
+    UAVSAR_Kaband,
 )
-from .frame_camera import FrameCamera, MultiCameraRig
-from .lvis import LVIS
-from .radar import SidelookingRadar
 
 # Waypoint and Dubins path planning
 from .waypoint import Waypoint
@@ -146,7 +157,10 @@ __all__ = [
     "GLiHT_VNIR", "GLiHT_Thermal", "GLiHT_SIF",
     "GCAS_UV_Vis", "GCAS_VNIR", "eMAS", "PICARD",
     "SENSOR_REGISTRY", "create_sensor",
-    "FrameCamera", "MultiCameraRig", "LVIS", "SidelookingRadar",
+    "FrameCamera", "MultiCameraRig",
+    "LVISLens", "LVIS_LENS_NARROW", "LVIS_LENS_MEDIUM", "LVIS_LENS_WIDE", "LVIS_LENSES", "LVIS",
+    "RadarExclusionConflict", "check_lband_radar_exclusions",
+    "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",
     # Dubins
     "Waypoint", "DubinsPath3D",
     # Swath

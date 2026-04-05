@@ -167,11 +167,12 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
    ┌──────────────────┐  ┌─────────────────┐  ┌─────────────────┐
    │   Instruments    │  │    Environment  │  │    Logistics    │
    ├──────────────────┤  ├─────────────────┤  ├─────────────────┤
-   │  sensors         │  │  sun            │  │  aircraft       │
-   │  frame_camera    │  │  glint          │  │  airports       │
-   │  lvis            │  │  terrain        │  │  satellites     │
-   │  radar           │  │  clouds         │  │  units          │
-   │  swath           │  │  geometry       │  │  plotting       │
+   │  instruments/    │  │  sun            │  │  aircraft       │
+   │   line_scanner   │  │  glint          │  │  airports       │
+   │   lvis           │  │  terrain        │  │  satellites     │
+   │   radar          │  │  clouds         │  │  units          │
+   │   frame_camera   │  │  geometry       │  │  plotting       │
+   │  swath           │  │                 │  │                 │
    └──────────────────┘  └─────────────────┘  ├─────────────────┤
                                               │  exports        │
                                               │  interactive    │
@@ -185,10 +186,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
 | `aircraft` | Aircraft performance models (14 pre-configured research aircraft) |
-| `sensors` | Sensor definitions (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.) |
-| `frame_camera` | Frame camera modeling with ground footprint calculations |
-| `lvis` | LVIS full-waveform scanning lidar sensor model |
-| `radar` | Side-looking SAR sensor models (UAVSAR L/P/Ka-band) |
+| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
 | `glint` | Solar glint angle prediction for water observations |
 | `swath` | Sensor swath coverage with terrain integration |
 | `terrain` | DEM data acquisition and ray-terrain intersection |
