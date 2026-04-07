@@ -311,8 +311,8 @@ class Aircraft:
             # where alpha = delta_roc / C, h_eq = C * roc_sl / delta_roc
             alpha = delta_roc / C
             h_eq = C * roc_sl / delta_roc  # theoretical equilibrium altitude
-            roc_h0 = roc_ceil + delta_roc * (1 - h0 / C)
-            roc_h1 = roc_ceil + delta_roc * (1 - end_altitude.magnitude / C)
+            roc_h0 = self.rate_of_climb(start_altitude).to(ureg.feet / ureg.minute).magnitude
+            roc_h1 = self.rate_of_climb(end_altitude).to(ureg.feet / ureg.minute).magnitude
             total_time = (1 / alpha) * np.log(roc_h0 / roc_h1)
 
             times = np.linspace(0, total_time, n_points)

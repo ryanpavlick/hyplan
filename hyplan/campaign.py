@@ -461,6 +461,11 @@ def _flight_line_from_geojson(feature: dict) -> FlightLine:
     lon2, lat2 = coords[-1]
     alt_m = props.get("altitude_msl")
 
+    if lat1 == lat2 and lon1 == lon2:
+        raise HyPlanValueError(
+            f"Degenerate flight line in GeoJSON: start == end ({lat1}, {lon1})"
+        )
+
     import pymap3d.vincenty
     _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
     _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)

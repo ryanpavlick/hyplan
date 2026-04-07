@@ -139,12 +139,16 @@ def build_graph(
     G = nx.DiGraph()
 
     # Assign unique keys to flight lines
-    line_keys = {}
+    line_keys: dict = {}
+    seen_keys: set = set()
+    collision_counter: dict = {}
     for fl in flight_lines:
-        key = fl.site_name or f"line_{id(fl)}"
-        # Handle duplicate names
-        if key in line_keys.values():
-            key = f"{key}_{id(fl)}"
+        base = fl.site_name or f"line_{len(line_keys)}"
+        key = base
+        while key in seen_keys:
+            collision_counter[base] = collision_counter.get(base, 0) + 1
+            key = f"{base}_{collision_counter[base]}"
+        seen_keys.add(key)
         line_keys[fl] = key
 
     # --- Add airport nodes ---

@@ -408,7 +408,11 @@ class OpenAIPClient:
             for lon in lon_points:
                 page_items = self._fetch_all_pages(lat, lon, query_dist, country)
                 for it in page_items:
-                    item_id = it.get("_id") or it.get("id") or id(it)
+                    item_id = it.get("_id") or it.get("id")
+                    if item_id is None:
+                        item_id = hashlib.sha1(
+                            json.dumps(it, sort_keys=True, default=str).encode()
+                        ).hexdigest()
                     if item_id not in seen_ids:
                         seen_ids.add(item_id)
                         items.append(it)

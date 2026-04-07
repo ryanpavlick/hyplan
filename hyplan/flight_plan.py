@@ -19,6 +19,7 @@ from .airports import Airport
 from .waypoint import Waypoint, is_waypoint
 from .flight_line import FlightLine
 from .geometry import process_linestring
+from .exceptions import HyPlanValueError
 
 __all__ = [
     "compute_flight_plan",
@@ -121,7 +122,11 @@ def compute_flight_plan(
         if isinstance(segment, FlightLine):
             track_geometry = segment.track()
             latitudes, longitudes, _, distances = process_linestring(track_geometry)
-            segment_distance = distances[-1] if len(distances) > 0 else 0
+            if len(distances) == 0:
+                raise HyPlanValueError(
+                    f"Flight line {segment.site_name} produced an empty track"
+                )
+            segment_distance = distances[-1]
 
             # Calculate time_to_segment using the computed segment_distance.
             time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude_msl)).to(ureg.minute).magnitude
