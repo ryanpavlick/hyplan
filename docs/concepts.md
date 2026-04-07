@@ -20,22 +20,22 @@ distinction matters.
 
 ## Sensor hierarchy
 
-All sensors derive from the {class}`~hyplan.sensors.Sensor` base class:
+All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
 
-- {class}`~hyplan.sensors.LineScanner` — Whiskbroom/pushbroom imagers
+- {class}`~hyplan.instruments.LineScanner` — Whiskbroom/pushbroom imagers
   (AVIRIS-3, HyTES, PRISM, MASTER, G-LiHT, GCAS, eMAS, PICARD).
   Defined by FOV, across-track pixels, and frame rate.
 
-- {class}`~hyplan.radar.SidelookingRadar` — Side-looking SAR instruments
+- {class}`~hyplan.instruments.SidelookingRadar` — Side-looking SAR instruments
   (UAVSAR L-band, P-band, Ka-band). Defined by frequency, bandwidth,
   near/far range angles, and look direction.
 
-- {class}`~hyplan.lvis.LVIS` — Full-waveform scanning lidar. The scanner
+- {class}`~hyplan.instruments.LVIS` — Full-waveform scanning lidar. The scanner
   geometry defines a fixed maximum swath ($\text{swath} = 0.2 \times
   \text{altitude}$), but the effective swath depends on laser repetition
   rate, lens divergence (footprint size), and aircraft speed.
 
-- {class}`~hyplan.frame_camera.FrameCamera` — Frame cameras defined by
+- {class}`~hyplan.instruments.FrameCamera` — Frame cameras defined by
   sensor dimensions, focal length, resolution, and frame rate.
 
 All sensor types provide `half_angle` and `swath_width(altitude_agl)` so they

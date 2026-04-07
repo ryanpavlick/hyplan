@@ -3,8 +3,7 @@
 import pytest
 from shapely.geometry import Polygon
 from hyplan.units import ureg
-from hyplan.sensors import AVIRIS3
-from hyplan.radar import UAVSAR_Lband
+from hyplan.instruments import AVIRIS3, UAVSAR_Lband
 from hyplan.exceptions import HyPlanValueError
 from hyplan.flight_box import box_around_center_line, box_around_polygon, box_around_polygon_terrain
 

@@ -1,9 +1,9 @@
-"""Comprehensive tests for hyplan.lvis module."""
+"""Comprehensive tests for the LVIS instrument model."""
 
 import pytest
 import numpy as np
 from hyplan.units import ureg
-from hyplan.lvis import (
+from hyplan.instruments import (
     LVIS,
     LVISLens,
     LVIS_LENS_NARROW,

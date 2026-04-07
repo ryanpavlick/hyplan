@@ -1,9 +1,9 @@
-"""Comprehensive tests for hyplan.radar module."""
+"""Comprehensive tests for the SAR radar instrument models."""
 
 import pytest
 import numpy as np
 from hyplan.units import ureg
-from hyplan.radar import SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
+from hyplan.instruments import SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
 
 
 @pytest.fixture
@@ -212,7 +212,7 @@ class TestSwathOffsetAngles:
         assert far == -lband.near_range_angle
 
     def test_left_right_differ(self):
-        from hyplan.radar import SidelookingRadar
+        from hyplan.instruments import SidelookingRadar
         left = SidelookingRadar(
             name="test", frequency=1.26 * ureg.GHz, bandwidth=80 * ureg.MHz,
             near_range_angle=25.0, far_range_angle=65.0,

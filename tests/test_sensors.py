@@ -1,8 +1,8 @@
-"""Tests for hyplan.sensors, hyplan.frame_camera, hyplan.lvis, hyplan.radar."""
+"""Tests for the hyplan.instruments subpackage."""
 
 import pytest
 from hyplan.units import ureg
-from hyplan.sensors import (
+from hyplan.instruments import (
     AVIRIS3,
     AVIRISNextGen,
     HyTES,
@@ -10,10 +10,15 @@ from hyplan.sensors import (
     MASTER,
     SENSOR_REGISTRY,
     create_sensor,
+    FrameCamera,
+    LVIS,
+    LVISLens,
+    LVIS_LENS_NARROW,
+    LVIS_LENS_WIDE,
+    UAVSAR_Lband,
+    UAVSAR_Pband,
+    SidelookingRadar,
 )
-from hyplan.frame_camera import FrameCamera
-from hyplan.lvis import LVIS, LVISLens, LVIS_LENS_NARROW, LVIS_LENS_WIDE
-from hyplan.radar import UAVSAR_Lband, UAVSAR_Pband, SidelookingRadar
 
 
 class TestLineScanner:
@@ -66,7 +71,7 @@ class TestSwathOffsetAngles:
 
     def test_tilted_starboard(self):
         """Starboard tilt shifts both angles positive."""
-        from hyplan.sensors import LineScanner
+        from hyplan.instruments import LineScanner
         s = LineScanner("Tilted", fov=30.0, across_track_pixels=600,
                         frame_rate=100.0 * ureg.Hz, cross_track_tilt=10.0)
         port, starboard = s.swath_offset_angles()
@@ -75,7 +80,7 @@ class TestSwathOffsetAngles:
 
     def test_tilted_port(self):
         """Port tilt shifts both angles negative."""
-        from hyplan.sensors import LineScanner
+        from hyplan.instruments import LineScanner
         s = LineScanner("Tilted", fov=30.0, across_track_pixels=600,
                         frame_rate=100.0 * ureg.Hz, cross_track_tilt=-10.0)
         port, starboard = s.swath_offset_angles()
@@ -92,7 +97,7 @@ class TestSwathOffsetAngles:
 
     def test_swath_width_with_tilt(self):
         """Tilted sensor has different (wider) swath than nadir."""
-        from hyplan.sensors import LineScanner
+        from hyplan.instruments import LineScanner
         import numpy as np
         s_nadir = LineScanner("N", fov=30.0, across_track_pixels=600,
                               frame_rate=100.0 * ureg.Hz, cross_track_tilt=0.0)
@@ -144,7 +149,7 @@ class TestSensorRegistry:
         assert isinstance(s, UAVSAR_Lband)
 
     def test_create_glistin(self):
-        from hyplan.radar import UAVSAR_Kaband
+        from hyplan.instruments import UAVSAR_Kaband
         s = create_sensor("GLISTIN-A")
         assert isinstance(s, UAVSAR_Kaband)
 

@@ -5,7 +5,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from hyplan.units import ureg
-from hyplan.sensors import AVIRIS3
+from hyplan.instruments import AVIRIS3
 from hyplan.flight_line import FlightLine
 from hyplan.swath import generate_swath_polygon, calculate_swath_widths, export_polygon_to_kml
 
@@ -55,7 +55,7 @@ class TestCalculateSwathWidths:
 
 class TestRadarSwathPolygon:
     def test_radar_polygon_is_valid(self, sample_flight_line):
-        from hyplan.radar import UAVSAR_Lband
+        from hyplan.instruments import UAVSAR_Lband
         radar = UAVSAR_Lband()
         poly = generate_swath_polygon(sample_flight_line, radar)
         assert poly is not None
@@ -64,7 +64,7 @@ class TestRadarSwathPolygon:
 
     def test_radar_swath_one_sided(self):
         """Left-looking radar swath should be entirely to the left of the flight track."""
-        from hyplan.radar import UAVSAR_Lband
+        from hyplan.instruments import UAVSAR_Lband
         radar = UAVSAR_Lband()
         # Northward flight line at 12,500 m (typical UAVSAR altitude)
         fl = FlightLine.start_length_azimuth(
@@ -83,7 +83,7 @@ class TestRadarSwathPolygon:
 
     def test_tilted_scanner_shifted(self):
         """A starboard-tilted scanner should have swath centroid to the right of track."""
-        from hyplan.sensors import LineScanner
+        from hyplan.instruments import LineScanner
         sensor = LineScanner("Tilted", fov=30.0, across_track_pixels=600,
                              frame_rate=100.0 * ureg.Hz, cross_track_tilt=20.0)
         fl = FlightLine.start_length_azimuth(

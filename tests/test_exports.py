@@ -23,7 +23,7 @@ from hyplan.exports import (
     to_txt,
 )
 from hyplan.flight_line import FlightLine
-from hyplan.sensors import AVIRIS3
+from hyplan.instruments import AVIRIS3
 from hyplan.geometry import (
     dd_to_ddm,
     dd_to_ddms,

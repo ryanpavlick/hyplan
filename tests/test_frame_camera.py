@@ -1,10 +1,10 @@
-"""Comprehensive tests for hyplan.frame_camera module."""
+"""Comprehensive tests for the FrameCamera instrument model."""
 
 import pytest
 import numpy as np
 from shapely.geometry import Polygon as ShapelyPolygon
 from hyplan.units import ureg
-from hyplan.frame_camera import FrameCamera, MultiCameraRig
+from hyplan.instruments import FrameCamera, MultiCameraRig
 
 
 @pytest.fixture
@@ -413,7 +413,7 @@ class TestGroundFootprint:
             n = len(az)
             return (np.full(n, 34.01), np.full(n, -117.01), np.full(n, 350.0))
 
-        with patch("hyplan.frame_camera.ray_terrain_intersection", side_effect=fake_rti):
+        with patch("hyplan.instruments.frame_camera.ray_terrain_intersection", side_effect=fake_rti):
             poly = camera.ground_footprint(
                 altitude, lat=34.0, lon=-117.0, altitude_msl=5000.0,
                 heading=90.0, dem_file="dummy.tif",
@@ -432,7 +432,7 @@ class TestGroundFootprint:
             n = len(az)
             return (np.full(n, 34.0), np.full(n, -117.0), np.full(n, 0.0))
 
-        with patch("hyplan.frame_camera.ray_terrain_intersection",
+        with patch("hyplan.instruments.frame_camera.ray_terrain_intersection",
                     side_effect=fake_rti) as mock_rti:
             camera.ground_footprint(
                 altitude, lat=34.0, lon=-117.0, altitude_msl=5000.0,
