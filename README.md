@@ -315,6 +315,20 @@ If you use HyPlan in your research, please cite it as:
 
 HyPlan is licensed under the Apache License, Version 2.0. See [`LICENSE.md`](LICENSE.md) for details.
 
+## Bundled data and attribution
+
+HyPlan ships the JPL DE421 planetary ephemeris (`hyplan/data/de421.bsp`)
+so solar geometry calculations work fully offline. DE421 is produced by
+NASA's Jet Propulsion Laboratory and is in the public domain:
+
+> Folkner, W. M., Williams, J. G., & Boggs, D. H. (2009). *The Planetary
+> and Lunar Ephemeris DE 421*. JPL Interoffice Memorandum 343R-08-003.
+> <https://ssd.jpl.nasa.gov/planets/eph_export.html>
+
+DE421 is read via the [Skyfield](https://rhodesmill.org/skyfield/)
+library (Rhodes 2019, ASCL:1907.024). See [`LICENSE.md`](LICENSE.md) for
+the full third-party data attribution.
+
 ## Contact
 
 For inquiries or further information, please contact Ryan Pavlick (ryan.p.pavlick@nasa.gov).

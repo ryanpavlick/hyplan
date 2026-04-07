@@ -1,3 +1,7 @@
+# Skyfield auto-downloaded ephemeris (we ship our own at hyplan/data/de421.bsp)
+/de421.bsp
+notebooks/de421.bsp
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

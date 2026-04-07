@@ -1,13 +1,25 @@
 """Solar position and illumination timing.
 
-Computes solar elevation thresholds and data collection windows using
-the Solar Position Algorithm (SPA).
+Computes solar elevation thresholds and data collection windows.
+
+Solar position is computed via the Skyfield library using JPL's DE421
+planetary ephemeris, which is bundled with hyplan at
+``hyplan/data/de421.bsp`` so calculations work fully offline.
 
 References
 ----------
 Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
 radiation applications. *Solar Energy*, 76(5), 577-589.
 doi:10.1016/j.solener.2003.12.003
+
+Folkner, W. M., Williams, J. G., & Boggs, D. H. (2009). *The Planetary
+and Lunar Ephemeris DE 421*. JPL Interoffice Memorandum 343R-08-003,
+NASA Jet Propulsion Laboratory.
+https://ssd.jpl.nasa.gov/planets/eph_export.html
+
+Rhodes, B. (2019). Skyfield: High precision research-grade positions
+for planets and Earth satellites generator. Astrophysics Source Code
+Library, ascl:1907.024.
 """
 
 import pandas as pd
@@ -40,9 +52,13 @@ def _skyfield_handles():
     """Lazily load and cache the Skyfield timescale and DE421 ephemeris."""
     global _SKYFIELD_TS, _SKYFIELD_SUN, _SKYFIELD_EARTH
     if _SKYFIELD_TS is None:
-        from skyfield.api import load as sf_load
+        from importlib.resources import files
+        from skyfield.api import load as sf_load, load_file
         _SKYFIELD_TS = sf_load.timescale()
-        eph = sf_load("de421.bsp")
+        # Load the bundled DE421 ephemeris from the package data directory
+        # rather than letting Skyfield download it into the user's cwd.
+        bsp_path = files("hyplan.data").joinpath("de421.bsp")
+        eph = load_file(str(bsp_path))
         _SKYFIELD_EARTH = eph["earth"]
         _SKYFIELD_SUN = eph["sun"]
     return _SKYFIELD_TS, _SKYFIELD_EARTH, _SKYFIELD_SUN

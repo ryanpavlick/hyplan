@@ -60,8 +60,11 @@ Issues = "https://github.com/ryanpavlick/hyplan/issues"
 [tool.setuptools.packages.find]
 include = ["hyplan*"]
 
+[tool.setuptools]
+license-files = ["LICENSE.md"]
+
 [tool.setuptools.package-data]
-hyplan = ["data/*.geojson"]
+hyplan = ["data/*.geojson", "data/*.bsp"]
 
 [tool.setuptools_scm]
 version_file = "hyplan/_version.py"
