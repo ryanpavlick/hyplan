@@ -11,9 +11,7 @@ rtree
 shapely
 simplekml
 skyfield
-sunposition
 folium
-geomag
 gpxpy
 matplotlib
 networkx

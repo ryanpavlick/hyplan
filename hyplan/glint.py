@@ -40,7 +40,7 @@ import pymap3d
 import pymap3d.vincenty
 from pymap3d import los
 
-from sunposition import sunpos
+from .sun import sunpos
 
 from .units import ureg
 from .exceptions import HyPlanValueError, HyPlanTypeError
@@ -125,8 +125,8 @@ class GlintArc:
             radians=False,
         )
 
-        self.solar_azimuth = float(solar_az)
-        self.solar_zenith = float(solar_zen)
+        self.solar_azimuth = float(np.asarray(solar_az).ravel()[0])
+        self.solar_zenith = float(np.asarray(solar_zen).ravel()[0])
 
         if self.solar_zenith < 5.0:
             raise HyPlanValueError(

@@ -38,9 +38,7 @@ dependencies = [
     "shapely",
     "simplekml",
     "skyfield",
-    "sunposition",
     "folium",
-    "geomag",
     "gpxpy",
     "matplotlib",
     "networkx",
@@ -48,6 +46,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mag = ["geomag"]
 clouds = ["earthengine-api", "seaborn"]
 interactive = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "nbstripout"]

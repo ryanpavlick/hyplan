@@ -205,7 +205,7 @@ def _utc_fraction(minutes_from_midnight: float) -> float:
 def _compute_sza(lat: float, lon: float, dt: datetime.datetime) -> float:
     """Compute solar zenith angle, returning -9999 if sun module unavailable."""
     try:
-        from sunposition import sunpos
+        from .sun import sunpos
         ts = pd.DatetimeIndex([dt], tz='UTC')
         _, zenith, *_ = sunpos(ts, lat, lon, elevation=0)
         return float(zenith[0])
@@ -217,7 +217,7 @@ def _compute_solar_azimuth(lat: float, lon: float,
                            dt: datetime.datetime) -> float:
     """Compute solar azimuth, returning -9999 if unavailable."""
     try:
-        from sunposition import sunpos
+        from .sun import sunpos
         ts = pd.DatetimeIndex([dt], tz='UTC')
         azimuth, *_ = sunpos(ts, lat, lon, elevation=0)
         return float(azimuth[0])
@@ -358,7 +358,7 @@ def to_pilot_excel(
     takeoff_time: datetime.datetime = None,
     mission_name: str = "",
     coord_format: str = "DD MM",
-    include_mag_heading: bool = True,
+    include_mag_heading: bool = False,
 ) -> None:
     """Write a simplified pilot-facing Excel file.
 
@@ -372,7 +372,9 @@ def to_pilot_excel(
         mission_name: Campaign / mission name.
         coord_format: Coordinate display format — one of
             ``'DD MM'``, ``'DD MM SS'``, ``'NDDD MM.SS'``.
-        include_mag_heading: Include a magnetic heading column.
+        include_mag_heading: Include a magnetic heading column. Requires the
+            optional ``geomag`` package (``pip install hyplan[mag]``); off by
+            default so the export works in conda-only installs.
     """
     import xlsxwriter
 

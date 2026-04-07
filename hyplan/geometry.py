@@ -32,7 +32,7 @@ from pyproj.database import query_utm_crs_info
 from pyproj import Transformer
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
-from .exceptions import HyPlanTypeError, HyPlanValueError
+from .exceptions import HyPlanTypeError, HyPlanValueError, HyPlanRuntimeError
 
 
 def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
@@ -525,7 +525,10 @@ def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
                          date: datetime.date = None) -> float:
     """Return magnetic declination in degrees (positive = east).
 
-    Uses the ``geomag`` library (WMM model).
+    Uses the optional ``geomag`` library (WMM model). ``geomag`` is not on
+    conda-forge, so it is an optional dependency — install it via
+    ``pip install hyplan[mag]`` (or ``pip install geomag``) when magnetic
+    headings are required.
 
     Args:
         lat: Latitude in decimal degrees.
@@ -537,7 +540,13 @@ def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
         Declination in degrees.  Add to true heading to get magnetic heading
         would give the wrong sign — use :func:`true_to_magnetic` instead.
     """
-    import geomag
+    try:
+        import geomag
+    except ImportError as e:
+        raise HyPlanRuntimeError(
+            "magnetic_declination requires the optional 'geomag' package. "
+            "Install it with: pip install hyplan[mag]"
+        ) from e
     if date is None:
         date = datetime.date.today()
     return geomag.declination(lat, lon, alt_m / 1000.0, date)

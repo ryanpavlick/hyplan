@@ -72,7 +72,6 @@ autodoc_mock_imports = [
     "shapely",
     "simplekml",
     "skyfield",
-    "sunposition",
     "tabulate",
     "pydantic",
     "pydantic_pint",

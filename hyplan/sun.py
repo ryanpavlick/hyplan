@@ -12,11 +12,142 @@ doi:10.1016/j.solener.2003.12.003
 
 import pandas as pd
 import numpy as np
-from sunposition import sunpos
 from datetime import datetime, date, timedelta
 from typing import List, Union
 import matplotlib.pyplot as plt
 from .exceptions import HyPlanValueError
+
+
+# ---------------------------------------------------------------------------
+# Solar position via Skyfield
+# ---------------------------------------------------------------------------
+#
+# Drop-in replacement for ``sunposition.sunpos`` that uses Skyfield (already a
+# required dependency, used elsewhere for SGP4 propagation). This removes the
+# pip-only ``sunposition`` package from hyplan's required dependencies so the
+# project can be installed entirely from conda-forge.
+#
+# The wrapper preserves the original return signature
+# ``(azimuth, zenith, *_)`` so existing call sites that unpack with ``*_``
+# continue to work unchanged.
+
+_SKYFIELD_TS = None
+_SKYFIELD_SUN = None
+_SKYFIELD_EARTH = None
+
+
+def _skyfield_handles():
+    """Lazily load and cache the Skyfield timescale and DE421 ephemeris."""
+    global _SKYFIELD_TS, _SKYFIELD_SUN, _SKYFIELD_EARTH
+    if _SKYFIELD_TS is None:
+        from skyfield.api import load as sf_load
+        _SKYFIELD_TS = sf_load.timescale()
+        eph = sf_load("de421.bsp")
+        _SKYFIELD_EARTH = eph["earth"]
+        _SKYFIELD_SUN = eph["sun"]
+    return _SKYFIELD_TS, _SKYFIELD_EARTH, _SKYFIELD_SUN
+
+
+def _to_utc_datetimes(dt):
+    """Coerce ``dt`` (scalar / list / ndarray / DatetimeIndex) to a list of
+    timezone-aware UTC ``datetime`` objects suitable for ``ts.from_datetimes``.
+    """
+    from skyfield.api import utc as sf_utc
+
+    if isinstance(dt, pd.DatetimeIndex):
+        if dt.tz is None:
+            dt = dt.tz_localize("UTC")
+        else:
+            dt = dt.tz_convert("UTC")
+        return [d.to_pydatetime() for d in dt]
+
+    if isinstance(dt, (list, tuple, np.ndarray)):
+        out = []
+        for d in np.asarray(dt).ravel():
+            if isinstance(d, np.datetime64):
+                d = pd.Timestamp(d).to_pydatetime()
+            if isinstance(d, pd.Timestamp):
+                d = d.to_pydatetime()
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=sf_utc)
+            out.append(d)
+        return out
+
+    # scalar
+    if isinstance(dt, np.datetime64):
+        dt = pd.Timestamp(dt).to_pydatetime()
+    if isinstance(dt, pd.Timestamp):
+        dt = dt.to_pydatetime()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=sf_utc)
+    return [dt]
+
+
+def sunpos(dt, latitude, longitude, elevation=0, radians=False):
+    """Compute solar azimuth and zenith via Skyfield.
+
+    Drop-in replacement for ``sunposition.sunpos`` covering the input shapes
+    used in hyplan: scalar datetime + scalar lat/lon, ``pd.DatetimeIndex`` +
+    scalar lat/lon, and arrays of datetimes + arrays of lat/lon (broadcast
+    elementwise).
+
+    Args:
+        dt: Datetime(s). Naive datetimes are assumed UTC.
+        latitude: Latitude in degrees (scalar or array).
+        longitude: Longitude in degrees (scalar or array).
+        elevation: Elevation in meters above WGS-84 (scalar or array).
+        radians: If True, return values in radians; otherwise degrees.
+
+    Returns:
+        Tuple ``(azimuth, zenith, ra, dec, h)`` to mirror ``sunposition.sunpos``.
+        Only ``azimuth`` and ``zenith`` are populated; the remaining slots are
+        arrays of NaN of matching shape, kept so that existing call sites can
+        unpack with ``*_``.
+    """
+    ts, earth, sun = _skyfield_handles()
+
+    dts = _to_utc_datetimes(dt)
+    lat_arr = np.atleast_1d(np.asarray(latitude, dtype=float))
+    lon_arr = np.atleast_1d(np.asarray(longitude, dtype=float))
+    elev_arr = np.atleast_1d(np.asarray(elevation, dtype=float))
+
+    n = max(len(dts), lat_arr.size, lon_arr.size, elev_arr.size)
+    if len(dts) == 1 and n > 1:
+        dts = dts * n
+    if lat_arr.size == 1 and n > 1:
+        lat_arr = np.broadcast_to(lat_arr, (n,)).copy()
+    if lon_arr.size == 1 and n > 1:
+        lon_arr = np.broadcast_to(lon_arr, (n,)).copy()
+    if elev_arr.size == 1 and n > 1:
+        elev_arr = np.broadcast_to(elev_arr, (n,)).copy()
+
+    if not (len(dts) == lat_arr.size == lon_arr.size == elev_arr.size):
+        raise HyPlanValueError(
+            "sunpos: dt, latitude, longitude, elevation must broadcast to a "
+            "common length"
+        )
+
+    t = ts.from_datetimes(dts)
+
+    from skyfield.api import wgs84
+    observer = earth + wgs84.latlon(
+        latitude_degrees=lat_arr,
+        longitude_degrees=lon_arr,
+        elevation_m=elev_arr,
+    )
+    apparent = observer.at(t).observe(sun).apparent()
+    alt, az, _dist = apparent.altaz()
+
+    if radians:
+        azimuth = az.radians
+        zenith = (np.pi / 2.0) - alt.radians
+    else:
+        azimuth = az.degrees
+        zenith = 90.0 - alt.degrees
+
+    nan_pad = np.full_like(azimuth, np.nan, dtype=float)
+    return azimuth, zenith, nan_pad, nan_pad, nan_pad
+
 
 
 def solar_threshold_times(latitude: float, longitude: float, start_date: str, end_date: str, thresholds: List[float], timezone_offset: int = 0) -> pd.DataFrame:

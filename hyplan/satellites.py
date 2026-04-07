@@ -28,7 +28,7 @@ import pandas as pd
 import geopandas as gpd
 import simplekml
 from shapely.geometry import Point, LineString, Polygon
-from sunposition import sunpos
+from .sun import sunpos
 import pymap3d.vincenty
 
 from .terrain import get_cache_root
