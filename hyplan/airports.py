@@ -14,7 +14,6 @@ Licensed under the Public Domain (CC0).
 import os
 import threading
 import geopandas as gpd
-import numpy as np
 import pandas as pd
 import logging
 from pathlib import Path
@@ -24,6 +23,7 @@ from typing import List, Union
 from .units import convert_distance, ureg
 from .download import download_file
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+from .geometry import haversine
 
 __all__ = [
     "Airport", "initialize_data", "find_nearest_airport", "find_nearest_airports",
@@ -429,12 +429,12 @@ def airports_within_radius(
     possible_matches = gdf_airports[gdf_airports.intersects(buffer)].copy()
 
     # Vectorized haversine — avoids row-by-row Python loop
-    lat1 = np.radians(lat)
-    lat2 = np.radians(possible_matches['latitude'].values)
-    dlat = lat2 - lat1
-    dlon = np.radians(possible_matches['longitude'].values - lon)
-    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
-    possible_matches['distance_m'] = 6371e3 * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    possible_matches['distance_m'] = haversine(
+        lat,
+        lon,
+        possible_matches['latitude'].values,
+        possible_matches['longitude'].values,
+    )
     within_radius = possible_matches[possible_matches['distance_m'] <= radius_m]
 
     if return_details:

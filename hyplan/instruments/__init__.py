@@ -6,7 +6,7 @@ Groups all sensor classes under a single subpackage::
     from hyplan.instruments import FrameCamera, LineScanner, Sensor
 """
 
-from ._base import Sensor
+from ._base import Sensor, ScanningSensor
 from .line_scanner import (
     LineScanner,
     AVIRISClassic,
@@ -47,6 +47,7 @@ from .frame_camera import FrameCamera, MultiCameraRig
 __all__ = [
     # Base
     "Sensor",
+    "ScanningSensor",
     # Line scanners
     "LineScanner",
     "AVIRISClassic", "AVIRISNextGen", "AVIRIS3", "AVIRIS5",

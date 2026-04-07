@@ -14,7 +14,7 @@ from shapely.geometry import Polygon
 import pymap3d.vincenty
 
 from .flight_line import FlightLine
-from .instruments import Sensor
+from .instruments import ScanningSensor
 from .terrain import ray_terrain_intersection
 from .geometry import process_linestring
 
@@ -27,7 +27,7 @@ __all__ = [
 
 def generate_swath_polygon(
     flight_line: FlightLine,
-    sensor: Sensor,
+    sensor: ScanningSensor,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
     dem_file: Optional[str] = None,
@@ -35,15 +35,16 @@ def generate_swath_polygon(
     """
     Generate a swath polygon for a given flight line and sensor.
 
-    Works with any sensor that implements ``swath_offset_angles()``
-    returning ``(port_edge_angle, starboard_edge_angle)`` in degrees
-    from nadir (negative = port, positive = starboard). This includes
-    nadir-looking line scanners, tilted line scanners, LVIS, and
+    Works with any sensor satisfying the
+    :class:`~hyplan.instruments.ScanningSensor` protocol — i.e. exposing
+    ``swath_offset_angles()`` returning ``(port_edge_angle, starboard_edge_angle)``
+    in degrees from nadir (negative = port, positive = starboard). This
+    includes nadir-looking line scanners, tilted line scanners, LVIS, and
     side-looking radar.
 
     Args:
         flight_line (FlightLine): The flight line object containing geometry and altitude (MSL).
-        sensor: A sensor with a ``swath_offset_angles()`` method.
+        sensor: Any object satisfying :class:`~hyplan.instruments.ScanningSensor`.
         along_precision (float): Precision of the interpolation along the flight line in meters.
         across_precision (float): Precision of the ray-terrain intersection sampling in meters.
         dem_file (str, optional): Path to the DEM file. If None, it will be generated.

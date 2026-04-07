@@ -20,10 +20,17 @@ import logging
 
 from . import flight_line
 from . import terrain
-from .instruments import LineScanner
+from .instruments import LineScanner, ScanningSensor
 from .swath import generate_swath_polygon, calculate_swath_widths
 from .units import ureg, altitude_to_flight_level
-from .geometry import wrap_to_180, rotated_rectangle, minimum_rotated_rectangle, buffer_polygon_along_azimuth, _validate_polygon
+from .geometry import (
+    wrap_to_180,
+    rotated_rectangle,
+    minimum_rotated_rectangle,
+    buffer_polygon_along_azimuth,
+    rectangle_dimensions,
+    _validate_polygon,
+)
 from .exceptions import HyPlanValueError
 
 
@@ -99,7 +106,7 @@ def _validate_inputs(**kwargs) -> None:
 
         
 def box_around_center_line(
-    instrument: object,
+    instrument: ScanningSensor,
     altitude_msl: ureg.Quantity,
     lat0: float,
     lon0: float,
@@ -221,7 +228,7 @@ def box_around_center_line(
 
 
 def box_around_polygon(
-    instrument: object,
+    instrument: ScanningSensor,
     altitude_msl: ureg.Quantity,
     polygon: Polygon,
     azimuth: Optional[float] = None,
@@ -274,35 +281,9 @@ def box_around_polygon(
     except Exception as e:
         raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
 
-    # Extract centroid and rectangle edge dimensions
-    lon0, lat0 = bounding_box.centroid.coords[0]
-    lons, lats = list(bounding_box.exterior.coords.xy)
-
-    # Compute distances and azimuths along both rectangle axes
-    length1, az1 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[1], lons[1])
-    length2, az2 = pymap3d.vincenty.vdist(lats[1], lons[1], lats[2], lons[2])
-
-    if azimuth is None:
-        # Use the azimuth corresponding to the longer side
-        if length1 >= length2:
-            azimuth = wrap_to_180(az1)
-            box_length = float(length1) * ureg.meter
-            box_width = float(length2) * ureg.meter
-        else:
-            azimuth = wrap_to_180(az2)
-            box_length = float(length2) * ureg.meter
-            box_width = float(length1) * ureg.meter
-    else:
-        # Assign box_length to the edge most aligned with the user azimuth
-        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
-        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
-        if az1_diff <= az2_diff:
-            box_length = float(length1) * ureg.meter
-            box_width = float(length2) * ureg.meter
-        else:
-            box_length = float(length2) * ureg.meter
-            box_width = float(length1) * ureg.meter
-
+    lat0, lon0, azimuth, length_m, width_m = rectangle_dimensions(bounding_box, azimuth)
+    box_length = length_m * ureg.meter
+    box_width = width_m * ureg.meter
 
     logger.info(
         f"Bounding box derived: Center=({lat0:.6f}, {lon0:.6f}), Azimuth={azimuth:.2f}°, "
@@ -328,7 +309,7 @@ def box_around_polygon(
 
 
 def box_around_polygon_terrain(
-    instrument,
+    instrument: ScanningSensor,
     altitude_msl: Quantity,
     polygon: Polygon,
     azimuth: Optional[float] = None,
@@ -410,12 +391,10 @@ def box_around_polygon_terrain(
     """
     if not isinstance(polygon, Polygon):
         raise HyPlanValueError("polygon must be a Shapely Polygon.")
-    if not (
-        hasattr(instrument, "swath_width") and callable(instrument.swath_width)
-        and hasattr(instrument, "swath_offset_angles") and callable(instrument.swath_offset_angles)
-    ):
+    if not isinstance(instrument, ScanningSensor):
         raise HyPlanValueError(
-            "instrument must implement swath_width(altitude_agl) and swath_offset_angles()."
+            "instrument must satisfy the ScanningSensor protocol "
+            "(swath_width(altitude_agl), swath_offset_angles(), half_angle)."
         )
     _validate_inputs(altitude=altitude_msl, overlap=overlap)
 
@@ -430,30 +409,9 @@ def box_around_polygon_terrain(
     except Exception as e:
         raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
 
-    lon0, lat0 = bounding_box.centroid.coords[0]
-    lons, lats = list(bounding_box.exterior.coords.xy)
-
-    length1, az1 = pymap3d.vincenty.vdist(lats[0], lons[0], lats[1], lons[1])
-    length2, az2 = pymap3d.vincenty.vdist(lats[1], lons[1], lats[2], lons[2])
-
-    if azimuth is None:
-        if length1 >= length2:
-            azimuth = wrap_to_180(az1)
-            box_length = float(length1) * ureg.meter
-            box_width  = float(length2) * ureg.meter
-        else:
-            azimuth = wrap_to_180(az2)
-            box_length = float(length2) * ureg.meter
-            box_width  = float(length1) * ureg.meter
-    else:
-        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
-        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
-        if az1_diff <= az2_diff:
-            box_length = float(length1) * ureg.meter
-            box_width  = float(length2) * ureg.meter
-        else:
-            box_length = float(length2) * ureg.meter
-            box_width  = float(length1) * ureg.meter
+    lat0, lon0, azimuth, length_m, width_m = rectangle_dimensions(bounding_box, azimuth)
+    box_length = length_m * ureg.meter
+    box_width = width_m * ureg.meter
 
     logger.info(
         f"Bounding box: center=({lat0:.6f}, {lon0:.6f}), az={azimuth:.2f}°, "
@@ -659,7 +617,7 @@ def altitude_msl_for_pixel_size(
 
 
 def box_around_center_terrain(
-    instrument,
+    instrument: ScanningSensor,
     altitude_msl: Quantity,
     lat0: float,
     lon0: float,

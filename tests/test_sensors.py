@@ -7,6 +7,7 @@ from hyplan.instruments import (
     HyTES,
     PRISM,
     SENSOR_REGISTRY,
+    ScanningSensor,
     create_sensor,
     FrameCamera,
     LVIS,
@@ -127,6 +128,41 @@ class TestSwathOffsetAngles:
         port, starboard = r.swath_offset_angles()
         assert port > 0
         assert starboard > 0
+
+
+class TestScanningSensorProtocol:
+    """Verify which concrete sensors satisfy the ScanningSensor protocol.
+
+    The runtime check is what flight_box.box_around_polygon uses to reject
+    inputs that don't expose swath_width / swath_offset_angles / half_angle.
+    Frame cameras intentionally do not conform — they have their own
+    planning path.
+    """
+
+    def test_line_scanner_conforms(self):
+        assert isinstance(AVIRIS3(), ScanningSensor)
+
+    def test_lvis_conforms(self):
+        assert isinstance(LVIS(), ScanningSensor)
+
+    def test_radar_conforms(self):
+        assert isinstance(UAVSAR_Lband(), ScanningSensor)
+
+    def test_frame_camera_does_not_conform(self):
+        cam = FrameCamera(
+            name="Test Camera",
+            sensor_width=ureg.Quantity(36, "mm"),
+            sensor_height=ureg.Quantity(24, "mm"),
+            focal_length=ureg.Quantity(50, "mm"),
+            resolution_x=6000,
+            resolution_y=4000,
+            frame_rate=ureg.Quantity(1, "Hz"),
+            f_speed=2.8,
+        )
+        assert not isinstance(cam, ScanningSensor)
+
+    def test_arbitrary_object_does_not_conform(self):
+        assert not isinstance(object(), ScanningSensor)
 
 
 class TestSensorRegistry:

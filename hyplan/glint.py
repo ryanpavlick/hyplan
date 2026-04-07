@@ -45,7 +45,7 @@ from .sun import sunpos
 from .units import ureg
 from .exceptions import HyPlanValueError
 from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
-from .instruments import LineScanner
+from .instruments import ScanningSensor
 from .flight_line import FlightLine
 from .waypoint import Waypoint
 
@@ -358,11 +358,13 @@ class GlintArc:
         lons, lats = from_utm(xs, ys)
         return LineString(np.column_stack([lons, lats]))
 
-    def footprint(self, sensor: LineScanner) -> Polygon:
+    def footprint(self, sensor: ScanningSensor) -> Polygon:
         """Ground coverage polygon of the banked sensor swath across the arc.
 
         Args:
-            sensor: LineScanner defining the sensor half-angle (half-FOV).
+            sensor: Any object satisfying the
+                :class:`~hyplan.instruments.ScanningSensor` protocol — only
+                ``half_angle`` is read.
 
         Returns:
             Shapely Polygon in WGS84 (lon, lat) enclosing the swath footprint.
@@ -562,7 +564,7 @@ def _sample_solar_geometry(latitudes, longitudes, altitude_m, observation_dateti
 
 def compute_glint_vectorized(
     flight_line: FlightLine,
-    sensor: LineScanner,
+    sensor: ScanningSensor,
     observation_datetime: datetime,
     output_geometry: str = "geographic",
 ) -> gpd.GeoDataFrame:
@@ -570,7 +572,9 @@ def compute_glint_vectorized(
 
     Args:
         flight_line: FlightLine object defining the flight path.
-        sensor: LineScanner object defining sensor characteristics.
+        sensor: Any object satisfying the
+            :class:`~hyplan.instruments.ScanningSensor` protocol — only
+            ``half_angle`` is read.
         observation_datetime: The observation timestamp (UTC).
         output_geometry: "geographic" for target lat/lon Points, or
             "along_track" for (tilt, along_track_distance) Points.
@@ -647,14 +651,16 @@ def compute_glint_vectorized(
 
 def compute_glint_arc(
     glint_arc: GlintArc,
-    sensor: LineScanner,
+    sensor: ScanningSensor,
     output_geometry: str = "geographic",
 ) -> gpd.GeoDataFrame:
     """Compute glint angles across a glint arc's sensor swath.
 
     Args:
         glint_arc: GlintArc object defining the arc flight path.
-        sensor: LineScanner object defining sensor characteristics.
+        sensor: Any object satisfying the
+            :class:`~hyplan.instruments.ScanningSensor` protocol — only
+            ``half_angle`` is read.
         output_geometry: "geographic" for target lat/lon Points, or
             "along_track" for (tilt, along_track_distance) Points.
 

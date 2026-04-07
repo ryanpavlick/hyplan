@@ -17,7 +17,6 @@ doi:10.21105/joss.00580
 
 import datetime
 import numpy as np
-import math
 import random
 import logging
 from functools import lru_cache
@@ -221,26 +220,39 @@ def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tup
     logging.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
     return wgs84_to_utm, utm_to_wgs84
 
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float, radius: float = 6371e3) -> float:
+def haversine(
+    lat1: Union[float, np.ndarray],
+    lon1: Union[float, np.ndarray],
+    lat2: Union[float, np.ndarray],
+    lon2: Union[float, np.ndarray],
+    radius: float = 6371e3,
+) -> Union[float, np.ndarray]:
     """
-    Calculate the haversine distance between two points on the Earth's surface.
+    Calculate the haversine (great-circle) distance between two points.
+
+    Accepts scalars or numpy arrays for any of the coordinate arguments,
+    so it works both as a one-off distance and as a vectorized calculation
+    over many candidate points (e.g. an array of airport latitudes against
+    a single query point).
 
     Args:
-        lat1 (float): Latitude of the first point in decimal degrees.
-        lon1 (float): Longitude of the first point in decimal degrees.
-        lat2 (float): Latitude of the second point in decimal degrees.
-        lon2 (float): Longitude of the second point in decimal degrees.
-        radius (float): Radius of the Earth in meters (default: 6371e3 for meters).
+        lat1: Latitude of the first point(s) in decimal degrees.
+        lon1: Longitude of the first point(s) in decimal degrees.
+        lat2: Latitude of the second point(s) in decimal degrees.
+        lon2: Longitude of the second point(s) in decimal degrees.
+        radius: Radius of the Earth in meters (default: 6371e3).
 
     Returns:
-        float: Distance between the two points in the same unit as the radius.
+        Distance(s) in the same unit as ``radius``. Returns a scalar if all
+        inputs are scalars, otherwise a numpy array broadcast to the inputs.
     """
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
+    phi1 = np.radians(lat1)
+    phi2 = np.radians(lat2)
+    delta_phi = np.radians(np.subtract(lat2, lat1))
+    delta_lambda = np.radians(np.subtract(lon2, lon1))
 
-    a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    a = np.sin(delta_phi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(delta_lambda / 2) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
     return radius * c
 
@@ -374,6 +386,51 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
 
     return rotated_bbox_wgs84
 
+
+def rectangle_dimensions(
+    rectangle: Polygon, azimuth: Optional[float] = None
+) -> Tuple[float, float, float, float, float]:
+    """Extract centroid, length, width and orientation from a rotated rectangle.
+
+    Given a 4-sided polygon (e.g. the output of :func:`minimum_rotated_rectangle`
+    or :func:`rotated_rectangle`), this returns the centroid, the orientation
+    in degrees, and the lengths of the long and short edges in meters.
+
+    If ``azimuth`` is ``None``, the rectangle's orientation is taken from the
+    longer edge. If ``azimuth`` is supplied, ``length_m`` is the side most
+    aligned with that azimuth and ``width_m`` is the perpendicular side; the
+    returned orientation is still wrapped to ``[-180, 180]``.
+
+    Args:
+        rectangle: A Shapely Polygon assumed to be a (rotated) rectangle in
+            WGS84 coordinates.
+        azimuth: Optional preferred orientation in degrees from true north.
+
+    Returns:
+        Tuple ``(lat0, lon0, azimuth, length_m, width_m)``.
+    """
+    lon0, lat0 = rectangle.centroid.coords[0]
+    lons, lats = list(rectangle.exterior.coords.xy)
+
+    length1, az1 = vdist(lats[0], lons[0], lats[1], lons[1])
+    length2, az2 = vdist(lats[1], lons[1], lats[2], lons[2])
+
+    if azimuth is None:
+        if length1 >= length2:
+            azimuth = wrap_to_180(az1)
+            length_m, width_m = float(length1), float(length2)
+        else:
+            azimuth = wrap_to_180(az2)
+            length_m, width_m = float(length2), float(length1)
+    else:
+        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
+        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
+        if az1_diff <= az2_diff:
+            length_m, width_m = float(length1), float(length2)
+        else:
+            length_m, width_m = float(length2), float(length1)
+
+    return float(lat0), float(lon0), float(azimuth), length_m, width_m
 
 
 def translate_polygon(polygon: Polygon, distance: float, azimuth: float) -> Polygon:
