@@ -9,6 +9,7 @@ caps, and refueling constraints to produce a feasible multi-day schedule.
 
 import itertools
 import logging
+from functools import lru_cache
 from typing import Optional, Tuple
 
 import networkx as nx
@@ -95,17 +96,22 @@ def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
     return info["total_time"].to(ureg.hour).magnitude
 
 
-def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine) -> float:
+def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=None) -> float:
     """Compute time in hours to fly along a flight line at cruise speed.
 
     Args:
         aircraft: Aircraft performance model.
         flight_line: Flight line to traverse.
+        cruise_speed: Optional precomputed cruise speed at the flight line's
+            altitude. When supplied, skips the per-call ``cruise_speed_at``
+            lookup (useful in batch graph construction).
 
     Returns:
         Flight line traversal time in hours.
     """
-    return (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude_msl)).to(ureg.hour).magnitude
+    if cruise_speed is None:
+        cruise_speed = aircraft.cruise_speed_at(flight_line.altitude_msl)
+    return (flight_line.length / cruise_speed).to(ureg.hour).magnitude
 
 
 def build_graph(
@@ -151,6 +157,32 @@ def build_graph(
         seen_keys.add(key)
         line_keys[fl] = key
 
+    # Cache cruise speed per altitude — most missions reuse a small set of MSLs.
+    cruise_speed_cache: dict = {}
+    def _cruise_speed_for(alt):
+        key_alt = round(alt.to(ureg.feet).magnitude, 3)
+        if key_alt not in cruise_speed_cache:
+            cruise_speed_cache[key_alt] = aircraft.cruise_speed_at(alt)
+        return cruise_speed_cache[key_alt]
+
+    # Memoize transit time for repeated waypoint pairs (airports reused N times
+    # against every flight-line endpoint). Key on rounded coords + altitude +
+    # heading; use a simple dict closed over locals.
+    def _wp_key(wp):
+        return (
+            round(wp.latitude, 6),
+            round(wp.longitude, 6),
+            round(wp.altitude_msl.to(ureg.meter).magnitude, 1),
+            round(wp.heading, 3),
+        )
+
+    transit_cache: dict = {}
+    def _cached_transit(wp_a, wp_b):
+        k = (_wp_key(wp_a), _wp_key(wp_b))
+        if k not in transit_cache:
+            transit_cache[k] = _transit_time(aircraft, wp_a, wp_b)
+        return transit_cache[k]
+
     # --- Add airport nodes ---
     for airport in airports:
         G.add_node(airport.icao_code, nodetype="airport", obj=airport)
@@ -166,7 +198,7 @@ def build_graph(
                    waypoint=fl.waypoint2, flight_line=fl, endpoint="end")
 
         # Along-line edges (both directions)
-        line_time = _flight_line_time(aircraft, fl)
+        line_time = _flight_line_time(aircraft, fl, cruise_speed=_cruise_speed_for(fl.altitude_msl))
         G.add_edge(start_node, end_node, weight=line_time,
                    edgetype="flight_line", flight_line=fl, direction="forward")
         G.add_edge(end_node, start_node, weight=line_time,
@@ -199,12 +231,12 @@ def build_graph(
         wp1 = _waypoint_from_airport(a1)
         wp2 = _waypoint_from_airport(a2)
         try:
-            t = _transit_time(aircraft, wp1, wp2)
+            t = _cached_transit(wp1, wp2)
             G.add_edge(a1.icao_code, a2.icao_code, weight=t, edgetype="transit")
         except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
             logger.warning(f"Could not compute transit {a1.icao_code} -> {a2.icao_code}: {e}")
         try:
-            t = _transit_time(aircraft, wp2, wp1)
+            t = _cached_transit(wp2, wp1)
             G.add_edge(a2.icao_code, a1.icao_code, weight=t, edgetype="transit")
         except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
             logger.warning(f"Could not compute transit {a2.icao_code} -> {a1.icao_code}: {e}")
@@ -220,16 +252,19 @@ def build_graph(
                 node1 = f"{key1}_{ep1}"
                 node2 = f"{key2}_{ep2}"
                 try:
-                    t = _transit_time(aircraft, wp1, wp2)
+                    t = _cached_transit(wp1, wp2)
                     G.add_edge(node1, node2, weight=t, edgetype="transit")
                 except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute transit {node1} -> {node2}: {e}")
                 try:
-                    t = _transit_time(aircraft, wp2, wp1)
+                    t = _cached_transit(wp2, wp1)
                     G.add_edge(node2, node1, weight=t, edgetype="transit")
                 except (HyPlanValueError, HyPlanRuntimeError, ValueError) as e:
                     logger.warning(f"Could not compute transit {node2} -> {node1}: {e}")
 
+    # Stash line_keys on the graph so greedy_optimize can reuse it without
+    # rebuilding (and without risking inconsistency with build_graph's keying).
+    G.graph["line_keys"] = line_keys
     return G
 
 
@@ -450,14 +485,7 @@ def greedy_optimize(
 
     logger.info(f"Building flight graph for {len(flight_lines)} lines and {len(airports)} airports...")
     G = build_graph(aircraft, flight_lines, airports)
-
-    # Build line_keys mapping (must match what build_graph used)
-    line_keys = {}
-    for fl in flight_lines:
-        key = fl.site_name or f"line_{id(fl)}"
-        if key in line_keys.values():
-            key = f"{key}_{id(fl)}"
-        line_keys[fl] = key
+    line_keys = G.graph["line_keys"]
 
     # Reverse lookup: key -> FlightLine
     key_to_line = {v: k for k, v in line_keys.items()}

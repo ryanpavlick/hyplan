@@ -13,7 +13,7 @@ from hyplan.glint import (
     GlintArc,
     compute_glint_arc,
 )
-from hyplan.sensors import AVIRIS3
+from hyplan.instruments import AVIRIS3
 from hyplan.units import ureg
 from hyplan.flight_line import FlightLine
 

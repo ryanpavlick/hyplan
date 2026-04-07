@@ -371,27 +371,27 @@ class GlintArc:
         latitudes, longitudes, azimuths, _ = process_linestring(arc_track)
         altitude_m = self.altitude_msl.magnitude
         half_ang = sensor.half_angle
-        near_pts, far_pts = [], []
 
-        for lat, lon, heading in zip(latitudes, longitudes, azimuths):
-            near_vz = self.bank_angle - half_ang
-            far_vz  = self.bank_angle + half_ang
+        near_vz = self.bank_angle - half_ang
+        far_vz = self.bank_angle + half_ang
 
-            if self.bank_direction == "right":
-                base_az = wrap_to_360(heading + 90.0)
-            else:
-                base_az = wrap_to_360(heading - 90.0)
+        offset = 90.0 if self.bank_direction == "right" else -90.0
+        base_az = (azimuths + offset) % 360.0
 
-            near_az = base_az if near_vz >= 0 else wrap_to_360(base_az + 180.0)
-            far_az  = base_az
+        near_az_scalar_offset = 0.0 if near_vz >= 0 else 180.0
+        near_az = (base_az + near_az_scalar_offset) % 360.0
+        far_az = base_az
 
-            near_lat, near_lon, _ = los.lookAtSpheroid(lat, lon, altitude_m, near_az, abs(near_vz))
-            far_lat,  far_lon,  _ = los.lookAtSpheroid(lat, lon, altitude_m, far_az,  abs(far_vz))
-            near_pts.append((float(near_lon), float(near_lat)))
-            far_pts.append((float(far_lon),   float(far_lat)))
+        altitudes = np.full_like(latitudes, altitude_m)
+        near_tilt = np.full_like(latitudes, abs(near_vz))
+        far_tilt = np.full_like(latitudes, abs(far_vz))
 
-        ring = near_pts + far_pts[::-1] + [near_pts[0]]
-        return Polygon(ring)
+        near_lat, near_lon, _ = los.lookAtSpheroid(latitudes, longitudes, altitudes, near_az, near_tilt)
+        far_lat, far_lon, _ = los.lookAtSpheroid(latitudes, longitudes, altitudes, far_az, far_tilt)
+
+        ring_lon = np.concatenate([near_lon, far_lon[::-1], near_lon[:1]])
+        ring_lat = np.concatenate([near_lat, far_lat[::-1], near_lat[:1]])
+        return Polygon(np.column_stack([ring_lon, ring_lat]))
 
     def to_dict(self) -> dict:
         """Convert the glint arc to a dictionary representation."""
@@ -478,8 +478,17 @@ def calculate_target_and_glint_vectorized(
     sensor_alt,
     viewing_azimuth,
     tilt_angle,
-    observation_datetime,
+    observation_datetime=None,
+    solar_azimuth=None,
+    solar_zenith=None,
 ):
+    """Compute target intersection and glint angle for sensor samples.
+
+    If ``solar_azimuth`` and ``solar_zenith`` are provided, the per-sample
+    ``sunpos`` call is skipped — useful when callers have already sampled
+    solar geometry along the track and broadcast it to match the tiled
+    shape of ``viewing_azimuth`` / ``tilt_angle``.
+    """
     target_lat, target_lon, _ = los.lookAtSpheroid(
         sensor_lat,
         sensor_lon,
@@ -488,13 +497,14 @@ def calculate_target_and_glint_vectorized(
         tilt_angle,
     )
 
-    solar_azimuth, solar_zenith, *_ = sunpos(
-        dt=observation_datetime,
-        latitude=sensor_lat,
-        longitude=sensor_lon,
-        elevation=sensor_alt,
-        radians=False,
-    )
+    if solar_azimuth is None or solar_zenith is None:
+        solar_azimuth, solar_zenith, *_ = sunpos(
+            dt=observation_datetime,
+            latitude=sensor_lat,
+            longitude=sensor_lon,
+            elevation=sensor_alt,
+            radians=False,
+        )
 
     glint_angles = glint_angle(
         solar_azimuth,
@@ -504,6 +514,50 @@ def calculate_target_and_glint_vectorized(
     )
 
     return target_lat, target_lon, glint_angles
+
+
+def _sample_solar_geometry(latitudes, longitudes, altitude_m, observation_datetime, n_samples=100):
+    """Sample solar geometry along a track and interpolate to all track points.
+
+    ``sunpos`` is the dominant cost in glint computation. Solar azimuth and
+    zenith vary smoothly over typical flight-line lengths, so sampling at
+    ~100 points along the track and interpolating is numerically
+    indistinguishable from per-point evaluation while running ~100× faster.
+
+    Returns ``(solar_az, solar_zen)`` as length-N arrays matching the input
+    track point arrays. Azimuth is interpolated via sin/cos components to
+    handle the 0/360 wrap correctly.
+    """
+    n = len(latitudes)
+    if n == 0:
+        return np.array([]), np.array([])
+    n_eff = min(n_samples, n)
+    if n_eff >= n:
+        sample_idx = np.arange(n)
+    else:
+        sample_idx = np.linspace(0, n - 1, n_eff).round().astype(int)
+
+    sample_az, sample_zen, *_ = sunpos(
+        dt=np.full(n_eff, observation_datetime),
+        latitude=latitudes[sample_idx],
+        longitude=longitudes[sample_idx],
+        elevation=np.full(n_eff, altitude_m),
+        radians=False,
+    )
+    sample_az = np.asarray(sample_az, dtype=float)
+    sample_zen = np.asarray(sample_zen, dtype=float)
+
+    if n_eff == n:
+        return sample_az, sample_zen
+
+    x_full = np.arange(n)
+    x_samp = sample_idx.astype(float)
+    az_rad = np.deg2rad(sample_az)
+    sin_az = np.interp(x_full, x_samp, np.sin(az_rad))
+    cos_az = np.interp(x_full, x_samp, np.cos(az_rad))
+    solar_az = np.rad2deg(np.arctan2(sin_az, cos_az)) % 360.0
+    solar_zen = np.interp(x_full, x_samp, sample_zen)
+    return solar_az, solar_zen
 
 
 def compute_glint_vectorized(
@@ -533,30 +587,33 @@ def compute_glint_vectorized(
     half_angle = sensor.half_angle
     tilt_angles = np.arange(-half_angle, half_angle + 1, 1)
     n_tilts = len(tilt_angles)
+    n_track = len(latitudes)
 
-    view_azimuths = np.empty(len(azimuths) * n_tilts)
-    for j, az in enumerate(azimuths):
-        for k, t in enumerate(tilt_angles):
-            view_azimuths[j * n_tilts + k] = (
-                (az + 90.0) % 360.0 if t >= 0 else (az - 90.0) % 360.0
-            )
+    # Vectorized: starboard (+90) for tilt>=0, port (-90) otherwise
+    sign = np.where(tilt_angles >= 0, 90.0, -90.0)
+    view_azimuths = ((azimuths[:, None] + sign[None, :]) % 360.0).ravel()
+    tilt_angles_tiled = np.tile(np.abs(tilt_angles), n_track)
 
-    tilt_angles_tiled = np.tile(np.abs(tilt_angles), len(latitudes))
+    # Sample solar geometry along the track once and interpolate per point
+    solar_az_track, solar_zen_track = _sample_solar_geometry(
+        latitudes, longitudes, altitude_msl, observation_datetime
+    )
+    solar_az_tiled = np.repeat(solar_az_track, n_tilts)
+    solar_zen_tiled = np.repeat(solar_zen_track, n_tilts)
 
-    latitudes = np.repeat(latitudes, n_tilts)
-    longitudes = np.repeat(longitudes, n_tilts)
-    altitudes = np.full_like(latitudes, altitude_msl)
-    along_track_distance = np.repeat(along_track_distance, n_tilts)
-
-    observation_datetimes = np.full(latitudes.shape, observation_datetime)
+    latitudes_t = np.repeat(latitudes, n_tilts)
+    longitudes_t = np.repeat(longitudes, n_tilts)
+    altitudes_t = np.full_like(latitudes_t, altitude_msl)
+    along_track_distance_t = np.repeat(along_track_distance, n_tilts)
 
     target_lat, target_lon, glint_angles = calculate_target_and_glint_vectorized(
-        sensor_lat=latitudes,
-        sensor_lon=longitudes,
-        sensor_alt=altitudes,
+        sensor_lat=latitudes_t,
+        sensor_lon=longitudes_t,
+        sensor_alt=altitudes_t,
         viewing_azimuth=view_azimuths,
         tilt_angle=tilt_angles_tiled,
-        observation_datetime=observation_datetimes,
+        solar_azimuth=solar_az_tiled,
+        solar_zenith=solar_zen_tiled,
     )
 
     data = {
@@ -565,17 +622,21 @@ def compute_glint_vectorized(
         "glint_angle": glint_angles,
         "tilt_angle": tilt_angles_tiled,
         "viewing_azimuth": view_azimuths,
-        "along_track_distance": along_track_distance,
+        "along_track_distance": along_track_distance_t,
     }
 
     if output_geometry == "geographic":
-        geometry = [Point(lon, lat) for lon, lat in zip(target_lon, target_lat)]
-        gdf = gpd.GeoDataFrame(data, geometry=geometry, crs="EPSG:4326")
+        gdf = gpd.GeoDataFrame(
+            data,
+            geometry=gpd.points_from_xy(target_lon, target_lat),
+            crs="EPSG:4326",
+        )
     elif output_geometry == "along_track":
-        geometry = [
-            Point(t, d) for t, d in zip(tilt_angles_tiled, along_track_distance)
-        ]
-        gdf = gpd.GeoDataFrame(data, geometry=geometry, crs=None)
+        gdf = gpd.GeoDataFrame(
+            data,
+            geometry=gpd.points_from_xy(tilt_angles_tiled, along_track_distance_t),
+            crs=None,
+        )
     else:
         raise HyPlanValueError(
             "Invalid output_geometry parameter. Must be 'geographic' or 'along_track'."
@@ -616,35 +677,33 @@ def compute_glint_arc(
     n_tilts = len(sensor_tilts)
 
     earth_vza = bank_angle + sensor_tilts
-
     view_zeniths = np.tile(earth_vza, n_track)
     sensor_tilt_tiled = np.tile(sensor_tilts, n_track)
 
-    view_azimuths = np.empty(n_track * n_tilts)
-    for j, az in enumerate(azimuths):
-        for k in range(n_tilts):
-            idx = j * n_tilts + k
-            vz = view_zeniths[idx]
+    # Vectorized view azimuth: bank direction + vz sign select +90 vs -90
+    base_sign = 90.0 if glint_arc.bank_direction == "right" else -90.0
+    sign = np.where(earth_vza >= 0, base_sign, -base_sign)
+    view_azimuths = ((azimuths[:, None] + sign[None, :]) % 360.0).ravel()
 
-            if glint_arc.bank_direction == "right":
-                view_azimuths[idx] = (az + 90.0) % 360.0 if vz >= 0 else (az - 90.0) % 360.0
-            else:
-                view_azimuths[idx] = (az - 90.0) % 360.0 if vz >= 0 else (az + 90.0) % 360.0
-
-    latitudes = np.repeat(latitudes, n_tilts)
-    longitudes = np.repeat(longitudes, n_tilts)
-    altitudes = np.full_like(latitudes, altitude_msl)
+    latitudes_t = np.repeat(latitudes, n_tilts)
+    longitudes_t = np.repeat(longitudes, n_tilts)
+    altitudes_t = np.full_like(latitudes_t, altitude_msl)
     atd_tiled = np.repeat(along_track_distance, n_tilts)
 
-    observation_datetimes = np.full(latitudes.shape, glint_arc.observation_datetime)
+    solar_az_track, solar_zen_track = _sample_solar_geometry(
+        latitudes, longitudes, altitude_msl, glint_arc.observation_datetime
+    )
+    solar_az_tiled = np.repeat(solar_az_track, n_tilts)
+    solar_zen_tiled = np.repeat(solar_zen_track, n_tilts)
 
     target_lat, target_lon, glint_angles = calculate_target_and_glint_vectorized(
-        sensor_lat=latitudes,
-        sensor_lon=longitudes,
-        sensor_alt=altitudes,
+        sensor_lat=latitudes_t,
+        sensor_lon=longitudes_t,
+        sensor_alt=altitudes_t,
         viewing_azimuth=view_azimuths,
         tilt_angle=np.abs(view_zeniths),
-        observation_datetime=observation_datetimes,
+        solar_azimuth=solar_az_tiled,
+        solar_zenith=solar_zen_tiled,
     )
 
     data = {
@@ -658,13 +717,17 @@ def compute_glint_arc(
     }
 
     if output_geometry == "geographic":
-        geometry = [Point(lon, lat) for lon, lat in zip(target_lon, target_lat)]
-        gdf = gpd.GeoDataFrame(data, geometry=geometry, crs="EPSG:4326")
+        gdf = gpd.GeoDataFrame(
+            data,
+            geometry=gpd.points_from_xy(target_lon, target_lat),
+            crs="EPSG:4326",
+        )
     elif output_geometry == "along_track":
-        geometry = [
-            Point(t, d) for t, d in zip(sensor_tilt_tiled, atd_tiled)
-        ]
-        gdf = gpd.GeoDataFrame(data, geometry=geometry, crs=None)
+        gdf = gpd.GeoDataFrame(
+            data,
+            geometry=gpd.points_from_xy(sensor_tilt_tiled, atd_tiled),
+            crs=None,
+        )
     else:
         raise HyPlanValueError(
             "Invalid output_geometry parameter. Must be 'geographic' or 'along_track'."

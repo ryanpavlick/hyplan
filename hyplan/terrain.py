@@ -20,6 +20,7 @@ import os
 import tempfile
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 import numpy as np
 from shapely.geometry import box
 from rtree import index
@@ -244,24 +245,48 @@ def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str =
     merge_tiles(cache_filename, tile_files)
     return cache_filename
 
+@lru_cache(maxsize=8)
+def _load_dem(dem_file: str, mtime: float):
+    """Load a DEM raster + geotransform once and cache it.
+
+    Keyed on (path, mtime) so an updated file invalidates the cache.
+    Bounded to 8 entries to avoid unbounded memory growth across many DEMs.
+    Returns ``(raster, geotransform, raster_min, raster_max)``.
+    """
+    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
+    if not dataset:
+        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
+    geotransform = dataset.GetGeoTransform()
+    band = dataset.GetRasterBand(1)
+    if not band:
+        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
+    raster = band.ReadAsArray()
+    dataset = None
+    raster.setflags(write=False)  # protect cached array from in-place mutation
+    raster_min = float(np.nanmin(raster))
+    raster_max = float(np.nanmax(raster))
+    return raster, geotransform, raster_min, raster_max
+
+
+def _get_dem_cached(dem_file: str):
+    """Public wrapper that handles mtime lookup so callers don't have to."""
+    try:
+        mtime = os.path.getmtime(dem_file)
+    except OSError as e:
+        raise HyPlanRuntimeError(f"Could not stat DEM file: {dem_file}") from e
+    return _load_dem(dem_file, mtime)
+
+
 def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndarray:
     """
     Extract elevation values for given latitudes and longitudes from a DEM file.
 
     Reads the entire raster band once and indexes it in bulk, rather than
-    querying pixel-by-pixel, for efficient batch lookups.
+    querying pixel-by-pixel. The raster is cached per ``(path, mtime)`` so
+    repeated calls against the same DEM (the common case in flight planning)
+    pay the read cost only once.
     """
-    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
-    if not dataset:
-        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
-
-    geotransform = dataset.GetGeoTransform()
-    band = dataset.GetRasterBand(1)
-    if not band:
-        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
-
-    raster = band.ReadAsArray()
-    dataset = None  # Close the dataset
+    raster, geotransform, _, _ = _get_dem_cached(dem_file)
 
     # np.round() rounds to nearest pixel center before int conversion; no truncation occurs.
     xs = np.round((lons - geotransform[0]) / geotransform[1]).astype(int)
@@ -291,18 +316,8 @@ def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
     Returns:
         Tuple[float, float]: (min_elevation, max_elevation) in the DEM file.
     """
-    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
-    if not dataset:
-        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
-
-    band = dataset.GetRasterBand(1)
-    if not band:
-        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
-
-    min_val, max_val = band.ComputeRasterMinMax()
-    dataset = None  # Close the dataset
-
-    return min_val, max_val
+    _, _, raster_min, raster_max = _get_dem_cached(dem_file)
+    return raster_min, raster_max
 
 
 def terrain_elevation_along_track(flight_line, dem_file: str,

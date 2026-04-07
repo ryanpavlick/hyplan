@@ -20,6 +20,7 @@ import numpy as np
 import math
 import random
 import logging
+from functools import lru_cache
 from typing import Optional, Tuple, Callable, Union, List
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
@@ -153,9 +154,18 @@ def calculate_geographic_mean(geometry: Union[BaseGeometry, List[BaseGeometry]])
 
 
 
+@lru_cache(maxsize=512)
+def _utm_crs_from_epsg(epsg: int) -> CRS:
+    return CRS.from_epsg(epsg)
+
+
 def get_utm_crs(lon: float, lat: float) -> CRS:
     """
-    Determine the UTM CRS for a given WGS84 coordinate using the area of interest (AOI).
+    Determine the UTM CRS for a given WGS84 coordinate.
+
+    UTM zones are determined arithmetically from longitude (6° wide) and
+    hemisphere from latitude, so we compute the EPSG code directly instead
+    of querying pyproj's CRS database — this is both faster and exact.
 
     Args:
         lon (float): Longitude in decimal degrees (WGS84).
@@ -164,18 +174,13 @@ def get_utm_crs(lon: float, lat: float) -> CRS:
     Returns:
         CRS: The appropriate UTM CRS for the coordinate.
     """
-    # Create an area of interest centered on the input coordinates
-    aoi = AreaOfInterest(west_lon_degree=lon, south_lat_degree=lat,
-                         east_lon_degree=lon, north_lat_degree=lat)
-
-    # Query UTM CRS info for the area of interest
-    utm_crs_list = query_utm_crs_info(datum_name="WGS 84", area_of_interest=aoi)
-
-    # Return the first matching UTM CRS
-    if not utm_crs_list:
-        raise HyPlanValueError(f"No UTM CRS found for the coordinate ({lon}, {lat}).")
-    
-    return CRS.from_epsg(utm_crs_list[0].code)
+    zone = int((lon + 180.0) / 6.0) + 1
+    if zone < 1:
+        zone = 1
+    elif zone > 60:
+        zone = 60
+    epsg = (32600 if lat >= 0 else 32700) + zone
+    return _utm_crs_from_epsg(epsg)
 
 
 
