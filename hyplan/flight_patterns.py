@@ -11,7 +11,7 @@ import numpy as np
 import pymap3d.vincenty
 
 from .units import ureg
-from .exceptions import HyPlanValueError
+from .exceptions import HyPlanValueError, HyPlanTypeError
 from .geometry import wrap_to_180, wrap_to_360
 from .waypoint import Waypoint
 from .flight_line import FlightLine
@@ -42,7 +42,7 @@ def _to_length_quantity(value, label="value"):
         return ureg.Quantity(float(value), "meter")
     if hasattr(value, 'units') and value.check('[length]'):
         return value.to(ureg.meter)
-    raise TypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
+    raise HyPlanTypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
 
 
 def racetrack(
@@ -85,7 +85,7 @@ def racetrack(
     # Build per-leg crosstrack offsets (meters from center)
     if isinstance(offset, list):
         if len(offset) != n_legs:
-            raise ValueError(f"offset list length ({len(offset)}) must equal n_legs ({n_legs})")
+            raise HyPlanValueError(f"offset list length ({len(offset)}) must equal n_legs ({n_legs})")
         offsets_m = [_to_length_quantity(o, "offset").magnitude for o in offset]
     else:
         spacing_m = _to_length_quantity(offset, "offset").magnitude
@@ -109,7 +109,7 @@ def racetrack(
         leg_alts = all_alts
     elif altitudes is not None:
         if len(altitudes) != n_legs:
-            raise ValueError(f"altitudes length ({len(altitudes)}) must equal n_legs ({n_legs})")
+            raise HyPlanValueError(f"altitudes length ({len(altitudes)}) must equal n_legs ({n_legs})")
         leg_alts = [_to_length_quantity(a, "altitudes") for a in altitudes]
     else:
         default_alt = _to_length_quantity(altitude, "altitude")
@@ -432,15 +432,15 @@ def spiral(
         List of Waypoint objects with segment_type="pattern".
 
     Raises:
-        HyPlanValueError: If n_turns <= 0 or points_per_turn < 3.
-        ValueError: If direction is not "right" or "left".
+        HyPlanValueError: If n_turns <= 0, points_per_turn < 3, or direction
+            is not "right" or "left".
     """
     if n_turns <= 0:
         raise HyPlanValueError("n_turns must be positive")
     if points_per_turn < 3:
         raise HyPlanValueError("points_per_turn must be at least 3")
     if direction not in ("right", "left"):
-        raise ValueError(f"direction must be 'right' or 'left', got '{direction}'")
+        raise HyPlanValueError(f"direction must be 'right' or 'left', got '{direction}'")
 
     center_lat, center_lon = center
     radius_m = _to_length_quantity(radius, "radius").magnitude

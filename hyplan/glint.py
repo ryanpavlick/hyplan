@@ -31,7 +31,7 @@ import numpy as np
 import geopandas as gpd
 
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import transform
@@ -43,7 +43,7 @@ from pymap3d import los
 from .sun import sunpos
 
 from .units import ureg
-from .exceptions import HyPlanValueError, HyPlanTypeError
+from .exceptions import HyPlanValueError
 from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
 from .instruments import LineScanner
 from .flight_line import FlightLine

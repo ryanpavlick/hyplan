@@ -13,7 +13,6 @@ from hyplan import (
     AVIRIS3,
     DynamicAviation_B200,
     box_around_polygon,
-    build_graph,
     compute_flight_plan,
     greedy_optimize,
     to_foreflight_csv,

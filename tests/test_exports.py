@@ -2,7 +2,6 @@
 
 import datetime
 import os
-import tempfile
 
 import pytest
 
@@ -456,7 +455,7 @@ class TestExportContentValidation:
         assert len(all_lines) > n_header
 
         # Data rows start after header
-        data_lines = [l for l in all_lines[n_header:] if l.strip()]
+        data_lines = [line for line in all_lines[n_header:] if line.strip()]
         assert len(data_lines) > 0
 
         # Each data row should have 7 comma-separated values
@@ -483,7 +482,7 @@ class TestExportContentValidation:
             all_lines = f.readlines()
 
         n_header = int(all_lines[0].strip().split(",")[0].strip())
-        data_lines = [l for l in all_lines[n_header:] if l.strip()]
+        data_lines = [line for line in all_lines[n_header:] if line.strip()]
 
         for line in data_lines:
             vals = [float(v.strip()) for v in line.strip().split(",")]
@@ -506,7 +505,7 @@ class TestExportContentValidation:
             lines = f.readlines()
 
         # Header + data lines
-        data_lines = [l for l in lines[1:] if l.strip()]
+        data_lines = [line for line in lines[1:] if line.strip()]
         assert len(data_lines) == len(wps)
 
         # Each data line should have the waypoint coordinates in NDDMM format

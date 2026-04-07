@@ -9,11 +9,9 @@ caps, and refueling constraints to produce a feasible multi-day schedule.
 
 import itertools
 import logging
-from functools import lru_cache
 from typing import Optional, Tuple
 
 import networkx as nx
-import pymap3d.vincenty
 
 from .units import ureg
 from .aircraft import Aircraft

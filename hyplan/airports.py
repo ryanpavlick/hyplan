@@ -23,7 +23,6 @@ from typing import List, Union
 
 from .units import convert_distance, ureg
 from .download import download_file
-from .geometry import haversine
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 
 __all__ = [

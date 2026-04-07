@@ -1,7 +1,6 @@
 """Tests for 3D Dubins integration into the flight planning pipeline."""
 
 import pytest
-import numpy as np
 
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint

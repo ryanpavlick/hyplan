@@ -19,11 +19,11 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import requests
-from shapely.geometry import LineString, Polygon, MultiPolygon, shape
+from shapely.geometry import Polygon, MultiPolygon, shape
 from shapely.geometry.base import BaseGeometry
 from shapely import STRtree
 

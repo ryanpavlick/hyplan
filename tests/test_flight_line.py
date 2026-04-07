@@ -1,8 +1,6 @@
 """Tests for hyplan.flight_line."""
 
 import pytest
-import numpy as np
-from shapely.geometry import Polygon
 from hyplan.units import ureg
 from hyplan.flight_line import FlightLine, to_gdf
 

@@ -21,7 +21,10 @@ import time
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - type-checking only
+    from skyfield.api import EarthSatellite
 
 import numpy as np
 import pandas as pd

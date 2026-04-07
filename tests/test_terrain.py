@@ -3,7 +3,6 @@
 import os
 import pytest
 import tempfile
-import numpy as np
 
 from hyplan.terrain import get_cache_root, clear_cache, _COS_TILT_MIN
 

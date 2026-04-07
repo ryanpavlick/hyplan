@@ -23,9 +23,9 @@ import datetime
 import json
 import logging
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
-from shapely.geometry import box, mapping, shape, LineString, Polygon
+from shapely.geometry import box, mapping, shape, Polygon
 
 from .airspace import (
     Airspace,

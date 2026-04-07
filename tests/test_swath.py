@@ -1,7 +1,5 @@
 """Tests for hyplan.swath."""
 
-import pytest
-import numpy as np
 from shapely.geometry import Polygon
 
 from hyplan.units import ureg

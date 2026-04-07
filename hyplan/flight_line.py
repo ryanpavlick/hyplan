@@ -13,7 +13,7 @@ derived automatically from the geodesic geometry via Vincenty's formulae.
 
 from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from pint import Quantity
-from typing import Optional, List, Dict, Union, Tuple
+from typing import Optional, List, Dict, Union
 import pymap3d
 import pymap3d.vincenty
 import geopandas as gpd

@@ -3,10 +3,8 @@
 import pytest
 from hyplan.units import ureg
 from hyplan.aircraft import (
-    Aircraft,
     NASA_ER2,
     NASA_GIII,
-    DynamicAviation_B200,
     DynamicAviation_B200 as B200,
     C130,
     TwinOtter,

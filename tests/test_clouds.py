@@ -2,7 +2,6 @@
 
 import pytest
 import pandas as pd
-from datetime import datetime
 
 from hyplan.clouds import create_date_ranges, simulate_visits
 

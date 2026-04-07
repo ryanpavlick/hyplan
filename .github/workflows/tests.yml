@@ -30,7 +30,16 @@ jobs:
           pip install --upgrade pip
           pip install gdal==$(gdal-config --version)
           pip install -e .
-          pip install pytest
+          pip install pytest pytest-cov ruff mypy
 
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Lint (ruff)
+        run: ruff check hyplan tests
+
+      - name: Type check (mypy, non-blocking)
+        # Mypy is currently informational: the codebase has ~330 pre-existing
+        # type errors that are being cleaned up incrementally. This job
+        # reports them in the logs but does not fail the build.
+        run: mypy hyplan || true
+
+      - name: Run tests with coverage
+        run: pytest tests/ -v --cov=hyplan --cov-report=term-missing --cov-fail-under=60

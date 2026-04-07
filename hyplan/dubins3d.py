@@ -26,9 +26,8 @@ Walker, A. (2011). Hard Real-Time Motion Planning for Autonomous
 Vehicles. PhD thesis, Swinburne University of Technology.
 """
 
-import logging
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from shapely.geometry import LineString

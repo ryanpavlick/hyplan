@@ -27,8 +27,6 @@ from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import triangulate, transform, unary_union
 from shapely.geometry.base import BaseGeometry
 from pyproj import CRS
-from pyproj.aoi import AreaOfInterest
-from pyproj.database import query_utm_crs_info
 from pyproj import Transformer
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
@@ -267,13 +265,13 @@ def random_points_in_polygon(polygon: Polygon, k: int) -> List[Point]:
         (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
         transforms.append([x1 - x0, x2 - x0, y2 - y0, y1 - y0, x0, y0])
     points = []
-    for transform in random.choices(transforms, weights=areas, k=k):
+    for tri_transform in random.choices(transforms, weights=areas, k=k):
         x, y = [random.random() for _ in range(2)]
         if x + y > 1:
             p = Point(1 - x, 1 - y)
         else:
             p = Point(x, y)
-        points.append(affine_transform(p, transform))
+        points.append(affine_transform(p, tri_transform))
     return points
 
 

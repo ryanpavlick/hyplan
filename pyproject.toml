@@ -49,7 +49,7 @@ dependencies = [
 mag = ["geomag"]
 clouds = ["earthengine-api", "seaborn"]
 interactive = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
-dev = ["pytest", "nbstripout"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [project.urls]
 Homepage = "https://github.com/ryanpavlick/hyplan"

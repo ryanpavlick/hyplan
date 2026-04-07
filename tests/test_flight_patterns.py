@@ -1,11 +1,9 @@
 """Tests for hyplan.flight_patterns."""
 
 import pytest
-import numpy as np
 import pymap3d.vincenty
 
 from hyplan.units import ureg
-from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
 from hyplan.flight_patterns import (
     racetrack,

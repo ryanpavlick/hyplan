@@ -2,7 +2,6 @@
 
 import os
 import pytest
-import tempfile
 
 from hyplan.download import download_file
 

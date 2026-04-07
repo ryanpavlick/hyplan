@@ -53,25 +53,14 @@ autodoc_default_options = {
 autodoc_typehints = "description"
 autodoc_class_signature = "separated"
 
-# Mock imports that may not be available in the docs build environment
+# Mock only truly optional imports — the docs CI workflow now does a real
+# `pip install -e .`, so all required dependencies are available at build time.
+# Only keep mocks for optional extras and packages not listed in pyproject.toml.
 autodoc_mock_imports = [
     "dubins",
-    "ee",
-    "folium",
-    "geopandas",
-    "matplotlib",
-    "networkx",
+    "ee",           # [clouds] extra
     "numba",
-    "osgeo",
-    "pandas",
-    "pymap3d",
-    "pyproj",
-    "requests",
-    "rtree",
-    "seaborn",
-    "shapely",
-    "simplekml",
-    "skyfield",
+    "seaborn",      # [clouds] extra
     "tabulate",
     "pydantic",
     "pydantic_pint",

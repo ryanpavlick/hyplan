@@ -5,7 +5,6 @@ import numpy as np
 from hyplan.units import ureg
 from hyplan.instruments import (
     LVIS,
-    LVISLens,
     LVIS_LENS_NARROW,
     LVIS_LENS_MEDIUM,
     LVIS_LENS_WIDE,

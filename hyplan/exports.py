@@ -20,12 +20,9 @@ planning tool. Zenodo. doi:10.5281/zenodo.1478126
 """
 
 import datetime
-import logging
 import math
-import os
 import warnings
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List
 
 import geopandas as gpd
 import numpy as np
@@ -475,17 +472,24 @@ def to_pilot_excel(
         utc_min = base_minutes + wp["cum_time_min"]
 
         col = 0
-        ws.write(row, col, int(wp["wp"]), cf); col += 1
-        ws.write(row, col, wp_names[idx] if idx < len(wp_names) else "", cf); col += 1
-        ws.write(row, col, lat_s, cf); col += 1
-        ws.write(row, col, lon_s, cf); col += 1
-        ws.write(row, col, wp["alt_kft"] or 0, df); col += 1
-        ws.write(row, col, _utc_fraction(utc_min), tf); col += 1
+        ws.write(row, col, int(wp["wp"]), cf)
+        col += 1
+        ws.write(row, col, wp_names[idx] if idx < len(wp_names) else "", cf)
+        col += 1
+        ws.write(row, col, lat_s, cf)
+        col += 1
+        ws.write(row, col, lon_s, cf)
+        col += 1
+        ws.write(row, col, wp["alt_kft"] or 0, df)
+        col += 1
+        ws.write(row, col, _utc_fraction(utc_min), tf)
+        col += 1
 
         if include_mag_heading:
             dec = magnetic_declination(wp["lat"], wp["lon"])
             mag_hdg = true_to_magnetic(wp["heading"], dec)
-            ws.write(row, col, mag_hdg, hf); col += 1
+            ws.write(row, col, mag_hdg, hf)
+            col += 1
 
         comment = wp["segment_type"]
         ws.write(row, col, comment, cf)
@@ -937,18 +941,11 @@ def to_gpx(
 
     wps = extract_waypoints(plan)
 
-    if takeoff_time:
-        base_minutes = takeoff_time.hour * 60 + takeoff_time.minute + takeoff_time.second / 60.0
-    else:
-        base_minutes = 0.0
-
     gpx = gpxpy.gpx.GPX()
     route = gpxpy.gpx.GPXRoute(name=mission_name or "Flight Plan")
     gpx.routes.append(route)
 
     for idx, (_, wp) in enumerate(wps.iterrows()):
-        utc_min = base_minutes + wp["cum_time_min"]
-
         rpt = gpxpy.gpx.GPXRoutePoint(
             latitude=wp["lat"],
             longitude=wp["lon"],

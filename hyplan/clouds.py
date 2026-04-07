@@ -43,7 +43,7 @@ daily L2G products from NASA LP DAAC, accessed via Google Earth Engine.
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
-from typing import Tuple, Dict
+from typing import Tuple, Dict, TYPE_CHECKING
 
 # Geospatial Libraries
 import geopandas as gpd
@@ -54,6 +54,10 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+
+if TYPE_CHECKING:  # pragma: no cover - type-checking only
+    import ee  # Google Earth Engine, optional runtime dep
+    from shapely.geometry.base import BaseGeometry
 
 __all__ = [
     "get_binary_cloud", "calculate_cloud_fraction", "create_date_ranges",
@@ -439,8 +443,8 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
                 "Install it with: pip install hyplan[clouds]"
             )
         plt.figure(figsize=(16, 8))
-        ax = sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False,
-                         linewidths=0.5, linecolor='gray', square=True)
+        sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False,
+                    linewidths=0.5, linecolor='gray', square=True)
         plt.scatter(stars_x, stars_y, color='red', marker='*', s=150, label='Visit Day')
         plt.title(f'Cloud Fraction Heatmap with Visits for Year {year}')
         plt.xlabel('Day of Year')

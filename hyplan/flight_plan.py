@@ -361,4 +361,3 @@ def process_flight_phase(
 
 
 # Backward-compatible re-exports — these functions now live in hyplan.plotting
-from .plotting import plot_flight_plan, terrain_profile_along_track, plot_altitude_trajectory

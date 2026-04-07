@@ -1,6 +1,5 @@
 """Tests for hyplan.interactive widgets and state."""
 
-import pytest
 
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint

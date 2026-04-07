@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
-from hyplan.waypoint import Waypoint, is_waypoint
+from hyplan.waypoint import is_waypoint
 from hyplan.units import ureg
 
 __all__ = [

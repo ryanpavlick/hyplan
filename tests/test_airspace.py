@@ -7,11 +7,10 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 import requests
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, box
 
 from hyplan.airspace import (
     Airspace,
-    AirspaceConflict,
     OpenAIPClient,
     check_airspace_conflicts,
     fetch_and_check,

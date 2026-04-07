@@ -167,6 +167,7 @@ __all__ = [
     "generate_swath_polygon", "calculate_swath_widths",
     # Flight patterns
     "racetrack", "rosette", "polygon", "sawtooth", "spiral", "flight_lines_to_waypoint_path",
+    "coordinated_line",
     # Flight planning
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
     "build_graph", "greedy_optimize",

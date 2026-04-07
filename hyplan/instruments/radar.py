@@ -85,7 +85,7 @@ def check_lband_radar_exclusions(
     Raises:
         FileNotFoundError: If *geojson* is ``None`` and the bundled data file
             does not exist, or if a path string is given that does not exist.
-        ValueError: If the GeoJSON is not a valid FeatureCollection.
+        HyPlanValueError: If the GeoJSON is not a valid FeatureCollection.
     """
     # Normalise input to a list
     if isinstance(swath_polygons, Polygon):
@@ -108,7 +108,7 @@ def check_lband_radar_exclusions(
             geojson = json.load(f)
 
     if geojson.get("type") != "FeatureCollection":
-        raise ValueError("geojson must be a GeoJSON FeatureCollection")
+        raise HyPlanValueError("geojson must be a GeoJSON FeatureCollection")
 
     # Parse exclusion zone polygons
     zone_names: List[str] = []

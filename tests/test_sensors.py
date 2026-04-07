@@ -4,19 +4,14 @@ import pytest
 from hyplan.units import ureg
 from hyplan.instruments import (
     AVIRIS3,
-    AVIRISNextGen,
     HyTES,
     PRISM,
-    MASTER,
     SENSOR_REGISTRY,
     create_sensor,
     FrameCamera,
     LVIS,
-    LVISLens,
     LVIS_LENS_NARROW,
-    LVIS_LENS_WIDE,
     UAVSAR_Lband,
-    UAVSAR_Pband,
     SidelookingRadar,
 )
 
@@ -98,7 +93,6 @@ class TestSwathOffsetAngles:
     def test_swath_width_with_tilt(self):
         """Tilted sensor has different (wider) swath than nadir."""
         from hyplan.instruments import LineScanner
-        import numpy as np
         s_nadir = LineScanner("N", fov=30.0, across_track_pixels=600,
                               frame_rate=100.0 * ureg.Hz, cross_track_tilt=0.0)
         s_tilted = LineScanner("T", fov=30.0, across_track_pixels=600,

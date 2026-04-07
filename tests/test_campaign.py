@@ -8,7 +8,7 @@ import pytest
 from shapely.geometry import box, Polygon
 
 from hyplan.airspace import Airspace, parse_airspace_items
-from hyplan.campaign import Campaign, _flight_line_from_geojson
+from hyplan.campaign import Campaign
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.flight_line import FlightLine
 from hyplan.units import ureg
@@ -245,7 +245,7 @@ class TestCampaignFlightLines:
         fl1 = _make_flight_line("A")
         fl2 = _make_flight_line("B")
         g1 = c.add_flight_lines([fl1], group_name="First")
-        g2 = c.add_flight_lines([fl2], group_name="Second")
+        c.add_flight_lines([fl2], group_name="Second")
         assert len(c.groups) == 2
         assert len(c.flight_lines) == 2
         c.remove_group(g1)
