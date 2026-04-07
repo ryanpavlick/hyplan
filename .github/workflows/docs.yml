@@ -34,7 +34,7 @@ jobs:
           pip install --upgrade pip
           pip install gdal==$(gdal-config --version)
           pip install -e .
-          pip install sphinx myst-parser furo sphinx-autodoc-typehints
+          pip install sphinx myst-nb furo sphinx-autodoc-typehints
 
       - name: Build docs
         # TODO: switch to `-W --keep-going` once existing duplicate-object

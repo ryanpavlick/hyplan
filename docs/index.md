@@ -15,6 +15,7 @@ and aircraft performance.
 
 installation
 concepts
+tutorial
 ```
 
 ## API Reference

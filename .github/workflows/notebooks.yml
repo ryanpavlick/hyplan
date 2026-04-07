@@ -1,0 +1,67 @@
+name: Notebook smoke test
+
+# Executes a small set of representative notebooks end-to-end on a
+# schedule, so we catch breakage in the notebooks even though they are
+# not part of the unit-test suite.
+#
+# The committed .ipynb outputs are intentionally preserved for GitHub
+# rendering, so this workflow runs each notebook into a throwaway
+# temp file (--output) rather than rewriting the source. If a notebook
+# fails, papermill exits non-zero and the matrix job goes red.
+
+on:
+  schedule:
+    # 09:00 UTC daily (~02:00 PT, ~05:00 ET) — quiet time for runners.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "notebooks/tutorial.ipynb"
+      - "notebooks/export_formats.ipynb"
+      - "notebooks/aircraft_performance.ipynb"
+      - ".github/workflows/notebooks.yml"
+
+jobs:
+  papermill:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook:
+          # Canonical end-to-end workflow (covers most planning APIs).
+          - tutorial.ipynb
+          # Exercises every public function in hyplan.exports.
+          - export_formats.ipynb
+          # Exercises the Aircraft base class and several subclasses.
+          - aircraft_performance.ipynb
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install gdal==$(gdal-config --version)
+          pip install -e .
+          pip install papermill ipykernel
+
+      - name: Execute ${{ matrix.notebook }}
+        # --cwd notebooks/ keeps relative paths (e.g. ../notebooks/exampledata/...)
+        # working the same way they do for an interactive user. The output
+        # path goes to a temp file so we never rewrite the committed
+        # notebook with stripped or re-executed cells.
+        run: |
+          papermill \
+            --cwd notebooks \
+            --kernel python3 \
+            notebooks/${{ matrix.notebook }} \
+            /tmp/${{ matrix.notebook }}

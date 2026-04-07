@@ -22,7 +22,9 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.mathjax",
     "sphinx_autodoc_typehints",
-    "myst_parser",
+    # myst_nb is a superset of myst_parser; it adds .ipynb support and
+    # supersedes the bare myst_parser extension. Don't enable both.
+    "myst_nb",
 ]
 
 # MyST settings
@@ -31,10 +33,18 @@ myst_enable_extensions = [
     "colon_fence",      # ::: directive syntax
 ]
 
-# Source file suffixes
+# myst-nb: render notebooks using their already-committed outputs.
+# We never execute at docs build time — committed outputs are the source
+# of truth for tutorials, and the nightly notebook smoke-test workflow
+# (.github/workflows/notebooks.yml) is what guarantees they keep working.
+nb_execution_mode = "off"
+
+# Source file suffixes — myst-nb registers itself as the parser for both
+# Markdown and Jupyter notebooks, so we hand both extensions to it.
 source_suffix = {
     ".rst": "restructuredtext",
-    ".md": "markdown",
+    ".md": "myst-nb",
+    ".ipynb": "myst-nb",
 }
 
 # Napoleon settings (Google-style docstrings)

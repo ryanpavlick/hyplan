@@ -16,6 +16,24 @@ mamba activate hyplan-env
 pip install -e hyplan
 ```
 
+## Optional extras
+
+HyPlan keeps its core install lightweight and gates niche features behind
+optional dependency groups. Install one or more with the usual
+`pip install hyplan[<extra>]` syntax (combine multiple in a single bracket
+list, e.g. `pip install -e .[interactive,mag]`).
+
+| Extra | Pulls in | Enables |
+|-------|----------|---------|
+| `mag` | `geomag` | Magnetic-declination correction in [`hyplan.exports.to_pilot_excel`](api/exports.md) when `include_mag_heading=True`, and {func}`hyplan.geometry.true_to_magnetic`. |
+| `clouds` | `earthengine-api`, `seaborn` | The {mod}`hyplan.clouds` module — climatology and time-series cloud queries against Google Earth Engine. Requires a separately-authenticated GEE account. |
+| `interactive` | `ipyleaflet`, `ipywidgets>=8`, `ipydatagrid` | The {mod}`hyplan.interactive` JupyterLab widgets for waypoint editing and flight-line management. |
+| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy` | The full test, lint, and type-check toolchain used in CI. Run `pytest --cov=hyplan` after installing. |
+
+None of the extras are required to run the core flight-planning, swath,
+or export workflows. If you only want to read the API reference or run
+the tutorial, the base install is enough.
+
 ## Versioning
 
 HyPlan uses [setuptools-scm](https://setuptools-scm.readthedocs.io/) to
