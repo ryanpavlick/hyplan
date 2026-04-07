@@ -417,7 +417,13 @@ class OpenAIPClient:
                         seen_ids.add(item_id)
                         items.append(it)
 
-        # Cache the raw JSON
+        # Cache the raw JSON. The cache is a pure performance optimization:
+        # `items` is already fully populated above, and the function returns
+        # the parsed result unconditionally below — a write failure (disk
+        # full, read-only mount, permission error) just means the next call
+        # will re-fetch instead of hitting the cache. We log the warning
+        # rather than promoting to an exception, which would discard a
+        # successful fetch.
         try:
             with open(cache_file, "w") as f:
                 json.dump(items, f)

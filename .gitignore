@@ -2,6 +2,11 @@
 /de421.bsp
 notebooks/de421.bsp
 
+# Notebook export artifacts (regenerated on every glint_arc_planning.ipynb run)
+notebooks/glint_arc_path.geojson
+notebooks/glint_arc_swath.geojson
+notebooks/glint_arc_trackair.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
