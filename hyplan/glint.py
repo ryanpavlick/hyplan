@@ -733,3 +733,35 @@ def compute_glint_arc(
 
     return gdf
 
+
+def fraction_exceeding_glint_threshold(
+    glint_gdf: gpd.GeoDataFrame,
+    threshold: float,
+) -> float:
+    """Fraction of glint samples whose angle is **below** ``threshold`` degrees.
+
+    A small glint angle means specular contamination, so values below the
+    threshold are the *bad* ones (i.e. the part of the swath that "exceeds"
+    the user's tolerable glint level). Returns a fraction in [0, 1].
+
+    Args:
+        glint_gdf: Result of :func:`compute_glint_vectorized` or
+            :func:`compute_glint_arc`. Must contain a ``glint_angle``
+            column in degrees.
+        threshold: Glint angle threshold in degrees. Common values are
+            5° (severe contamination) and 25° (moderate contamination).
+
+    Returns:
+        Fraction of samples with ``glint_angle < threshold``, in [0, 1].
+        Returns 0.0 for an empty input.
+    """
+    if "glint_angle" not in glint_gdf.columns:
+        raise HyPlanValueError(
+            "glint_gdf has no 'glint_angle' column; "
+            "pass output of compute_glint_vectorized or compute_glint_arc"
+        )
+    n = len(glint_gdf)
+    if n == 0:
+        return 0.0
+    return float((glint_gdf["glint_angle"] < threshold).sum()) / n
+

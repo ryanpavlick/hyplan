@@ -12,6 +12,7 @@ from hyplan.glint import (
     compute_glint_vectorized,
     GlintArc,
     compute_glint_arc,
+    fraction_exceeding_glint_threshold,
 )
 from hyplan.instruments import AVIRIS3
 from hyplan.units import ureg
@@ -534,3 +535,38 @@ class TestGlintArcFootprint:
         assert isinstance(poly, Polygon)
         assert poly.is_valid
         assert poly.contains(Point(ARC_TARGET_LON, ARC_TARGET_LAT))
+
+
+class TestFractionExceedingGlintThreshold:
+    def _make_gdf(self, glint_angles):
+        import pandas as pd
+        return gpd.GeoDataFrame(pd.DataFrame({"glint_angle": glint_angles}))
+
+    def test_basic_fraction(self):
+        gdf = self._make_gdf([1, 2, 10, 20, 30])
+        # 2 of 5 are < 5
+        assert fraction_exceeding_glint_threshold(gdf, 5) == pytest.approx(0.4)
+
+    def test_all_below(self):
+        gdf = self._make_gdf([1, 2, 3])
+        assert fraction_exceeding_glint_threshold(gdf, 100) == pytest.approx(1.0)
+
+    def test_none_below(self):
+        gdf = self._make_gdf([10, 20, 30])
+        assert fraction_exceeding_glint_threshold(gdf, 5) == pytest.approx(0.0)
+
+    def test_threshold_at_zero(self):
+        gdf = self._make_gdf([0, 1, 2, 3])
+        # Strict <, so 0 is not counted
+        assert fraction_exceeding_glint_threshold(gdf, 0) == pytest.approx(0.0)
+
+    def test_empty_returns_zero(self):
+        gdf = self._make_gdf([])
+        assert fraction_exceeding_glint_threshold(gdf, 5) == 0.0
+
+    def test_missing_column_raises(self):
+        import pandas as pd
+        from hyplan.exceptions import HyPlanValueError
+        gdf = gpd.GeoDataFrame(pd.DataFrame({"other_col": [1, 2, 3]}))
+        with pytest.raises(HyPlanValueError):
+            fraction_exceeding_glint_threshold(gdf, 5)
