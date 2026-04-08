@@ -13,6 +13,8 @@ from typing import List, Optional, Union
 import numpy as np
 import geopandas as gpd
 import pandas as pd
+from pint import Quantity
+import pymap3d.vincenty
 from .units import ureg
 from .aircraft import Aircraft
 from .airports import Airport
@@ -28,11 +30,57 @@ __all__ = [
 ]
 
 
+def _wind_factor(
+    tas: Quantity,
+    heading_deg: float,
+    wind_speed: Optional[Quantity],
+    wind_from_deg: Optional[float],
+) -> float:
+    """Multiplicative wind-correction factor for a segment's no-wind time.
+
+    Given the true airspeed and a constant wind vector (speed + direction
+    *from which* the wind is blowing, per meteorological convention), returns
+    ``TAS / ground_speed`` where
+
+        ground_speed = TAS − wind_speed · cos(wind_from_deg − heading_deg)
+
+    Multiply a no-wind ``distance / TAS`` time by this factor to obtain the
+    wind-corrected time. Returns 1.0 when no wind is supplied. Crosswind
+    effects on ground speed are ignored (valid small-angle approximation
+    that matches standard pre-flight planning practice).
+
+    Raises:
+        HyPlanValueError: If the headwind exceeds TAS, yielding a
+            non-positive ground speed (unflyable).
+    """
+    if wind_speed is None or wind_speed.magnitude == 0 or wind_from_deg is None:
+        return 1.0
+    if heading_deg is None:
+        return 1.0
+    rel_angle_rad = np.radians(wind_from_deg - heading_deg)
+    headwind = wind_speed * float(np.cos(rel_angle_rad))
+    ground_speed = tas - headwind
+    if ground_speed.m_as(ureg.knot) <= 0:
+        raise HyPlanValueError(
+            f"Headwind {headwind.to(ureg.knot):.1f} exceeds TAS "
+            f"{tas.to(ureg.knot):.1f} on heading {heading_deg:.0f}°; unflyable."
+        )
+    return float((tas / ground_speed).to_base_units().magnitude)
+
+
+def _bearing_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Initial great-circle bearing in degrees from point 1 to point 2."""
+    _, az = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+    return float(az)
+
+
 def _direct_segment_record(
     start_wp: Waypoint,
     end_wp: Waypoint,
     aircraft: Aircraft,
     segment_type: str,
+    wind_speed: Optional[Quantity] = None,
+    wind_direction: Optional[float] = None,
 ) -> dict:
     """Create a direct great-circle segment between two pattern waypoints.
 
@@ -60,7 +108,11 @@ def _direct_segment_record(
     alt_end = end_wp.altitude_msl or ureg.Quantity(0, "foot")
     avg_alt = (alt_start + alt_end) / 2.0
     speed = start_wp.speed if start_wp.speed is not None else aircraft.cruise_speed_at(avg_alt)
-    time_min = (ureg.Quantity(dist_m, "meter") / speed).m_as(ureg.minute)
+    heading = _bearing_between(
+        start_wp.latitude, start_wp.longitude, end_wp.latitude, end_wp.longitude,
+    )
+    factor = _wind_factor(speed, heading, wind_speed, wind_direction)
+    time_min = (ureg.Quantity(dist_m, "meter") / speed).m_as(ureg.minute) * factor
 
     return {
         "geometry": geom,
@@ -86,10 +138,12 @@ def compute_flight_plan(
     return_airport: Optional[Airport] = None,
     start_offset: float = 5,
     end_offset: float = 1,
+    wind_speed: Optional[Quantity] = None,
+    wind_direction: Optional[float] = None,
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
-    
+
     Segment types are determined as follows:
       - "takeoff" for the very first ascending phase,
       - "climb" for any subsequent ascending phase,
@@ -97,7 +151,30 @@ def compute_flight_plan(
       - "descent" for descending flight,
       - "flight_line" for dedicated flight line segments,
       - "approach" for the final descending phase into the return airport.
+
+    Args:
+        aircraft: Aircraft performance model used for timing.
+        flight_sequence: Ordered list of flight lines and/or waypoints.
+        takeoff_airport: Optional departure airport (prepends a takeoff phase).
+        return_airport: Optional arrival airport (appends an approach phase).
+        start_offset: Pre-extension of each flight line (nautical miles).
+        end_offset: Post-extension of each flight line (nautical miles).
+        wind_speed: Optional constant wind speed as a ``pint.Quantity``
+            (e.g. ``30 * ureg.knot``). When supplied together with
+            ``wind_direction``, every segment time is adjusted by the
+            headwind/tailwind component along its heading:
+            ``time = distance / (TAS − wind · cos(wind_from − heading))``.
+            Crosswind effects on ground speed are ignored. Defaults to no
+            wind, preserving the pre-v1.1 behavior exactly.
+        wind_direction: Direction the wind is blowing *from*, in degrees
+            true (meteorological convention: 0° = wind from north, 90° =
+            from east). Required when ``wind_speed`` is set. Ignored when
+            ``wind_speed`` is None or zero.
     """
+    if wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is None:
+        raise HyPlanValueError(
+            "wind_direction is required when wind_speed is non-zero"
+        )
     # Apply offsets to flight lines, if applicable.
     flight_sequence = [
         seg.offset_along(ureg.Quantity(-start_offset, "nautical_mile"),
@@ -114,7 +191,20 @@ def compute_flight_plan(
         if isinstance(first_target, FlightLine):
             first_target = first_target.waypoint1
         takeoff_info = aircraft.time_to_takeoff(takeoff_airport, first_target)
-        records.extend(process_flight_phase(takeoff_airport, first_target, takeoff_info, "Departure"))
+        takeoff_bearing = _bearing_between(
+            takeoff_airport.latitude, takeoff_airport.longitude,
+            first_target.latitude, first_target.longitude,
+        )
+        takeoff_tas = aircraft.cruise_speed_at(first_target.altitude_msl)
+        takeoff_factor = _wind_factor(
+            takeoff_tas, takeoff_bearing, wind_speed, wind_direction,
+        )
+        takeoff_records = process_flight_phase(
+            takeoff_airport, first_target, takeoff_info, "Departure",
+        )
+        for r in takeoff_records:
+            r["time_to_segment"] *= takeoff_factor
+        records.extend(takeoff_records)
 
     # Process connecting/cruise phases between flight segments.
     for i, segment in enumerate(flight_sequence):
@@ -129,7 +219,14 @@ def compute_flight_plan(
             segment_distance = distances[-1]
 
             # Calculate time_to_segment using the computed segment_distance.
-            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude_msl)).m_as(ureg.minute)
+            fl_tas = aircraft.cruise_speed_at(segment.altitude_msl)
+            fl_time_no_wind = (
+                ureg.Quantity(segment_distance, 'meter') / fl_tas
+            ).m_as(ureg.minute)
+            fl_factor = _wind_factor(
+                fl_tas, segment.waypoint1.heading, wind_speed, wind_direction,
+            )
+            time_to_segment = fl_time_no_wind * fl_factor
 
             # Use the FlightLine's own heading properties.
             start_heading = segment.waypoint1.heading  # From FlightLine.az12
@@ -189,6 +286,7 @@ def compute_flight_plan(
             if departing_is_pattern:
                 records.append(_direct_segment_record(
                     start_wp, end_wp, aircraft, segment.segment_type,
+                    wind_speed=wind_speed, wind_direction=wind_direction,
                 ))
                 continue
 
@@ -209,10 +307,28 @@ def compute_flight_plan(
                 wp_seg_type = None
                 if is_waypoint(segment):
                     wp_seg_type = segment.segment_type
-                records.extend(process_flight_phase(
+                cruise_records = process_flight_phase(
                     start_wp, end_wp, cruise_info, phase_name,
                     override_segment_type=wp_seg_type,
-                ))
+                )
+                # Wind correction: scale every phase time by the factor
+                # computed from the dominant leg bearing. Using a single
+                # leg bearing (start→end) rather than per-phase headings
+                # keeps the approximation simple and matches how pilots
+                # pre-plan wind on straight cruise legs.
+                cruise_bearing = _bearing_between(
+                    start_wp.latitude, start_wp.longitude,
+                    end_wp.latitude, end_wp.longitude,
+                )
+                cruise_tas = speed_override or aircraft.cruise_speed_at(
+                    end_wp.altitude_msl
+                )
+                cruise_factor = _wind_factor(
+                    cruise_tas, cruise_bearing, wind_speed, wind_direction,
+                )
+                for r in cruise_records:
+                    r["time_to_segment"] *= cruise_factor
+                records.extend(cruise_records)
 
     # Process the approach phase if a return airport is provided.
     if return_airport:
@@ -221,7 +337,20 @@ def compute_flight_plan(
             last_target = last_target.waypoint2
         return_info = aircraft.time_to_return(last_target, return_airport)
         if return_info["total_time"].m_as(ureg.minute) > 0:
-            records.extend(process_flight_phase(last_target, return_airport, return_info, "Return"))
+            return_records = process_flight_phase(
+                last_target, return_airport, return_info, "Return",
+            )
+            return_bearing = _bearing_between(
+                last_target.latitude, last_target.longitude,
+                return_airport.latitude, return_airport.longitude,
+            )
+            return_tas = aircraft.cruise_speed_at(last_target.altitude_msl)
+            return_factor = _wind_factor(
+                return_tas, return_bearing, wind_speed, wind_direction,
+            )
+            for r in return_records:
+                r["time_to_segment"] *= return_factor
+            records.extend(return_records)
 
     # Create and return the GeoDataFrame.
     df = pd.DataFrame(records)
