@@ -23,6 +23,7 @@ from hyplan.geometry import (
     translate_polygon,
     random_points_in_polygon,
     true_to_magnetic,
+    get_timezone,
 )
 from hyplan.exceptions import HyPlanValueError, HyPlanTypeError
 
@@ -389,3 +390,22 @@ class TestCalculateGeographicMeanExtended:
     def test_invalid_input_raises(self):
         with pytest.raises(HyPlanTypeError):
             calculate_geographic_mean("not a geometry")
+
+
+class TestGetTimezone:
+    def test_los_angeles(self):
+        assert get_timezone(34.05, -118.25) == "America/Los_Angeles"
+
+    def test_new_york(self):
+        assert get_timezone(40.71, -74.00) == "America/New_York"
+
+    def test_sydney(self):
+        assert get_timezone(-33.87, 151.21) == "Australia/Sydney"
+
+    def test_invalid_latitude(self):
+        with pytest.raises(HyPlanValueError):
+            get_timezone(91.0, 0.0)
+
+    def test_invalid_longitude(self):
+        with pytest.raises(HyPlanValueError):
+            get_timezone(0.0, 200.0)

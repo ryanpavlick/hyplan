@@ -58,6 +58,60 @@ def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
     """
     return np.squeeze(np.mod(np.array(angle), 360.0))
 
+
+_timezone_finder = None
+
+
+def _get_timezone_finder():
+    """Lazily instantiate a single ``TimezoneFinder``.
+
+    ``TimezoneFinder()`` loads tens of MB of polygon data on first use, so
+    we keep a module-level singleton instead of constructing one per call.
+    """
+    global _timezone_finder
+    if _timezone_finder is None:
+        try:
+            from timezonefinder import TimezoneFinder
+        except ImportError as e:
+            raise HyPlanRuntimeError(
+                "get_timezone requires the 'timezonefinder' package. "
+                "Install it with: pip install timezonefinder"
+            ) from e
+        _timezone_finder = TimezoneFinder()
+    return _timezone_finder
+
+
+@lru_cache(maxsize=1024)
+def get_timezone(latitude: float, longitude: float) -> str:
+    """Return the IANA timezone name for a lat/lon (e.g. ``'America/Los_Angeles'``).
+
+    Args:
+        latitude: Latitude in decimal degrees, in [-90, 90].
+        longitude: Longitude in decimal degrees, in [-180, 180].
+
+    Returns:
+        IANA timezone name string. Coordinates over open ocean may return
+        an ``'Etc/GMT±N'`` zone.
+
+    Raises:
+        HyPlanValueError: If coordinates are out of range or no timezone
+            can be determined for the location.
+        HyPlanRuntimeError: If the optional ``timezonefinder`` package is
+            not installed.
+    """
+    if not -90.0 <= latitude <= 90.0:
+        raise HyPlanValueError(f"latitude {latitude} out of range [-90, 90]")
+    if not -180.0 <= longitude <= 180.0:
+        raise HyPlanValueError(f"longitude {longitude} out of range [-180, 180]")
+    tf = _get_timezone_finder()
+    tz = tf.timezone_at(lat=latitude, lng=longitude)
+    if tz is None:
+        raise HyPlanValueError(
+            f"Could not determine timezone for ({latitude}, {longitude})"
+        )
+    return tz
+
+
 def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
     """
     Validate the input polygon and ensure it is a single, non-empty, valid Shapely Polygon.

@@ -38,6 +38,7 @@ dependencies = [
     "shapely",
     "simplekml",
     "skyfield",
+    "timezonefinder",
     "folium",
     "gpxpy",
     "matplotlib",
