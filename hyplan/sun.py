@@ -25,7 +25,7 @@ Library, ascl:1907.024.
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
-from typing import List, Union
+from typing import List, Optional, Union
 import matplotlib.pyplot as plt
 from .exceptions import HyPlanValueError
 
@@ -166,7 +166,15 @@ def sunpos(dt, latitude, longitude, elevation=0, radians=False):
 
 
 
-def solar_threshold_times(latitude: float, longitude: float, start_date: str, end_date: str, thresholds: List[float], timezone_offset: int = 0) -> pd.DataFrame:
+def solar_threshold_times(
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+    thresholds: List[float],
+    timezone_offset: int = 0,
+    timezone: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Find times when the solar elevation crosses specified thresholds.
 
@@ -176,7 +184,14 @@ def solar_threshold_times(latitude: float, longitude: float, start_date: str, en
         start_date (str): Start date in 'YYYY-MM-DD' format.
         end_date (str): End date in 'YYYY-MM-DD' format.
         thresholds (list): List of 1 or 2 solar elevation thresholds in degrees (e.g., [35] or [35, 50]).
-        timezone_offset (int): Timezone offset from UTC in hours (e.g., -8 for PST, 1 for CET).
+        timezone_offset (int): Fixed timezone offset from UTC in hours
+            (e.g., -8 for PST, 1 for CET). Ignored if ``timezone`` is given.
+        timezone (str, optional): IANA timezone name (e.g.
+            ``"America/Los_Angeles"``). When supplied, takes precedence over
+            ``timezone_offset`` and is DST-aware — recommended for any date
+            range that may cross a DST transition. Pair with
+            :func:`hyplan.geometry.get_timezone` to look up the zone from
+            a lat/lon.
 
     Returns:
         pandas.DataFrame: DataFrame with reordered columns: ['Date', 'Rise_<lower>', 'Rise_<upper>', 'Set_<upper>', 'Set_<lower>'].
@@ -190,8 +205,12 @@ def solar_threshold_times(latitude: float, longitude: float, start_date: str, en
     end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
     timestamps = pd.date_range(start=start_datetime, end=end_datetime + timedelta(days=1) - timedelta(minutes=1), freq='1min', tz='UTC')
 
-    # Adjust timestamps to local timezone
-    local_timestamps = timestamps + pd.Timedelta(hours=timezone_offset)
+    # Convert to local time. Prefer the IANA timezone (DST-aware) when given;
+    # fall back to the legacy fixed-offset behavior otherwise.
+    if timezone is not None:
+        local_timestamps = timestamps.tz_convert(timezone)
+    else:
+        local_timestamps = timestamps + pd.Timedelta(hours=timezone_offset)
 
     # Vectorized calculation of solar positions using UTC timestamps
     _, zenith, *_ = sunpos(timestamps, latitude, longitude, elevation=0)
@@ -273,19 +292,34 @@ def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: fl
     return azimuth[0]
 
 
-def solar_position_increments(latitude: float, longitude: float, date: Union[str, date, datetime], min_elevation: float, timezone_offset: int = 0, increment: str = '10min') -> pd.DataFrame:
+def solar_position_increments(
+    latitude: float,
+    longitude: float,
+    date: Union[str, date, datetime],
+    min_elevation: float,
+    timezone_offset: int = 0,
+    increment: str = '10min',
+    timezone: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Return the solar azimuth and solar elevation at user-specified increments for a given date and location,
     but only for times when the solar elevation exceeds the specified minimum.
-    
+
     Args:
         latitude (float): Latitude of the location.
         longitude (float): Longitude of the location.
         date (str or datetime.date): Date in 'YYYY-MM-DD' format or as a date object.
         min_elevation (float): Minimum solar elevation (in degrees) required to include the time.
-        timezone_offset (int, optional): Timezone offset from UTC in hours (e.g., -8 for PST). Default is 0.
+        timezone_offset (int, optional): Fixed timezone offset from UTC in
+            hours (e.g., -8 for PST). Ignored if ``timezone`` is given.
+            Default is 0.
         increment (str, optional): Frequency increment for sampling times (e.g., '10min'). Default is '10min'.
-    
+        timezone (str, optional): IANA timezone name (e.g.
+            ``"America/Los_Angeles"``). When supplied, takes precedence over
+            ``timezone_offset`` and is DST-aware. Pair with
+            :func:`hyplan.geometry.get_timezone` to look up the zone from
+            a lat/lon.
+
     Returns:
         pandas.DataFrame: DataFrame with columns:
             - 'Time': Local time (HH:MM:SS),
@@ -312,8 +346,12 @@ def solar_position_increments(latitude: float, longitude: float, date: Union[str
                                    freq=increment,
                                    tz='UTC')
     
-    # Convert UTC timestamps to local time using the provided timezone offset.
-    local_timestamps = timestamps_utc + pd.Timedelta(hours=timezone_offset)
+    # Convert to local time. Prefer the IANA timezone (DST-aware) when given;
+    # fall back to the legacy fixed-offset behavior otherwise.
+    if timezone is not None:
+        local_timestamps = timestamps_utc.tz_convert(timezone)
+    else:
+        local_timestamps = timestamps_utc + pd.Timedelta(hours=timezone_offset)
     
     # Compute solar positions using the UTC timestamps.
     # The sunpos function returns (azimuth, zenith, ...). Solar elevation = 90 - zenith.
