@@ -20,6 +20,32 @@ except ImportError:
     # before first build), fall back to a default.
     __version__ = "0.0.0.dev0"
 
+import logging as _logging
+
+
+def setup_logging(
+    level: int = _logging.INFO,
+    format: str = "%(asctime)s %(name)s %(levelname)s: %(message)s",
+) -> None:
+    """Attach a StreamHandler to the ``hyplan`` logger.
+
+    Library code uses ``logging.getLogger(__name__)`` everywhere and never
+    configures handlers itself. Call this once from a notebook, script, or
+    CLI to see hyplan's INFO/WARNING messages. Idempotent — re-calling
+    replaces the handler instead of stacking duplicates.
+    """
+    logger = _logging.getLogger("hyplan")
+    for h in list(logger.handlers):
+        if getattr(h, "_hyplan_managed", False):
+            logger.removeHandler(h)
+    handler = _logging.StreamHandler()
+    handler.setFormatter(_logging.Formatter(format))
+    handler._hyplan_managed = True
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.propagate = False
+
+
 # --- Core re-exports ---
 
 # Exceptions
@@ -31,7 +57,7 @@ from .exceptions import (
 )
 
 # Units
-from .units import ureg, convert_distance, convert_speed, altitude_to_flight_level
+from .units import ureg, convert_distance, convert_speed, convert_angle, convert_time, altitude_to_flight_level
 
 # Flight geometry
 from .flight_line import FlightLine
@@ -106,7 +132,7 @@ from .waypoint import Waypoint
 from .dubins3d import DubinsPath3D
 
 # Swath
-from .swath import generate_swath_polygon, calculate_swath_widths
+from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps
 
 # Flight patterns
 from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
@@ -135,10 +161,12 @@ from .airspace import (
 from .campaign import Campaign
 
 __all__ = [
+    # Logging
+    "setup_logging",
     # Exceptions
     "HyPlanError", "HyPlanValueError", "HyPlanTypeError", "HyPlanRuntimeError",
     # Units
-    "ureg", "convert_distance", "convert_speed", "altitude_to_flight_level",
+    "ureg", "convert_distance", "convert_speed", "convert_angle", "convert_time", "altitude_to_flight_level",
     # Flight geometry
     "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
@@ -164,7 +192,7 @@ __all__ = [
     # Dubins
     "Waypoint", "DubinsPath3D",
     # Swath
-    "generate_swath_polygon", "calculate_swath_widths",
+    "generate_swath_polygon", "calculate_swath_widths", "analyze_swath_gaps_overlaps",
     # Flight patterns
     "racetrack", "rosette", "polygon", "sawtooth", "spiral", "flight_lines_to_waypoint_path",
     "coordinated_line",

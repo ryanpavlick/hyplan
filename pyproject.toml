@@ -65,7 +65,7 @@ include = ["hyplan*"]
 license-files = ["LICENSE.md"]
 
 [tool.setuptools.package-data]
-hyplan = ["data/*.geojson", "data/*.bsp"]
+hyplan = ["py.typed", "data/*.geojson", "data/*.bsp"]
 
 [tool.setuptools_scm]
 version_file = "hyplan/_version.py"
