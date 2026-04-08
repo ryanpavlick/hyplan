@@ -97,10 +97,10 @@ class TestTimeToCruise:
         result = b200.time_to_cruise(start, end)
 
         phase_time_sum = sum(
-            (p["end_time"] - p["start_time"]).to(ureg.minute).magnitude
+            (p["end_time"] - p["start_time"]).m_as(ureg.minute)
             for p in result["phases"].values()
         )
-        total = result["total_time"].to(ureg.minute).magnitude
+        total = result["total_time"].m_as(ureg.minute)
         assert phase_time_sum == pytest.approx(total, rel=1e-3)
 
 

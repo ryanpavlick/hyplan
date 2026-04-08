@@ -194,9 +194,9 @@ class Aircraft:
             pitch_max is positive (climb).
         """
         tas = speed if speed is not None else self.cruise_speed
-        tas_mps = tas.to(ureg.meter / ureg.second).magnitude
-        climb_mps = self.best_rate_of_climb.to(ureg.meter / ureg.minute).magnitude / 60.0
-        descent_mps = self.descent_rate.to(ureg.meter / ureg.minute).magnitude / 60.0
+        tas_mps = tas.m_as(ureg.meter / ureg.second)
+        climb_mps = self.best_rate_of_climb.m_as(ureg.meter / ureg.minute) / 60.0
+        descent_mps = self.descent_rate.m_as(ureg.meter / ureg.minute) / 60.0
         pitch_max = float(np.degrees(np.arctan(climb_mps / tas_mps)))
         pitch_min = -float(np.degrees(np.arctan(descent_mps / tas_mps)))
         return pitch_min, pitch_max
@@ -297,8 +297,8 @@ class Aircraft:
 
         h0 = start_altitude.magnitude
         C = self.service_ceiling.magnitude
-        roc_sl = self.best_rate_of_climb.to(ureg.feet / ureg.minute).magnitude
-        roc_ceil = self.roc_at_service_ceiling.to(ureg.feet / ureg.minute).magnitude
+        roc_sl = self.best_rate_of_climb.m_as(ureg.feet / ureg.minute)
+        roc_ceil = self.roc_at_service_ceiling.m_as(ureg.feet / ureg.minute)
         delta_roc = roc_sl - roc_ceil
 
         if delta_roc < 1e-6:
@@ -311,8 +311,8 @@ class Aircraft:
             # where alpha = delta_roc / C, h_eq = C * roc_sl / delta_roc
             alpha = delta_roc / C
             h_eq = C * roc_sl / delta_roc  # theoretical equilibrium altitude
-            roc_h0 = self.rate_of_climb(start_altitude).to(ureg.feet / ureg.minute).magnitude
-            roc_h1 = self.rate_of_climb(end_altitude).to(ureg.feet / ureg.minute).magnitude
+            roc_h0 = self.rate_of_climb(start_altitude).m_as(ureg.feet / ureg.minute)
+            roc_h1 = self.rate_of_climb(end_altitude).m_as(ureg.feet / ureg.minute)
             total_time = (1 / alpha) * np.log(roc_h0 / roc_h1)
 
             times = np.linspace(0, total_time, n_points)

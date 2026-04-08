@@ -460,8 +460,8 @@ def spiral(
         angle_step = -angle_step
 
     # Altitude interpolation (as pint Quantities)
-    alt_start_m = alt_start.to(ureg.meter).magnitude
-    alt_end_m = alt_end.to(ureg.meter).magnitude
+    alt_start_m = alt_start.m_as(ureg.meter)
+    alt_end_m = alt_end.m_as(ureg.meter)
 
     waypoints = []
     for i in range(total_steps + 1):

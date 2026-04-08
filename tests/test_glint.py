@@ -472,7 +472,7 @@ class TestGlintArcApproachExitLines:
 
     def test_approach_length(self, arc):
         fl = arc.approach_line(ureg.Quantity(5000, "meter"))
-        assert fl.length.to("meter").magnitude == pytest.approx(5000.0, rel=0.01)
+        assert fl.length.m_as("meter") == pytest.approx(5000.0, rel=0.01)
 
     def test_exit_returns_flight_line(self, arc):
         assert isinstance(arc.exit_line(ureg.Quantity(5000, "meter")), FlightLine)
@@ -485,15 +485,15 @@ class TestGlintArcApproachExitLines:
 
     def test_exit_length(self, arc):
         fl = arc.exit_line(ureg.Quantity(5000, "meter"))
-        assert fl.length.to("meter").magnitude == pytest.approx(5000.0, rel=0.01)
+        assert fl.length.m_as("meter") == pytest.approx(5000.0, rel=0.01)
 
     def test_plain_float_length(self, arc):
         fl = arc.approach_line(3000.0)
-        assert fl.length.to("meter").magnitude == pytest.approx(3000.0, rel=0.01)
+        assert fl.length.m_as("meter") == pytest.approx(3000.0, rel=0.01)
 
     def test_approach_altitude_matches_arc(self, arc):
         fl = arc.approach_line(ureg.Quantity(5000, "meter"))
-        assert fl.altitude_msl.to("meter").magnitude == pytest.approx(
+        assert fl.altitude_msl.m_as("meter") == pytest.approx(
             arc.altitude_msl.magnitude, rel=0.001
         )
 

@@ -42,7 +42,7 @@ from pymap3d import los
 
 from .sun import sunpos
 
-from .units import ureg
+from .units import ureg, magnitude_in
 from .exceptions import HyPlanValueError
 from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
 from .instruments import ScanningSensor
@@ -106,7 +106,7 @@ class GlintArc:
 
         self.altitude_msl = altitude_msl.to(ureg.meter)
         self.speed = speed
-        self._speed_mps = speed.to(ureg.meter / ureg.second).magnitude
+        self._speed_mps = speed.m_as(ureg.meter / ureg.second)
 
         self._compute_arc()
 
@@ -154,10 +154,7 @@ class GlintArc:
         if self._collection_length is None:
             self.arc_extent = 180.0
         else:
-            if hasattr(self._collection_length, "to"):
-                cl_m = self._collection_length.to(ureg.meter).magnitude
-            else:
-                cl_m = float(self._collection_length)
+            cl_m = magnitude_in(self._collection_length, "meter")
             self.arc_extent = min(np.degrees(cl_m / self._turn_radius_m), 180.0)
 
         # --- Aircraft midpoint (specular geometry) ---
@@ -277,7 +274,7 @@ class GlintArc:
         Returns:
             FlightLine from the entry point to the arc start waypoint.
         """
-        length_m = length.to(ureg.meter).magnitude if hasattr(length, "to") else float(length)
+        length_m = magnitude_in(length, "meter")
         wp1 = self.waypoint1
         back_az = wrap_to_360(wp1.heading + 180.0)
         start_lat, start_lon = pymap3d.vincenty.vreckon(
@@ -302,7 +299,7 @@ class GlintArc:
         Returns:
             FlightLine from the arc end waypoint to the exit point.
         """
-        length_m = length.to(ureg.meter).magnitude if hasattr(length, "to") else float(length)
+        length_m = magnitude_in(length, "meter")
         wp2 = self.waypoint2
         return FlightLine.start_length_azimuth(
             wp2.latitude,
@@ -320,10 +317,7 @@ class GlintArc:
             precision: Desired distance between interpolated points.
                 Accepts a Quantity with length units or a plain float (assumed meters).
         """
-        if hasattr(precision, "to"):
-            precision_m = precision.to("meter").magnitude
-        else:
-            precision_m = float(precision)
+        precision_m = magnitude_in(precision, "meter")
 
         arc_length_m = self.length.magnitude
         n_points = max(int(np.ceil(arc_length_m / precision_m)) + 1, 3)
@@ -415,9 +409,8 @@ class GlintArc:
             "arc_extent": self.arc_extent,
             "arc_length": self.length.magnitude,
             "collection_length": (
-                self._collection_length.to(ureg.meter).magnitude
-                if hasattr(self._collection_length, "to")
-                else self._collection_length
+                None if self._collection_length is None
+                else magnitude_in(self._collection_length, "meter")
             ),
             "site_name": self.site_name,
         }
@@ -444,9 +437,8 @@ class GlintArc:
                 "turn_radius": self._turn_radius_m,
                 "arc_extent": self.arc_extent,
                 "collection_length": (
-                    self._collection_length.to(ureg.meter).magnitude
-                    if hasattr(self._collection_length, "to")
-                    else self._collection_length
+                    None if self._collection_length is None
+                    else magnitude_in(self._collection_length, "meter")
                 ),
                 "site_name": self.site_name,
             },

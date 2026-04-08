@@ -8,6 +8,24 @@ ureg = UnitRegistry()
 # Set application-wide registry
 set_application_registry(ureg)
 
+
+def magnitude_in(value, unit) -> float:
+    """Return ``value`` as a float in ``unit``.
+
+    Accepts either a :class:`pint.Quantity` (which is converted to ``unit``
+    and stripped to its magnitude) or a bare numeric (which is assumed to
+    already be in ``unit`` and is returned as a float). Use this at module
+    boundaries where the caller may pass either form.
+
+    For the common case where ``value`` is already known to be a Quantity,
+    prefer pint's built-in :meth:`pint.Quantity.m_as` directly --
+    ``q.m_as("meter")`` is equivalent to ``q.to("meter").magnitude`` but
+    shorter, and doesn't need this helper.
+    """
+    if hasattr(value, "to"):
+        return value.m_as(unit)
+    return float(value)
+
 def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
     """
     Convert distance between specified units.
@@ -30,7 +48,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
-    return (distance * units[from_unit]).to(units[to_unit]).magnitude
+    return (distance * units[from_unit]).m_as(units[to_unit])
 
 def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     """
@@ -54,7 +72,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (speed * units[from_unit]).to(units[to_unit]).magnitude
+    return (speed * units[from_unit]).m_as(units[to_unit])
 
 def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
     """
@@ -75,10 +93,10 @@ def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Un
     if isinstance(altitude, ureg.Quantity):
         if not altitude.check("[length]"):
             raise HyPlanValueError("Altitude must have units of length.")
-        altitude_ft = altitude.to("feet").magnitude
+        altitude_ft = altitude.m_as("feet")
     elif isinstance(altitude, (int, float)):
         # Assume numeric value is in meters
-        altitude_ft = (altitude * ureg.meter).to("feet").magnitude
+        altitude_ft = (altitude * ureg.meter).m_as("feet")
     else:
         raise HyPlanValueError("Altitude must be a pint length or a number (assumed meters).")
 
@@ -86,7 +104,7 @@ def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Un
     if isinstance(pressure, ureg.Quantity):
         if not pressure.check("[pressure]"):
             raise HyPlanValueError("Pressure must have units of pressure.")
-        pressure_hpa = pressure.to("hPa").magnitude
+        pressure_hpa = pressure.m_as("hPa")
     elif isinstance(pressure, (int, float)):
         pressure_hpa = pressure  # Assume numeric value is in hPa
     else:

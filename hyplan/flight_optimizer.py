@@ -61,7 +61,7 @@ def _transit_time(aircraft: Aircraft, start_wp: Waypoint, end_wp: Waypoint) -> f
         Transit time in hours.
     """
     info = aircraft.time_to_cruise(start_wp, end_wp)
-    return info["total_time"].to(ureg.hour).magnitude
+    return info["total_time"].m_as(ureg.hour)
 
 
 def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float:
@@ -76,7 +76,7 @@ def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float
         Total departure time in hours.
     """
     info = aircraft.time_to_takeoff(airport, wp)
-    return info["total_time"].to(ureg.hour).magnitude
+    return info["total_time"].m_as(ureg.hour)
 
 
 def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
@@ -91,7 +91,7 @@ def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
         Total return time in hours.
     """
     info = aircraft.time_to_return(wp, airport)
-    return info["total_time"].to(ureg.hour).magnitude
+    return info["total_time"].m_as(ureg.hour)
 
 
 def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=None) -> float:
@@ -109,7 +109,7 @@ def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=
     """
     if cruise_speed is None:
         cruise_speed = aircraft.cruise_speed_at(flight_line.altitude_msl)
-    return (flight_line.length / cruise_speed).to(ureg.hour).magnitude
+    return (flight_line.length / cruise_speed).m_as(ureg.hour)
 
 
 def build_graph(
@@ -158,7 +158,7 @@ def build_graph(
     # Cache cruise speed per altitude — most missions reuse a small set of MSLs.
     cruise_speed_cache: dict = {}
     def _cruise_speed_for(alt):
-        key_alt = round(alt.to(ureg.feet).magnitude, 3)
+        key_alt = round(alt.m_as(ureg.feet), 3)
         if key_alt not in cruise_speed_cache:
             cruise_speed_cache[key_alt] = aircraft.cruise_speed_at(alt)
         return cruise_speed_cache[key_alt]
@@ -170,7 +170,7 @@ def build_graph(
         return (
             round(wp.latitude, 6),
             round(wp.longitude, 6),
-            round(wp.altitude_msl.to(ureg.meter).magnitude, 1),
+            round(wp.altitude_msl.m_as(ureg.meter), 1),
             round(wp.heading, 3),
         )
 
@@ -476,7 +476,7 @@ def greedy_optimize(
         return_airport = takeoff_airport
 
     if max_endurance is None:
-        max_endurance = aircraft.endurance.to(ureg.hour).magnitude
+        max_endurance = aircraft.endurance.m_as(ureg.hour)
 
     if max_daily_flight_time is None:
         max_daily_flight_time = max_endurance

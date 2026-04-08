@@ -10,7 +10,7 @@ class TestFlightLineCreation:
         fl = sample_flight_line
         assert fl.lat1 == pytest.approx(34.05)
         assert fl.lon1 == pytest.approx(-118.25)
-        assert fl.length.to("meter").magnitude == pytest.approx(50000, rel=0.01)
+        assert fl.length.m_as("meter") == pytest.approx(50000, rel=0.01)
         assert fl.site_name == "Test Line"
 
     def test_center_length_azimuth(self):
@@ -24,10 +24,10 @@ class TestFlightLineCreation:
         # Center should be near (34, -118)
         mid_lat = (fl.lat1 + fl.lat2) / 2
         assert mid_lat == pytest.approx(34.0, abs=0.01)
-        assert fl.length.to("meter").magnitude == pytest.approx(20000, rel=0.01)
+        assert fl.length.m_as("meter") == pytest.approx(20000, rel=0.01)
 
     def test_altitude_stored(self, sample_flight_line):
-        assert sample_flight_line.altitude_msl.to("meter").magnitude == pytest.approx(6000)
+        assert sample_flight_line.altitude_msl.m_as("meter") == pytest.approx(6000)
 
 
 class TestFlightLineProperties:
@@ -57,13 +57,13 @@ class TestFlightLineOperations:
         assert isinstance(parts, list)
         assert len(parts) == 5
         for part in parts:
-            assert part.length.to("meter").magnitude == pytest.approx(10000, rel=0.01)
+            assert part.length.m_as("meter") == pytest.approx(10000, rel=0.01)
 
     def test_offset_across(self, sample_flight_line):
         offset_fl = sample_flight_line.offset_across(ureg.Quantity(1000, "meter"))
         # Should be a parallel line roughly 1 km away
-        assert offset_fl.length.to("meter").magnitude == pytest.approx(
-            sample_flight_line.length.to("meter").magnitude, rel=0.01
+        assert offset_fl.length.m_as("meter") == pytest.approx(
+            sample_flight_line.length.m_as("meter"), rel=0.01
         )
 
     def test_rotate_around_midpoint(self, sample_flight_line):

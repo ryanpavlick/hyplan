@@ -624,7 +624,7 @@ class DubinsPath3D:
         if isinstance(speed, (int, float)):
             self.speed_mps = float(speed)
         elif hasattr(speed, "units") and speed.check("[speed]"):
-            self.speed_mps = speed.to(ureg.meter / ureg.second).magnitude
+            self.speed_mps = speed.m_as(ureg.meter / ureg.second)
         else:
             raise HyPlanTypeError("speed must be a float (m/s) or a pint Quantity with speed units")
 
@@ -653,8 +653,8 @@ class DubinsPath3D:
         heading1 = -math.radians(start.heading - 90.0)
         heading2 = -math.radians(end.heading - 90.0)
 
-        alt_start = start.altitude_msl.to(ureg.meter).magnitude
-        alt_end = end.altitude_msl.to(ureg.meter).magnitude
+        alt_start = start.altitude_msl.m_as(ureg.meter)
+        alt_end = end.altitude_msl.m_as(ureg.meter)
 
         # qi/qf: [x, y, z, heading, pitch]
         qi = np.array([start_utm.x, start_utm.y, alt_start, heading1, pitch_start_rad])
@@ -722,9 +722,9 @@ class DubinsPath3D:
             "start_lon": self.start.longitude,
             "end_lat": self.end.latitude,
             "end_lon": self.end.longitude,
-            "start_altitude": self.start.altitude_msl.to(ureg.meter).magnitude,
-            "end_altitude": self.end.altitude_msl.to(ureg.meter).magnitude,
+            "start_altitude": self.start.altitude_msl.m_as(ureg.meter),
+            "end_altitude": self.end.altitude_msl.m_as(ureg.meter),
             "start_heading": self.start.heading,
             "end_heading": self.end.heading,
-            "distance": self.length.to(ureg.nautical_mile).magnitude,
+            "distance": self.length.m_as(ureg.nautical_mile),
         }

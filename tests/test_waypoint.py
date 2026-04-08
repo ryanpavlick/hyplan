@@ -25,7 +25,7 @@ class TestWaypointConstruction:
     def test_with_quantity_altitude(self):
         alt = ureg.Quantity(20000, "feet")
         wp = Waypoint(34.0, -118.0, 0.0, altitude_msl=alt)
-        assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(20000, rel=1e-6)
+        assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(20000, rel=1e-6)
 
     def test_heading_wrapping(self):
         wp = Waypoint(0.0, 0.0, 361.0)

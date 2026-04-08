@@ -719,7 +719,7 @@ class MultiCameraRig(Sensor):
         result = []
         for entry in self.cameras:
             dx = entry["dx"]
-            cross_offset = dx.to("degree").magnitude if isinstance(dx, Quantity) else float(dx)
+            cross_offset = dx.m_as("degree") if isinstance(dx, Quantity) else float(dx)
             poly = entry["camera"].ground_footprint(
                 altitude_agl, cross_track_offset=cross_offset,
                 edge_points=edge_points, **terrain_kwargs,

@@ -234,7 +234,7 @@ class FlightLine:
         if not isinstance(az, (int, float)):
             raise HyPlanValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
-        length_m = length.to("meter").magnitude
+        length_m = length.m_as("meter")
         lat2, lon2 = pymap3d.vincenty.vreckon(lat1, lon1, length_m, az)
         lon2 = wrap_to_180(lon2)
 
@@ -286,7 +286,7 @@ class FlightLine:
         if not isinstance(az, (int, float)):
             raise HyPlanValueError(f"Azimuth must be a numeric value in degrees. Got {type(az)}.")
 
-        length_m = length.to("meter").magnitude
+        length_m = length.m_as("meter")
 
         lat2, lon2 = pymap3d.vincenty.vreckon(lat, lon, length_m / 2, az)
         lat1, lon1 = pymap3d.vincenty.vreckon(lat, lon, length_m / 2, az - 180)
@@ -363,14 +363,14 @@ class FlightLine:
             LineString: A LineString object containing the interpolated track.
         """
         if isinstance(precision, Quantity):
-            precision_m = precision.to("meter").magnitude
+            precision_m = precision.m_as("meter")
         else:
             precision_m = float(precision)
 
         if precision_m <= 0:
             raise HyPlanValueError("precision must be positive")
 
-        num_points = int(np.ceil(self.length.to("meter").magnitude / precision_m)) + 1
+        num_points = int(np.ceil(self.length.m_as("meter") / precision_m)) + 1
 
         track_lat, track_lon = pymap3d.vincenty.track2(
             self.lat1, self.lon1, self.lat2, self.lon2, npts=num_points, deg=True
@@ -405,8 +405,8 @@ class FlightLine:
         if not isinstance(offset_east, Quantity):
             offset_east = ureg.Quantity(offset_east, "meter")
 
-        offset_north_m = offset_north.to("meter").magnitude
-        offset_east_m = offset_east.to("meter").magnitude
+        offset_north_m = offset_north.m_as("meter")
+        offset_east_m = offset_east.m_as("meter")
 
         def compute_offset(lat, lon, north, east):
             new_lat, new_lon, _ = pymap3d.ned2geodetic(
@@ -440,7 +440,7 @@ class FlightLine:
         perpendicular_az = (self.az12.magnitude + 90) % 360 if offset_distance.magnitude >= 0 else (self.az12.magnitude - 90) % 360
 
         def compute_offset(lat, lon, distance, azimuth):
-            return pymap3d.vincenty.vreckon(lat, lon, distance.to("meter").magnitude, azimuth)
+            return pymap3d.vincenty.vreckon(lat, lon, distance.m_as("meter"), azimuth)
 
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, abs(offset_distance), perpendicular_az)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, abs(offset_distance), perpendicular_az)
@@ -474,7 +474,7 @@ class FlightLine:
             if offset < 0:
                 azimuth = (azimuth + 180) % 360
                 offset = abs(offset)
-            return pymap3d.vincenty.vreckon(lat, lon, offset.to("meter").magnitude, azimuth)
+            return pymap3d.vincenty.vreckon(lat, lon, offset.m_as("meter"), azimuth)
 
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_start, self.az12.magnitude)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_end, (self.az21.magnitude + 180.0) % 360.0)
@@ -527,9 +527,9 @@ class FlightLine:
         Returns:
             List[FlightLine]: List of FlightLine objects representing the segments.
         """
-        total_length_m = self.length.to("meter").magnitude
-        max_length_m = max_length.to("meter").magnitude
-        gap_length_m = gap_length.to("meter").magnitude if gap_length else 0
+        total_length_m = self.length.m_as("meter")
+        max_length_m = max_length.m_as("meter")
+        gap_length_m = gap_length.m_as("meter") if gap_length else 0
 
         if max_length_m <= 0:
             raise HyPlanValueError("Maximum length must be greater than 0.")

@@ -130,7 +130,7 @@ class TestAltitudeForGSD:
         alt = 2000 * ureg.meter
         gsd = camera.ground_sample_distance(alt)
         recovered_alt = camera.altitude_agl_for_ground_sample_distance(gsd["x"], gsd["y"])
-        assert recovered_alt.to("meter").magnitude == pytest.approx(alt.magnitude, rel=0.02)
+        assert recovered_alt.m_as("meter") == pytest.approx(alt.magnitude, rel=0.02)
 
     def test_positive(self, camera):
         alt = camera.altitude_agl_for_ground_sample_distance(
@@ -255,7 +255,7 @@ class TestImageScale:
         alt = 2000 * ureg.meter
         scale = camera.image_scale(alt)
         recovered = camera.altitude_for_scale(scale)
-        assert recovered.to("meter").magnitude == pytest.approx(alt.magnitude, rel=0.01)
+        assert recovered.m_as("meter") == pytest.approx(alt.magnitude, rel=0.01)
 
     def test_higher_altitude_larger_scale(self, camera):
         s1 = camera.image_scale(500 * ureg.meter)
@@ -272,8 +272,8 @@ class TestFocalLengthForGSD:
         pixel_size = camera.sensor_width / camera.resolution_x
         linear_gsd = (altitude * pixel_size / camera.focal_length).to(ureg.meter)
         fl = camera.focal_length_for_gsd(altitude, linear_gsd)
-        assert fl.to("mm").magnitude == pytest.approx(
-            camera.focal_length.to("mm").magnitude, rel=0.01
+        assert fl.m_as("mm") == pytest.approx(
+            camera.focal_length.m_as("mm"), rel=0.01
         )
 
     def test_finer_gsd_needs_longer_focal(self, camera, altitude):
@@ -699,7 +699,7 @@ class TestQUAKESI:
         sigma_q = 0.023e-3  # 0.023 mrad in radians
         ra = cam.range_accuracy(alt, baseline, sigma_q=sigma_q)
         # Should be on the order of meters
-        assert 0.1 < ra.to("meter").magnitude < 100
+        assert 0.1 < ra.m_as("meter") < 100
 
     def test_quakes_i_frame_rate(self, quakes):
         for entry in quakes.cameras:

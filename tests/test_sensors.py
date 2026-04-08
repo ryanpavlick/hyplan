@@ -249,7 +249,7 @@ class TestRadar:
     def test_wavelength(self):
         r = UAVSAR_Lband()
         wl = r.wavelength
-        assert wl.to("cm").magnitude == pytest.approx(23.8, rel=0.1)
+        assert wl.m_as("cm") == pytest.approx(23.8, rel=0.1)
 
     def test_ground_sample_distance(self):
         r = UAVSAR_Lband()

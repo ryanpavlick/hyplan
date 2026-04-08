@@ -23,7 +23,7 @@ class TestBoxAroundCenterLine:
         )
         assert len(lines) > 0
         for fl in lines:
-            assert fl.altitude_msl.to("meter").magnitude == pytest.approx(6000)
+            assert fl.altitude_msl.m_as("meter") == pytest.approx(6000)
 
     def test_overlap_changes_count(self):
         sensor = AVIRIS3()
@@ -53,7 +53,7 @@ class TestBoxAroundCenterLine:
         box_width_km = ureg.Quantity(15, "km")
         import numpy as np
         expected = max(1, int(np.ceil(
-            (box_width_km / spacing).to("dimensionless").magnitude
+            (box_width_km / spacing).m_as("dimensionless")
         )))
 
         lines = box_around_center_line(
@@ -180,7 +180,7 @@ class TestBoxAroundPolygon:
             clip_to_polygon=False,
         )
         # Lines at azimuth=90 should be ~40 km long (E-W), not ~12 km
-        line_len_km = lines[0].length.to(ureg.km).magnitude
+        line_len_km = lines[0].length.m_as(ureg.km)
         assert line_len_km > 30, f"Line length {line_len_km:.1f} km is too short for E-W polygon"
         # Should have few cross-track lines (~12 km / ~3.5 km spacing)
         assert len(lines) < 10, f"Too many lines ({len(lines)}) for a 12 km cross-track extent"

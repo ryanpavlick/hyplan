@@ -106,11 +106,11 @@ class Waypoint:
         if isinstance(offset_north, (int, float)):
             n_m = float(offset_north)
         else:
-            n_m = offset_north.to(ureg.meter).magnitude
+            n_m = offset_north.m_as(ureg.meter)
         if isinstance(offset_east, (int, float)):
             e_m = float(offset_east)
         else:
-            e_m = offset_east.to(ureg.meter).magnitude
+            e_m = offset_east.m_as(ureg.meter)
 
         alt_m = self.altitude_msl.magnitude if self.altitude_msl is not None else 0.0
         new_lat, new_lon, _ = pymap3d.ned2geodetic(

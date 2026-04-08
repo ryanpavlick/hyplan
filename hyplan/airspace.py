@@ -126,7 +126,7 @@ def check_airspace_conflicts(
 
     for fl_idx, fl in enumerate(flight_lines):
         fl_geom = fl.geometry
-        fl_alt_ft = fl.altitude_msl.to(ureg.foot).magnitude
+        fl_alt_ft = fl.altitude_msl.m_as(ureg.foot)
 
         # Query spatial index for candidate airspaces
         candidate_indices = tree.query(fl_geom, predicate="intersects")

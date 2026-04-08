@@ -19,7 +19,7 @@ class TestAircraftInstantiation:
 
     def test_er2(self):
         ac = NASA_ER2()
-        assert ac.service_ceiling.to("feet").magnitude > 60000
+        assert ac.service_ceiling.m_as("feet") > 60000
 
     def test_giii(self):
         ac = NASA_GIII()
@@ -110,13 +110,13 @@ class TestAircraftPerformance:
 
     def test_endurance_exists_and_reasonable(self):
         ac = B200()
-        endurance_hrs = ac.endurance.to("hour").magnitude
+        endurance_hrs = ac.endurance.m_as("hour")
         assert endurance_hrs > 0
         assert endurance_hrs < 24  # no aircraft flies more than a day
 
     def test_endurance_er2(self):
         ac = NASA_ER2()
-        endurance_hrs = ac.endurance.to("hour").magnitude
+        endurance_hrs = ac.endurance.m_as("hour")
         assert endurance_hrs >= 6  # ER-2 has ~8 hr endurance
 
     def test_rate_of_climb_at_sea_level(self):

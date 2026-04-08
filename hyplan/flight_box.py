@@ -77,7 +77,7 @@ def _validate_inputs(**kwargs) -> None:
             if isinstance(value, ureg.Quantity):
                 if not value.check("[length]"):
                     raise HyPlanValueError(f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}.")
-                value = value.to("meter").magnitude  # Convert to meters
+                value = value.m_as("meter")  # Convert to meters
             elif not isinstance(value, float):
                 raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
             
@@ -181,7 +181,7 @@ def box_around_center_line(
         polygon = buffer_polygon_along_azimuth(polygon, along_track_buffer, swath.magnitude/2, azimuth)
         box_length += ureg.Quantity(along_track_buffer, "meter")
 
-    nlines = max(1, int(np.ceil((box_width / swath_spacing).to("dimensionless").magnitude)))
+    nlines = max(1, int(np.ceil((box_width / swath_spacing).m_as("dimensionless"))))
 
     logger.info(f"Calculated swath spacing: {swath_spacing:.2f} meters.")
     logger.info(f"Number of lines: {nlines}.")
@@ -418,19 +418,19 @@ def box_around_polygon_terrain(
         f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."
     )
 
-    box_length_m      = box_length.to("meter").magnitude
-    box_width_m       = box_width.to("meter").magnitude
-    safe_altitude_m   = safe_altitude.to("meter").magnitude
-    min_line_length_m = min_line_length.to("meter").magnitude
+    box_length_m      = box_length.m_as("meter")
+    box_width_m       = box_width.m_as("meter")
+    safe_altitude_m   = safe_altitude.m_as("meter")
+    min_line_length_m = min_line_length.m_as("meter")
     mode3             = target_agl is not None
-    target_agl_m      = target_agl.to("meter").magnitude if mode3 else None
+    target_agl_m      = target_agl.m_as("meter") if mode3 else None
 
     dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
 
     if not mode3:
         # Mode 2: single fixed altitude — check global terrain clearance up front
         _, max_elev = terrain.get_min_max_elevations(dem_file)
-        clearance = altitude_msl.to("meter").magnitude - max_elev
+        clearance = altitude_msl.m_as("meter") - max_elev
         if clearance < safe_altitude_m:
             raise HyPlanValueError(
                 f"Minimum clearance {clearance:.0f} m is below safe_altitude "
@@ -491,7 +491,7 @@ def box_around_polygon_terrain(
             clipped = candidate.clip_to_polygon(effective_clip)
             output_segments = (
                 [seg for seg in clipped
-                 if seg.length.to("meter").magnitude >= min_line_length_m]
+                 if seg.length.m_as("meter") >= min_line_length_m]
                 if clipped else []
             )
         else:
@@ -685,8 +685,8 @@ def box_around_center_terrain(
 
     rect = _rectangle_polygon(
         lat0, lon0, azimuth,
-        box_length.to("meter").magnitude,
-        box_width.to("meter").magnitude,
+        box_length.m_as("meter"),
+        box_width.m_as("meter"),
     )
 
     return box_around_polygon_terrain(

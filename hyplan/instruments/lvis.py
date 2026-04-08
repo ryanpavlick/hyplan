@@ -58,7 +58,7 @@ class LVISLens:
         Returns:
             Footprint diameter in meters.
         """
-        alt_m = altitude_agl.to(ureg.meter).magnitude
+        alt_m = altitude_agl.m_as(ureg.meter)
         return np.tan(self.divergence_mrad / 1000.0) * alt_m * ureg.meter
 
 
@@ -177,7 +177,7 @@ class LVIS(Sensor):
             Effective FOV in degrees.
         """
         esw = self.effective_swath_width(altitude_agl, speed).magnitude
-        alt_m = altitude_agl.to(ureg.meter).magnitude
+        alt_m = altitude_agl.m_as(ureg.meter)
         return 2 * np.degrees(np.arctan(esw / (2 * alt_m)))
 
     def footprint_diameter(self, altitude_agl: Quantity) -> Quantity:
@@ -205,7 +205,7 @@ class LVIS(Sensor):
         Returns:
             Coverage rate in m^2/s.
         """
-        spd = speed.to(ureg.meter / ureg.second).magnitude
+        spd = speed.m_as(ureg.meter / ureg.second)
         ms = self.swath_width(altitude_agl).magnitude
         return spd * ms * ureg.meter ** 2 / ureg.second
 
@@ -245,7 +245,7 @@ class LVIS(Sensor):
         """
         ms = self.swath_width(altitude_agl).magnitude
         fp = self.footprint_diameter(altitude_agl).magnitude
-        spd = speed.to(ureg.meter / ureg.second).magnitude
+        spd = speed.m_as(ureg.meter / ureg.second)
         rr = self.rep_rate.magnitude
 
         contiguous_swath = fp ** 2 * rr / spd
@@ -302,10 +302,10 @@ class LVIS(Sensor):
 
     def compare_lenses(self, altitude_agl: Quantity, speed: Quantity) -> None:
         """Print a comparison table across all standard lenses."""
-        spd = speed.to(ureg.meter / ureg.second).magnitude
+        spd = speed.m_as(ureg.meter / ureg.second)
         rr = self.rep_rate.magnitude
         ms = self.swath_width(altitude_agl).magnitude
-        alt_m = altitude_agl.to(ureg.meter).magnitude
+        alt_m = altitude_agl.m_as(ureg.meter)
 
         print(f"LVIS Lens Comparison at {altitude_agl.to(ureg.km):.1f} AGL, {speed.to(ureg.knot):.0f}")
         print(f"  Rep rate: {self.rep_rate:.0f}   Max swath: {ms:.0f} m")

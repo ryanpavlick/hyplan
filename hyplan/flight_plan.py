@@ -53,14 +53,14 @@ def _direct_segment_record(
         end_wp.latitude, end_wp.longitude,
     )
     dist_m = float(dist_m)
-    dist_nm = ureg.Quantity(dist_m, "meter").to(ureg.nautical_mile).magnitude
+    dist_nm = ureg.Quantity(dist_m, "meter").m_as(ureg.nautical_mile)
 
     # Average altitude for speed lookup
     alt_start = start_wp.altitude_msl or ureg.Quantity(0, "foot")
     alt_end = end_wp.altitude_msl or ureg.Quantity(0, "foot")
     avg_alt = (alt_start + alt_end) / 2.0
     speed = start_wp.speed if start_wp.speed is not None else aircraft.cruise_speed_at(avg_alt)
-    time_min = (ureg.Quantity(dist_m, "meter") / speed).to(ureg.minute).magnitude
+    time_min = (ureg.Quantity(dist_m, "meter") / speed).m_as(ureg.minute)
 
     return {
         "geometry": geom,
@@ -68,8 +68,8 @@ def _direct_segment_record(
         "start_lon": start_wp.longitude,
         "end_lat": end_wp.latitude,
         "end_lon": end_wp.longitude,
-        "start_altitude": alt_start.to(ureg.foot).magnitude,
-        "end_altitude": alt_end.to(ureg.foot).magnitude,
+        "start_altitude": alt_start.m_as(ureg.foot),
+        "end_altitude": alt_end.m_as(ureg.foot),
         "start_heading": start_wp.heading,
         "end_heading": end_wp.heading,
         "time_to_segment": time_min,
@@ -129,7 +129,7 @@ def compute_flight_plan(
             segment_distance = distances[-1]
 
             # Calculate time_to_segment using the computed segment_distance.
-            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude_msl)).to(ureg.minute).magnitude
+            time_to_segment = (ureg.Quantity(segment_distance, 'meter') / aircraft.cruise_speed_at(segment.altitude_msl)).m_as(ureg.minute)
 
             # Use the FlightLine's own heading properties.
             start_heading = segment.waypoint1.heading  # From FlightLine.az12
@@ -141,11 +141,11 @@ def compute_flight_plan(
                 "start_lon": longitudes[0],
                 "end_lat": latitudes[-1],
                 "end_lon": longitudes[-1],
-                "start_altitude": segment.altitude_msl.to(ureg.foot).magnitude,
-                "end_altitude": segment.altitude_msl.to(ureg.foot).magnitude,
+                "start_altitude": segment.altitude_msl.m_as(ureg.foot),
+                "end_altitude": segment.altitude_msl.m_as(ureg.foot),
                 "segment_type": "flight_line",
                 "segment_name": segment.site_name,
-                "distance": ureg.Quantity(segment_distance, 'meter').to(ureg.nautical_mile).magnitude,
+                "distance": ureg.Quantity(segment_distance, 'meter').m_as(ureg.nautical_mile),
                 "time_to_segment": time_to_segment,
                 "start_heading": start_heading,
                 "end_heading": end_heading
@@ -160,12 +160,12 @@ def compute_flight_plan(
                 "start_lon": segment.longitude,
                 "end_lat": segment.latitude,
                 "end_lon": segment.longitude,
-                "start_altitude": segment.altitude_msl.to(ureg.foot).magnitude if segment.altitude_msl else None,
-                "end_altitude": segment.altitude_msl.to(ureg.foot).magnitude if segment.altitude_msl else None,
+                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
                 "segment_type": "loiter",
                 "segment_name": segment.name,
                 "distance": 0.0,
-                "time_to_segment": segment.delay.to(ureg.minute).magnitude,
+                "time_to_segment": segment.delay.m_as(ureg.minute),
                 "start_heading": segment.heading,
                 "end_heading": segment.heading
             })
@@ -198,7 +198,7 @@ def compute_flight_plan(
                 speed_override = segment.speed
 
             cruise_info = aircraft.time_to_cruise(start_wp, end_wp, true_air_speed=speed_override)
-            if cruise_info["total_time"].to(ureg.minute).magnitude > 0:
+            if cruise_info["total_time"].m_as(ureg.minute) > 0:
                 phase_name = (
                     "Departure" if (i == 0 and takeoff_airport is None) else
                     f"{getattr(segment, 'site_name', getattr(segment, 'name', 'Unknown'))} to "
@@ -220,7 +220,7 @@ def compute_flight_plan(
         if isinstance(last_target, FlightLine):
             last_target = last_target.waypoint2
         return_info = aircraft.time_to_return(last_target, return_airport)
-        if return_info["total_time"].to(ureg.minute).magnitude > 0:
+        if return_info["total_time"].m_as(ureg.minute) > 0:
             records.extend(process_flight_phase(last_target, return_airport, return_info, "Return"))
 
     # Create and return the GeoDataFrame.
@@ -247,14 +247,14 @@ def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> di
         "start_lon": flight_line.lon1,
         "end_lat": flight_line.lat2,
         "end_lon": flight_line.lon2,
-        "start_altitude": flight_line.altitude_msl.to(ureg.foot).magnitude,
-        "end_altitude": flight_line.altitude_msl.to(ureg.foot).magnitude,
+        "start_altitude": flight_line.altitude_msl.m_as(ureg.foot),
+        "end_altitude": flight_line.altitude_msl.m_as(ureg.foot),
         "start_heading": flight_line.waypoint1.heading,
         "end_heading": flight_line.waypoint2.heading,
-        "time_to_segment": (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude_msl)).to(ureg.minute).magnitude,
+        "time_to_segment": (flight_line.length / aircraft.cruise_speed_at(flight_line.altitude_msl)).m_as(ureg.minute),
         "segment_type": "flight_line",
         "segment_name": flight_line.site_name,
-        "distance": flight_line.length.to(ureg.nautical_mile).magnitude
+        "distance": flight_line.length.m_as(ureg.nautical_mile)
     }
 
 
@@ -293,7 +293,7 @@ def process_flight_phase(
     phase_items = list(phase_info["phases"].items())
     phase_times = []
     for phase, details in phase_items:
-        dt = (details["end_time"] - details["start_time"]).to(ureg.minute).magnitude
+        dt = (details["end_time"] - details["start_time"]).m_as(ureg.minute)
         phase_times.append(dt)
 
     total_time = sum(phase_times)
@@ -313,7 +313,7 @@ def process_flight_phase(
         end_heading   = details.get("end_heading", getattr(end, "heading", None))
 
         if "distance" in details:
-            phase_distance_nm = details["distance"].to(ureg.nautical_mile).magnitude
+            phase_distance_nm = details["distance"].m_as(ureg.nautical_mile)
         else:
             phase_distance_nm = None
 
@@ -347,11 +347,11 @@ def process_flight_phase(
             "start_lon": start_lon_g,
             "end_lat": end_lat_g,
             "end_lon": end_lon_g,
-            "start_altitude": details["start_altitude"].to(ureg.foot).magnitude,
-            "end_altitude": details["end_altitude"].to(ureg.foot).magnitude,
+            "start_altitude": details["start_altitude"].m_as(ureg.foot),
+            "end_altitude": details["end_altitude"].m_as(ureg.foot),
             "start_heading": start_heading,
             "end_heading": end_heading,
-            "time_to_segment": (details["end_time"] - details["start_time"]).to(ureg.minute).magnitude,
+            "time_to_segment": (details["end_time"] - details["start_time"]).m_as(ureg.minute),
             "segment_type": seg_type,
             "segment_name": segment_name,
             "distance": phase_distance_nm

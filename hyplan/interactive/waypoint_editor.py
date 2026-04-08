@@ -167,9 +167,9 @@ class WaypointEditor(widgets.VBox):
 
         rows = []
         for wp in wps:
-            alt = wp.altitude_msl.to(ureg.meter).magnitude if wp.altitude_msl is not None else np.nan
-            spd = wp.speed.to(ureg.meter / ureg.second).magnitude if wp.speed is not None else np.nan
-            dly = wp.delay.to(ureg.second).magnitude if wp.delay is not None else np.nan
+            alt = wp.altitude_msl.m_as(ureg.meter) if wp.altitude_msl is not None else np.nan
+            spd = wp.speed.m_as(ureg.meter / ureg.second) if wp.speed is not None else np.nan
+            dly = wp.delay.m_as(ureg.second) if wp.delay is not None else np.nan
             rows.append({
                 "name": wp.name or "",
                 "lat": round(wp.latitude, 6),

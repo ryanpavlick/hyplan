@@ -103,12 +103,12 @@ class TestWavelengthAndResolution:
         wl = lband.wavelength
         assert wl.check("[length]")
         # L-band ~ 23.8 cm
-        assert wl.to("cm").magnitude == pytest.approx(23.8, rel=0.05)
+        assert wl.m_as("cm") == pytest.approx(23.8, rel=0.05)
 
     def test_kaband_wavelength(self, kaband):
         wl = kaband.wavelength
         # Ka-band ~ 8.4 mm
-        assert wl.to("mm").magnitude == pytest.approx(8.4, rel=0.05)
+        assert wl.m_as("mm") == pytest.approx(8.4, rel=0.05)
 
     def test_range_resolution(self, lband):
         rr = lband.range_resolution

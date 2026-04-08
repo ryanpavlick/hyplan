@@ -69,8 +69,8 @@ class TestRacetrack:
         assert len(wps) == 6
         # All legs on same track (offset=0) but different altitudes
         for i, alt_expected in enumerate(alts):
-            assert wps[2*i].altitude_msl.to(ureg.foot).magnitude == pytest.approx(
-                alt_expected.to(ureg.foot).magnitude, rel=1e-3)
+            assert wps[2*i].altitude_msl.m_as(ureg.foot) == pytest.approx(
+                alt_expected.m_as(ureg.foot), rel=1e-3)
 
     def test_stacked(self):
         stack = [ureg.Quantity(a, "feet") for a in [9000, 7000, 5000]]
@@ -215,7 +215,7 @@ class TestSawtooth:
         # Pattern: max, min, max, min, max
         expected_ft = [10000, 5000, 10000, 5000, 10000]
         for wp, exp in zip(wps, expected_ft):
-            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(exp, rel=1e-3)
+            assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(exp, rel=1e-3)
 
     def test_track_length(self):
         length = ureg.Quantity(100, "km")
@@ -248,7 +248,7 @@ class TestFlightLinesToWaypointPath:
         assert len(wps) == 2
         assert wps[0].segment_type == "pattern"
         assert wps[1].segment_type == "pattern_turn"
-        assert wps[0].altitude_msl.to(ureg.foot).magnitude == pytest.approx(20000, rel=1e-2)
+        assert wps[0].altitude_msl.m_as(ureg.foot) == pytest.approx(20000, rel=1e-2)
 
     def test_altitude_override(self):
         fl = FlightLine.start_length_azimuth(
@@ -259,7 +259,7 @@ class TestFlightLinesToWaypointPath:
         new_alt = ureg.Quantity(10000, "feet")
         wps = flight_lines_to_waypoint_path([fl], altitude=new_alt)
         for wp in wps:
-            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(10000, rel=1e-2)
+            assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(10000, rel=1e-2)
 
     def test_two_flight_lines(self):
         fl1 = FlightLine.start_length_azimuth(
@@ -300,7 +300,7 @@ class TestSpiral:
         alt_end = ureg.Quantity(20000, "feet")
         wps = spiral(CENTER, 0.0, alt_start, alt_end, ureg.Quantity(5, "km"),
                      n_turns=3)
-        alts = [wp.altitude_msl.to(ureg.foot).magnitude for wp in wps]
+        alts = [wp.altitude_msl.m_as(ureg.foot) for wp in wps]
         # Monotonically increasing
         assert all(alts[i] <= alts[i + 1] for i in range(len(alts) - 1))
 
@@ -309,8 +309,8 @@ class TestSpiral:
         alt_end = ureg.Quantity(20000, "feet")
         wps = spiral(CENTER, 0.0, alt_start, alt_end, ureg.Quantity(5, "km"),
                      n_turns=2)
-        assert wps[0].altitude_msl.to(ureg.foot).magnitude == pytest.approx(5000, rel=1e-3)
-        assert wps[-1].altitude_msl.to(ureg.foot).magnitude == pytest.approx(20000, rel=1e-3)
+        assert wps[0].altitude_msl.m_as(ureg.foot) == pytest.approx(5000, rel=1e-3)
+        assert wps[-1].altitude_msl.m_as(ureg.foot) == pytest.approx(20000, rel=1e-3)
 
     def test_heading_tangent_right(self):
         """Headings should be perpendicular to radial bearing (right turn = +90)."""
@@ -354,9 +354,9 @@ class TestSpiral:
     def test_constant_altitude_orbit(self):
         """altitude_start == altitude_end should produce a constant-altitude orbit."""
         wps = spiral(CENTER, 0.0, ALT, ALT, ureg.Quantity(5, "km"), n_turns=2)
-        alt_ft = ALT.to(ureg.foot).magnitude
+        alt_ft = ALT.m_as(ureg.foot)
         for wp in wps:
-            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(alt_ft, rel=1e-6)
+            assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(alt_ft, rel=1e-6)
 
     def test_invalid_n_turns(self):
         from hyplan.exceptions import HyPlanValueError
@@ -461,9 +461,9 @@ class TestCoordinatedLine:
             primary_altitude=pri_alt, secondary_altitude=sec_alt,
             ground_speed_ratio=1.2)
         for wp in result["primary"]:
-            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(5000, rel=1e-3)
+            assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(5000, rel=1e-3)
         for wp in result["secondary"]:
-            assert wp.altitude_msl.to(ureg.foot).magnitude == pytest.approx(65000, rel=1e-3)
+            assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(65000, rel=1e-3)
 
     def test_heading(self):
         """Waypoint headings should be close to the requested heading."""
