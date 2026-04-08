@@ -33,6 +33,7 @@ import simplekml
 from shapely.geometry import Point, LineString, Polygon
 from .sun import sunpos
 import pymap3d.vincenty
+from pyproj import Geod
 
 from .terrain import get_cache_root
 from .download import download_file
@@ -307,6 +308,9 @@ def compute_ground_track(
 # Swath footprint
 # ---------------------------------------------------------------------------
 
+_GEOD_WGS84 = Geod(ellps="WGS84")
+
+
 def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """
     Compute forward azimuths between consecutive ground track points.
@@ -318,13 +322,20 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
         lons (np.ndarray): Longitudes in decimal degrees.
 
     Returns:
-        np.ndarray: Forward azimuths in degrees for each point.
+        np.ndarray: Forward azimuths in degrees for each point, in [0, 360).
     """
-    headings = np.zeros(len(lats))
-    for i in range(len(lats) - 1):
-        _, az = pymap3d.vincenty.vdist(lats[i], lons[i], lats[i + 1], lons[i + 1])
-        headings[i] = az
-    headings[-1] = headings[-2] if len(headings) > 1 else 0.0
+    n = len(lats)
+    if n == 0:
+        return np.zeros(0)
+    if n == 1:
+        return np.zeros(1)
+    # pyproj.Geod.inv is fully vectorized; pymap3d.vincenty.vdist falls into a
+    # scalar-only branch on degenerate equator-parallel pairs.
+    fwd_az, _, _ = _GEOD_WGS84.inv(lons[:-1], lats[:-1], lons[1:], lats[1:])
+    fwd_az = np.mod(np.asarray(fwd_az), 360.0)
+    headings = np.empty(n)
+    headings[:-1] = fwd_az
+    headings[-1] = fwd_az[-1]
     return headings
 
 
