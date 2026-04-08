@@ -5,7 +5,12 @@ from shapely.geometry import Polygon
 from hyplan.units import ureg
 from hyplan.instruments import AVIRIS3
 from hyplan.flight_line import FlightLine
-from hyplan.swath import generate_swath_polygon, calculate_swath_widths, export_polygon_to_kml
+from hyplan.swath import (
+    generate_swath_polygon,
+    calculate_swath_widths,
+    analyze_swath_gaps_overlaps,
+    export_polygon_to_kml,
+)
 
 
 class TestGenerateSwathPolygon:
@@ -105,6 +110,47 @@ class TestRadarSwathPolygon:
         assert poly.area > 0
         widths = calculate_swath_widths(poly)
         assert widths["min_width"] > 0
+
+
+class TestAnalyzeSwathGapsOverlaps:
+    def test_two_overlapping_lonlat_squares(self):
+        # Two ~1 km squares near the equator that overlap by ~half
+        a = Polygon([(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01)])
+        b = Polygon([(0.005, 0.0), (0.015, 0.0), (0.015, 0.01), (0.005, 0.01)])
+        df = analyze_swath_gaps_overlaps([a, b])
+        assert len(df) == 1
+        assert df.iloc[0]["overlap_area_m2"] > 0
+        assert df.iloc[0]["gap_area_m2"] == 0
+        assert df.iloc[0]["overlap_fraction"] > 0
+
+    def test_two_disjoint_lonlat_squares(self):
+        a = Polygon([(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01)])
+        b = Polygon([(0.02, 0.0), (0.03, 0.0), (0.03, 0.01), (0.02, 0.01)])
+        df = analyze_swath_gaps_overlaps([a, b])
+        assert df.iloc[0]["overlap_area_m2"] == 0
+        assert df.iloc[0]["gap_area_m2"] > 0
+        assert df.iloc[0]["overlap_fraction"] == 0
+
+    def test_single_polygon_returns_empty(self):
+        a = Polygon([(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01)])
+        df = analyze_swath_gaps_overlaps([a])
+        assert df.empty
+        assert list(df.columns) == [
+            "pair_index", "overlap_area_m2", "gap_area_m2", "overlap_fraction"
+        ]
+
+    def test_empty_returns_empty(self):
+        df = analyze_swath_gaps_overlaps([])
+        assert df.empty
+
+    def test_three_polygons_two_pairs(self):
+        a = Polygon([(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01)])
+        b = Polygon([(0.005, 0.0), (0.015, 0.0), (0.015, 0.01), (0.005, 0.01)])
+        c = Polygon([(0.02, 0.0), (0.03, 0.0), (0.03, 0.01), (0.02, 0.01)])
+        df = analyze_swath_gaps_overlaps([a, b, c])
+        assert len(df) == 2
+        assert df.iloc[0]["overlap_area_m2"] > 0  # a-b overlap
+        assert df.iloc[1]["gap_area_m2"] > 0      # b-c gap
 
 
 class TestExportPolygonToKml:

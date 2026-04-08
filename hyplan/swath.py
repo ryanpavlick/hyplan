@@ -6,21 +6,24 @@ accounting for cross-track field of view and altitude.
 :func:`calculate_swath_widths` measures port/starboard widths along the track.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
+import pandas as pd
 import simplekml
 from shapely.geometry import Polygon
+from shapely.ops import transform
 import pymap3d.vincenty
 
 from .flight_line import FlightLine
 from .instruments import ScanningSensor
 from .terrain import ray_terrain_intersection
-from .geometry import process_linestring
+from .geometry import get_utm_transforms, process_linestring
 
 __all__ = [
     "generate_swath_polygon",
     "calculate_swath_widths",
+    "analyze_swath_gaps_overlaps",
     "export_polygon_to_kml",
 ]
 
@@ -137,6 +140,72 @@ def calculate_swath_widths(swath_polygon: Polygon) -> dict:
         "mean_width": np.mean(valid_distances),
         "max_width": np.max(valid_distances),
     }
+
+def analyze_swath_gaps_overlaps(
+    swath_polygons: List[Polygon],
+) -> pd.DataFrame:
+    """Pairwise gap/overlap analysis between adjacent swath polygons.
+
+    For each consecutive pair ``(swath_polygons[i], swath_polygons[i+1])``,
+    reports the area of overlap and the area of any gap between them. Either
+    value is zero when the polygons abut or overlap entirely. The caller is
+    responsible for ordering the polygons (e.g. in the perpendicular-offset
+    order produced by :func:`hyplan.flight_box.box_around_center_line`).
+
+    Each pair is projected to a local UTM zone before computing areas, so
+    the resulting values are in square meters regardless of the input CRS
+    (must be lon/lat in WGS84).
+
+    Args:
+        swath_polygons: Polygons in adjacency order. Must be in WGS84
+            (EPSG:4326). Returns an empty DataFrame if fewer than two
+            polygons are provided.
+
+    Returns:
+        DataFrame with columns:
+            - ``pair_index``: index ``i`` of the first polygon in the pair.
+            - ``overlap_area_m2``: area of intersection in m².
+            - ``gap_area_m2``: area between the two polygons in m² when
+              they don't overlap; 0.0 if they do.
+            - ``overlap_fraction``: ``overlap_area_m2`` divided by the
+              mean of the two polygon areas.
+    """
+    if len(swath_polygons) < 2:
+        return pd.DataFrame(
+            columns=["pair_index", "overlap_area_m2", "gap_area_m2", "overlap_fraction"]
+        )
+
+    rows = []
+    for i in range(len(swath_polygons) - 1):
+        a = swath_polygons[i]
+        b = swath_polygons[i + 1]
+
+        # Project this pair to a local UTM CRS so areas come out in m².
+        to_utm, _ = get_utm_transforms([a.centroid, b.centroid])
+        a_m = transform(to_utm, a)
+        b_m = transform(to_utm, b)
+
+        overlap_area = a_m.intersection(b_m).area
+        if overlap_area > 0:
+            gap_area = 0.0
+        else:
+            # Gap = area inside the convex hull of the pair but in neither polygon.
+            hull = a_m.union(b_m).convex_hull
+            gap_area = hull.area - a_m.area - b_m.area
+            gap_area = max(gap_area, 0.0)
+
+        mean_area = 0.5 * (a_m.area + b_m.area)
+        overlap_fraction = overlap_area / mean_area if mean_area > 0 else 0.0
+
+        rows.append({
+            "pair_index": i,
+            "overlap_area_m2": overlap_area,
+            "gap_area_m2": gap_area,
+            "overlap_fraction": overlap_fraction,
+        })
+
+    return pd.DataFrame(rows)
+
 
 def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name="Swath Polygon") -> None:
     """
