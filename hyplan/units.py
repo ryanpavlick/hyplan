@@ -74,6 +74,52 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
 
     return (speed * units[from_unit]).m_as(units[to_unit])
 
+def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
+    """
+    Convert angle between specified units.
+
+    Args:
+        angle (float): Angle to convert.
+        from_unit (str): Unit of the input angle. Must be one of "degrees", "radians", "arcminutes", "arcseconds".
+        to_unit (str): Unit of the output angle. Must be one of "degrees", "radians", "arcminutes", "arcseconds".
+
+    Returns:
+        float: Angle converted to the target unit.
+    """
+    units = {
+        "degrees": ureg.degree,
+        "radians": ureg.radian,
+        "arcminutes": ureg.arcminute,
+        "arcseconds": ureg.arcsecond,
+    }
+    if from_unit not in units or to_unit not in units:
+        raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
+
+    return (angle * units[from_unit]).m_as(units[to_unit])
+
+def convert_time(time: float, from_unit: str, to_unit: str) -> float:
+    """
+    Convert a time duration between specified units.
+
+    Args:
+        time (float): Time duration to convert.
+        from_unit (str): Unit of the input duration. Must be one of "seconds", "minutes", "hours", "days".
+        to_unit (str): Unit of the output duration. Must be one of "seconds", "minutes", "hours", "days".
+
+    Returns:
+        float: Duration converted to the target unit.
+    """
+    units = {
+        "seconds": ureg.second,
+        "minutes": ureg.minute,
+        "hours": ureg.hour,
+        "days": ureg.day,
+    }
+    if from_unit not in units or to_unit not in units:
+        raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
+
+    return (time * units[from_unit]).m_as(units[to_unit])
+
 def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
     """
     Converts altitude to flight level (FL), considering atmospheric pressure.
