@@ -1,14 +1,18 @@
 """Tests for hyplan.aircraft."""
 
 import pytest
+import numpy as np
 from hyplan.units import ureg
 from hyplan.aircraft import (
+    Aircraft,
+    PerformanceTable,
     NASA_ER2,
     NASA_GIII,
     DynamicAviation_B200 as B200,
     C130,
     TwinOtter,
 )
+from hyplan.exceptions import HyPlanValueError
 
 
 class TestAircraftInstantiation:
@@ -206,3 +210,118 @@ class TestER2Performance:
     def test_max_bank_angle(self):
         ac = NASA_ER2()
         assert 0 < ac.max_bank_angle < 90
+
+
+# ---------------------------------------------------------------------------
+# PerformanceTable and table-backed Aircraft dispatch
+# ---------------------------------------------------------------------------
+
+
+def _sample_table() -> PerformanceTable:
+    """A fabricated three-row table for dispatch-level tests only."""
+    return PerformanceTable(
+        rows=[
+            (ureg.Quantity(0, "feet"), ureg.Quantity(180, "knot"), ureg.Quantity(2500, "feet/minute")),
+            (ureg.Quantity(15000, "feet"), ureg.Quantity(260, "knot"), ureg.Quantity(1500, "feet/minute")),
+            (ureg.Quantity(25000, "feet"), ureg.Quantity(280, "knot"), ureg.Quantity(500, "feet/minute")),
+        ],
+        source="fabricated test data",
+    )
+
+
+def _tabled_b200() -> Aircraft:
+    """A B200 instance with a synthetic PerformanceTable attached.
+
+    Kept local to the tests so no aircraft-data subclass is touched in PR 1.
+    """
+    ac = B200()
+    ac.performance_table = _sample_table()
+    return ac
+
+
+class TestPerformanceTable:
+    def test_requires_two_rows(self):
+        with pytest.raises(HyPlanValueError):
+            PerformanceTable(rows=[(
+                ureg.Quantity(0, "feet"),
+                ureg.Quantity(200, "knot"),
+                ureg.Quantity(2000, "feet/minute"),
+            )])
+
+    def test_requires_ascending_altitudes(self):
+        with pytest.raises(HyPlanValueError):
+            PerformanceTable(rows=[
+                (ureg.Quantity(10000, "feet"), ureg.Quantity(200, "knot"), ureg.Quantity(2000, "feet/minute")),
+                (ureg.Quantity(0, "feet"), ureg.Quantity(180, "knot"), ureg.Quantity(2500, "feet/minute")),
+            ])
+
+    def test_cruise_tas_interpolates(self):
+        t = _sample_table()
+        # Midpoint between 0 ft / 180 kt and 15000 ft / 260 kt = 220 kt
+        assert t.cruise_tas_at(ureg.Quantity(7500, "feet")).m_as("knot") == pytest.approx(220)
+
+    def test_cruise_tas_clamps_below_range(self):
+        t = _sample_table()
+        assert t.cruise_tas_at(ureg.Quantity(-1000, "feet")).m_as("knot") == pytest.approx(180)
+
+    def test_cruise_tas_clamps_above_range(self):
+        t = _sample_table()
+        assert t.cruise_tas_at(ureg.Quantity(40000, "feet")).m_as("knot") == pytest.approx(280)
+
+    def test_roc_interpolates(self):
+        t = _sample_table()
+        # Midpoint between 0 ft / 2500 fpm and 15000 ft / 1500 fpm = 2000 fpm
+        assert t.rate_of_climb_at(ureg.Quantity(7500, "feet")).m_as("feet/minute") == pytest.approx(2000)
+
+    def test_unit_conversion_at_construction(self):
+        t = PerformanceTable(rows=[
+            (ureg.Quantity(0, "meter"), ureg.Quantity(100, "m/s"), ureg.Quantity(10, "m/s")),
+            (ureg.Quantity(3000, "meter"), ureg.Quantity(120, "m/s"), ureg.Quantity(5, "m/s")),
+        ])
+        # Just confirm lookups return Quantities in the expected units.
+        assert t.cruise_tas_at(ureg.Quantity(1500, "meter")).check("[length] / [time]")
+        assert t.rate_of_climb_at(ureg.Quantity(1500, "meter")).check("[length] / [time]")
+
+
+class TestAircraftTableDispatch:
+    def test_cruise_speed_at_uses_table_when_present(self):
+        ac = _tabled_b200()
+        # 7500 ft → 220 kt per the fabricated table, regardless of the
+        # underlying B200 speed_profile / low_altitude_speed values.
+        assert ac.cruise_speed_at(ureg.Quantity(7500, "feet")).m_as("knot") == pytest.approx(220)
+
+    def test_rate_of_climb_uses_table_when_present(self):
+        ac = _tabled_b200()
+        assert ac.rate_of_climb(ureg.Quantity(7500, "feet")).m_as("feet/minute") == pytest.approx(2000)
+
+    def test_default_b200_unchanged_without_table(self):
+        """Regression guard: table feature is opt-in and must not alter
+        existing per-aircraft behavior."""
+        ac = B200()
+        assert ac.performance_table is None
+        # Spot-check two methods against the pre-PR-1 values.
+        speed_15k = ac.cruise_speed_at(ureg.Quantity(15000, "feet"))
+        roc_0 = ac.rate_of_climb(ureg.Quantity(0, "feet"))
+        assert speed_15k.magnitude > 0
+        assert roc_0.magnitude == pytest.approx(ac.best_rate_of_climb.magnitude, rel=1e-6)
+
+    def test_climb_time_table_vs_analytic_same_order(self):
+        """Numerical climb integration with a table should produce a
+        climb time in the same ballpark as the linear-ROC analytic path
+        for a similar ROC curve."""
+        ac = _tabled_b200()
+        t_table, _ = ac._climb(ureg.Quantity(0, "feet"), ureg.Quantity(15000, "feet"))
+        # Analytic reference: linear from 2500 → 1500 fpm over 0–15000 ft.
+        # Expected time = 15000 / (2500-1500) * ln(2500/1500) ≈ 7.66 min.
+        assert t_table.m_as("minute") == pytest.approx(7.66, rel=0.02)
+
+    def test_climb_altitude_profile_table_monotone(self):
+        ac = _tabled_b200()
+        times, alts = ac.climb_altitude_profile(
+            ureg.Quantity(0, "feet"), ureg.Quantity(15000, "feet"), n_points=32
+        )
+        assert len(times) == len(alts) == 32
+        assert times[0] == 0.0
+        assert np.all(np.diff(times) > 0)
+        assert np.all(np.diff(alts) > 0)
+        assert alts[-1] == pytest.approx(15000, rel=1e-6)

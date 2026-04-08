@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pymap3d.vincenty
@@ -11,6 +12,79 @@ from .waypoint import Waypoint
 from .dubins3d import DubinsPath3D
 from .exceptions import HyPlanTypeError, HyPlanValueError
 from .units import ureg
+
+
+@dataclass
+class PerformanceTable:
+    """Altitude-indexed aircraft performance table.
+
+    A small, unit-aware container holding cruise true airspeed and rate of
+    climb at a set of altitude breakpoints. Intended as the primary source
+    for :meth:`Aircraft.cruise_speed_at` and :meth:`Aircraft.rate_of_climb`
+    lookups when populated; callers never touch this directly.
+
+    Values at altitudes between breakpoints are linearly interpolated.
+    Outside the breakpoint range the values are clamped to the endpoints
+    (``np.interp`` semantics).
+
+    This PR 1 shape covers speed/timing only. Rate of descent remains a
+    per-aircraft scalar (``Aircraft.descent_rate``). The dataclass can grow
+    a ``rod`` or ``fuel_flow`` column later without breaking callers.
+
+    Args:
+        rows: List of ``(altitude, cruise_tas, roc)`` triples. Altitudes
+            must be strictly ascending. Each element must be a
+            ``pint.Quantity`` in a compatible unit (altitude convertible to
+            feet, TAS to knots, ROC to feet/minute).
+        source: Free-text citation for the data, e.g.
+            ``"Beechcraft King Air B200 POH, Rev. 2018-03, Section 5"``.
+            Stored for traceability; not used in calculations.
+    """
+
+    rows: List[Tuple[Quantity, Quantity, Quantity]]
+    source: str = ""
+
+    def __post_init__(self) -> None:
+        if len(self.rows) < 2:
+            raise HyPlanValueError(
+                "PerformanceTable requires at least 2 altitude rows for interpolation"
+            )
+        alts_ft = np.array(
+            [alt.to(ureg.feet).magnitude for alt, _, _ in self.rows], dtype=float
+        )
+        tas_kt = np.array(
+            [tas.to(ureg.knot).magnitude for _, tas, _ in self.rows], dtype=float
+        )
+        roc_fpm = np.array(
+            [
+                roc.to(ureg.feet / ureg.minute).magnitude
+                for _, _, roc in self.rows
+            ],
+            dtype=float,
+        )
+        if not np.all(np.diff(alts_ft) > 0):
+            raise HyPlanValueError(
+                "PerformanceTable altitudes must be strictly ascending"
+            )
+        # Cache plain ndarrays for fast interpolation in hot loops.
+        self._alts_ft = alts_ft
+        self._tas_kt = tas_kt
+        self._roc_fpm = roc_fpm
+
+    def cruise_tas_at(self, altitude: Quantity) -> Quantity:
+        """Interpolated cruise true airspeed at ``altitude``."""
+        alt_ft = altitude.to(ureg.feet).magnitude
+        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot
+
+    def rate_of_climb_at(self, altitude: Quantity) -> Quantity:
+        """Interpolated rate of climb at ``altitude``."""
+        alt_ft = altitude.to(ureg.feet).magnitude
+        return (
+            float(np.interp(alt_ft, self._alts_ft, self._roc_fpm))
+            * ureg.feet
+            / ureg.minute
+        )
+
 
 class Aircraft:
     """
@@ -37,6 +111,7 @@ class Aircraft:
         low_altitude_speed: Quantity = None,  # knots - TAS at sea level
         descent_speed_reduction: Quantity = None,  # knots - TAS decrease during descent
         speed_profile: list = None,  # list of (altitude_Quantity, speed_Quantity) breakpoints
+        performance_table: Optional[PerformanceTable] = None,
     ):
         """
         Initializes an Aircraft object with performance parameters.
@@ -67,6 +142,12 @@ class Aircraft:
                 order. cruise_speed_at() linearly interpolates between breakpoints and
                 holds constant beyond the endpoints. Overrides low_altitude_speed and
                 cruise_speed for speed lookups when set.
+            performance_table (PerformanceTable, optional): Altitude-indexed
+                cruise-TAS and ROC table. When supplied, takes precedence
+                over ``speed_profile``, ``low_altitude_speed``, and the
+                linear ROC model for :meth:`cruise_speed_at` and
+                :meth:`rate_of_climb` lookups. Primary source for the
+                post-PR-1 performance data rollout.
 
         Raises:
             TypeError: If any input has an incorrect type.
@@ -103,6 +184,11 @@ class Aircraft:
             self._convert_to_unit(descent_speed_reduction, ureg.knot)
             if descent_speed_reduction is not None else 0 * ureg.knot
         )
+
+        # Performance table (altitude-indexed cruise TAS + ROC). When present
+        # it wins over speed_profile / low_altitude_speed / linear ROC in the
+        # dispatch inside cruise_speed_at() and rate_of_climb().
+        self.performance_table = performance_table
 
         # Build speed profile lookup arrays (altitudes in feet, speeds in knots)
         if speed_profile is not None:
@@ -147,8 +233,11 @@ class Aircraft:
         """
         Compute the rate of climb at a given altitude.
 
-        Assumes a linear decrease from best_rate_of_climb at sea level
-        to roc_at_service_ceiling at the service ceiling.
+        Dispatch order:
+
+        1. If a ``performance_table`` is set, interpolate ROC from it.
+        2. Otherwise assume a linear decrease from ``best_rate_of_climb`` at
+           sea level to ``roc_at_service_ceiling`` at the service ceiling.
 
         Args:
             altitude (Quantity): Current altitude (feet or convertible).
@@ -156,9 +245,12 @@ class Aircraft:
         Returns:
             Quantity: Rate of climb at the given altitude (feet per minute).
         """
+        if self.performance_table is not None:
+            return self.performance_table.rate_of_climb_at(altitude)
+
         if altitude >= self.service_ceiling:
             return self.roc_at_service_ceiling
-        
+
         altitude_ratio = altitude / self.service_ceiling
         roc = (1 - altitude_ratio) * (self.best_rate_of_climb - self.roc_at_service_ceiling) + self.roc_at_service_ceiling
         return roc
@@ -167,10 +259,18 @@ class Aircraft:
         """
         Compute true airspeed at a given altitude.
 
-        If a speed_profile is set, linearly interpolates between breakpoints
-        (constant beyond endpoints). Otherwise falls back to linear interpolation
-        between low_altitude_speed and cruise_speed, or constant cruise_speed.
+        Dispatch order:
+
+        1. If a ``performance_table`` is set, interpolate cruise TAS from it.
+        2. Else if a ``speed_profile`` is set, linearly interpolate between
+           breakpoints (constant beyond endpoints).
+        3. Else if ``low_altitude_speed`` is set, linearly interpolate between
+           it and ``cruise_speed``.
+        4. Else return the constant ``cruise_speed``.
         """
+        if self.performance_table is not None:
+            return self.performance_table.cruise_tas_at(altitude)
+
         altitude = altitude.to(ureg.feet)
         if self._profile_alts is not None:
             speed_kt = np.interp(
@@ -250,19 +350,41 @@ class Aircraft:
 
         roc_start = self.rate_of_climb(start_altitude)
         roc_end = self.rate_of_climb(end_altitude)
-        C = self.service_ceiling
-        roc_sl = self.best_rate_of_climb
-        roc_ceil = self.roc_at_service_ceiling
-        delta_roc = (roc_sl - roc_ceil).magnitude
 
-        if delta_roc < 1e-6:
-            # Constant ROC — degenerate case
-            time_to_climb = ((end_altitude - start_altitude) / roc_sl).to(ureg.minute)
+        if self.performance_table is not None:
+            # Numerical integration of dt = dh / ROC(h). ROC(h) from a
+            # table is piecewise-linear but not globally linear, so the
+            # closed-form below doesn't apply. 64 steps is plenty given
+            # typical cruise altitudes and ROC smoothness.
+            n_steps = 64
+            alts_ft = np.linspace(
+                start_altitude.magnitude, end_altitude.magnitude, n_steps + 1
+            )
+            rocs_fpm = np.array(
+                [
+                    self.rate_of_climb(ureg.Quantity(a, "feet"))
+                    .m_as(ureg.feet / ureg.minute)
+                    for a in alts_ft
+                ]
+            )
+            # Trapezoidal integration of 1/ROC with respect to altitude.
+            inv_roc = 1.0 / rocs_fpm
+            minutes = float(np.trapezoid(inv_roc, alts_ft))
+            time_to_climb = minutes * ureg.minute
         else:
-            # Analytical solution: t = C / (ROC_sl - ROC_ceil) * ln(ROC(h0) / ROC(h1))
-            time_to_climb = (
-                C / (roc_sl - roc_ceil) * np.log(roc_start / roc_end)
-            ).to(ureg.minute)
+            C = self.service_ceiling
+            roc_sl = self.best_rate_of_climb
+            roc_ceil = self.roc_at_service_ceiling
+            delta_roc = (roc_sl - roc_ceil).magnitude
+
+            if delta_roc < 1e-6:
+                # Constant ROC — degenerate case
+                time_to_climb = ((end_altitude - start_altitude) / roc_sl).to(ureg.minute)
+            else:
+                # Analytical solution: t = C / (ROC_sl - ROC_ceil) * ln(ROC(h0) / ROC(h1))
+                time_to_climb = (
+                    C / (roc_sl - roc_ceil) * np.log(roc_start / roc_end)
+                ).to(ureg.minute)
 
         # Horizontal distance using average climb angle
         avg_roc = (roc_start + roc_end) / 2
@@ -294,6 +416,27 @@ class Aircraft:
 
         if end_altitude <= start_altitude:
             return np.array([0.0]), np.array([start_altitude.magnitude])
+
+        if self.performance_table is not None:
+            # Numerical integration of t(h) = ∫ dh / ROC(h) against a
+            # piecewise-linear ROC curve. Returns a monotonically
+            # increasing time array aligned to n_points altitude samples.
+            altitudes = np.linspace(
+                start_altitude.magnitude, end_altitude.magnitude, n_points
+            )
+            rocs = np.array(
+                [
+                    self.rate_of_climb(ureg.Quantity(a, "feet"))
+                    .m_as(ureg.feet / ureg.minute)
+                    for a in altitudes
+                ]
+            )
+            inv_roc = 1.0 / rocs
+            # Cumulative trapezoidal integration.
+            dh = np.diff(altitudes)
+            seg = 0.5 * (inv_roc[:-1] + inv_roc[1:]) * dh
+            times = np.concatenate([[0.0], np.cumsum(seg)])
+            return times, altitudes
 
         h0 = start_altitude.magnitude
         C = self.service_ceiling.magnitude
@@ -566,6 +709,7 @@ from .aircraft_models import (  # noqa: E402
 
 __all__ = [
     "Aircraft",
+    "PerformanceTable",
     "NASA_ER2",
     "NASA_GIII",
     "NASA_GIV",
