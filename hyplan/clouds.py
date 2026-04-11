@@ -63,6 +63,7 @@ __all__ = [
     "get_binary_cloud", "calculate_cloud_fraction", "create_date_ranges",
     "create_cloud_data_array_with_limit", "simulate_visits",
     "plot_yearly_cloud_fraction_heatmaps_with_visits",
+    "OpenMeteoCloudFraction", "fetch_cloud_fraction",
 ]
 
 logger = logging.getLogger(__name__)
@@ -253,6 +254,202 @@ def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_
     results_df = pd.DataFrame(results)
     aggregated_df = results_df.groupby(['polygon_id', 'year', 'day_of_year']).mean().reset_index()
     return aggregated_df
+
+# ---------------------------------------------------------------------------
+# Open-Meteo cloud fraction (no auth, ERA5 0.25°)
+# ---------------------------------------------------------------------------
+
+_OPENMETEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+
+class OpenMeteoCloudFraction:
+    """Fetch daily cloud fraction from the Open-Meteo ERA5 archive.
+
+    Uses the `Open-Meteo Historical Weather API
+    <https://open-meteo.com/en/docs/historical-weather-api>`_ to retrieve
+    daily mean total cloud cover from ERA5 reanalysis at 0.25° (~25 km)
+    resolution.  **No authentication required.**
+
+    For each polygon the centroid is used as the query point.  One HTTP
+    request per polygon covers the entire date range (all years at once),
+    so even 20-year × 5-polygon queries complete in seconds.
+
+    Args:
+        url: Override the Open-Meteo archive endpoint (for testing).
+    """
+
+    def __init__(self, url: str | None = None):
+        self._url = url or _OPENMETEO_ARCHIVE_URL
+
+    def fetch(
+        self,
+        polygons: gpd.GeoDataFrame,
+        year_start: int,
+        year_stop: int,
+        day_start: int,
+        day_stop: int,
+    ) -> pd.DataFrame:
+        """Fetch daily cloud fraction for each polygon.
+
+        Args:
+            polygons: GeoDataFrame with a ``Name`` column and polygon
+                geometries (WGS 84).
+            year_start: First year to include.
+            year_stop: Last year to include (inclusive).
+            day_start: Start day-of-year (1–365).
+            day_stop: End day-of-year (1–365).  If ``day_start > day_stop``
+                the range crosses a year boundary (e.g. Dec → Feb).
+
+        Returns:
+            DataFrame with columns ``polygon_id``, ``year``,
+            ``day_of_year``, ``cloud_fraction`` (0.0–1.0).
+        """
+        import requests as _requests
+
+        if "Name" not in polygons.columns:
+            raise HyPlanValueError(
+                f"Polygon GeoDataFrame must have a 'Name' column. "
+                f"Found: {list(polygons.columns)}"
+            )
+
+        crosses_year = day_start > day_stop
+
+        # Build the overall date window.  Open-Meteo accepts ISO dates.
+        start_date = f"{year_start}-01-01"
+        if crosses_year:
+            # Need data through day_stop of year_stop + 1
+            end_date = f"{year_stop + 1}-12-31"
+        else:
+            end_date = f"{year_stop}-12-31"
+
+        rows: list[dict] = []
+
+        for _, row in polygons.iterrows():
+            name = row["Name"]
+            centroid = row["geometry"].centroid
+            lat, lon = centroid.y, centroid.x
+
+            logger.info("Fetching Open-Meteo cloud cover for %s (%.2f, %.2f)", name, lat, lon)
+
+            resp = _requests.get(
+                self._url,
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "daily": "cloud_cover_mean",
+                    "timezone": "UTC",
+                },
+                timeout=60,
+            )
+            if resp.status_code != 200:
+                raise HyPlanRuntimeError(
+                    f"Open-Meteo request failed (HTTP {resp.status_code}): "
+                    f"{resp.text[:200]}"
+                )
+
+            data = resp.json()
+            daily = data.get("daily", {})
+            dates = daily.get("time", [])
+            cloud_pct = daily.get("cloud_cover_mean", [])
+
+            for date_str, pct in zip(dates, cloud_pct):
+                if pct is None:
+                    continue
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                year = dt.year
+                doy = dt.timetuple().tm_yday
+
+                # Filter to requested year/day-of-year window
+                if year < year_start or year > (year_stop + 1 if crosses_year else year_stop):
+                    continue
+
+                if crosses_year:
+                    # Accept days in [day_start, 365] or [1, day_stop]
+                    in_window = doy >= day_start or doy <= day_stop
+                else:
+                    in_window = day_start <= doy <= day_stop
+
+                if not in_window:
+                    continue
+
+                # For cross-year campaigns, assign the "season year" as the
+                # year containing day_start (matching simulate_visits logic).
+                if crosses_year and doy <= day_stop:
+                    season_year = year - 1
+                else:
+                    season_year = year
+
+                if season_year < year_start or season_year > year_stop:
+                    continue
+
+                rows.append({
+                    "polygon_id": name,
+                    "year": season_year,
+                    "day_of_year": doy,
+                    "cloud_fraction": pct / 100.0,
+                })
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+
+        # Average duplicates (shouldn't happen, but for safety)
+        return df.groupby(["polygon_id", "year", "day_of_year"]).mean().reset_index()
+
+
+def fetch_cloud_fraction(
+    polygon_file: str,
+    year_start: int,
+    year_stop: int,
+    day_start: int,
+    day_stop: int,
+    source: str = "openmeteo",
+    **kwargs,
+) -> pd.DataFrame:
+    """Fetch historical cloud fraction data for flight planning.
+
+    Factory function that selects the appropriate cloud data source and
+    returns a DataFrame compatible with :func:`simulate_visits` and
+    :func:`plot_yearly_cloud_fraction_heatmaps_with_visits`.
+
+    Args:
+        polygon_file: Path to a GeoJSON or shapefile with a ``Name`` column.
+        year_start: First year to include.
+        year_stop: Last year to include (inclusive).
+        day_start: Start day-of-year (1–365).
+        day_stop: End day-of-year (1–365).
+        source: Data source to use:
+
+            ``"openmeteo"``
+                ERA5 reanalysis via Open-Meteo (0.25°, no auth).
+            ``"gee"``
+                MODIS via Google Earth Engine (1 km, requires GEE auth).
+
+        **kwargs: Passed to the source constructor.
+
+    Returns:
+        DataFrame with columns ``polygon_id``, ``year``,
+        ``day_of_year``, ``cloud_fraction``.
+    """
+    gdf = gpd.read_file(polygon_file)
+
+    if source == "openmeteo":
+        return OpenMeteoCloudFraction(**kwargs).fetch(
+            gdf, year_start, year_stop, day_start, day_stop,
+        )
+    elif source == "gee":
+        return create_cloud_data_array_with_limit(
+            polygon_file, year_start, year_stop, day_start, day_stop,
+            **kwargs,
+        )
+    else:
+        raise HyPlanValueError(
+            f"Unknown cloud fraction source: {source!r}. "
+            f"Use 'openmeteo' or 'gee'."
+        )
+
 
 def simulate_visits(
     df: pd.DataFrame,

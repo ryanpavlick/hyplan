@@ -28,7 +28,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
 - **Terrain-aware analysis** — Download DEM data and compute where the sensor field of view intersects the ground
-- **Cloud cover analysis** — Estimate clear-sky probability from MODIS imagery via Google Earth Engine
+- **Cloud cover analysis** — Estimate clear-sky probability from ERA5 reanalysis via Open-Meteo (no auth) or MODIS imagery via Google Earth Engine
 - **Wind correction** — Per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
 - **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
 - **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles
@@ -81,7 +81,7 @@ pip install -e .
 
 ### Optional dependencies
 
-- **Google Earth Engine** (`earthengine-api`) — required for `hyplan.clouds`
+- **Google Earth Engine** (`earthengine-api`) — optional for `hyplan.clouds` (MODIS path); the Open-Meteo path requires no extra dependencies
 - **Wind fields** (`xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib`) — install with `pip install hyplan[winds]` for MERRA-2, GFS, and GEOS-FP wind data
 - **GUI widgets** (`ipyleaflet`, `ipywidgets`, `ipydatagrid`) — install with `pip install hyplan[gui]`
 
@@ -216,7 +216,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `sun` | Solar position and timing calculations |
 | `glint` | Solar glint angle prediction for water observations |
 | `terrain` | DEM data acquisition and ray-terrain intersection |
-| `clouds` | Cloud cover analysis and clear-sky probability from MODIS |
+| `clouds` | Cloud cover analysis and clear-sky probability from ERA5 (Open-Meteo) or MODIS (GEE) |
 | `winds` | Wind field models (MERRA-2, GFS, GEOS-FP, constant, still air) for per-segment flight plan correction |
 | | **Logistics** |
 | `airports` | Airport database with search, filtering, and runway data |
@@ -310,7 +310,7 @@ make html
 
 - **Flight optimizer** — Uses a greedy nearest-neighbor heuristic; does not guarantee globally optimal ordering; still experimental
 - **Terrain module** — DEM downloads require internet access and may be slow for large areas
-- **Google Earth Engine** — The `clouds` module requires a Google Earth Engine account and authentication
+- **Google Earth Engine** — The `clouds` module's MODIS path requires a Google Earth Engine account; the Open-Meteo path (default) needs no account
 
 ---
 

@@ -20,8 +20,6 @@
 
 **flight_optimizer.py:** convex hull + cheapest insertion route optimizer (monotone chain hull around flight line endpoints to build outer loop, then greedy insertion of interior lines — fast, non-crossing routes; can seed 2-opt; inspired by SynthFlight); Google OR-Tools or 2-opt/simulated annealing; return daily_lines grouping in result dict; time-window constraints (solar, satellite overpass); multi-aircraft scheduling; weight edges by fuel burn
 
-**winds.py:** add HRRR wind source for CONUS high-resolution planning
-
 **dubins3d.py:** wind-corrected Dubins paths
 
 **aircraft.py:** altitude-dependent fuel burn model; weight-dependent performance (payload vs range); turboprop vs jet engine modeling
@@ -40,7 +38,7 @@
 
 **glint.py:** map predicted glint intensity; glint avoidance routing
 
-**clouds.py:** non-GEE cloud sources (ERA5, MERRA-2); probabilistic clear-sky forecasting
+**clouds.py:** probabilistic clear-sky forecasting
 
 **terrain.py:** obstacle clearance analysis; dominant terrain aspect azimuth for optimal flight line orientation (`terrain_aspect_azimuth`)
 
