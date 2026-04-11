@@ -29,7 +29,9 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
 - **Terrain-aware analysis** — Download DEM data and compute where the sensor field of view intersects the ground
 - **Cloud cover analysis** — Estimate clear-sky probability from MODIS imagery via Google Earth Engine
-- **Aircraft performance** — 14 pre-configured aircraft models (NASA ER-2, WB-57, G-III, B200, Twin Otter, and others) with climb/cruise/descent profiles
+- **Wind correction** — Per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
+- **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
+- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
@@ -80,7 +82,25 @@ pip install -e .
 ### Optional dependencies
 
 - **Google Earth Engine** (`earthengine-api`) — required for `hyplan.clouds`
-- **Interactive planning** (`ipyleaflet`, `ipywidgets`, `ipydatagrid`) — install with `pip install hyplan[interactive]`
+- **Wind fields** (`xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib`) — install with `pip install hyplan[winds]` for MERRA-2, GFS, and GEOS-FP wind data
+- **GUI widgets** (`ipyleaflet`, `ipywidgets`, `ipydatagrid`) — install with `pip install hyplan[gui]`
+
+### API keys
+
+Some modules require API keys or tokens. Create a `.env` file in the project root:
+
+```bash
+# NASA Earthdata — required for MERRA-2 wind data
+# Get a token at https://urs.earthdata.nasa.gov/
+EARTHDATA_TOKEN=your_token_here
+
+# OpenAIP — required for airspace data
+# Get a key at https://www.openaip.net/
+OPENAIP_API_KEY=your_key_here
+```
+
+Google Earth Engine (required for `hyplan.clouds`) uses OAuth — run
+`earthengine authenticate` once to store credentials locally.
 
 ---
 
@@ -150,58 +170,66 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 ## Modules
 
 ```
-                          ┌──────────────────────┐
-                          │     Flight Planning  │
-                          ├──────────────────────┤
-                          │  flight_line         │
-                          │  flight_box          │
-                          │  flight_plan         │
-                          │  flight_optimizer    │
-                          │  flight_patterns     │
-                          │  dubins3d            │
-                          │  waypoint            │
-                          └────────┬─────────────┘
-                                   │
-              ┌────────────────────┼────────────────────┐
-              ▼                    ▼                    ▼
-   ┌──────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-   │   Instruments    │  │    Environment  │  │    Logistics    │
-   ├──────────────────┤  ├─────────────────┤  ├─────────────────┤
-   │  instruments/    │  │  sun            │  │  aircraft       │
-   │   line_scanner   │  │  glint          │  │  airports       │
-   │   lvis           │  │  terrain        │  │  satellites     │
-   │   radar          │  │  clouds         │  │  units          │
-   │   frame_camera   │  │  geometry       │  │  plotting       │
-   │  swath           │  │                 │  │                 │
-   └──────────────────┘  └─────────────────┘  ├─────────────────┤
-                                              │  exports        │
-                                              │  interactive    │
-                                              └─────────────────┘
+                        ┌────────────────────────┐
+                        │    Flight Planning     │
+                        ├────────────────────────┤
+                        │  flight_line           │
+                        │  flight_box            │
+                        │  flight_plan           │
+                        │  flight_optimizer      │
+                        │  flight_patterns       │
+                        │  waypoint  · campaign  │
+                        └───────────┬────────────┘
+                                    │
+        ┌──────────────┬────────────┼────────────┬──────────────┐
+        ▼              ▼            ▼            ▼              ▼
+ ┌────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+ │Instruments │ │  Aircraft  │ │  Environ │ │Logistics │ │Utilities │
+ ├────────────┤ ├────────────┤ ├──────────┤ ├──────────┤ ├──────────┤
+ │instruments/│ │ aircraft   │ │ sun      │ │ airports │ │ geometry │
+ │ line_scan  │ │ atmosphere │ │ glint    │ │ airspace │ │ units    │
+ │ lvis       │ │ dubins3d   │ │ terrain  │ │satellites│ │ plotting │
+ │ radar      │ │            │ │ clouds   │ │ exports  │ │ gui      │
+ │ frame_cam  │ │            │ │ winds    │ │          │ │ download │
+ │swath       │ │            │ │          │ │          │ │exceptions│
+ └────────────┘ └────────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
 
 | Module | Description |
 |--------|-------------|
+| | **Flight Planning** |
 | `flight_line` | Create, modify, split, clip, and export individual flight lines |
 | `flight_box` | Generate parallel flight lines covering a geographic area |
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
-| `aircraft` | Aircraft performance models (14 pre-configured research aircraft) |
-| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
-| `glint` | Solar glint angle prediction for water observations |
-| `swath` | Sensor swath coverage with terrain integration |
-| `terrain` | DEM data acquisition and ray-terrain intersection |
-| `sun` | Solar position and timing calculations |
-| `clouds` | Cloud cover analysis and clear-sky probability from MODIS |
-| `satellites` | Satellite overpass prediction and swath modeling |
-| `airports` | Airport database with search, filtering, and runway data |
 | `flight_patterns` | Flight pattern generators (racetrack, rosette, spiral, sawtooth, polygon, coordinated line) |
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
+| `campaign` | Campaign manager for organizing flight lines, caching reference data, and persisting plans |
+| | **Instruments** |
+| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
+| `swath` | Sensor swath coverage with terrain integration |
+| | **Aircraft** |
+| `aircraft` | Aircraft performance models (15 pre-configured research aircraft) |
+| `atmosphere` | ISA standard atmosphere model, airspeed conversions (CAS/TAS/Mach) |
 | `dubins3d` | 3D Dubins path planning with pitch constraints (Vana et al., ICRA 2020) |
+| | **Environment** |
+| `sun` | Solar position and timing calculations |
+| `glint` | Solar glint angle prediction for water observations |
+| `terrain` | DEM data acquisition and ray-terrain intersection |
+| `clouds` | Cloud cover analysis and clear-sky probability from MODIS |
+| `winds` | Wind field models (MERRA-2, GFS, GEOS-FP, constant, still air) for per-segment flight plan correction |
+| | **Logistics** |
+| `airports` | Airport database with search, filtering, and runway data |
+| `airspace` | Airspace data from OpenAIP with flight line conflict detection |
+| `satellites` | Satellite overpass prediction and swath modeling |
 | `exports` | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT |
-| `interactive` | Interactive Jupyter map-based flight planning with ipyleaflet |
+| | **Utilities** |
 | `geometry` | Geospatial utilities (haversine, coordinate transforms, polygons) |
 | `units` | Unit conversions using Pint (meters, feet, knots, etc.) |
 | `plotting` | Interactive Folium map generation and altitude profiles |
+| `gui` | Interactive Jupyter map-based flight planning with ipyleaflet |
+| `download` | File download utility with chunked transfer and timeout support |
+| `exceptions` | HyPlan exception hierarchy for targeted error handling |
 
 ---
 
@@ -247,6 +275,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [glint_arc_planning.ipynb](notebooks/glint_arc_planning.ipynb) | GlintArc geometry for specular reflection flight paths over water |
 | [terrain_aware_planning.ipynb](notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
 | [cloud_analysis.ipynb](notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
+| [winds.ipynb](notebooks/winds.ipynb) | Wind field models, flight plan wind correction, MERRA-2 reanalysis demo, direction/speed sensitivity |
 
 ### Aircraft & Satellites
 

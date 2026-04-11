@@ -69,6 +69,7 @@ from .aircraft import (
     NASA_ER2,
     NASA_GIII,
     NASA_GIV,
+    NASA_GV,
     NASA_C20A,
     NASA_P3,
     NASA_WB57,
@@ -139,6 +140,9 @@ from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flig
 
 # Flight planning and optimization
 from .flight_plan import compute_flight_plan
+
+# Wind fields
+from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan
 from .flight_optimizer import build_graph, greedy_optimize
 
 # Plotting
@@ -171,7 +175,7 @@ __all__ = [
     "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
     "Aircraft",
-    "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_C20A", "NASA_P3",
+    "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",
     "NASA_WB57", "NASA_B777",
     "DynamicAviation_B200", "DynamicAviation_DH8", "DynamicAviation_A90",
     "C130", "BAe146", "Learjet", "TwinOtter",
@@ -196,6 +200,8 @@ __all__ = [
     # Flight patterns
     "racetrack", "rosette", "polygon", "sawtooth", "spiral", "flight_lines_to_waypoint_path",
     "coordinated_line",
+    # Wind
+    "WindField", "StillAirField", "ConstantWindField", "MERRA2WindField", "GMAOWindField", "GFSWindField", "wind_field_from_plan",
     # Flight planning
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
     "build_graph", "greedy_optimize",

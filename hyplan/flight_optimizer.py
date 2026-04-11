@@ -476,6 +476,10 @@ def greedy_optimize(
         return_airport = takeoff_airport
 
     if max_endurance is None:
+        if aircraft.endurance is None:
+            raise HyPlanValueError(
+                "max_endurance must be specified when aircraft.endurance is None."
+            )
         max_endurance = aircraft.endurance.m_as(ureg.hour)
 
     if max_daily_flight_time is None:

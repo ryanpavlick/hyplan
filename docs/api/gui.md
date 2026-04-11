@@ -1,16 +1,16 @@
-# Interactive Widgets
+# GUI Widgets
 
 Lightweight Jupyter widgets for interactive flight planning in notebooks.
-Requires the `interactive` optional dependencies:
+Requires the `gui` optional dependencies:
 
 ```bash
-pip install hyplan[interactive]
+pip install hyplan[gui]
 ```
 
 ## Shared state
 
 ```{eval-rst}
-.. autoclass:: hyplan.interactive.PlannerState
+.. autoclass:: hyplan.gui.PlannerState
    :members:
    :show-inheritance:
 ```
@@ -22,7 +22,7 @@ and edit properties (name, heading, altitude, speed) in a synchronized
 ipydatagrid table.
 
 ```{eval-rst}
-.. autoclass:: hyplan.interactive.WaypointEditor
+.. autoclass:: hyplan.gui.WaypointEditor
    :members:
    :show-inheritance:
 ```
@@ -34,7 +34,7 @@ selection; use the sidebar controls to reorder selected lines for
 flight plan sequencing.
 
 ```{eval-rst}
-.. autoclass:: hyplan.interactive.FlightLineManager
+.. autoclass:: hyplan.gui.FlightLineManager
    :members: selected_lines
    :show-inheritance:
 ```

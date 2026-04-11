@@ -1,10 +1,10 @@
-"""Tests for hyplan.interactive widgets and state."""
+"""Tests for hyplan.gui widgets and state."""
 
 
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
-from hyplan.interactive._state import PlannerState
+from hyplan.gui._state import PlannerState
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class TestPlannerState:
 class TestWaypointEditorInstantiation:
     def test_creates_without_error(self):
         import ipyleaflet
-        from hyplan.interactive.waypoint_editor import WaypointEditor
+        from hyplan.gui.waypoint_editor import WaypointEditor
 
         state = PlannerState()
         m = ipyleaflet.Map(center=(34.0, -118.0), zoom=10)
@@ -114,7 +114,7 @@ class TestWaypointEditorInstantiation:
 
     def test_prepopulated_waypoints(self):
         import ipyleaflet
-        from hyplan.interactive.waypoint_editor import WaypointEditor
+        from hyplan.gui.waypoint_editor import WaypointEditor
 
         state = PlannerState()
         state.append_waypoint(_wp(name="WP1"))
@@ -127,7 +127,7 @@ class TestWaypointEditorInstantiation:
 class TestFlightLineManagerInstantiation:
     def test_creates_without_error(self):
         import ipyleaflet
-        from hyplan.interactive.flight_line_manager import FlightLineManager
+        from hyplan.gui.flight_line_manager import FlightLineManager
 
         state = PlannerState()
         m = ipyleaflet.Map(center=(34.0, -118.0), zoom=10)
@@ -137,7 +137,7 @@ class TestFlightLineManagerInstantiation:
 
     def test_initial_flight_lines(self):
         import ipyleaflet
-        from hyplan.interactive.flight_line_manager import FlightLineManager
+        from hyplan.gui.flight_line_manager import FlightLineManager
 
         state = PlannerState()
         lines = [_fl(name="A"), _fl(lat2=34.2, name="B")]
@@ -149,7 +149,7 @@ class TestFlightLineManagerInstantiation:
 
     def test_toggle_selection(self):
         import ipyleaflet
-        from hyplan.interactive.flight_line_manager import FlightLineManager
+        from hyplan.gui.flight_line_manager import FlightLineManager
 
         state = PlannerState()
         lines = [_fl(name="A"), _fl(lat2=34.2, name="B")]
@@ -166,7 +166,7 @@ class TestFlightLineManagerInstantiation:
 
     def test_reorder(self):
         import ipyleaflet
-        from hyplan.interactive.flight_line_manager import FlightLineManager
+        from hyplan.gui.flight_line_manager import FlightLineManager
 
         state = PlannerState()
         lines = [_fl(name="A"), _fl(lat2=34.2, name="B"), _fl(lat2=34.3, name="C")]

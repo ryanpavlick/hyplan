@@ -8,7 +8,10 @@ flight_line), and returns a :class:`~geopandas.GeoDataFrame` with timing,
 distance, altitude, and geometry for every segment.
 """
 
-from typing import List, Optional, Union
+from __future__ import annotations
+
+import datetime
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 import geopandas as gpd
@@ -22,6 +25,9 @@ from .waypoint import Waypoint, is_waypoint
 from .flight_line import FlightLine
 from .geometry import process_linestring
 from .exceptions import HyPlanValueError
+
+if TYPE_CHECKING:
+    from .winds import WindField
 
 __all__ = [
     "compute_flight_plan",
@@ -68,6 +74,64 @@ def _wind_factor(
     return float((tas / ground_speed).to_base_units().magnitude)
 
 
+def _wind_factor_from_uv(
+    tas: Quantity,
+    heading_deg: float,
+    u: Quantity,
+    v: Quantity,
+) -> float:
+    """Multiplicative wind-correction factor from U/V components.
+
+    Args:
+        tas: True airspeed.
+        heading_deg: Segment heading in degrees true.
+        u: Eastward wind component (positive = from west).
+        v: Northward wind component (positive = from south).
+
+    Returns:
+        ``TAS / ground_speed`` as a float.
+    """
+    if heading_deg is None:
+        return 1.0
+    heading_rad = np.radians(heading_deg)
+    u_mps = u.m_as(ureg.meter / ureg.second)
+    v_mps = v.m_as(ureg.meter / ureg.second)
+    # Headwind is the component of wind opposing the direction of flight.
+    # Flight direction unit vector: (sin(hdg), cos(hdg)).
+    # Wind vector: (u, v).
+    # Tailwind component (wind along flight direction) = u*sin(hdg) + v*cos(hdg)
+    # Headwind = -tailwind
+    headwind_mps = -(u_mps * np.sin(heading_rad) + v_mps * np.cos(heading_rad))
+
+    tas_mps = tas.m_as(ureg.meter / ureg.second)
+    ground_speed_mps = tas_mps - headwind_mps  # TAS - headwind = groundspeed
+
+    if ground_speed_mps <= 0:
+        raise HyPlanValueError(
+            f"Headwind {headwind_mps:.1f} m/s exceeds TAS "
+            f"{tas_mps:.1f} m/s on heading {heading_deg:.0f}°; unflyable."
+        )
+    return tas_mps / ground_speed_mps
+
+
+def _resolve_wind_factor(
+    tas: Quantity,
+    heading_deg: float,
+    lat: float,
+    lon: float,
+    altitude: Quantity,
+    segment_time: Optional[datetime.datetime],
+    wind_source: Optional["WindField"],
+    wind_speed: Optional[Quantity],
+    wind_direction: Optional[float],
+) -> float:
+    """Compute wind factor using wind_source (preferred) or legacy scalars."""
+    if wind_source is not None:
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+        return _wind_factor_from_uv(tas, heading_deg, u, v)
+    return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
+
+
 def _bearing_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Initial great-circle bearing in degrees from point 1 to point 2."""
     _, az = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
@@ -81,6 +145,8 @@ def _direct_segment_record(
     segment_type: str,
     wind_speed: Optional[Quantity] = None,
     wind_direction: Optional[float] = None,
+    wind_source: Optional["WindField"] = None,
+    segment_time: Optional[datetime.datetime] = None,
 ) -> dict:
     """Create a direct great-circle segment between two pattern waypoints.
 
@@ -111,7 +177,11 @@ def _direct_segment_record(
     heading = _bearing_between(
         start_wp.latitude, start_wp.longitude, end_wp.latitude, end_wp.longitude,
     )
-    factor = _wind_factor(speed, heading, wind_speed, wind_direction)
+    factor = _resolve_wind_factor(
+        speed, heading,
+        start_wp.latitude, start_wp.longitude, avg_alt, segment_time,
+        wind_source, wind_speed, wind_direction,
+    )
     time_min = (ureg.Quantity(dist_m, "meter") / speed).m_as(ureg.minute) * factor
 
     return {
@@ -140,6 +210,8 @@ def compute_flight_plan(
     end_offset: float = 1,
     wind_speed: Optional[Quantity] = None,
     wind_direction: Optional[float] = None,
+    wind_source: Optional["WindField"] = None,
+    takeoff_time: Optional[datetime.datetime] = None,
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -170,11 +242,39 @@ def compute_flight_plan(
             true (meteorological convention: 0° = wind from north, 90° =
             from east). Required when ``wind_speed`` is set. Ignored when
             ``wind_speed`` is None or zero.
+        wind_source: A :class:`~hyplan.winds.WindField` providing
+            per-segment wind.  Takes precedence over ``wind_speed`` /
+            ``wind_direction``.  Cannot be combined with those parameters.
+        takeoff_time: UTC datetime of takeoff.  Required when
+            ``wind_source`` is a gridded wind field (MERRA-2, GMAO) so
+            that each segment can be queried at the correct time.
     """
+    # Validate wind parameter combinations
+    if wind_source is not None and wind_speed is not None:
+        raise HyPlanValueError(
+            "Cannot specify both wind_source and wind_speed/wind_direction. "
+            "Use one or the other."
+        )
     if wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is None:
         raise HyPlanValueError(
             "wind_direction is required when wind_speed is non-zero"
         )
+    # Gridded wind fields need takeoff_time; simple fields do not
+    if wind_source is not None and takeoff_time is None:
+        from .winds import _GriddedWindField
+        if isinstance(wind_source, _GriddedWindField):
+            raise HyPlanValueError(
+                "takeoff_time is required when using a gridded wind field "
+                "(MERRA2WindField, GMAOWindField, GFSWindField)."
+            )
+
+    # Cumulative elapsed time for wind queries
+    cumulative_minutes = 0.0
+
+    def _current_time() -> Optional[datetime.datetime]:
+        if takeoff_time is None:
+            return None
+        return takeoff_time + datetime.timedelta(minutes=cumulative_minutes)
     # Apply offsets to flight lines, if applicable.
     flight_sequence = [
         seg.offset_along(ureg.Quantity(-start_offset, "nautical_mile"),
@@ -196,14 +296,20 @@ def compute_flight_plan(
             first_target.latitude, first_target.longitude,
         )
         takeoff_tas = aircraft.cruise_speed_at(first_target.altitude_msl)
-        takeoff_factor = _wind_factor(
-            takeoff_tas, takeoff_bearing, wind_speed, wind_direction,
+        mid_lat = (takeoff_airport.latitude + first_target.latitude) / 2
+        mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
+        takeoff_factor = _resolve_wind_factor(
+            takeoff_tas, takeoff_bearing,
+            mid_lat, mid_lon,
+            first_target.altitude_msl, _current_time(),
+            wind_source, wind_speed, wind_direction,
         )
         takeoff_records = process_flight_phase(
             takeoff_airport, first_target, takeoff_info, "Departure",
         )
         for r in takeoff_records:
             r["time_to_segment"] *= takeoff_factor
+            cumulative_minutes += r["time_to_segment"]
         records.extend(takeoff_records)
 
     # Process connecting/cruise phases between flight segments.
@@ -223,8 +329,11 @@ def compute_flight_plan(
             fl_time_no_wind = (
                 ureg.Quantity(segment_distance, 'meter') / fl_tas
             ).m_as(ureg.minute)
-            fl_factor = _wind_factor(
-                fl_tas, segment.waypoint1.heading, wind_speed, wind_direction,
+            fl_factor = _resolve_wind_factor(
+                fl_tas, segment.waypoint1.heading,
+                segment.waypoint1.latitude, segment.waypoint1.longitude,
+                segment.altitude_msl, _current_time(),
+                wind_source, wind_speed, wind_direction,
             )
             time_to_segment = fl_time_no_wind * fl_factor
 
@@ -247,10 +356,12 @@ def compute_flight_plan(
                 "start_heading": start_heading,
                 "end_heading": end_heading
             })
+            cumulative_minutes += time_to_segment
 
         # Insert loiter segment if the current waypoint has a delay.
         if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:
             from shapely.geometry import Point as _Point
+            loiter_time = segment.delay.m_as(ureg.minute)
             records.append({
                 "geometry": _Point(segment.longitude, segment.latitude),
                 "start_lat": segment.latitude,
@@ -262,10 +373,11 @@ def compute_flight_plan(
                 "segment_type": "loiter",
                 "segment_name": segment.name,
                 "distance": 0.0,
-                "time_to_segment": segment.delay.m_as(ureg.minute),
+                "time_to_segment": loiter_time,
                 "start_heading": segment.heading,
                 "end_heading": segment.heading
             })
+            cumulative_minutes += loiter_time
 
         # Process the connecting phase between the current and next segment.
         if i + 1 < len(flight_sequence):
@@ -284,10 +396,13 @@ def compute_flight_plan(
                 and end.segment_type in ("pattern", "pattern_turn")
             )
             if departing_is_pattern:
-                records.append(_direct_segment_record(
+                rec = _direct_segment_record(
                     start_wp, end_wp, aircraft, segment.segment_type,
                     wind_speed=wind_speed, wind_direction=wind_direction,
-                ))
+                    wind_source=wind_source, segment_time=_current_time(),
+                )
+                cumulative_minutes += rec["time_to_segment"]
+                records.append(rec)
                 continue
 
             # Use per-waypoint speed override if set on the departing waypoint.
@@ -323,11 +438,17 @@ def compute_flight_plan(
                 cruise_tas = speed_override or aircraft.cruise_speed_at(
                     end_wp.altitude_msl
                 )
-                cruise_factor = _wind_factor(
-                    cruise_tas, cruise_bearing, wind_speed, wind_direction,
+                mid_lat = (start_wp.latitude + end_wp.latitude) / 2
+                mid_lon = (start_wp.longitude + end_wp.longitude) / 2
+                cruise_factor = _resolve_wind_factor(
+                    cruise_tas, cruise_bearing,
+                    mid_lat, mid_lon,
+                    end_wp.altitude_msl, _current_time(),
+                    wind_source, wind_speed, wind_direction,
                 )
                 for r in cruise_records:
                     r["time_to_segment"] *= cruise_factor
+                    cumulative_minutes += r["time_to_segment"]
                 records.extend(cruise_records)
 
     # Process the approach phase if a return airport is provided.
@@ -345,11 +466,17 @@ def compute_flight_plan(
                 return_airport.latitude, return_airport.longitude,
             )
             return_tas = aircraft.cruise_speed_at(last_target.altitude_msl)
-            return_factor = _wind_factor(
-                return_tas, return_bearing, wind_speed, wind_direction,
+            mid_lat = (last_target.latitude + return_airport.latitude) / 2
+            mid_lon = (last_target.longitude + return_airport.longitude) / 2
+            return_factor = _resolve_wind_factor(
+                return_tas, return_bearing,
+                mid_lat, mid_lon,
+                last_target.altitude_msl, _current_time(),
+                wind_source, wind_speed, wind_direction,
             )
             for r in return_records:
                 r["time_to_segment"] *= return_factor
+                cumulative_minutes += r["time_to_segment"]
             records.extend(return_records)
 
     # Create and return the GeoDataFrame.

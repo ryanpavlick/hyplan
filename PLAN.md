@@ -8,9 +8,6 @@
 ### Package-wide
 - Add CLI entry point for common tasks (generate flight lines, export plan)
 
-### New modules
-- **weather.py** — GMAO forecast API, wind barbs, real-time cloud/visibility, time-on-deck predictions
-
 ### Module improvements
 
 **geometry.py:** regionate geometries by UTM zone for large areas
@@ -22,6 +19,8 @@
 **flight_plan.py:** wind in transit time estimates; fuel burn estimation per segment; multiple altitude levels in single plan; pilot-ready briefing sheet export
 
 **flight_optimizer.py:** convex hull + cheapest insertion route optimizer (monotone chain hull around flight line endpoints to build outer loop, then greedy insertion of interior lines — fast, non-crossing routes; can seed 2-opt; inspired by SynthFlight); Google OR-Tools or 2-opt/simulated annealing; return daily_lines grouping in result dict; time-window constraints (solar, satellite overpass); multi-aircraft scheduling; weight edges by fuel burn
+
+**winds.py:** add HRRR wind source for CONUS high-resolution planning
 
 **dubins3d.py:** wind-corrected Dubins paths
 
@@ -53,4 +52,4 @@
 
 **airspace.py:** filtering by type (show only RESTRICTED, etc.); handle "no ceiling" SUA special case
 
-**interactive:** hover to reveal solar elevation times; copy/delete/rotate/nudge individual lines; aircraft icons on map; wind barbs overlay
+**gui:** hover to reveal solar elevation times; copy/delete/rotate/nudge individual lines; aircraft icons on map; wind barbs overlay

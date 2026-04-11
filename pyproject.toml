@@ -49,7 +49,8 @@ dependencies = [
 [project.optional-dependencies]
 mag = ["geomag"]
 clouds = ["earthengine-api", "seaborn"]
-interactive = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
+winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
+gui = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [project.urls]

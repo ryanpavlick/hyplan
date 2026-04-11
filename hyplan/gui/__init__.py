@@ -8,9 +8,9 @@ Provides two focused widgets and a shared observable state object:
 * :class:`FlightLineManager` -- add, select, deselect, and reorder
   flight lines for flight plan sequencing.
 
-These widgets require the ``interactive`` optional dependencies::
+These widgets require the ``gui`` optional dependencies::
 
-    pip install hyplan[interactive]
+    pip install hyplan[gui]
 """
 
 __all__ = [
