@@ -168,9 +168,12 @@ class TestWindCorrectedTransit:
         )
         assert plan_tw["time_to_segment"].sum() < plan_calm["time_to_segment"].sum()
 
-    def test_crosswind_negligible(self, b200):
-        """Pure crosswind should not materially change ground speed under
-        the small-crosswind-angle approximation used by _wind_factor."""
+    def test_crosswind_small_effect(self, b200):
+        """Pure crosswind has a small but non-zero effect on total time.
+
+        With trochoidal Dubins path planning, crosswind affects the turn
+        geometry slightly, so we allow up to 2% deviation from still air.
+        """
         wp1, wp2 = self._north_leg()
         plan_calm = compute_flight_plan(aircraft=b200, flight_sequence=[wp1, wp2])
         plan_cw = compute_flight_plan(
@@ -180,7 +183,7 @@ class TestWindCorrectedTransit:
             wind_direction=90.0,  # wind FROM the east → crosswind on northbound
         )
         assert plan_cw["time_to_segment"].sum() == pytest.approx(
-            plan_calm["time_to_segment"].sum(), rel=1e-6
+            plan_calm["time_to_segment"].sum(), rel=0.02
         )
 
     def test_headwind_magnitude_matches_hand_calc(self, b200):

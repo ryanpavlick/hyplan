@@ -566,7 +566,12 @@ class Aircraft:
     # 3D path planning
     # ------------------------------------------------------------------
 
-    def time_to_takeoff(self, airport: Airport, waypoint: Waypoint) -> dict:
+    def time_to_takeoff(
+        self,
+        airport: Airport,
+        waypoint: Waypoint,
+        wind: Optional[Tuple[float, float]] = None,
+    ) -> dict:
         """Calculate time from takeoff to the first waypoint.
 
         Uses 3D Dubins path planning for the departure including climb.
@@ -581,9 +586,14 @@ class Aircraft:
             heading=departure_heading,
             altitude_msl=airport.elevation,
         )
-        return self.time_to_cruise(airport_waypoint, waypoint)
+        return self.time_to_cruise(airport_waypoint, waypoint, wind=wind)
 
-    def time_to_return(self, waypoint: Waypoint, airport: Airport) -> dict:
+    def time_to_return(
+        self,
+        waypoint: Waypoint,
+        airport: Airport,
+        wind: Optional[Tuple[float, float]] = None,
+    ) -> dict:
         """Calculate time from the last waypoint back to the airport.
 
         Uses 3D Dubins path planning for the return including descent.
@@ -598,19 +608,25 @@ class Aircraft:
             heading=(arrival_heading + 180.0) % 360.0,
             altitude_msl=airport.elevation,
         )
-        return self.time_to_cruise(waypoint, airport_waypoint)
+        return self.time_to_cruise(waypoint, airport_waypoint, wind=wind)
 
     def time_to_cruise(
         self,
         start_waypoint: Waypoint,
         end_waypoint: Waypoint,
         true_air_speed: Optional[Quantity] = None,
+        wind: Optional[Tuple[float, float]] = None,
     ) -> dict:
         """Calculate time to fly between two waypoints.
 
         Uses 3D Dubins path planning with pitch constraints derived from
         climb/descent performance.  Returns a dict with ``total_time``,
         ``phases``, and ``dubins_path``.
+
+        Args:
+            wind: Optional ``(u_east, v_north)`` wind vector in m/s.
+                When provided, horizontal turning arcs become trochoids
+                and the returned path length / timing account for wind.
         """
         true_air_speed = true_air_speed or self.cruise_speed_at(
             end_waypoint.altitude_msl
@@ -628,6 +644,7 @@ class Aircraft:
             bank_angle=self.max_bank_angle,
             pitch_min=pitch_min,
             pitch_max=pitch_max,
+            wind=wind,
         )
 
         distance = path.length.to(ureg.nautical_mile)

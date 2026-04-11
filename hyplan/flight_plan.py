@@ -11,7 +11,7 @@ distance, altitude, and geometry for every segment.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 import geopandas as gpd
@@ -130,6 +130,35 @@ def _resolve_wind_factor(
         u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
         return _wind_factor_from_uv(tas, heading_deg, u, v)
     return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
+
+
+def _resolve_wind_uv(
+    lat: float,
+    lon: float,
+    altitude: Quantity,
+    segment_time: Optional[datetime.datetime],
+    wind_source: Optional["WindField"],
+    wind_speed: Optional[Quantity],
+    wind_direction: Optional[float],
+) -> Optional[Tuple[float, float]]:
+    """Extract wind as ``(u_east, v_north)`` in m/s for :class:`DubinsPath3D`.
+
+    Returns ``None`` when no wind is available (still-air path).
+    """
+    if wind_source is not None:
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+        u_mps = u.m_as(ureg.meter / ureg.second)
+        v_mps = v.m_as(ureg.meter / ureg.second)
+        if abs(u_mps) < 1e-10 and abs(v_mps) < 1e-10:
+            return None
+        return (u_mps, v_mps)
+    if wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is not None:
+        ws = wind_speed.m_as(ureg.meter / ureg.second)
+        wind_from_rad = np.radians(wind_direction)
+        u_mps = float(-ws * np.sin(wind_from_rad))
+        v_mps = float(-ws * np.cos(wind_from_rad))
+        return (u_mps, v_mps)
+    return None
 
 
 def _bearing_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -290,25 +319,20 @@ def compute_flight_plan(
         first_target = flight_sequence[0]
         if isinstance(first_target, FlightLine):
             first_target = first_target.waypoint1
-        takeoff_info = aircraft.time_to_takeoff(takeoff_airport, first_target)
-        takeoff_bearing = _bearing_between(
-            takeoff_airport.latitude, takeoff_airport.longitude,
-            first_target.latitude, first_target.longitude,
-        )
-        takeoff_tas = aircraft.cruise_speed_at(first_target.altitude_msl)
         mid_lat = (takeoff_airport.latitude + first_target.latitude) / 2
         mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
-        takeoff_factor = _resolve_wind_factor(
-            takeoff_tas, takeoff_bearing,
+        takeoff_wind_uv = _resolve_wind_uv(
             mid_lat, mid_lon,
             first_target.altitude_msl, _current_time(),
             wind_source, wind_speed, wind_direction,
+        )
+        takeoff_info = aircraft.time_to_takeoff(
+            takeoff_airport, first_target, wind=takeoff_wind_uv,
         )
         takeoff_records = process_flight_phase(
             takeoff_airport, first_target, takeoff_info, "Departure",
         )
         for r in takeoff_records:
-            r["time_to_segment"] *= takeoff_factor
             cumulative_minutes += r["time_to_segment"]
         records.extend(takeoff_records)
 
@@ -410,7 +434,18 @@ def compute_flight_plan(
             if is_waypoint(segment) and segment.speed is not None:
                 speed_override = segment.speed
 
-            cruise_info = aircraft.time_to_cruise(start_wp, end_wp, true_air_speed=speed_override)
+            mid_lat = (start_wp.latitude + end_wp.latitude) / 2
+            mid_lon = (start_wp.longitude + end_wp.longitude) / 2
+            cruise_wind_uv = _resolve_wind_uv(
+                mid_lat, mid_lon,
+                end_wp.altitude_msl, _current_time(),
+                wind_source, wind_speed, wind_direction,
+            )
+            cruise_info = aircraft.time_to_cruise(
+                start_wp, end_wp,
+                true_air_speed=speed_override,
+                wind=cruise_wind_uv,
+            )
             if cruise_info["total_time"].m_as(ureg.minute) > 0:
                 phase_name = (
                     "Departure" if (i == 0 and takeoff_airport is None) else
@@ -426,28 +461,7 @@ def compute_flight_plan(
                     start_wp, end_wp, cruise_info, phase_name,
                     override_segment_type=wp_seg_type,
                 )
-                # Wind correction: scale every phase time by the factor
-                # computed from the dominant leg bearing. Using a single
-                # leg bearing (start→end) rather than per-phase headings
-                # keeps the approximation simple and matches how pilots
-                # pre-plan wind on straight cruise legs.
-                cruise_bearing = _bearing_between(
-                    start_wp.latitude, start_wp.longitude,
-                    end_wp.latitude, end_wp.longitude,
-                )
-                cruise_tas = speed_override or aircraft.cruise_speed_at(
-                    end_wp.altitude_msl
-                )
-                mid_lat = (start_wp.latitude + end_wp.latitude) / 2
-                mid_lon = (start_wp.longitude + end_wp.longitude) / 2
-                cruise_factor = _resolve_wind_factor(
-                    cruise_tas, cruise_bearing,
-                    mid_lat, mid_lon,
-                    end_wp.altitude_msl, _current_time(),
-                    wind_source, wind_speed, wind_direction,
-                )
                 for r in cruise_records:
-                    r["time_to_segment"] *= cruise_factor
                     cumulative_minutes += r["time_to_segment"]
                 records.extend(cruise_records)
 
@@ -456,26 +470,21 @@ def compute_flight_plan(
         last_target = flight_sequence[-1]
         if isinstance(last_target, FlightLine):
             last_target = last_target.waypoint2
-        return_info = aircraft.time_to_return(last_target, return_airport)
+        mid_lat = (last_target.latitude + return_airport.latitude) / 2
+        mid_lon = (last_target.longitude + return_airport.longitude) / 2
+        return_wind_uv = _resolve_wind_uv(
+            mid_lat, mid_lon,
+            last_target.altitude_msl, _current_time(),
+            wind_source, wind_speed, wind_direction,
+        )
+        return_info = aircraft.time_to_return(
+            last_target, return_airport, wind=return_wind_uv,
+        )
         if return_info["total_time"].m_as(ureg.minute) > 0:
             return_records = process_flight_phase(
                 last_target, return_airport, return_info, "Return",
             )
-            return_bearing = _bearing_between(
-                last_target.latitude, last_target.longitude,
-                return_airport.latitude, return_airport.longitude,
-            )
-            return_tas = aircraft.cruise_speed_at(last_target.altitude_msl)
-            mid_lat = (last_target.latitude + return_airport.latitude) / 2
-            mid_lon = (last_target.longitude + return_airport.longitude) / 2
-            return_factor = _resolve_wind_factor(
-                return_tas, return_bearing,
-                mid_lat, mid_lon,
-                last_target.altitude_msl, _current_time(),
-                wind_source, wind_speed, wind_direction,
-            )
             for r in return_records:
-                r["time_to_segment"] *= return_factor
                 cumulative_minutes += r["time_to_segment"]
             records.extend(return_records)
 
