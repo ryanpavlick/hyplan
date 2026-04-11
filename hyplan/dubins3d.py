@@ -212,6 +212,121 @@ def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray
 
 
 # ---------------------------------------------------------------------------
+# Wind-aware 2D Dubins solver (trochoidal ground tracks)
+# ---------------------------------------------------------------------------
+
+class _TrochoidDubins2D:
+    """Wind-aware 2D Dubins solver with trochoidal ground tracks.
+
+    Solves for the time-optimal path in the air-relative frame, then
+    provides ground-frame sampling where turning arcs become trochoids
+    (circles + wind drift).
+
+    The approach:
+    1. Iteratively solve: guess total time T, place the air-frame target
+       at ``qf_ground - wind * T``, solve standard Dubins, update T.
+    2. Once converged, store the air-frame Dubins solution.
+    3. ``get_coordinates_at(offset)`` returns ground-frame positions by
+       adding cumulative wind drift to air-frame positions.
+
+    Args:
+        qi: Start pose [x, y, heading] in ground frame (meters, radians).
+        qf: End pose [x, y, heading] in ground frame (meters, radians).
+        rhomin: Minimum turn radius in meters (air-frame).
+        airspeed: True airspeed in m/s.
+        wind_u: Eastward wind component in m/s.
+        wind_v: Northward wind component in m/s.
+        disable_ccc: If True, disable CCC (RLR/LRL) path types.
+    """
+
+    def __init__(
+        self,
+        qi: np.ndarray,
+        qf: np.ndarray,
+        rhomin: float,
+        airspeed: float,
+        wind_u: float,
+        wind_v: float,
+        disable_ccc: bool = False,
+    ):
+        self.qi = qi.copy()
+        self.qf = qf.copy()
+        self.rhomin = rhomin
+        self.airspeed = airspeed
+        self.wind_u = wind_u  # eastward (x-direction in UTM)
+        self.wind_v = wind_v  # northward (y-direction in UTM)
+
+        # Iteratively solve for the time-optimal air-frame path.
+        # The air-frame target drifts at -wind relative to the aircraft's
+        # starting position, so qf_air = qf_ground - wind * T.
+        self._solve_iterative(disable_ccc)
+
+    def _solve_iterative(self, disable_ccc: bool, max_iter: int = 20, tol: float = 0.1):
+        """Find the air-frame Dubins path that accounts for wind drift."""
+        # Initial guess: still-air path
+        d_still = _Dubins2D(self.qi, self.qf, self.rhomin, disable_ccc)
+        T = d_still.maneuver.length / self.airspeed if self.airspeed > 0 else 0.0
+
+        for _ in range(max_iter):
+            # Place target in air frame: ground target drifts by -wind*T
+            qf_air = self.qf.copy()
+            qf_air[0] -= self.wind_u * T
+            qf_air[1] -= self.wind_v * T
+            # Heading stays the same (air heading = desired ground heading
+            # only if we ignore crab angle — we'll handle that below)
+
+            d_air = _Dubins2D(self.qi, qf_air, self.rhomin, disable_ccc)
+            T_new = d_air.maneuver.length / self.airspeed if self.airspeed > 0 else 0.0
+
+            if abs(T_new - T) < tol:
+                T = T_new
+                break
+            T = T_new
+
+        self._air_dubins = d_air
+        self._total_time = T
+
+    @property
+    def maneuver(self) -> _DubinsSegment:
+        """The air-frame Dubins maneuver (segment lengths in air-frame meters)."""
+        return self._air_dubins.maneuver
+
+    @property
+    def total_time(self) -> float:
+        """Total path time in seconds."""
+        return self._total_time
+
+    @property
+    def ground_length(self) -> float:
+        """Approximate ground-track length in meters."""
+        # Sample and compute cumulative distance
+        n = 50
+        pts = np.array([self.get_coordinates_at(i * self._total_time / (n - 1))
+                        for i in range(n)])
+        diffs = np.diff(pts[:, :2], axis=0)
+        return float(np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)))
+
+    def get_coordinates_at(self, time_offset: float) -> np.ndarray:
+        """Get ground-frame (x, y, heading) at a given time offset.
+
+        The air-frame position is computed from the standard Dubins path,
+        then wind drift is added to get the ground-frame position.
+        Turn segments produce trochoidal ground tracks.
+        """
+        # Air-frame arc-length offset
+        arc_offset = time_offset * self.airspeed
+        # Air-frame position (circle/line geometry, no wind)
+        q_air = self._air_dubins.get_coordinates_at(arc_offset)
+        # Ground-frame position = air position + wind * time
+        q_ground = np.array([
+            q_air[0] + self.wind_u * time_offset,
+            q_air[1] + self.wind_v * time_offset,
+            q_air[2],  # heading in air frame
+        ])
+        return q_ground
+
+
+# ---------------------------------------------------------------------------
 # Vertical-plane Dubins solver (pitch-constrained, CSC only)
 # ---------------------------------------------------------------------------
 
@@ -460,7 +575,9 @@ def _try_to_construct(
     rhomin: float,
     horizontal_radius: float,
     pitch_limits: Tuple[float, float],
-) -> Optional[Tuple[_Dubins2D, _Dubins2D]]:
+    wind: Optional[Tuple[float, float]] = None,
+    airspeed: float = 0.0,
+) -> Optional[Tuple[Union[_Dubins2D, _TrochoidDubins2D], "_VerticalDubins"]]:
     """
     Attempt to construct a 3D Dubins path with the given horizontal radius.
 
@@ -469,7 +586,12 @@ def _try_to_construct(
     # Horizontal 2D Dubins: (x, y, heading)
     qi2d = np.array([qi[0], qi[1], qi[3]])
     qf2d = np.array([qf[0], qf[1], qf[3]])
-    d_lat = _Dubins2D(qi2d, qf2d, horizontal_radius)
+    if wind is not None:
+        d_lat = _TrochoidDubins2D(
+            qi2d, qf2d, horizontal_radius, airspeed, wind[0], wind[1],
+        )
+    else:
+        d_lat = _Dubins2D(qi2d, qf2d, horizontal_radius)
 
     # Vertical curvature from curvature budget
     vc = 1.0 / (rhomin * rhomin) - 1.0 / (horizontal_radius * horizontal_radius)
@@ -502,7 +624,9 @@ def _compute_3d_path(
     qf: np.ndarray,
     rhomin: float,
     pitch_limits: Tuple[float, float],
-) -> Tuple[_Dubins2D, _Dubins2D, float]:
+    wind: Optional[Tuple[float, float]] = None,
+    airspeed: float = 0.0,
+) -> Tuple[Union[_Dubins2D, _TrochoidDubins2D], "_VerticalDubins", float]:
     """
     Find optimal horizontal radius and return (horizontal, vertical, length).
 
@@ -511,7 +635,7 @@ def _compute_3d_path(
     b = 1.0
 
     # Find initial feasible solution by doubling b
-    fb = _try_to_construct(qi, qf, rhomin, rhomin * b, pitch_limits)
+    fb = _try_to_construct(qi, qf, rhomin, rhomin * b, pitch_limits, wind, airspeed)
     max_iter = 50
     for _ in range(max_iter):
         if fb is not None:
@@ -522,7 +646,7 @@ def _compute_3d_path(
                 "No feasible 3D Dubins path found. Check that the pitch limits "
                 "allow reaching the target altitude."
             )
-        fb = _try_to_construct(qi, qf, rhomin, rhomin * b, pitch_limits)
+        fb = _try_to_construct(qi, qf, rhomin, rhomin * b, pitch_limits, wind, airspeed)
 
     if fb is None:
         raise HyPlanValueError("No feasible 3D Dubins path found.")
@@ -533,7 +657,7 @@ def _compute_3d_path(
         c = b + step
         if c < 1.0:
             c = 1.0
-        fc = _try_to_construct(qi, qf, rhomin, rhomin * c, pitch_limits)
+        fc = _try_to_construct(qi, qf, rhomin, rhomin * c, pitch_limits, wind, airspeed)
         if fc is not None and fc[1].maneuver.length < fb[1].maneuver.length:
             b = c
             fb = fc
@@ -546,8 +670,8 @@ def _compute_3d_path(
 
 
 def _sample_3d_path(
-    d_lat: _Dubins2D,
-    d_lon: _Dubins2D,
+    d_lat: Union[_Dubins2D, _TrochoidDubins2D],
+    d_lon: "_VerticalDubins",
     n_samples: int,
 ) -> np.ndarray:
     """
@@ -555,16 +679,29 @@ def _sample_3d_path(
 
     Returns array of shape (n_samples, 5): [x, y, z, heading, pitch].
     The vertical path is the master parameterization.
+
+    For wind-aware (trochoid) paths, the horizontal path is sampled by
+    time offset rather than arc-length offset, since the ground track
+    differs from the air track.
     """
     total_length = d_lon.maneuver.length
     offsets = np.linspace(0, total_length, n_samples)
+
+    is_trochoid = isinstance(d_lat, _TrochoidDubins2D)
 
     points = np.empty((n_samples, 5))
     for i, offset in enumerate(offsets):
         # Vertical path gives (arc_length_on_horizontal, altitude, pitch)
         q_sz = d_lon.get_coordinates_at(offset)
-        # Horizontal path gives (x, y, heading) at that arc-length
-        q_xy = d_lat.get_coordinates_at(q_sz[0])
+
+        if is_trochoid:
+            # Convert air-frame arc length to time, then sample ground track
+            time_offset = q_sz[0] / d_lat.airspeed if d_lat.airspeed > 0 else 0.0
+            q_xy = d_lat.get_coordinates_at(time_offset)
+        else:
+            # Standard: sample by arc-length directly
+            q_xy = d_lat.get_coordinates_at(q_sz[0])
+
         points[i] = [q_xy[0], q_xy[1], q_sz[1], q_xy[2], q_sz[2]]
 
     return points
@@ -584,10 +721,16 @@ class DubinsPath3D:
     as the heading analogue. A 1D search optimizes the horizontal turn
     radius to minimize total 3D path length.
 
+    When ``wind`` is provided, turning arcs in the horizontal plane
+    become **trochoids** (circles drifting with the wind) instead of
+    pure circles. The solver finds the time-optimal path in the
+    air-relative frame and samples the ground track with wind drift
+    applied. See Moon et al. (2023), arXiv:2306.11845.
+
     Args:
         start: Starting waypoint (must have altitude_msl and heading).
         end: Ending waypoint (must have altitude_msl and heading).
-        speed: Cruise speed (m/s as float, or pint Quantity).
+        speed: True airspeed (m/s as float, or pint Quantity).
         bank_angle: Maximum bank angle in degrees.
         pitch_min: Minimum pitch angle in degrees (negative = descent).
         pitch_max: Maximum pitch angle in degrees (positive = climb).
@@ -596,6 +739,9 @@ class DubinsPath3D:
         step_size: Approximate distance between sampled points in meters.
             Defaults to 500.
         n_samples: Number of sample points. If given, overrides step_size.
+        wind: Optional (u_east, v_north) wind vector in m/s. When
+            provided, the horizontal path uses trochoidal geometry.
+            Defaults to ``None`` (still air).
     """
 
     def __init__(
@@ -610,6 +756,7 @@ class DubinsPath3D:
         pitch_end: float = 0.0,
         step_size: float = 500.0,
         n_samples: Optional[int] = None,
+        wind: Optional[Tuple[float, float]] = None,
     ):
         if not is_waypoint(start) or not is_waypoint(end):
             raise HyPlanTypeError("start and end must be Waypoint objects")
@@ -660,8 +807,13 @@ class DubinsPath3D:
         qi = np.array([start_utm.x, start_utm.y, alt_start, heading1, pitch_start_rad])
         qf = np.array([end_utm.x, end_utm.y, alt_end, heading2, pitch_end_rad])
 
+        self._wind = wind
+
         # Solve 3D path
-        d_lat, d_lon, total_length = _compute_3d_path(qi, qf, self._rhomin, pitch_lim_rad)
+        d_lat, d_lon, total_length = _compute_3d_path(
+            qi, qf, self._rhomin, pitch_lim_rad,
+            wind=wind, airspeed=self.speed_mps,
+        )
 
         self._length = total_length * ureg.meter
 

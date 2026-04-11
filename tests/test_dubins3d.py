@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
-from hyplan.dubins3d import DubinsPath3D, _Dubins2D, _VerticalDubins
+from hyplan.dubins3d import DubinsPath3D, _Dubins2D, _TrochoidDubins2D, _VerticalDubins
 from hyplan.exceptions import HyPlanRuntimeError
 
 
@@ -212,3 +212,128 @@ class TestDubinsSegmentValid:
         from hyplan.dubins3d import _DubinsSegment
         seg = _DubinsSegment(1.0, 2.0, 1.0, math.inf, "LSL")
         assert not seg.valid
+
+
+# ---------------------------------------------------------------------------
+# Wind-aware trochoid Dubins tests
+# ---------------------------------------------------------------------------
+
+class TestTrochoidDubins2D:
+    """Verify the wind-aware 2D solver."""
+
+    def test_zero_wind_matches_standard(self):
+        """With zero wind, trochoid solver should match standard solver."""
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([1000.0, 0.0, 0.0])
+        rho = 200.0
+        airspeed = 100.0
+
+        d_std = _Dubins2D(qi, qf, rho)
+        d_troc = _TrochoidDubins2D(qi, qf, rho, airspeed, 0.0, 0.0)
+
+        assert d_troc.maneuver.length == pytest.approx(d_std.maneuver.length, rel=1e-3)
+
+    def test_headwind_increases_time(self):
+        """Headwind should increase path time."""
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([1000.0, 0.0, 0.0])
+        rho = 200.0
+        airspeed = 100.0
+
+        d_still = _TrochoidDubins2D(qi, qf, rho, airspeed, 0.0, 0.0)
+        d_hw = _TrochoidDubins2D(qi, qf, rho, airspeed, -20.0, 0.0)
+
+        assert d_hw.total_time > d_still.total_time
+
+    def test_tailwind_decreases_time(self):
+        """Tailwind should decrease path time."""
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([1000.0, 0.0, 0.0])
+        rho = 200.0
+        airspeed = 100.0
+
+        d_still = _TrochoidDubins2D(qi, qf, rho, airspeed, 0.0, 0.0)
+        d_tw = _TrochoidDubins2D(qi, qf, rho, airspeed, 20.0, 0.0)
+
+        assert d_tw.total_time < d_still.total_time
+
+    def test_start_position_correct(self):
+        """Ground track should start at qi."""
+        qi = np.array([100.0, 200.0, 0.5])
+        qf = np.array([1100.0, 200.0, 0.5])
+        d = _TrochoidDubins2D(qi, qf, 200.0, 100.0, 15.0, -10.0)
+
+        p0 = d.get_coordinates_at(0.0)
+        assert p0[0] == pytest.approx(qi[0], abs=1.0)
+        assert p0[1] == pytest.approx(qi[1], abs=1.0)
+
+
+class TestDubinsPath3DWind:
+    """Verify DubinsPath3D with wind parameter."""
+
+    @pytest.fixture
+    def waypoints(self):
+        start = Waypoint(latitude=34.0, longitude=-118.5,
+                         altitude_msl=6000 * ureg.meter, heading=90.0)
+        end = Waypoint(latitude=34.0, longitude=-118.3,
+                       altitude_msl=6000 * ureg.meter, heading=90.0)
+        return start, end
+
+    def test_still_air_unchanged(self, waypoints):
+        """wind=None should give same result as before."""
+        start, end = waypoints
+        path_none = DubinsPath3D(start, end, 130.0, 25.0)
+        path_zero = DubinsPath3D(start, end, 130.0, 25.0, wind=(0.0, 0.0))
+
+        assert path_none.length.m_as(ureg.meter) == pytest.approx(
+            path_zero.length.m_as(ureg.meter), rel=0.05
+        )
+
+    def test_headwind_longer(self, waypoints):
+        """Headwind path should be longer than still-air."""
+        start, end = waypoints
+        path_still = DubinsPath3D(start, end, 130.0, 25.0)
+        path_hw = DubinsPath3D(start, end, 130.0, 25.0, wind=(-20.0, 0.0))
+
+        assert path_hw.length > path_still.length
+
+    def test_tailwind_shorter(self, waypoints):
+        """Tailwind path should be shorter than still-air."""
+        start, end = waypoints
+        path_still = DubinsPath3D(start, end, 130.0, 25.0)
+        path_tw = DubinsPath3D(start, end, 130.0, 25.0, wind=(20.0, 0.0))
+
+        assert path_tw.length < path_still.length
+
+    def test_endpoints_match(self, waypoints):
+        """Start and end lat/lon should match the waypoints."""
+        start, end = waypoints
+        path = DubinsPath3D(start, end, 130.0, 25.0, wind=(15.0, -10.0))
+
+        assert path.points[0, 0] == pytest.approx(34.0, abs=0.01)
+        assert path.points[0, 1] == pytest.approx(-118.5, abs=0.01)
+        assert path.points[-1, 0] == pytest.approx(34.0, abs=0.01)
+        assert path.points[-1, 1] == pytest.approx(-118.3, abs=0.01)
+
+    def test_geometry_is_linestring(self, waypoints):
+        """Path geometry should be a valid LineString."""
+        start, end = waypoints
+        path = DubinsPath3D(start, end, 130.0, 25.0, wind=(10.0, 10.0))
+
+        assert path.geometry.is_valid
+        assert path.geometry_3d.is_valid
+        assert len(path.points) > 2
+
+    def test_altitude_change_with_wind(self):
+        """Wind should not affect altitude profile (wind is horizontal)."""
+        start = Waypoint(latitude=34.0, longitude=-118.5,
+                         altitude_msl=5000 * ureg.meter, heading=90.0)
+        end = Waypoint(latitude=34.0, longitude=-118.3,
+                       altitude_msl=6000 * ureg.meter, heading=90.0)
+
+        path_still = DubinsPath3D(start, end, 130.0, 25.0)
+        path_wind = DubinsPath3D(start, end, 130.0, 25.0, wind=(15.0, 0.0))
+
+        # Both should reach the same final altitude
+        assert path_still.points[-1, 2] == pytest.approx(6000.0, rel=0.01)
+        assert path_wind.points[-1, 2] == pytest.approx(6000.0, rel=0.01)
