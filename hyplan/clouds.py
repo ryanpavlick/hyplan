@@ -64,6 +64,9 @@ __all__ = [
     "create_cloud_data_array_with_limit", "simulate_visits",
     "plot_yearly_cloud_fraction_heatmaps_with_visits",
     "OpenMeteoCloudFraction", "fetch_cloud_fraction",
+    "summarize_cloud_fraction_by_doy", "plot_doy_cloud_fraction",
+    "OpenMeteoCloudForecast", "fetch_cloud_forecast",
+    "fetch_cloud_fraction_spatial", "plot_cloud_fraction_spatial",
 ]
 
 logger = logging.getLogger(__name__)
@@ -131,7 +134,10 @@ def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     qa = image.select("state_1km")
     clouds = qa.bitwiseAnd(3).gt(0)
     date_char = image.date().format('yyyy-MM-dd')
-    return clouds.set("date_char", date_char)
+    result = clouds.set("date_char", date_char)
+    # Propagate satellite tag when present (for split_satellite mode)
+    result = result.set("satellite", image.get("satellite"))
+    return result
 
 def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry") -> "ee.Feature":
     """
@@ -151,7 +157,11 @@ def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry")
         scale=1000
     )
     cloud_fraction = reduction.get('state_1km')
-    return ee.Feature(None, {'date_char': image.get('date_char'), 'cloud_fraction': cloud_fraction})
+    return ee.Feature(None, {
+        'date_char': image.get('date_char'),
+        'cloud_fraction': cloud_fraction,
+        'satellite': image.get('satellite'),
+    })
 
 def create_date_ranges(day_start: int, day_stop: int, year_start: int, year_stop: int) -> list:
     """
@@ -189,7 +199,24 @@ def create_date_ranges(day_start: int, day_stop: int, year_start: int, year_stop
 
     return date_ranges
 
-def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_stop: int, day_start: int, day_stop: int, limit: int = 5000) -> pd.DataFrame:
+_VALID_SATELLITES = {"both", "terra", "aqua"}
+
+_SATELLITE_COLLECTIONS = {
+    "terra": "MODIS/061/MOD09GA",
+    "aqua": "MODIS/061/MYD09GA",
+}
+
+
+def create_cloud_data_array_with_limit(
+    polygon_file: str,
+    year_start: int,
+    year_stop: int,
+    day_start: int,
+    day_stop: int,
+    limit: int = 5000,
+    satellite: str = "both",
+    split_satellite: bool = False,
+) -> pd.DataFrame:
     """
     Processes MODIS cloud data for polygons and calculates daily cloud fractions.
 
@@ -202,10 +229,24 @@ def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_
         day_start (int): Start day of the year for data processing.
         day_stop (int): End day of the year for data processing.
         limit (int, optional): Maximum number of images to process per date range. Default is 5000.
+        satellite (str): Which MODIS satellite to use: ``"both"`` (default),
+            ``"terra"`` (morning, ~10:30 local), or ``"aqua"`` (afternoon,
+            ~13:30 local).
+        split_satellite (bool): If ``True``, include a ``satellite`` column
+            in the output so Terra and Aqua observations are kept separate.
+            When ``True`` with ``satellite="both"``, the same
+            ``(polygon_id, year, day_of_year)`` may appear twice.  Filter or
+            aggregate before passing to :func:`simulate_visits`.
 
     Returns:
-        pd.DataFrame: A DataFrame with columns 'polygon_id', 'year', 'day_of_year', and 'cloud_fraction'.
+        pd.DataFrame: A DataFrame with columns 'polygon_id', 'year', 'day_of_year', and 'cloud_fraction'
+            (plus 'satellite' if *split_satellite* is True).
     """
+    if satellite not in _VALID_SATELLITES:
+        raise HyPlanValueError(
+            f"satellite must be one of {_VALID_SATELLITES}, got {satellite!r}"
+        )
+
     ee = _get_ee()
     try:
         gdf = gpd.read_file(polygon_file)
@@ -223,12 +264,23 @@ def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_
     results = []
     date_ranges = create_date_ranges(day_start, day_stop, year_start, year_stop)
 
+    sats_to_query = (
+        list(_SATELLITE_COLLECTIONS.keys())
+        if satellite == "both"
+        else [satellite]
+    )
+
     try:
         cloud_data = ee.ImageCollection([])
         for start, stop in date_ranges:
-            cloud_terra = ee.ImageCollection("MODIS/061/MOD09GA").filterDate(start, stop).limit(limit)
-            cloud_aqua = ee.ImageCollection('MODIS/061/MYD09GA').filterDate(start, stop).limit(limit)
-            cloud_data = cloud_data.merge(cloud_terra).merge(cloud_aqua)
+            for sat_name in sats_to_query:
+                col = (
+                    ee.ImageCollection(_SATELLITE_COLLECTIONS[sat_name])
+                    .filterDate(start, stop)
+                    .limit(limit)
+                    .map(lambda img, _s=sat_name: img.set("satellite", _s))
+                )
+                cloud_data = cloud_data.merge(col)
         cloud_data = cloud_data.map(get_binary_cloud)
     except Exception as e:
         raise HyPlanRuntimeError("Error occurred while processing MODIS data.") from e
@@ -249,10 +301,21 @@ def create_cloud_data_array_with_limit(polygon_file: str, year_start: int, year_
             if cloud_fraction is not None:
                 year, month, day = [int(x) for x in date_char.split('-')]
                 day_of_year = pd.Timestamp(year=year, month=month, day=day).dayofyear
-                results.append({'year': year, 'day_of_year': day_of_year, 'polygon_id': polygon_name, 'cloud_fraction': cloud_fraction})
+                rec = {
+                    'year': year,
+                    'day_of_year': day_of_year,
+                    'polygon_id': polygon_name,
+                    'cloud_fraction': cloud_fraction,
+                }
+                if split_satellite:
+                    rec['satellite'] = properties.get('satellite', 'unknown')
+                results.append(rec)
 
     results_df = pd.DataFrame(results)
-    aggregated_df = results_df.groupby(['polygon_id', 'year', 'day_of_year']).mean().reset_index()
+    group_cols = ['polygon_id', 'year', 'day_of_year']
+    if split_satellite:
+        group_cols.append('satellite')
+    aggregated_df = results_df.groupby(group_cols).mean().reset_index()
     return aggregated_df
 
 # ---------------------------------------------------------------------------
@@ -436,6 +499,13 @@ def fetch_cloud_fraction(
     gdf = gpd.read_file(polygon_file)
 
     if source == "openmeteo":
+        sat = kwargs.pop("satellite", "both")
+        kwargs.pop("split_satellite", None)
+        if sat != "both":
+            raise HyPlanValueError(
+                "Morning/afternoon (satellite) discrimination is only "
+                "available with source='gee'."
+            )
         return OpenMeteoCloudFraction(**kwargs).fetch(
             gdf, year_start, year_stop, day_start, day_stop,
         )
@@ -449,6 +519,277 @@ def fetch_cloud_fraction(
             f"Unknown cloud fraction source: {source!r}. "
             f"Use 'openmeteo' or 'gee'."
         )
+
+
+# ---------------------------------------------------------------------------
+# Cloud cover *forecasts* (near-term, not historical)
+# ---------------------------------------------------------------------------
+
+_OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+
+class OpenMeteoCloudForecast:
+    """Fetch cloud cover forecasts from the Open-Meteo Forecast API.
+
+    Provides up to 16 days of forecast cloud cover at any global location.
+    **No authentication required.**
+
+    For each polygon the centroid is used as the query point.
+
+    Args:
+        url: Override the Open-Meteo forecast endpoint (for testing).
+    """
+
+    _MAX_FORECAST_DAYS = 16
+
+    def __init__(self, url: str | None = None):
+        self._url = url or _OPENMETEO_FORECAST_URL
+
+    def fetch(
+        self,
+        polygons: gpd.GeoDataFrame,
+        forecast_days: int = 7,
+        hourly: bool = False,
+        models: "list[str] | None" = None,
+    ) -> pd.DataFrame:
+        """Fetch cloud cover forecast for each polygon.
+
+        Args:
+            polygons: GeoDataFrame with a ``Name`` column and polygon
+                geometries (WGS 84).
+            forecast_days: Number of days to forecast (1–16).
+            hourly: If ``True``, return hourly data with layer breakdown
+                (low / mid / high cloud cover).  Otherwise return daily means.
+            models: Optional list of NWP model identifiers to use (e.g.
+                ``["ecmwf_ifs025"]``).  ``None`` uses Open-Meteo's automatic
+                best-match selection.
+
+        Returns:
+            DataFrame with columns:
+
+            * **daily** (default): ``polygon_id``, ``date``,
+              ``cloud_fraction`` (0.0–1.0).
+            * **hourly**: ``polygon_id``, ``date``, ``hour``,
+              ``cloud_fraction``, ``cloud_fraction_low``,
+              ``cloud_fraction_mid``, ``cloud_fraction_high``.
+        """
+        import requests as _requests
+
+        if "Name" not in polygons.columns:
+            raise HyPlanValueError(
+                f"Polygon GeoDataFrame must have a 'Name' column. "
+                f"Found: {list(polygons.columns)}"
+            )
+
+        if not 1 <= forecast_days <= self._MAX_FORECAST_DAYS:
+            raise HyPlanValueError(
+                f"forecast_days must be between 1 and {self._MAX_FORECAST_DAYS}, "
+                f"got {forecast_days}."
+            )
+
+        rows: list[dict] = []
+
+        for _, row in polygons.iterrows():
+            name = row["Name"]
+            centroid = row["geometry"].centroid
+            lat, lon = centroid.y, centroid.x
+
+            logger.info(
+                "Fetching Open-Meteo cloud forecast for %s (%.2f, %.2f)",
+                name, lat, lon,
+            )
+
+            params: dict = {
+                "latitude": lat,
+                "longitude": lon,
+                "forecast_days": forecast_days,
+                "timezone": "UTC",
+            }
+            if hourly:
+                params["hourly"] = (
+                    "cloud_cover,cloud_cover_low,"
+                    "cloud_cover_mid,cloud_cover_high"
+                )
+            else:
+                params["daily"] = "cloud_cover_mean"
+
+            if models:
+                params["models"] = ",".join(models)
+
+            resp = _requests.get(self._url, params=params, timeout=60)
+            if resp.status_code != 200:
+                raise HyPlanRuntimeError(
+                    f"Open-Meteo forecast request failed "
+                    f"(HTTP {resp.status_code}): {resp.text[:200]}"
+                )
+
+            data = resp.json()
+
+            if hourly:
+                h = data.get("hourly", {})
+                times = h.get("time", [])
+                cc = h.get("cloud_cover", [])
+                cc_low = h.get("cloud_cover_low", [])
+                cc_mid = h.get("cloud_cover_mid", [])
+                cc_high = h.get("cloud_cover_high", [])
+                for t, c, cl, cm, ch in zip(times, cc, cc_low, cc_mid, cc_high):
+                    if c is None:
+                        continue
+                    dt = datetime.strptime(t, "%Y-%m-%dT%H:%M")
+                    rows.append({
+                        "polygon_id": name,
+                        "date": dt.date(),
+                        "hour": dt.hour,
+                        "cloud_fraction": c / 100.0,
+                        "cloud_fraction_low": (cl or 0) / 100.0,
+                        "cloud_fraction_mid": (cm or 0) / 100.0,
+                        "cloud_fraction_high": (ch or 0) / 100.0,
+                    })
+            else:
+                d = data.get("daily", {})
+                dates = d.get("time", [])
+                cloud_pct = d.get("cloud_cover_mean", [])
+                for date_str, pct in zip(dates, cloud_pct):
+                    if pct is None:
+                        continue
+                    rows.append({
+                        "polygon_id": name,
+                        "date": datetime.strptime(date_str, "%Y-%m-%d").date(),
+                        "cloud_fraction": pct / 100.0,
+                    })
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df["date"] = pd.to_datetime(df["date"])
+        return df
+
+
+def fetch_cloud_forecast(
+    polygon_file: str,
+    source: str = "openmeteo",
+    forecast_days: int = 7,
+    hourly: bool = False,
+    **kwargs,
+) -> pd.DataFrame:
+    """Fetch cloud cover forecasts for flight planning.
+
+    Args:
+        polygon_file: Path to a GeoJSON or shapefile with a ``Name`` column.
+        source: Forecast source.  Currently only ``"openmeteo"`` is supported.
+        forecast_days: Number of days to forecast (1–16).
+        hourly: If ``True``, return hourly resolution with cloud-layer
+            breakdown.
+        **kwargs: Passed to the source constructor (e.g. ``models``).
+
+    Returns:
+        DataFrame — see :class:`OpenMeteoCloudForecast` for column details.
+    """
+    gdf = gpd.read_file(polygon_file)
+
+    if source == "openmeteo":
+        models = kwargs.pop("models", None)
+        return OpenMeteoCloudForecast(**kwargs).fetch(
+            gdf, forecast_days=forecast_days, hourly=hourly, models=models,
+        )
+    else:
+        raise HyPlanValueError(
+            f"Unknown cloud forecast source: {source!r}. "
+            f"Currently only 'openmeteo' is supported."
+        )
+
+
+def summarize_cloud_fraction_by_doy(
+    df: pd.DataFrame,
+    window: int | None = None,
+) -> pd.DataFrame:
+    """Compute a "typical year" cloud fraction summary per polygon.
+
+    Averages cloud fraction across all years for each
+    ``(polygon_id, day_of_year)`` pair, producing a single seasonal profile
+    per polygon.
+
+    Args:
+        df: Cloud fraction DataFrame with columns ``polygon_id``, ``year``,
+            ``day_of_year``, ``cloud_fraction`` (as returned by
+            :func:`fetch_cloud_fraction`).
+        window: Optional rolling-mean window size (centered) applied to the
+            per-polygon DOY mean.  ``None`` disables smoothing.
+
+    Returns:
+        DataFrame with columns ``polygon_id``, ``day_of_year``,
+        ``cloud_fraction_mean``, ``cloud_fraction_std``,
+        ``cloud_fraction_count``.
+    """
+    required = {"polygon_id", "year", "day_of_year", "cloud_fraction"}
+    if not required.issubset(df.columns):
+        raise HyPlanValueError(
+            f"Input DataFrame must contain columns: {required}. "
+            f"Found: {set(df.columns)}"
+        )
+
+    if df.empty:
+        return pd.DataFrame(
+            columns=["polygon_id", "day_of_year",
+                     "cloud_fraction_mean", "cloud_fraction_std",
+                     "cloud_fraction_count"]
+        )
+
+    summary = (
+        df.groupby(["polygon_id", "day_of_year"])["cloud_fraction"]
+        .agg(["mean", "std", "count"])
+        .rename(columns={
+            "mean": "cloud_fraction_mean",
+            "std": "cloud_fraction_std",
+            "count": "cloud_fraction_count",
+        })
+        .reset_index()
+    )
+
+    if window is not None:
+        summary["cloud_fraction_mean"] = (
+            summary.groupby("polygon_id")["cloud_fraction_mean"]
+            .transform(lambda s: s.rolling(window, center=True, min_periods=1).mean())
+        )
+
+    return summary
+
+
+def plot_doy_cloud_fraction(
+    summary_df: pd.DataFrame,
+    ax: "plt.Axes | None" = None,
+    show_std: bool = True,
+    **kwargs,
+) -> "plt.Axes":
+    """Line plot of DOY cloud fraction for each polygon.
+
+    Args:
+        summary_df: Output of :func:`summarize_cloud_fraction_by_doy`.
+        ax: Matplotlib Axes to plot on.  Created if ``None``.
+        show_std: If ``True``, draw a shaded ±1 std-dev band.
+        **kwargs: Passed to ``ax.plot()``.
+
+    Returns:
+        The matplotlib Axes.
+    """
+    if ax is None:
+        _, ax = plt.subplots()
+
+    for name, grp in summary_df.groupby("polygon_id"):
+        grp = grp.sort_values("day_of_year")
+        ax.plot(grp["day_of_year"], grp["cloud_fraction_mean"],
+                label=name, **kwargs)
+        if show_std and "cloud_fraction_std" in grp.columns:
+            ax.fill_between(
+                grp["day_of_year"],
+                grp["cloud_fraction_mean"] - grp["cloud_fraction_std"],
+                grp["cloud_fraction_mean"] + grp["cloud_fraction_std"],
+                alpha=0.2,
+            )
+
+    ax.set_xlabel("Day of Year")
+    ax.set_ylabel("Cloud Fraction")
+    ax.legend()
+    return ax
 
 
 def simulate_visits(
@@ -560,6 +901,194 @@ def simulate_visits(
         visit_days.append({'year': year, 'days': total_days})
 
     return pd.DataFrame(visit_days), visit_tracker, rest_days
+
+
+# ---------------------------------------------------------------------------
+# Spatial cloud fraction maps (per-pixel, not polygon-mean)
+# ---------------------------------------------------------------------------
+
+def fetch_cloud_fraction_spatial(
+    polygon_file: str,
+    year_start: int,
+    year_stop: int,
+    day_start: int,
+    day_stop: int,
+    scale: int = 1000,
+    satellite: str = "both",
+) -> "dict[str, object]":
+    """Compute a per-pixel mean cloud fraction map for each polygon.
+
+    Uses Google Earth Engine to produce a time-averaged cloud fraction
+    raster at the native MODIS resolution within each polygon's bounding
+    box.  Requires GEE authentication.
+
+    Args:
+        polygon_file: Path to a GeoJSON or shapefile with a ``Name`` column.
+        year_start: First year to include.
+        year_stop: Last year to include (inclusive).
+        day_start: Start day-of-year (1–365).
+        day_stop: End day-of-year (1–365).
+        scale: Output resolution in metres (default 1000 = MODIS native).
+        satellite: ``"both"``, ``"terra"``, or ``"aqua"``.
+
+    Returns:
+        Dictionary mapping polygon name → ``xarray.DataArray`` with
+        dimensions ``(latitude, longitude)`` and values 0.0–1.0.
+
+    Raises:
+        HyPlanRuntimeError: If GEE initialisation fails or download errors.
+        HyPlanValueError: If the polygon file is invalid.
+    """
+    try:
+        import xarray as xr
+        import numpy as np
+    except ImportError:
+        raise HyPlanRuntimeError(
+            "xarray and numpy are required for spatial cloud maps. "
+            "Install with: pip install xarray numpy"
+        )
+
+    if satellite not in _VALID_SATELLITES:
+        raise HyPlanValueError(
+            f"satellite must be one of {_VALID_SATELLITES}, got {satellite!r}"
+        )
+
+    ee = _get_ee()
+
+    gdf = gpd.read_file(polygon_file)
+    if "Name" not in gdf.columns:
+        raise HyPlanValueError(
+            f"Polygon file must have a 'Name' column. Found: {list(gdf.columns)}"
+        )
+    gdf["geometry"] = gdf["geometry"].apply(_drop_z)
+
+    date_ranges = create_date_ranges(day_start, day_stop, year_start, year_stop)
+
+    sats_to_query = (
+        list(_SATELLITE_COLLECTIONS.keys())
+        if satellite == "both"
+        else [satellite]
+    )
+
+    # Build merged collection and compute temporal mean server-side
+    cloud_data = ee.ImageCollection([])
+    for start, stop in date_ranges:
+        for sat_name in sats_to_query:
+            col = (
+                ee.ImageCollection(_SATELLITE_COLLECTIONS[sat_name])
+                .filterDate(start, stop)
+            )
+            cloud_data = cloud_data.merge(col)
+    cloud_data = cloud_data.map(get_binary_cloud)
+    mean_image = cloud_data.mean()
+
+    result: dict[str, object] = {}
+
+    for _, row in gdf.iterrows():
+        name = row["Name"]
+        geom = ee.Geometry(row["geometry"].__geo_interface__)
+        bounds = row["geometry"].bounds  # (minx, miny, maxx, maxy)
+
+        logger.info("Downloading spatial cloud map for %s", name)
+
+        # Use getDownloadURL for GeoTIFF export (avoids sampleRectangle limits)
+        try:
+            url = mean_image.getDownloadURL({
+                "region": geom,
+                "scale": scale,
+                "format": "NPY",
+            })
+        except Exception as exc:
+            raise HyPlanRuntimeError(
+                f"GEE download URL generation failed for {name}"
+            ) from exc
+
+        import requests as _requests
+        resp = _requests.get(url, timeout=120)
+        if resp.status_code != 200:
+            raise HyPlanRuntimeError(
+                f"GEE download failed for {name} (HTTP {resp.status_code})"
+            )
+
+        # GEE NPY format returns a structured numpy array
+        import io
+        arr = np.load(io.BytesIO(resp.content), allow_pickle=True)
+        # Extract the cloud band (state_1km)
+        if arr.dtype.names:
+            data = arr["state_1km"].astype(float)
+        else:
+            data = arr.astype(float)
+
+        # Build lat/lon coordinates from bounds and array shape
+        nrows, ncols = data.shape
+        minx, miny, maxx, maxy = bounds
+        lons = np.linspace(minx, maxx, ncols)
+        lats = np.linspace(maxy, miny, nrows)  # top to bottom
+
+        da = xr.DataArray(
+            data,
+            dims=["latitude", "longitude"],
+            coords={"latitude": lats, "longitude": lons},
+            name="cloud_fraction_mean",
+            attrs={"units": "fraction", "long_name": "Mean cloud fraction"},
+        )
+        result[name] = da
+
+    return result
+
+
+def plot_cloud_fraction_spatial(
+    spatial_data: "dict[str, object]",
+    polygon_file: str | None = None,
+    ncols: int = 2,
+) -> "plt.Figure":
+    """Plot per-pixel cloud fraction maps.
+
+    Args:
+        spatial_data: Dictionary mapping polygon name → ``xarray.DataArray``,
+            as returned by :func:`fetch_cloud_fraction_spatial`.
+        polygon_file: Optional path to polygon file for boundary overlay.
+        ncols: Number of subplot columns.
+
+    Returns:
+        The matplotlib Figure.
+    """
+    import numpy as np
+
+    n = len(spatial_data)
+    if n == 0:
+        raise HyPlanValueError("spatial_data is empty — nothing to plot.")
+
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows),
+                             squeeze=False)
+
+    overlay_gdf = None
+    if polygon_file is not None:
+        overlay_gdf = gpd.read_file(polygon_file)
+
+    for idx, (name, da) in enumerate(spatial_data.items()):
+        ax = axes[idx // ncols, idx % ncols]
+        im = ax.pcolormesh(
+            da.coords["longitude"], da.coords["latitude"], da.values,
+            cmap="viridis_r", vmin=0, vmax=1,
+        )
+        if overlay_gdf is not None:
+            row = overlay_gdf[overlay_gdf["Name"] == name]
+            if not row.empty:
+                row.boundary.plot(ax=ax, edgecolor="red", linewidth=1.5)
+        ax.set_title(name)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        fig.colorbar(im, ax=ax, label="Cloud Fraction")
+
+    # Hide unused subplots
+    for idx in range(n, nrows * ncols):
+        axes[idx // ncols, idx % ncols].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
 
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
     cloud_data_df: pd.DataFrame, visit_tracker: Dict[int, Dict[str, list]], rest_days: Dict[int, list],
