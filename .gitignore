@@ -183,3 +183,6 @@ hyplan/_version.py
 .pypirc
 
 .DS_Store
+
+# Claude Code plans
+plans/
