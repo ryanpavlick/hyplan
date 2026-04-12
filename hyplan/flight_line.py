@@ -254,6 +254,50 @@ class FlightLine:
                    investigator=investigator)
 
     @classmethod
+    def from_endpoints(
+        cls,
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+        altitude_msl: Quantity = None,
+        site_name: Optional[str] = None,
+        site_description: Optional[str] = None,
+        investigator: Optional[str] = None,
+    ) -> "FlightLine":
+        """Create a flight line from two endpoint coordinates.
+
+        Args:
+            lat1: Start latitude in decimal degrees.
+            lon1: Start longitude in decimal degrees.
+            lat2: End latitude in decimal degrees.
+            lon2: End longitude in decimal degrees.
+            altitude_msl: Flight altitude MSL.
+            site_name: Optional site name.
+            site_description: Optional site description.
+            investigator: Optional investigator name.
+
+        Returns:
+            A new FlightLine from ``(lat1, lon1)`` to ``(lat2, lon2)``.
+        """
+        _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+        _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
+
+        alt = cls._validate_altitude(altitude_msl)
+        wp1 = Waypoint(latitude=lat1, longitude=lon1,
+                       heading=float(az12) % 360,
+                       altitude_msl=alt,
+                       name=f"{site_name}_start" if site_name else "start")
+        wp2 = Waypoint(latitude=lat2, longitude=lon2,
+                       heading=(float(az21) + 180.0) % 360.0,
+                       altitude_msl=alt,
+                       name=f"{site_name}_end" if site_name else "end")
+
+        return cls(waypoint1=wp1, waypoint2=wp2,
+                   site_name=site_name, site_description=site_description,
+                   investigator=investigator)
+
+    @classmethod
     def center_length_azimuth(
         cls,
         lat: float,

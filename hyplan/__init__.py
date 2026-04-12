@@ -146,7 +146,12 @@ from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField,
 from .flight_optimizer import build_graph, greedy_optimize
 
 # Plotting
-from .plotting import map_flight_lines, plot_flight_plan, plot_altitude_trajectory, terrain_profile_along_track
+from .plotting import (
+    map_flight_lines, plot_flight_plan, plot_altitude_trajectory,
+    terrain_profile_along_track,
+    plot_airspace_map, plot_oceanic_tracks, plot_vertical_profile,
+    plot_conflict_matrix, map_airspace,
+)
 
 # Exports
 from .exports import (
@@ -158,7 +163,12 @@ from .exports import (
 # Airspace
 from .airspace import (
     Airspace, AirspaceConflict, OpenAIPClient,
-    check_airspace_conflicts, fetch_and_check, clear_airspace_cache,
+    check_airspace_conflicts, check_airspace_proximity,
+    fetch_and_check, clear_airspace_cache,
+    classify_severity, FAATFRClient, NASRAirspaceSource,
+    convert_agl_floors, filter_by_schedule,
+    summarize_airspaces,
+    OceanicTrack, FlightPlanDBClient,
 )
 
 # Campaign
