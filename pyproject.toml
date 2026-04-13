@@ -50,6 +50,7 @@ dependencies = [
 mag = ["geomag"]
 clouds = ["earthengine-api", "seaborn"]
 winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
+adsb = ["traffic>=2.8"]
 gui = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
