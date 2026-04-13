@@ -44,27 +44,7 @@
 
 **exports.py:** import flight plans from Excel/ICARTT/KML/shapefile; PowerPoint briefing generation (python-pptx); Word mission summary (python-docx); `--strict` mode that raises on missing data
 
-**airspace.py:**
-- **P1 — Quick wins:**
-  - ~~Type filtering: add `type_filter` param to `fetch_airspaces()`/`fetch_and_check()` to show only RESTRICTED, PROHIBITED, etc.~~
-  - ~~Conflict severity classification: tag each `AirspaceConflict` as HARD/ADVISORY/INFO based on airspace class (enables color-coded display)~~
-  - ~~Handle "no ceiling" SUA special case (distinguish unlimited ceiling from 60000 ft default)~~
-  - ~~Multi-country bounding box: auto-include airspaces from neighboring countries when bbox spans borders~~
-- **P2 — Moderate effort, high value:**
-  - Entry/exit point extraction: compute lat/lon where flight lines cross airspace boundaries (from existing intersection geometry)
-  - Lateral buffer / near-miss warning: optional buffer around airspace polygons to flag proximity without penetration
-  - AGL-to-MSL floor conversion: use `terrain.get_elevations()` to convert GND-referenced floors to MSL at conflict points
-  - Airspace summary table: `airspace_summary_df()` returning a DataFrame for quick pilot reference
-- **P3 — Significant effort, high value:**
-  - ~~FAA SUA/NASR data source: free GeoJSON from 28-day NASR cycle (no API key needed for US ops)~~
-  - ~~TFR (Temporary Flight Restriction) data retrieval from FAA TFR feed~~
-  - Airspace visualization in `plotting.py`: integrate airspace overlay into `plot_flight_plan()` with severity color-coding
-- **P4 — High effort or niche:**
-  - ~~NOTAM integration (FAA or ICAO API) for temporary airspace changes~~
-  - Active schedule / time-of-day filtering: parse MOA/restricted area schedules to filter out inactive airspaces
-  - Vertical profile view: distance-vs-altitude cross-section showing airspace floors/ceilings along route
-  - NAT/POCAT oceanic track display (via FlightPlanDB API)
-  - FIR (Flight Information Region) boundaries (largely covered by type filtering + plotting)
+**airspace.py:** FIR (Flight Information Region) boundaries (largely covered by type filtering + plotting)
 
 **gui:** hover to reveal solar elevation times; copy/rotate/nudge individual lines; aircraft icons on map; wind barbs overlay; distance measurement tool
 

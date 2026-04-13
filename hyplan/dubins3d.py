@@ -1,29 +1,46 @@
 """
-3D Dubins path planning with pitch angle constraints.
+3D Dubins path planning with pitch angle constraints and optional wind.
 
-Port of comrob/Dubins3D.jl (Vana et al., ICRA 2020) to Python.
-Decomposes 3D paths into coupled horizontal and vertical 2D Dubins
-problems linked by a curvature budget:
+Originally based on comrob/Dubins3D.jl (Vana et al.,  2020),
+extended with pitch-constrained vertical planning and wind-aware
+trochoidal arcs (Moon et al., 2023).  Decomposes 3D paths into coupled horizontal and
+vertical 2D Dubins problems linked by a curvature budget:
 
     1/rho_min² = 1/rho_h² + 1/rho_v²
 
-A 1D search over rho_h finds the shortest feasible 3D path.
+A 1D search over rho_h finds the shortest feasible 3D path.  The
+vertical sub-problem enforces pitch-angle limits via a dedicated
+solver that only considers CSC (curve-straight-curve) manoeuvres and
+validates centre-angle excursions against the pitch bounds.
+
+When a wind vector is supplied, the horizontal sub-problem switches
+from circular arcs to **trochoidal** arcs (circles drifting with the
+wind).  The solver finds the time-optimal path in the air-relative
+frame using an iterative target-drift algorithm, then samples the
+ground track with cumulative wind displacement applied.  Path length
+and timing are always expressed in the air frame (see
+:attr:`DubinsPath3D.length`).
 
 References
 ----------
+
+Moon, S., Oh, E., and Shim, D.H. (2023). An integral approach to the
+time-optimal Dubins path problem with trochoidal paths. *arXiv preprint*
+arXiv:2306.11845.
+
 Vana, P., Neto, A.A., Faigl, J. and Macharet, D.G. (2020). Minimal
 3D Dubins path with bounded curvature and pitch angle. *IEEE
 International Conference on Robotics and Automation (ICRA)*, 8497-8503.
 doi:10.1109/ICRA40945.2020.9197348
 
+2D Dubins solver adapted from Andrew Walker's implementation:
+Walker, A. (2011). Hard Real-Time Motion Planning for Autonomous
+Vehicles. PhD thesis, Swinburne University of Technology.
+
 Dubins, L.E. (1957). On curves of minimal length with a constraint on
 average curvature, and with prescribed initial and terminal positions
 and tangents. *American Journal of Mathematics*, 79(3), 497-516.
 doi:10.2307/2372560
-
-2D Dubins solver adapted from Andrew Walker's implementation:
-Walker, A. (2011). Hard Real-Time Motion Planning for Autonomous
-Vehicles. PhD thesis, Swinburne University of Technology.
 """
 
 import math
@@ -602,19 +619,13 @@ def _try_to_construct(
     # Vertical 2D Dubins: (arc_length, altitude, pitch)
     qi3d = np.array([0.0, qi[2], qi[4]])
     qf3d = np.array([d_lat.maneuver.length, qf[2], qf[4]])
-    d_lon = _Dubins2D(qi3d, qf3d, vertical_radius)
-
-    # Reject CCC paths in vertical plane (bug fix: original checked RLR twice)
-    if d_lon.maneuver.case in ("RLR", "LRL"):
+    try:
+        d_lon = _VerticalDubins(qi3d, qf3d, vertical_radius, pitch_limits)
+    except HyPlanRuntimeError:
         return None
 
-    # Check pitch constraint on first arc
-    if d_lon.maneuver.case[0] == "R":
-        if qi[4] - d_lon.maneuver.t < pitch_limits[0]:
-            return None
-    else:
-        if qi[4] + d_lon.maneuver.t > pitch_limits[1]:
-            return None
+    if not math.isfinite(d_lon.maneuver.length):
+        return None
 
     return (d_lat, d_lon)
 
@@ -852,7 +863,16 @@ class DubinsPath3D:
 
     @property
     def length(self) -> ureg.Quantity:
-        """Total 3D path length."""
+        """Total 3D path length (air-path distance).
+
+        This is the distance traveled through the air mass, not the
+        ground-track distance.  In still air, the two are identical.
+        When wind is active, the ground track (available via
+        :attr:`geometry`) will be longer or shorter depending on
+        headwind/tailwind components, but ``length`` always reflects
+        the airspeed-integrated path used for timing calculations
+        (i.e. ``time = length / TAS``).
+        """
         return self._length
 
     @property

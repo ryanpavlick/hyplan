@@ -10,7 +10,7 @@ For backwards compatibility every class defined here is re-exported from
 
 from __future__ import annotations
 
-from .aircraft import (
+from ._base import (
     Aircraft,
     CasMachSchedule,
     TasSchedule,
@@ -20,7 +20,7 @@ from .aircraft import (
     PerformanceConfidence,
     SourceRecord,
 )
-from .units import ureg
+from ..units import ureg
 
 __all__ = [
     "NASA_ER2",
@@ -95,6 +95,7 @@ class NASA_ER2(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=5000 * ureg.nautical_mile,
             endurance=8 * ureg.hour,
             useful_payload=2900 * ureg.pound,
@@ -141,6 +142,7 @@ class NASA_GIII(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=3767 * ureg.nautical_mile,
             endurance=7.5 * ureg.hour,
             useful_payload=2610 * ureg.pound,
@@ -186,6 +188,7 @@ class NASA_GIV(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=5130 * ureg.nautical_mile,
             endurance=7.5 * ureg.hour,
             useful_payload=5610 * ureg.pound,
@@ -250,6 +253,7 @@ class NASA_GV(Aircraft):
                 ),
                 max_bank_deg=30.0,
             ),
+            engine_type="jet",
             range=5500 * ureg.nautical_mile,
             endurance=13 * ureg.hour,
             confidence=PerformanceConfidence(
@@ -302,6 +306,7 @@ class NASA_C20A(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=3400 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=2500 * ureg.pound,
@@ -349,6 +354,7 @@ class NASA_P3(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="turboprop",
             range=3800 * ureg.nautical_mile,
             endurance=12 * ureg.hour,
             useful_payload=18000 * ureg.pound,
@@ -395,6 +401,7 @@ class NASA_WB57(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=2500 * ureg.nautical_mile,
             endurance=6.5 * ureg.hour,
             useful_payload=8800 * ureg.pound,
@@ -430,6 +437,7 @@ class NASA_B777(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=9000 * ureg.nautical_mile,
             endurance=18 * ureg.hour,
             useful_payload=75000 * ureg.pound,
@@ -469,6 +477,7 @@ class DynamicAviation_DH8(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="turboprop",
             range=950 * ureg.nautical_mile,
             endurance=5 * ureg.hour,
             useful_payload=15000 * ureg.pound,
@@ -504,6 +513,7 @@ class DynamicAviation_A90(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="turboprop",
             range=1500 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=2950 * ureg.pound,
@@ -539,6 +549,7 @@ class DynamicAviation_B200(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="turboprop",
             range=1632 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=4250 * ureg.pound,
@@ -582,6 +593,7 @@ class C130(Aircraft):
                 (0 * ureg.feet, 2000 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=20.0),
+            engine_type="turboprop",
             range=2500 * ureg.nautical_mile,
             endurance=10 * ureg.hour,
             useful_payload=45000 * ureg.pound,
@@ -620,6 +632,7 @@ class BAe146(Aircraft):
                 (0 * ureg.feet, 1000 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=20.0),
+            engine_type="jet",
             range=1800 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=10000 * ureg.pound,
@@ -657,6 +670,7 @@ class Learjet(Aircraft):
                 (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
+            engine_type="jet",
             range=1500 * ureg.nautical_mile,
             endurance=4 * ureg.hour,
             useful_payload=3000 * ureg.pound,
@@ -694,6 +708,7 @@ class TwinOtter(Aircraft):
                 (0 * ureg.feet, 430 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=15.0),
+            engine_type="turboprop",
             range=800 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=4000 * ureg.pound,

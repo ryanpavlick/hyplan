@@ -567,9 +567,11 @@ def process_flight_phase(
     cumulative_frac = 0.0
     for i, (phase, details) in enumerate(phase_items):
         # Determine the segment type based on altitude information.
-        if details["start_altitude"] < details["end_altitude"]:
+        # Use a 1-foot tolerance for floating-point noise from the Dubins solver.
+        alt_diff_ft = (details["end_altitude"] - details["start_altitude"]).m_as(ureg.foot)
+        if alt_diff_ft > 1.0:
             seg_type = "takeoff" if segment_name == "Departure" else "climb"
-        elif details["start_altitude"] > details["end_altitude"]:
+        elif alt_diff_ft < -1.0:
             seg_type = "approach" if segment_name == "Arrival" else "descent"
         else:
             seg_type = override_segment_type or "transit"

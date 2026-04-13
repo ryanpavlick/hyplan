@@ -22,18 +22,23 @@ schedule type is in use.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
+
+import logging
+import warnings
 
 import numpy as np
 import pymap3d.vincenty
 from pint import Quantity
 
-from .airports import Airport
-from .atmosphere import cas_to_tas, mach_to_tas
-from .dubins3d import DubinsPath3D
-from .exceptions import HyPlanTypeError, HyPlanValueError
-from .units import ureg
-from .waypoint import Waypoint
+from ..airports import Airport
+from ..atmosphere import cas_to_tas, mach_to_tas
+from ..dubins3d import DubinsPath3D
+from ..exceptions import HyPlanTypeError, HyPlanValueError
+from ..units import ureg
+
+logger = logging.getLogger(__name__)
+from ..waypoint import Waypoint
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +260,8 @@ class Aircraft:
         climb_profile: Rate-of-climb vs altitude.
         descent_profile: Rate-of-descent vs altitude.
         turn_model: Turn performance / bank angles.
+        engine_type: Propulsion category — ``"jet"``, ``"turboprop"``,
+            or ``"piston"``.
         confidence: Per-submodel confidence ratings.
         sources: List of provenance records.
         range: Maximum flight range (optional, metadata only).
@@ -275,6 +282,7 @@ class Aircraft:
         climb_profile: VerticalProfile,
         descent_profile: VerticalProfile,
         turn_model: TurnModel,
+        engine_type: Literal["jet", "turboprop", "piston"],
         confidence: Optional[PerformanceConfidence] = None,
         sources: Optional[List[SourceRecord]] = None,
         range: Optional[Quantity] = None,
@@ -302,6 +310,7 @@ class Aircraft:
         self.descent_profile = descent_profile
 
         self.turn_model = turn_model
+        self.engine_type = engine_type
         self.confidence = confidence or PerformanceConfidence()
         self.sources = sources or []
 
@@ -310,6 +319,61 @@ class Aircraft:
         self.useful_payload = (
             useful_payload.to(ureg.pound) if useful_payload is not None else None
         )
+
+        self._validate_schedule_compatibility()
+
+    # ------------------------------------------------------------------
+    # Schedule / engine-type compatibility
+    # ------------------------------------------------------------------
+
+    # Compatibility matrix: engine_type → schedule_type → level.
+    #   "typical"  — expected combination, no warning.
+    #   "unusual"  — allowed but surprising; emits a warning.
+    #   "forbid"   — raises HyPlanValueError.
+    _SCHEDULE_COMPAT = {
+        "jet": {CasMachSchedule: "typical", TasSchedule: "typical"},
+        "turboprop": {CasMachSchedule: "unusual", TasSchedule: "typical"},
+        "piston": {CasMachSchedule: "forbid", TasSchedule: "typical"},
+    }
+
+    def _validate_schedule_compatibility(self) -> None:
+        """Check engine_type vs speed-schedule combinations.
+
+        Warns for unusual pairings, raises for invalid ones.
+        """
+        schedules = {
+            "climb_schedule": self.climb_schedule,
+            "cruise_schedule": self.cruise_schedule,
+            "descent_schedule": self.descent_schedule,
+        }
+        compat = self._SCHEDULE_COMPAT.get(self.engine_type, {})
+        for name, sched in schedules.items():
+            level = compat.get(type(sched))
+            if level == "forbid":
+                raise HyPlanValueError(
+                    f"{name}: {type(sched).__name__} is not valid for "
+                    f"engine_type={self.engine_type!r}."
+                )
+            if level == "unusual":
+                warnings.warn(
+                    f"{self.aircraft_type}: {name} uses "
+                    f"{type(sched).__name__} with engine_type="
+                    f"{self.engine_type!r} — this is unusual.",
+                    stacklevel=3,
+                )
+
+    @property
+    def speed_model_fidelity(self) -> str:
+        """Describe the fidelity level of the cruise speed model.
+
+        Returns one of:
+
+        * ``"cas_mach"`` — CAS/Mach schedule (atmosphere-aware).
+        * ``"simplified_tas"`` — piecewise-linear TAS approximation.
+        """
+        if isinstance(self.cruise_schedule, CasMachSchedule):
+            return "cas_mach"
+        return "simplified_tas"
 
     # ------------------------------------------------------------------
     # Public API (preserved for flight_plan.py / flight_optimizer.py)
@@ -737,52 +801,3 @@ class Aircraft:
             i = j
 
         return phases
-
-
-# %% Concrete aircraft models
-#
-# The aircraft subclasses live in hyplan.aircraft_models.  They are
-# re-exported below so ``from hyplan.aircraft import NASA_ER2`` keeps working.
-from .aircraft_models import (  # noqa: E402
-    NASA_ER2,
-    NASA_GIII,
-    NASA_GIV,
-    NASA_GV,
-    NASA_C20A,
-    NASA_P3,
-    NASA_WB57,
-    NASA_B777,
-    DynamicAviation_DH8,
-    DynamicAviation_A90,
-    DynamicAviation_B200,
-    C130,
-    BAe146,
-    Learjet,
-    TwinOtter,
-)
-
-__all__ = [
-    "Aircraft",
-    "CasMachSchedule",
-    "TasSchedule",
-    "VerticalProfile",
-    "TurnModel",
-    "PhaseBankAngles",
-    "SourceRecord",
-    "PerformanceConfidence",
-    "NASA_ER2",
-    "NASA_GIII",
-    "NASA_GIV",
-    "NASA_GV",
-    "NASA_C20A",
-    "NASA_P3",
-    "NASA_WB57",
-    "NASA_B777",
-    "DynamicAviation_DH8",
-    "DynamicAviation_A90",
-    "DynamicAviation_B200",
-    "C130",
-    "BAe146",
-    "Learjet",
-    "TwinOtter",
-]
