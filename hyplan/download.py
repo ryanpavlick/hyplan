@@ -25,14 +25,21 @@ def download_file(filepath: str, url: str, chunk_size: int = int(1E6), timeout: 
         logger.info(f"The file at {filepath} already exists. Skipping download.")
         return
 
-    # Download the file in chunks
+    # Download to a temp file first, then rename atomically.
+    # This prevents partial/corrupt files from persisting if the
+    # download is interrupted.
+    tmp_path = filepath + ".tmp"
     try:
         with requests.get(url, stream=True, timeout=timeout) as response:
             response.raise_for_status()
-            with open(filepath, "wb") as file:
+            with open(tmp_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     file.write(chunk)
+        os.replace(tmp_path, filepath)
         logger.info(f"Data downloaded successfully to {filepath}.")
     except requests.RequestException as e:
+        # Clean up partial temp file
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
         logger.error(f"Error downloading data from {url}: {e}")
         raise

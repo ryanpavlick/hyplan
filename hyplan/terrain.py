@@ -24,7 +24,8 @@ from functools import lru_cache
 import numpy as np
 from shapely.geometry import box
 from rtree import index
-from osgeo import gdal
+import rasterio
+import rasterio.merge
 from typing import List, Tuple
 import pymap3d.los
 import pymap3d.aer
@@ -187,7 +188,20 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
             except Exception as e:
                 logger.error(f"Error downloading tile {tile_file}: {e}")
 
-    return downloaded_files
+    # Validate tiles — remove corrupt files so they re-download next time
+    valid_files = []
+    for tile_file in downloaded_files:
+        try:
+            with rasterio.open(tile_file) as src:
+                src.read(1, window=rasterio.windows.Window(0, 0, 1, 1))
+            valid_files.append(tile_file)
+        except Exception:
+            logger.warning(
+                f"Corrupt DEM tile detected, removing: {tile_file}"
+            )
+            os.remove(tile_file)
+
+    return valid_files
 
 
 def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
@@ -211,11 +225,22 @@ def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
 
     try:
         logger.info(f"Merging {len(tile_file_list)} tiles into {output_filename}")
-        gdal.Warp(
-            destNameOrDestDS=output_filename,
-            srcDSOrSrcDSTab=tile_file_list,
-            format="GTiff",
-        )
+        datasets = [rasterio.open(p) for p in tile_file_list]
+        merged, merged_transform = rasterio.merge.merge(datasets)
+        for ds in datasets:
+            ds.close()
+        # Write merged result
+        profile = {
+            "driver": "GTiff",
+            "height": merged.shape[1],
+            "width": merged.shape[2],
+            "count": 1,
+            "dtype": merged.dtype,
+            "crs": "EPSG:4326",
+            "transform": merged_transform,
+        }
+        with rasterio.open(output_filename, "w", **profile) as dst:
+            dst.write(merged)
         logger.info(f"Successfully merged tiles into {output_filename}")
     except Exception as e:
         logger.error(f"Failed to merge tiles: {e}")
@@ -254,15 +279,15 @@ def _load_dem(dem_file: str, mtime: float):
     Bounded to 8 entries to avoid unbounded memory growth across many DEMs.
     Returns ``(raster, geotransform, raster_min, raster_max)``.
     """
-    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
-    if not dataset:
-        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
-    geotransform = dataset.GetGeoTransform()
-    band = dataset.GetRasterBand(1)
-    if not band:
-        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
-    raster = band.ReadAsArray()
-    dataset = None
+    try:
+        with rasterio.open(dem_file) as src:
+            raster = src.read(1)
+            t = src.transform
+            # Convert rasterio Affine to GDAL-style geotransform tuple
+            # so downstream code (get_elevations, surface_normal_at) is unchanged.
+            geotransform = (t.c, t.a, t.b, t.f, t.d, t.e)
+    except Exception as e:
+        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}") from e
     raster.setflags(write=False)  # protect cached array from in-place mutation
     raster_min = float(np.nanmin(raster))
     raster_max = float(np.nanmax(raster))
@@ -370,15 +395,8 @@ def terrain_aspect_azimuth(polygon, dem_file: str = None) -> float:
         lats_poly = coords[:, 1]
         dem_file = generate_demfile(lats_poly, lons_poly)
 
-    dataset = gdal.Open(dem_file, gdal.GA_ReadOnly)
-    if not dataset:
-        raise HyPlanRuntimeError(f"Could not open DEM file: {dem_file}")
-
-    band = dataset.GetRasterBand(1)
-    if not band:
-        raise HyPlanRuntimeError(f"DEM file does not contain valid raster data: {dem_file}")
-    elevations = band.ReadAsArray().astype(float)
-    dataset = None
+    raster, _, _, _ = _get_dem_cached(dem_file)
+    elevations = raster.astype(float)
 
     # np.gradient returns (d/d_row, d/d_col).  In a north-up GeoTIFF rows
     # increase southward, so the north component is the *negative* row gradient.
