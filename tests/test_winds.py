@@ -414,3 +414,226 @@ class TestGFSFilter:
         date, cycle = _gfs_best_cycle(dt)
         assert cycle in (0, 6, 12, 18)
         assert isinstance(date, datetime.date)
+
+
+# ---------------------------------------------------------------------------
+# Wind vector conversions (utils)
+# ---------------------------------------------------------------------------
+
+from hyplan.winds.utils import wind_uv_from_speed_dir, wind_speed_dir_from_uv
+
+
+class TestWindVectorConversions:
+    """Test meteorological wind <-> U/V component conversions."""
+
+    def test_from_north(self):
+        u, v = wind_uv_from_speed_dir(10.0, 0.0)
+        assert u == pytest.approx(0.0, abs=1e-10)
+        assert v == pytest.approx(-10.0)
+
+    def test_from_east(self):
+        u, v = wind_uv_from_speed_dir(10.0, 90.0)
+        assert u == pytest.approx(-10.0)
+        assert v == pytest.approx(0.0, abs=1e-10)
+
+    def test_from_south(self):
+        u, v = wind_uv_from_speed_dir(10.0, 180.0)
+        assert u == pytest.approx(0.0, abs=1e-10)
+        assert v == pytest.approx(10.0)
+
+    def test_from_west(self):
+        u, v = wind_uv_from_speed_dir(10.0, 270.0)
+        assert u == pytest.approx(10.0)
+        assert v == pytest.approx(0.0, abs=1e-10)
+
+    def test_zero_wind(self):
+        u, v = wind_uv_from_speed_dir(0.0, 123.0)
+        assert u == pytest.approx(0.0, abs=1e-10)
+        assert v == pytest.approx(0.0, abs=1e-10)
+
+    def test_roundtrip(self):
+        """speed_dir -> uv -> speed_dir should be identity."""
+        for speed in [5.0, 15.0, 50.0]:
+            for from_deg in [0, 30, 45, 90, 135, 180, 225, 270, 315]:
+                u, v = wind_uv_from_speed_dir(speed, from_deg)
+                s2, d2 = wind_speed_dir_from_uv(u, v)
+                assert s2 == pytest.approx(speed, rel=1e-10)
+                assert d2 == pytest.approx(from_deg, abs=1e-6)
+
+    def test_inverse_zero_wind(self):
+        speed, from_deg = wind_speed_dir_from_uv(0.0, 0.0)
+        assert speed == pytest.approx(0.0)
+        assert from_deg == pytest.approx(0.0)
+
+    def test_inverse_cardinal_directions(self):
+        # Positive u (eastward) = wind from west (270)
+        speed, from_deg = wind_speed_dir_from_uv(10.0, 0.0)
+        assert speed == pytest.approx(10.0)
+        assert from_deg == pytest.approx(270.0)
+
+        # Positive v (northward) = wind from south (180)
+        speed, from_deg = wind_speed_dir_from_uv(0.0, 10.0)
+        assert speed == pytest.approx(10.0)
+        assert from_deg == pytest.approx(180.0)
+
+
+# ---------------------------------------------------------------------------
+# _interp_weights
+# ---------------------------------------------------------------------------
+
+from hyplan.winds.gridded import _GriddedWindField
+
+
+class TestInterpWeights:
+    """Test the linear interpolation weight computation."""
+
+    def test_single_element(self):
+        coords = np.array([500.0])
+        result = _GriddedWindField._interp_weights(coords, 500.0)
+        assert result == [(0, 1.0)]
+
+    def test_single_element_any_value(self):
+        coords = np.array([500.0])
+        result = _GriddedWindField._interp_weights(coords, 999.0)
+        assert result == [(0, 1.0)]
+
+    def test_below_range_clamps(self):
+        coords = np.array([100.0, 200.0, 300.0])
+        result = _GriddedWindField._interp_weights(coords, 50.0)
+        assert result == [(0, 1.0)]
+
+    def test_above_range_clamps(self):
+        coords = np.array([100.0, 200.0, 300.0])
+        result = _GriddedWindField._interp_weights(coords, 400.0)
+        assert result == [(2, 1.0)]
+
+    def test_exact_grid_point(self):
+        coords = np.array([100.0, 200.0, 300.0])
+        result = _GriddedWindField._interp_weights(coords, 100.0)
+        assert result == [(0, 1.0)]
+
+    def test_exact_last_grid_point(self):
+        coords = np.array([100.0, 200.0, 300.0])
+        result = _GriddedWindField._interp_weights(coords, 300.0)
+        assert result == [(2, 1.0)]
+
+    def test_midpoint(self):
+        coords = np.array([100.0, 200.0, 300.0])
+        result = _GriddedWindField._interp_weights(coords, 150.0)
+        assert len(result) == 2
+        assert result[0] == (0, pytest.approx(0.5))
+        assert result[1] == (1, pytest.approx(0.5))
+
+    def test_weights_sum_to_one(self):
+        coords = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
+        for val in [15.0, 22.0, 37.5, 48.0]:
+            result = _GriddedWindField._interp_weights(coords, val)
+            total = sum(w for _, w in result)
+            assert total == pytest.approx(1.0)
+
+    def test_quarter_point(self):
+        coords = np.array([0.0, 100.0])
+        result = _GriddedWindField._interp_weights(coords, 25.0)
+        assert result[0] == (0, pytest.approx(0.75))
+        assert result[1] == (1, pytest.approx(0.25))
+
+
+# ---------------------------------------------------------------------------
+# _index_range
+# ---------------------------------------------------------------------------
+
+class TestIndexRange:
+
+    def test_ascending_interior(self):
+        coords = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
+        sl = _GriddedWindField._index_range(coords, 25.0, 35.0)
+        # Should include margin: indices 1..3 (values 20..40)
+        assert sl.start <= 1
+        assert sl.stop >= 4  # slice stop is exclusive in isel
+
+    def test_descending_coords(self):
+        coords = np.array([50.0, 40.0, 30.0, 20.0, 10.0])
+        sl = _GriddedWindField._index_range(coords, 25.0, 35.0)
+        selected = coords[sl]
+        assert np.min(selected) <= 25.0
+        assert np.max(selected) >= 35.0
+
+
+# ---------------------------------------------------------------------------
+# Synthetic gridded interpolation
+# ---------------------------------------------------------------------------
+
+class _SyntheticGriddedWind(_GriddedWindField):
+    """Minimal concrete subclass with synthetic data for testing."""
+
+    def __init__(self, u_data, v_data, times, levs, lats, lons):
+        # Skip the parent __init__ which calls _fetch_slab
+        # Instead, set the arrays directly
+        self._u_data = u_data
+        self._v_data = v_data
+        self._times = times
+        self._levs = levs
+        self._lats = lats
+        self._lons = lons
+
+    def _build_urls(self):
+        return []
+
+
+class TestGriddedInterpolation:
+    """Test 4D interpolation with synthetic data."""
+
+    def _make_field(self):
+        """Create a field where U = lat and V = lon (linear gradients)."""
+        lats = np.array([30.0, 32.0, 34.0, 36.0])
+        lons = np.array([-120.0, -118.0, -116.0])
+        levs = np.array([500.0, 700.0, 850.0])
+        # Single timestep, epoch seconds for 2024-01-01
+        t = np.datetime64("2024-01-01T00:00:00")
+        times = np.array([
+            (t - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
+        ], dtype=float)
+
+        # Shape: (1, 3, 4, 3) = (time, lev, lat, lon)
+        u_data = np.zeros((1, 3, 4, 3))
+        v_data = np.zeros((1, 3, 4, 3))
+        for ila, la in enumerate(lats):
+            for ilo, lo in enumerate(lons):
+                u_data[0, :, ila, ilo] = la   # U = latitude
+                v_data[0, :, ila, ilo] = lo   # V = longitude
+
+        return _SyntheticGriddedWind(u_data, v_data, times, levs, lats, lons)
+
+    def test_exact_grid_point(self):
+        wf = self._make_field()
+        u, v = wf.wind_at(
+            32.0, -118.0,
+            ureg.Quantity(18000, "feet"),  # ~500 hPa
+            datetime.datetime(2024, 1, 1),
+        )
+        assert u.m_as("m/s") == pytest.approx(32.0, abs=0.5)
+        assert v.m_as("m/s") == pytest.approx(-118.0, abs=0.5)
+
+    def test_interpolated_point(self):
+        wf = self._make_field()
+        u, v = wf.wind_at(
+            33.0, -119.0,
+            ureg.Quantity(18000, "feet"),
+            datetime.datetime(2024, 1, 1),
+        )
+        # U should be ~33 (midpoint between 32 and 34)
+        assert u.m_as("m/s") == pytest.approx(33.0, abs=0.5)
+        # V should be ~-119 (midpoint between -120 and -118)
+        assert v.m_as("m/s") == pytest.approx(-119.0, abs=0.5)
+
+    def test_boundary_clamping(self):
+        """Points outside the grid should clamp to boundary values."""
+        wf = self._make_field()
+        u, v = wf.wind_at(
+            28.0, -122.0,  # below/left of grid
+            ureg.Quantity(18000, "feet"),
+            datetime.datetime(2024, 1, 1),
+        )
+        # Should clamp to nearest grid corner: lat=30, lon=-120
+        assert u.m_as("m/s") == pytest.approx(30.0, abs=0.5)
+        assert v.m_as("m/s") == pytest.approx(-120.0, abs=0.5)
