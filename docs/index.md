@@ -15,6 +15,7 @@ and aircraft performance.
 
 installation
 concepts
+architecture
 tutorial
 ```
 
@@ -22,32 +23,82 @@ tutorial
 
 ```{toctree}
 :maxdepth: 2
+:caption: Flight planning
 
 api/flight_line
+api/waypoint
 api/flight_box
+api/flight_patterns
 api/flight_plan
 api/flight_optimizer
-api/flight_patterns
-api/waypoint
-api/campaign
-api/sensors
-api/swath
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Aircraft & navigation
+
 api/aircraft
-api/atmosphere
 api/dubins3d
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Instruments
+
+api/sensors
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Winds & atmosphere
+
+api/winds
+api/atmosphere
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Terrain & swath
+
+api/terrain
+api/swath
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Environment & timing
+
 api/sun
 api/glint
-api/terrain
 api/clouds
-api/winds
-api/airports
-api/airspace
 api/satellites
+api/airspace
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Mission management
+
+api/campaign
 api/exports
 api/gui
+api/plotting
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Internals
+
 api/geometry
 api/units
-api/plotting
 api/download
 api/exceptions
+```
+
+## Developer Guide
+
+```{toctree}
+:maxdepth: 2
+
+developer
 ```
