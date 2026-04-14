@@ -1,5 +1,7 @@
 """Tests for hyplan.swath."""
 
+import numpy as np
+import pytest
 from shapely.geometry import Polygon
 
 from hyplan.units import ureg
@@ -10,6 +12,7 @@ from hyplan.swath import (
     calculate_swath_widths,
     analyze_swath_gaps_overlaps,
     export_polygon_to_kml,
+    _resolve_swath_boresight_azimuths,
 )
 
 
@@ -151,6 +154,97 @@ class TestAnalyzeSwathGapsOverlaps:
         assert len(df) == 2
         assert df.iloc[0]["overlap_area_m2"] > 0  # a-b overlap
         assert df.iloc[1]["gap_area_m2"] > 0      # b-c gap
+
+
+class TestCrabAwareSwath:
+    """Test crab-angle-aware swath generation."""
+
+    @pytest.fixture
+    def northward_line(self):
+        return FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(50, "kilometer"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            site_name="North Line",
+        )
+
+    def test_track_mode_matches_default(self, northward_line):
+        """heading_mode='track' should reproduce existing behavior exactly."""
+        sensor = AVIRIS3()
+        poly_default = generate_swath_polygon(northward_line, sensor,
+                                               along_precision=5000.0)
+        poly_track = generate_swath_polygon(northward_line, sensor,
+                                             along_precision=5000.0,
+                                             heading_mode="track")
+        # Same polygon
+        assert poly_default.equals(poly_track)
+
+    def test_crabbed_with_zero_crab_matches_track(self, northward_line):
+        """Crabbed mode with crab=0 should match track mode."""
+        sensor = AVIRIS3()
+        poly_track = generate_swath_polygon(northward_line, sensor,
+                                             along_precision=5000.0)
+        poly_crab0 = generate_swath_polygon(northward_line, sensor,
+                                             along_precision=5000.0,
+                                             heading_mode="crabbed",
+                                             crab_angle_deg=0.0)
+        # Should be very close (not bit-identical due to float modular arithmetic)
+        assert abs(poly_track.area - poly_crab0.area) / poly_track.area < 0.01
+
+    def test_crabbed_rotates_swath(self, northward_line):
+        """Nonzero crab should shift the swath centroid relative to track mode."""
+        sensor = AVIRIS3()
+        poly_track = generate_swath_polygon(northward_line, sensor,
+                                             along_precision=5000.0)
+        poly_crabbed = generate_swath_polygon(northward_line, sensor,
+                                               along_precision=5000.0,
+                                               heading_mode="crabbed",
+                                               crab_angle_deg=10.0)
+        # Centroids should differ
+        assert poly_track.centroid.x != pytest.approx(poly_crabbed.centroid.x, abs=1e-6)
+
+    def test_crabbed_with_heading_deg(self, northward_line):
+        """heading_deg should override track azimuths."""
+        sensor = AVIRIS3()
+        poly = generate_swath_polygon(northward_line, sensor,
+                                       along_precision=5000.0,
+                                       heading_mode="crabbed",
+                                       heading_deg=10.0)
+        assert poly.is_valid
+        assert poly.area > 0
+
+    def test_invalid_heading_mode_raises(self, northward_line):
+        sensor = AVIRIS3()
+        with pytest.raises(ValueError, match="heading_mode"):
+            generate_swath_polygon(northward_line, sensor,
+                                    heading_mode="invalid")
+
+    def test_crabbed_without_params_raises(self, northward_line):
+        sensor = AVIRIS3()
+        with pytest.raises(ValueError, match="crab_angle_deg or heading_deg"):
+            generate_swath_polygon(northward_line, sensor,
+                                    heading_mode="crabbed")
+
+
+class TestResolveBoresightAzimuths:
+    def test_track_mode_passthrough(self):
+        azimuths = np.array([0.0, 10.0, 20.0])
+        result = _resolve_swath_boresight_azimuths(azimuths, "track")
+        np.testing.assert_array_equal(result, azimuths)
+
+    def test_crabbed_with_angle(self):
+        azimuths = np.array([0.0, 90.0, 180.0])
+        result = _resolve_swath_boresight_azimuths(azimuths, "crabbed",
+                                                     crab_angle_deg=5.0)
+        expected = np.array([5.0, 95.0, 185.0])
+        np.testing.assert_array_almost_equal(result, expected)
+
+    def test_crabbed_with_heading(self):
+        azimuths = np.array([0.0, 90.0, 180.0])
+        result = _resolve_swath_boresight_azimuths(azimuths, "crabbed",
+                                                     heading_deg=45.0)
+        np.testing.assert_array_almost_equal(result, [45.0, 45.0, 45.0])
 
 
 class TestExportPolygonToKml:

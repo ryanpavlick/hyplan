@@ -132,6 +132,118 @@ def _resolve_wind_factor(
     return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
 
 
+def _track_hold_solution_from_uv(
+    tas: Quantity,
+    track_deg: float,
+    u: Quantity,
+    v: Quantity,
+) -> dict:
+    """Solve for crab angle and groundspeed when holding a desired ground track.
+
+    Given TAS, desired track, and wind (u, v), computes the heading the
+    aircraft must fly to maintain the track, the resulting crab angle,
+    and the along-track groundspeed.
+
+    Args:
+        tas: True airspeed.
+        track_deg: Desired ground-track azimuth (degrees true).
+        u: Eastward wind component (positive = from west).
+        v: Northward wind component (positive = from south).
+
+    Returns:
+        Dict with keys: ``track_deg``, ``heading_deg``, ``crab_angle_deg``,
+        ``groundspeed``, ``alongtrack_wind``, ``crosstrack_wind``.
+
+    Raises:
+        HyPlanValueError: If crosswind exceeds TAS (track cannot be held)
+            or if resulting groundspeed is non-positive (unflyable).
+    """
+    tas_mps = tas.m_as(ureg.meter / ureg.second)
+    u_mps = u.m_as(ureg.meter / ureg.second)
+    v_mps = v.m_as(ureg.meter / ureg.second)
+
+    track_rad = np.radians(track_deg)
+
+    # Decompose wind into along-track and cross-track components
+    # Track unit vector: (sin(track), cos(track))
+    tailwind = u_mps * np.sin(track_rad) + v_mps * np.cos(track_rad)
+    crosswind = u_mps * np.cos(track_rad) - v_mps * np.sin(track_rad)
+
+    # Crab angle: aircraft must point into the crosswind
+    sin_crab = -crosswind / tas_mps
+    sin_crab = float(np.clip(sin_crab, -1.0, 1.0))
+
+    if abs(crosswind) > tas_mps:
+        raise HyPlanValueError(
+            f"Crosswind {abs(crosswind):.1f} m/s exceeds TAS "
+            f"{tas_mps:.1f} m/s on track {track_deg:.0f}°; "
+            f"cannot hold desired ground track."
+        )
+
+    crab_rad = np.arcsin(sin_crab)
+    crab_deg = float(np.degrees(crab_rad))
+    heading_deg = (track_deg + crab_deg) % 360.0
+
+    # Along-track groundspeed
+    groundspeed_mps = tas_mps * np.cos(crab_rad) + tailwind
+
+    if groundspeed_mps <= 0:
+        raise HyPlanValueError(
+            f"Groundspeed {groundspeed_mps:.1f} m/s is non-positive on "
+            f"track {track_deg:.0f}° (headwind {-tailwind:.1f} m/s, "
+            f"TAS {tas_mps:.1f} m/s); unflyable."
+        )
+
+    return {
+        "track_deg": track_deg,
+        "heading_deg": heading_deg,
+        "crab_angle_deg": crab_deg,
+        "groundspeed": groundspeed_mps * ureg.meter / ureg.second,
+        "alongtrack_wind": tailwind * ureg.meter / ureg.second,
+        "crosstrack_wind": crosswind * ureg.meter / ureg.second,
+    }
+
+
+def _resolve_track_hold_solution(
+    tas: Quantity,
+    track_deg: float,
+    lat: float,
+    lon: float,
+    altitude: Quantity,
+    segment_time: Optional[datetime.datetime],
+    wind_source: Optional["WindField"],
+    wind_speed: Optional[Quantity],
+    wind_direction: Optional[float],
+) -> dict:
+    """Compute track-hold solution using wind_source or legacy scalars.
+
+    Returns a no-wind identity solution when no wind is provided.
+    """
+    u = None
+    v = None
+
+    if wind_source is not None:
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+    elif wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is not None:
+        ws = wind_speed.m_as(ureg.meter / ureg.second)
+        wind_from_rad = np.radians(wind_direction)
+        u = float(-ws * np.sin(wind_from_rad)) * ureg.meter / ureg.second
+        v = float(-ws * np.cos(wind_from_rad)) * ureg.meter / ureg.second
+
+    if u is None or v is None:
+        # No wind — identity solution
+        return {
+            "track_deg": track_deg,
+            "heading_deg": track_deg,
+            "crab_angle_deg": 0.0,
+            "groundspeed": tas,
+            "alongtrack_wind": 0.0 * ureg.meter / ureg.second,
+            "crosstrack_wind": 0.0 * ureg.meter / ureg.second,
+        }
+
+    return _track_hold_solution_from_uv(tas, track_deg, u, v)
+
+
 def _resolve_wind_uv(
     lat: float,
     lon: float,
@@ -348,22 +460,28 @@ def compute_flight_plan(
                 )
             segment_distance = distances[-1]
 
-            # Calculate time_to_segment using the computed segment_distance.
+            # Crab-aware timing: solve for heading and groundspeed
+            # given the desired track and wind at the line midpoint.
             fl_tas = aircraft.cruise_speed_at(segment.altitude_msl)
-            fl_time_no_wind = (
-                ureg.Quantity(segment_distance, 'meter') / fl_tas
-            ).m_as(ureg.minute)
-            fl_factor = _resolve_wind_factor(
-                fl_tas, segment.waypoint1.heading,
-                segment.waypoint1.latitude, segment.waypoint1.longitude,
+            track_deg = segment.waypoint1.heading  # forward azimuth = desired track
+
+            mid_idx = len(latitudes) // 2
+            mid_lat = latitudes[mid_idx]
+            mid_lon = longitudes[mid_idx]
+
+            sol = _resolve_track_hold_solution(
+                fl_tas, track_deg,
+                mid_lat, mid_lon,
                 segment.altitude_msl, _current_time(),
                 wind_source, wind_speed, wind_direction,
             )
-            time_to_segment = fl_time_no_wind * fl_factor
 
-            # Use the FlightLine's own heading properties.
-            start_heading = segment.waypoint1.heading  # From FlightLine.az12
-            end_heading = segment.waypoint2.heading    # From FlightLine.az21 (adjusted)
+            time_to_segment = (
+                ureg.Quantity(segment_distance, "meter") / sol["groundspeed"]
+            ).m_as(ureg.minute)
+
+            start_heading = sol["heading_deg"]
+            end_heading = sol["heading_deg"]
 
             records.append({
                 "geometry": track_geometry,
@@ -375,10 +493,16 @@ def compute_flight_plan(
                 "end_altitude": segment.altitude_msl.m_as(ureg.foot),
                 "segment_type": "flight_line",
                 "segment_name": segment.site_name,
-                "distance": ureg.Quantity(segment_distance, 'meter').m_as(ureg.nautical_mile),
+                "distance": ureg.Quantity(segment_distance, "meter").m_as(ureg.nautical_mile),
                 "time_to_segment": time_to_segment,
                 "start_heading": start_heading,
-                "end_heading": end_heading
+                "end_heading": end_heading,
+                "planned_track": track_deg,
+                "wind_corrected_heading": sol["heading_deg"],
+                "crab_angle_deg": sol["crab_angle_deg"],
+                "groundspeed_kts": sol["groundspeed"].m_as(ureg.knot),
+                "tailwind_kts": sol["alongtrack_wind"].m_as(ureg.knot),
+                "crosswind_kts": sol["crosstrack_wind"].m_as(ureg.knot),
             })
             cumulative_minutes += time_to_segment
 

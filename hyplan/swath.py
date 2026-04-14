@@ -28,15 +28,58 @@ __all__ = [
 ]
 
 
+def _resolve_swath_boresight_azimuths(
+    track_azimuths: np.ndarray,
+    heading_mode: str = "track",
+    crab_angle_deg: Optional[float] = None,
+    heading_deg: Optional[float] = None,
+) -> np.ndarray:
+    """Compute instrument boresight azimuths for swath edge computation.
+
+    In ``"track"`` mode (default), the instrument is assumed aligned with
+    the ground track.  In ``"crabbed"`` mode, the boresight is rotated
+    to match the aircraft heading, which differs from the track when the
+    aircraft crabs into a crosswind.
+
+    Args:
+        track_azimuths: Per-point track azimuths (degrees true).
+        heading_mode: ``"track"`` or ``"crabbed"``.
+        crab_angle_deg: Crab angle to add to track azimuths
+            (used when ``heading_mode="crabbed"`` and ``heading_deg``
+            is not provided).
+        heading_deg: Constant aircraft heading (used when
+            ``heading_mode="crabbed"`` for a uniform heading along the
+            entire line).
+
+    Returns:
+        Array of boresight azimuths (same length as *track_azimuths*).
+    """
+    if heading_mode == "track":
+        return track_azimuths
+    if heading_mode != "crabbed":
+        raise ValueError(
+            f"heading_mode must be 'track' or 'crabbed', got {heading_mode!r}"
+        )
+    if heading_deg is not None:
+        return np.full_like(track_azimuths, heading_deg % 360.0)
+    if crab_angle_deg is not None:
+        return (track_azimuths + crab_angle_deg) % 360.0
+    raise ValueError(
+        "heading_mode='crabbed' requires either crab_angle_deg or heading_deg"
+    )
+
+
 def generate_swath_polygon(
     flight_line: FlightLine,
     sensor: ScanningSensor,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
     dem_file: Optional[str] = None,
+    heading_mode: str = "track",
+    crab_angle_deg: Optional[float] = None,
+    heading_deg: Optional[float] = None,
 ) -> Polygon:
-    """
-    Generate a swath polygon for a given flight line and sensor.
+    """Generate a swath polygon for a given flight line and sensor.
 
     Works with any sensor satisfying the
     :class:`~hyplan.instruments.ScanningSensor` protocol — i.e. exposing
@@ -46,25 +89,38 @@ def generate_swath_polygon(
     side-looking radar.
 
     Args:
-        flight_line (FlightLine): The flight line object containing geometry and altitude (MSL).
+        flight_line: The flight line containing geometry and altitude (MSL).
         sensor: Any object satisfying :class:`~hyplan.instruments.ScanningSensor`.
-        along_precision (float): Precision of the interpolation along the flight line in meters.
-        across_precision (float): Precision of the ray-terrain intersection sampling in meters.
-        dem_file (str, optional): Path to the DEM file. If None, it will be generated.
+        along_precision: Along-track interpolation spacing (meters).
+        across_precision: Ray-terrain intersection sampling (meters).
+        dem_file: Path to the DEM file.  If *None*, one is generated.
+        heading_mode: ``"track"`` (default) orients the swath
+            perpendicular to the ground track.  ``"crabbed"`` orients it
+            perpendicular to the aircraft heading, which differs from
+            the track when the aircraft crabs into a crosswind.
+        crab_angle_deg: Crab angle (degrees) to add to track azimuths.
+            Only used when ``heading_mode="crabbed"``.
+        heading_deg: Constant aircraft heading (degrees true).
+            Only used when ``heading_mode="crabbed"``.
 
     Returns:
-        Polygon: A Shapely Polygon representing the swath.
+        A Shapely Polygon representing the swath.
     """
     altitude_msl = flight_line.altitude_msl.magnitude
     lats, lons, azimuths, *_ = process_linestring(
         flight_line.track(precision=along_precision)
     )
 
+    # Resolve boresight direction (track or crabbed heading)
+    boresight = _resolve_swath_boresight_azimuths(
+        azimuths, heading_mode, crab_angle_deg, heading_deg,
+    )
+
     port_angle, starboard_angle = sensor.swath_offset_angles()
 
-    # Azimuths perpendicular to track
-    az_port = (azimuths + 270.0) % 360.0      # left of track
-    az_starboard = (azimuths + 90.0) % 360.0   # right of track
+    # Swath edges perpendicular to boresight direction
+    az_port = (boresight + 270.0) % 360.0
+    az_starboard = (boresight + 90.0) % 360.0
 
     # Each swath edge angle is measured from nadir.
     # Negative = port side, positive = starboard side.

@@ -1,5 +1,6 @@
 """Tests for hyplan.flight_plan."""
 
+import numpy as np
 import pytest
 import geopandas as gpd
 from hyplan.units import ureg
@@ -7,7 +8,11 @@ from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
 from hyplan.aircraft import DynamicAviation_B200
 from hyplan.airports import Airport, initialize_data
-from hyplan.flight_plan import compute_flight_plan
+from hyplan.exceptions import HyPlanValueError
+from hyplan.flight_plan import (
+    compute_flight_plan,
+    _track_hold_solution_from_uv,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -231,3 +236,83 @@ class TestWindCorrectedTransit:
                 wind_speed=ureg.Quantity(1000, "knot"),
                 wind_direction=0.0,
             )
+
+
+class TestTrackHoldSolution:
+    """Test the crab-angle-aware track-hold wind solver."""
+
+    def _zero_wind(self):
+        return 0.0 * ureg.meter / ureg.second
+
+    def test_no_wind(self):
+        """No wind: crab=0, heading=track, groundspeed=TAS."""
+        tas = 250 * ureg.knot
+        sol = _track_hold_solution_from_uv(
+            tas, 90.0, self._zero_wind(), self._zero_wind(),
+        )
+        assert sol["crab_angle_deg"] == pytest.approx(0.0, abs=0.01)
+        assert sol["heading_deg"] == pytest.approx(90.0, abs=0.01)
+        assert sol["groundspeed"].m_as(ureg.knot) == pytest.approx(250.0, rel=0.01)
+
+    def test_pure_tailwind(self):
+        """Tailwind along track: crab=0, GS > TAS."""
+        tas = 250 * ureg.knot
+        # Track north, wind from south (tailwind)
+        # Wind from south = v positive (northward component)
+        v_tail = 30 * ureg.knot
+        sol = _track_hold_solution_from_uv(
+            tas, 0.0, self._zero_wind(), v_tail,
+        )
+        assert sol["crab_angle_deg"] == pytest.approx(0.0, abs=0.01)
+        assert sol["groundspeed"].m_as(ureg.knot) > 250.0
+        assert sol["groundspeed"].m_as(ureg.knot) == pytest.approx(280.0, rel=0.01)
+
+    def test_pure_headwind(self):
+        """Headwind along track: crab=0, GS < TAS."""
+        tas = 250 * ureg.knot
+        # Track north, wind from north (headwind) = v negative
+        v_head = -30 * ureg.knot
+        sol = _track_hold_solution_from_uv(
+            tas, 0.0, self._zero_wind(), v_head,
+        )
+        assert sol["crab_angle_deg"] == pytest.approx(0.0, abs=0.01)
+        assert sol["groundspeed"].m_as(ureg.knot) < 250.0
+        assert sol["groundspeed"].m_as(ureg.knot) == pytest.approx(220.0, rel=0.01)
+
+    def test_pure_crosswind(self):
+        """Crosswind: nonzero crab, GS = TAS*cos(crab)."""
+        tas = 250 * ureg.knot
+        # Track north, wind from west (eastward u component)
+        u_cross = 50 * ureg.knot
+        sol = _track_hold_solution_from_uv(
+            tas, 0.0, u_cross, self._zero_wind(),
+        )
+        assert abs(sol["crab_angle_deg"]) > 1.0
+        # GS should be TAS*cos(crab) (no along-track wind component)
+        expected_gs = 250.0 * np.cos(np.radians(sol["crab_angle_deg"]))
+        assert sol["groundspeed"].m_as(ureg.knot) == pytest.approx(expected_gs, rel=0.01)
+
+    def test_crosswind_exceeds_tas_raises(self):
+        """Crosswind > TAS: cannot hold track."""
+        tas = 100 * ureg.knot
+        u_huge = 200 * ureg.knot
+        with pytest.raises(HyPlanValueError, match="Crosswind"):
+            _track_hold_solution_from_uv(
+                tas, 0.0, u_huge, self._zero_wind(),
+            )
+
+    def test_crab_sign_convention(self):
+        """Crosswind from the right requires left (negative) crab."""
+        tas = 250 * ureg.knot
+        # Track north, wind from east (u negative = westward)
+        # Crosswind = u*cos(track) - v*sin(track) = u*cos(0) = u (negative)
+        # crab = asin(-crosswind/TAS) = asin(positive) = positive
+        # Actually: wind from east means u < 0 (westward component)
+        u_from_east = -50 * ureg.knot
+        sol = _track_hold_solution_from_uv(
+            tas, 0.0, u_from_east, self._zero_wind(),
+        )
+        # Aircraft must crab right (positive) to compensate westward drift
+        # crosswind = u*cos(0) - v*sin(0) = u = -50 kt (negative)
+        # crab = asin(-crosswind/TAS) = asin(50/250) > 0
+        assert sol["crab_angle_deg"] > 0
