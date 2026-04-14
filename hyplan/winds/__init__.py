@@ -50,6 +50,14 @@ from .providers import GFSWindField, GMAOWindField, MERRA2WindField  # noqa: F40
 from .providers.gfs import _gfs_best_cycle, _gfs_filter_url  # noqa: F401
 from .providers.merra2 import _merra2_stream, _merra2_url  # noqa: F401
 from .simple import ConstantWindField, StillAirField  # noqa: F401
+from .utils import (  # noqa: F401
+    _resolve_track_hold_solution,
+    _resolve_wind_factor,
+    _resolve_wind_uv,
+    _track_hold_solution_from_uv,
+    _wind_factor,
+    _wind_factor_from_uv,
+)
 
 __all__ = [
     "WindField",

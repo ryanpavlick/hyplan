@@ -139,7 +139,7 @@ from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath
 from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
 
 # Flight planning and optimization
-from .flight_plan import compute_flight_plan
+from .planning import compute_flight_plan
 
 # Wind fields
 from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan

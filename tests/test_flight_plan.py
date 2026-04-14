@@ -316,3 +316,96 @@ class TestTrackHoldSolution:
         # crosswind = u*cos(0) - v*sin(0) = u = -50 kt (negative)
         # crab = asin(-crosswind/TAS) = asin(50/250) > 0
         assert sol["crab_angle_deg"] > 0
+
+
+# ---------------------------------------------------------------------------
+# End-to-end planner regression tests
+# ---------------------------------------------------------------------------
+
+from hyplan.winds import ConstantWindField
+from hyplan.flight_patterns import racetrack
+
+
+class TestPlannerRegression:
+    """End-to-end regression tests for compute_flight_plan."""
+
+    def test_single_line_no_wind(self, b200):
+        """Single flight line, no wind: basic sanity."""
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.05, lon1=-118.25,
+            length=ureg.Quantity(50000, "meter"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="North Line",
+        )
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[fl])
+        assert isinstance(plan, gpd.GeoDataFrame)
+        assert len(plan) > 0
+        assert "flight_line" in plan["segment_type"].values
+        assert plan["time_to_segment"].sum() > 0
+        assert plan["distance"].dropna().sum() > 0
+
+    def test_multi_line_racetrack(self, b200):
+        """Racetrack pattern: all flight lines present with transitions."""
+        waypoints = racetrack(
+            center=(34.05, -118.25),
+            heading=0.0,
+            altitude=ureg.Quantity(20000, "feet"),
+            leg_length=ureg.Quantity(50000, "meter"),
+            n_legs=4,
+            offset=ureg.Quantity(5000, "meter"),
+        )
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=waypoints)
+        assert isinstance(plan, gpd.GeoDataFrame)
+        # Racetrack with 4 legs should produce multiple segments
+        assert len(plan) >= 4
+        # Should have pattern-type segments
+        seg_types = set(plan["segment_type"].values)
+        assert "pattern" in seg_types or "flight_line" in seg_types
+
+    def test_airport_departure_and_return(self, b200):
+        """Takeoff and approach phases appear with correct ordering."""
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.45, lon1=-119.85,
+            length=ureg.Quantity(30000, "meter"),
+            az=90.0,
+            altitude_msl=ureg.Quantity(15000, "feet"),
+            site_name="SBA Line",
+        )
+        plan = compute_flight_plan(
+            aircraft=b200,
+            flight_sequence=[fl],
+            takeoff_airport=Airport("KSBA"),
+            return_airport=Airport("KSBA"),
+        )
+        seg_types = list(plan["segment_type"].values)
+        # First segment should be takeoff or climb
+        assert seg_types[0] in ("takeoff", "climb")
+        # Last segment should be approach or descent
+        assert seg_types[-1] in ("approach", "descent")
+        # Flight line should be somewhere in the middle
+        assert "flight_line" in seg_types
+
+    def test_constant_wind_populates_fields(self, b200):
+        """Constant wind: crab angle, groundspeed, tailwind fields populated."""
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.05, lon1=-118.25,
+            length=ureg.Quantity(50000, "meter"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="Wind Test Line",
+        )
+        wf = ConstantWindField(wind_speed=30 * ureg.knot, wind_from_deg=270.0)
+        plan = compute_flight_plan(
+            aircraft=b200, flight_sequence=[fl], wind_source=wf,
+        )
+        fl_row = plan[plan["segment_type"] == "flight_line"].iloc[0]
+        # Wind fields should be present and non-NaN
+        assert "crab_angle_deg" in fl_row.index
+        assert "groundspeed_kts" in fl_row.index
+        assert "tailwind_kts" in fl_row.index
+        assert "crosswind_kts" in fl_row.index
+        # With westerly wind on a northbound line, crosswind should be nonzero
+        assert abs(fl_row["crosswind_kts"]) > 0.1
+        # Groundspeed should be positive and reasonable
+        assert fl_row["groundspeed_kts"] > 50
