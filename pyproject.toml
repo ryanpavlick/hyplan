@@ -29,8 +29,7 @@ dependencies = [
     "numpy",
     "pandas",
     "pint",
-    # Note: GDAL/osgeo is required but must be installed at the system level
-    # (via conda, brew, or apt). It cannot be pip-installed directly.
+    "rasterio",
     "pymap3d",
     "pyproj",
     "requests",
