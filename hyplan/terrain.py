@@ -48,6 +48,7 @@ __all__ = [
     "ray_terrain_intersection",
     "terrain_elevation_along_track",
     "terrain_aspect_azimuth",
+    "surface_normal_at",
 ]
 
 # Minimum cos(tilt) magnitude below which ray-terrain intersection is undefined
@@ -537,3 +538,79 @@ def ray_terrain_intersection(
         logger.warning(f"{n_miss} observer(s) had no terrain intersection within the valid slant-range window.")
 
     return intersection_lats, intersection_lons, intersection_alts
+
+
+# ---------------------------------------------------------------------------
+# Surface normal computation
+# ---------------------------------------------------------------------------
+
+# Approximate meters per degree of latitude (WGS84 mean)
+_M_PER_DEG_LAT = 111_320.0
+
+
+def surface_normal_at(
+    lats: np.ndarray,
+    lons: np.ndarray,
+    dem_file: str,
+) -> np.ndarray:
+    """Compute outward surface normal unit vectors in the ENU frame.
+
+    Uses central-difference gradients from the 3x3 DEM neighbourhood
+    around each query point, converted to metric slope.
+
+    Args:
+        lats: Latitude(s) in decimal degrees.
+        lons: Longitude(s) in decimal degrees.
+        dem_file: Path to a GeoTIFF DEM file.
+
+    Returns:
+        ``(N, 3)`` array of ``[east, north, up]`` unit normal components.
+        On flat terrain the normal is ``[0, 0, 1]``.
+    """
+    lats = np.atleast_1d(np.asarray(lats, dtype=float))
+    lons = np.atleast_1d(np.asarray(lons, dtype=float))
+
+    raster, gt, _, _ = _get_dem_cached(dem_file)
+    rows, cols = raster.shape
+
+    # Pixel coordinates (float for sub-pixel, int for indexing)
+    px_x = (lons - gt[0]) / gt[1]
+    px_y = (lats - gt[3]) / gt[5]
+    ix = np.round(px_x).astype(int)
+    iy = np.round(px_y).astype(int)
+
+    # Clamp to valid range, leaving a 1-pixel border for central differences
+    ix = np.clip(ix, 1, cols - 2)
+    iy = np.clip(iy, 1, rows - 2)
+
+    # Central differences: dz/dx (east-west) and dz/dy (north-south) in pixels
+    # raster[row, col]: row increases southward, col increases eastward
+    z_w = raster[iy, ix - 1].astype(float)
+    z_e = raster[iy, ix + 1].astype(float)
+    z_n = raster[iy - 1, ix].astype(float)
+    z_s = raster[iy + 1, ix].astype(float)
+
+    dz_dx_px = (z_e - z_w) / 2.0  # positive = rising eastward
+    dz_dy_px = (z_n - z_s) / 2.0  # positive = rising northward
+    # Note: z_n uses iy-1 because row index decreases northward in the raster
+
+    # Convert pixel gradients to metric gradients
+    m_per_deg_lon = _M_PER_DEG_LAT * np.cos(np.radians(lats))
+    pixel_width_m = abs(gt[1]) * m_per_deg_lon  # meters per pixel, east-west
+    pixel_height_m = abs(gt[5]) * _M_PER_DEG_LAT  # meters per pixel, north-south
+
+    dz_dx = dz_dx_px / pixel_width_m  # dz/dx in m/m (dimensionless slope)
+    dz_dy = dz_dy_px / pixel_height_m  # dz/dy in m/m
+
+    # Surface normal: n = normalize([-dz/dx, -dz/dy, 1])
+    n = len(lats)
+    normals = np.empty((n, 3), dtype=float)
+    normals[:, 0] = -dz_dx  # east
+    normals[:, 1] = -dz_dy  # north
+    normals[:, 2] = 1.0     # up
+
+    # Normalize to unit vectors
+    magnitudes = np.sqrt(np.sum(normals ** 2, axis=1, keepdims=True))
+    normals /= magnitudes
+
+    return normals
