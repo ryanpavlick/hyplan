@@ -46,22 +46,6 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 ### Requirements
 
 - Python 3.9+
-- GDAL (must be installed at the system level before `pip install`)
-
-On macOS:
-```bash
-brew install gdal
-```
-
-On Ubuntu/Debian:
-```bash
-sudo apt-get install gdal-bin libgdal-dev
-```
-
-With conda/mamba (recommended — handles GDAL automatically):
-```bash
-mamba install gdal
-```
 
 ### Option 1: pip
 

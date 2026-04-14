@@ -38,7 +38,7 @@ def wind_field_from_plan(
             GEOS-FP near-real-time analysis, ``"gfs"`` for NOAA GFS
             forecast, or ``"still_air"`` for zero wind.
         flight_sequence: Ordered list of flight lines and/or waypoints
-            (same format as :func:`~hyplan.flight_plan.compute_flight_plan`).
+            (same format as :func:`~hyplan.planning.compute_flight_plan`).
         takeoff_time: Mission start time (UTC).
         takeoff_airport: Optional departure airport (extends bounding box).
         return_airport: Optional arrival airport (extends bounding box).

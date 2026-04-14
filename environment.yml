@@ -3,20 +3,21 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.9
-  - numpy
-  - pandas
+  - folium
+  - geopandas
+  - gpxpy
   - matplotlib
   - networkx
-  - geopandas
-  - shapely
-  - pyproj
-  - rtree
-  - gdal
+  - numpy
+  - pandas
   - pint
-  - requests
-  - folium
   - pymap3d
-  - gpxpy
+  - pyproj
+  - rasterio
+  - requests
+  - rtree
+  - shapely
+  - timezonefinder
   - xlsxwriter
   - pip
   - pip:

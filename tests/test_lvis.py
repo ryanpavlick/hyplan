@@ -330,10 +330,10 @@ class TestPrintMethods:
 # Terrain-aware tests
 # ===================================================================
 
-def _has_gdal():
-    """Check if GDAL is available for writing synthetic DEMs."""
+def _has_rasterio():
+    """Check if rasterio is available for writing synthetic DEMs."""
     try:
-        from osgeo import gdal  # noqa: F401
+        import rasterio  # noqa: F401
         return True
     except ImportError:
         return False
@@ -345,10 +345,14 @@ def _write_synthetic_dem(filepath, lat_center, lon_center, elevation_func, size=
     elevation_func(row, col) returns elevation in meters for each pixel.
     The raster covers ±0.05° around (lat_center, lon_center).
     """
-    from osgeo import gdal, osr
+    import rasterio
+    from rasterio.transform import from_bounds
+    from rasterio.crs import CRS
 
     pixel_deg = 0.001  # ~111m resolution
     x_min = lon_center - size * pixel_deg / 2
+    x_max = lon_center + size * pixel_deg / 2
+    y_min = lat_center - size * pixel_deg / 2
     y_max = lat_center + size * pixel_deg / 2
 
     raster = np.zeros((size, size), dtype=np.float32)
@@ -356,21 +360,21 @@ def _write_synthetic_dem(filepath, lat_center, lon_center, elevation_func, size=
         for c in range(size):
             raster[r, c] = elevation_func(r, c)
 
-    driver = gdal.GetDriverByName("GTiff")
-    ds = driver.Create(filepath, size, size, 1, gdal.GDT_Float32)
-    ds.SetGeoTransform((x_min, pixel_deg, 0, y_max, 0, -pixel_deg))
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(4326)
-    ds.SetProjection(srs.ExportToWkt())
-    ds.GetRasterBand(1).WriteArray(raster)
-    ds = None
+    transform = from_bounds(x_min, y_min, x_max, y_max, size, size)
+    with rasterio.open(
+        filepath, "w", driver="GTiff",
+        height=size, width=size, count=1,
+        dtype=raster.dtype, crs=CRS.from_epsg(4326),
+        transform=transform,
+    ) as dst:
+        dst.write(raster, 1)
 
 
 @pytest.fixture
 def flat_dem(tmp_path):
     """Flat DEM at 500m elevation."""
-    if not _has_gdal():
-        pytest.skip("GDAL not available")
+    if not _has_rasterio():
+        pytest.skip("rasterio not available")
     path = str(tmp_path / "flat.tif")
     _write_synthetic_dem(path, 35.0, -111.0, lambda r, c: 500.0)
     return path
@@ -382,8 +386,8 @@ def sloped_dem(tmp_path):
 
     With pixel spacing ~111m, this is ~15° slope.
     """
-    if not _has_gdal():
-        pytest.skip("GDAL not available")
+    if not _has_rasterio():
+        pytest.skip("rasterio not available")
     path = str(tmp_path / "slope.tif")
     _write_synthetic_dem(path, 35.0, -111.0, lambda r, c: 500.0 + c * 30.0)
     return path

@@ -1,16 +1,12 @@
 """Terrain analysis using Copernicus DEM data.
 
 Downloads, caches, and queries 30-meter Copernicus GLO-30 DEM tiles
-from AWS. Provides bulk elevation lookup, DEM tile merging via GDAL,
+from AWS. Provides bulk elevation lookup, DEM tile merging via rasterio,
 and a vectorized ray-terrain intersection algorithm for computing
 off-nadir ground intersection points.
 
 References
 ----------
-GDAL/OGR contributors (2024). GDAL/OGR Geospatial Data Abstraction
-software Library. Open Source Geospatial Foundation.
-doi:10.5281/zenodo.5884351
-
 Data source: Copernicus DEM GLO-30, European Space Agency, distributed
 via AWS Open Data (s3://copernicus-dem-30m).
 """
@@ -206,7 +202,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
 
 def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
     """
-    Merge multiple DEM tile files into a single GeoTIFF using GDAL Warp.
+    Merge multiple DEM tile files into a single GeoTIFF using rasterio.
 
     Args:
         output_filename (str): Path for the merged output GeoTIFF file.
@@ -214,7 +210,7 @@ def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
 
     Raises:
         ValueError: If tile_file_list is empty or contains invalid paths.
-        RuntimeError: If GDAL merge operation fails.
+        RuntimeError: If merge operation fails.
     """
     if not tile_file_list:
         raise HyPlanValueError("No tiles provided for merging.")

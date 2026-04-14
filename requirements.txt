@@ -1,18 +1,19 @@
 # hyplan dependencies
+folium
 geopandas
+gpxpy
+matplotlib
+networkx
 numpy
-gdal
 pandas
 pint
 pymap3d
 pyproj
+rasterio
 requests
 rtree
 shapely
 simplekml
 skyfield
-folium
-gpxpy
-matplotlib
-networkx
+timezonefinder
 xlsxwriter

@@ -1,7 +1,7 @@
 # Flight Patterns
 
 Generate common flight patterns as ordered waypoint sequences for use
-with {py:func}`~hyplan.flight_plan.compute_flight_plan`.
+with {py:func}`~hyplan.planning.compute_flight_plan`.
 
 ## Pattern generators
 

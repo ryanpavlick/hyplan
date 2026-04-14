@@ -56,7 +56,7 @@ A typical mission planning workflow:
    lines covering a target area, spaced by the sensor's swath width.
 
 3. **Compute the mission plan** — Use
-   {func}`~hyplan.flight_plan.compute_flight_plan` with an aircraft and
+   {func}`~hyplan.planning.compute_flight_plan` with an aircraft and
    departure/destination airports to generate a complete flight plan with
    climb, transit, data collection, descent, and landing segments.
 
