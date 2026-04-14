@@ -49,12 +49,10 @@ class TestWaypointConstruction:
             34.0, -118.0, 0.0,
             speed=ureg.Quantity(75, "m/s"),
             delay=ureg.Quantity(30, "s"),
-            headwind=ureg.Quantity(10, "m/s"),
             segment_type="pattern",
         )
         assert wp.speed.magnitude == pytest.approx(75.0)
         assert wp.delay.magnitude == pytest.approx(30.0)
-        assert wp.headwind.magnitude == pytest.approx(10.0)
         assert wp.segment_type == "pattern"
 
     def test_speed_bare_float(self):

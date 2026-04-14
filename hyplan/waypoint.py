@@ -24,7 +24,6 @@ class Waypoint:
         name: str = None,
         speed: Union[ureg.Quantity, float, None] = None,
         delay: Union[ureg.Quantity, float, None] = None,
-        headwind: Union[ureg.Quantity, float, None] = None,
         segment_type: str = None,
     ):
         """
@@ -38,7 +37,6 @@ class Waypoint:
             name (str, optional): Name of the waypoint. Defaults to None.
             speed (Union[Quantity, float, None], optional): Speed override in m/s or as a pint Quantity. Used for the departing leg. Defaults to None.
             delay (Union[Quantity, float, None], optional): Loiter time at waypoint in seconds or as a pint Quantity. Defaults to None.
-            headwind (Union[Quantity, float, None], optional): Headwind component in m/s or as a pint Quantity. Positive = into the wind. Defaults to None.
             segment_type (str, optional): Segment type label for the departing leg (e.g. "pattern", "sampling"). Used by compute_flight_plan. Defaults to None.
         """
         # Validate latitude and longitude and process geometry
@@ -84,7 +82,6 @@ class Waypoint:
         # Optional fields for flight planning
         self.speed = _validate_quantity(speed, '[speed]', ureg.meter / ureg.second, 'speed')
         self.delay = _validate_quantity(delay, '[time]', ureg.second, 'delay')
-        self.headwind = _validate_quantity(headwind, '[speed]', ureg.meter / ureg.second, 'headwind')
         self.segment_type = segment_type
 
     def offset_north_east(
@@ -124,7 +121,6 @@ class Waypoint:
             name=self.name,
             speed=self.speed,
             delay=self.delay,
-            headwind=self.headwind,
             segment_type=self.segment_type,
         )
 

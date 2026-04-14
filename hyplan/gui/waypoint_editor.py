@@ -144,7 +144,7 @@ class WaypointEditor(widgets.VBox):
             name=old.name,
             speed=old.speed,
             delay=old.delay,
-            headwind=old.headwind,
+
             segment_type=old.segment_type,
         )
         # Temporarily disconnect observer to avoid loop
@@ -198,7 +198,7 @@ class WaypointEditor(widgets.VBox):
             name=old.name,
             speed=old.speed,
             delay=old.delay,
-            headwind=old.headwind,
+
             segment_type=old.segment_type,
         )
 
