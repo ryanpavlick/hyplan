@@ -6,14 +6,12 @@ installation required for the core algorithm tests.
 
 from __future__ import annotations
 
-import datetime
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from hyplan.aircraft._base import (
-    Aircraft,
     PerformanceConfidence,
     SourceRecord,
     TasSchedule,
@@ -24,7 +22,7 @@ from hyplan.aircraft.adsb.fitting import (
     _reject_outliers,
     fit_schedules,
 )
-from hyplan.aircraft.adsb.models import FitResult, FlightPhaseData, ScheduleFitMetrics
+from hyplan.aircraft.adsb.models import FitResult, ScheduleFitMetrics
 from hyplan.aircraft.adsb.phases import (
     _find_runs,
     _merge_short_phases,

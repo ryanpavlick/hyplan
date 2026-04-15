@@ -4,7 +4,6 @@ import pytest
 import numpy as np
 from hyplan.units import ureg
 from hyplan.aircraft import (
-    Aircraft,
     CasMachSchedule,
     TasSchedule,
     VerticalProfile,

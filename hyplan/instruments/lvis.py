@@ -800,7 +800,7 @@ class LVIS(Sensor):
 
         # --- Effective swath: largest contiguous block ---
         effective_swath_m = 0.0
-        best_start, best_end = 0, 0
+        _best_start, _best_end = 0, 0
         start = None
         for i in range(n):
             if contiguous[i]:
@@ -815,7 +815,7 @@ class LVIS(Sensor):
                         )
                         if float(span) > effective_swath_m:
                             effective_swath_m = float(span)
-                            best_start, best_end = start, i - 1
+                            _best_start, _best_end = start, i - 1
                     start = None
         if start is not None and valid[start] and valid[n - 1]:
             span, _ = pymap3d.vincenty.vdist(
@@ -824,7 +824,7 @@ class LVIS(Sensor):
             )
             if float(span) > effective_swath_m:
                 effective_swath_m = float(span)
-                best_start, best_end = start, n - 1
+                _best_start, _best_end = start, n - 1
 
         # --- Density statistics ---
         valid_densities = local_densities[np.isfinite(local_densities)]

@@ -1,7 +1,7 @@
 """Tests for hyplan.winds and wind-source integration in flight_plan."""
+# ruff: noqa: E402
 
 import datetime
-from unittest.mock import patch
 
 import numpy as np
 import pytest

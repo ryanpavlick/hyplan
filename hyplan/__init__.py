@@ -47,9 +47,10 @@ def setup_logging(
 
 
 # --- Core re-exports ---
+# ruff: noqa: E402
 
 # Exceptions
-from .exceptions import (
+from .exceptions import (  # noqa: F401
     HyPlanError,
     HyPlanValueError,
     HyPlanTypeError,
@@ -57,14 +58,14 @@ from .exceptions import (
 )
 
 # Units
-from .units import ureg, convert_distance, convert_speed, convert_angle, convert_time, altitude_to_flight_level
+from .units import ureg, convert_distance, convert_speed, convert_angle, convert_time, altitude_to_flight_level  # noqa: F401
 
 # Flight geometry
-from .flight_line import FlightLine
-from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size
+from .flight_line import FlightLine  # noqa: F401
+from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size  # noqa: F401
 
 # Aircraft
-from .aircraft import (
+from .aircraft import (  # noqa: F401
     Aircraft,
     NASA_ER2,
     NASA_GIII,
@@ -84,7 +85,7 @@ from .aircraft import (
 )
 
 # Airports
-from .airports import (
+from .airports import (  # noqa: F401
     Airport,
     initialize_data,
     find_nearest_airport,
@@ -93,7 +94,7 @@ from .airports import (
 )
 
 # Sensors
-from .instruments import (
+from .instruments import (  # noqa: F401
     Sensor,
     LineScanner,
     AVIRISClassic,
@@ -129,24 +130,24 @@ from .instruments import (
 )
 
 # Waypoint and Dubins path planning
-from .waypoint import Waypoint
-from .dubins3d import DubinsPath3D
+from .waypoint import Waypoint  # noqa: F401
+from .dubins3d import DubinsPath3D  # noqa: F401
 
 # Swath
-from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps
+from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps  # noqa: F401
 
 # Flight patterns
-from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
+from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line  # noqa: F401
 
 # Flight planning and optimization
-from .planning import compute_flight_plan
+from .planning import compute_flight_plan  # noqa: F401
 
 # Wind fields
-from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan
-from .flight_optimizer import build_graph, greedy_optimize
+from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan  # noqa: F401
+from .flight_optimizer import build_graph, greedy_optimize  # noqa: F401
 
 # Plotting
-from .plotting import (
+from .plotting import (  # noqa: F401
     map_flight_lines, plot_flight_plan, plot_altitude_trajectory,
     terrain_profile_along_track,
     plot_airspace_map, plot_oceanic_tracks, plot_vertical_profile,
@@ -154,14 +155,14 @@ from .plotting import (
 )
 
 # Exports
-from .exports import (
+from .exports import (  # noqa: F401
     to_excel, to_pilot_excel, to_foreflight_csv,
     to_honeywell_fms, to_er2_csv, to_icartt,
     to_kml, to_gpx, to_txt,
 )
 
 # Airspace
-from .airspace import (
+from .airspace import (  # noqa: F401
     Airspace, AirspaceConflict, OpenAIPClient,
     check_airspace_conflicts, check_airspace_proximity,
     fetch_and_check, clear_airspace_cache,
@@ -172,7 +173,7 @@ from .airspace import (
 )
 
 # Campaign
-from .campaign import Campaign
+from .campaign import Campaign  # noqa: F401
 
 __all__ = [
     # Logging
@@ -217,13 +218,20 @@ __all__ = [
     "build_graph", "greedy_optimize",
     # Plotting
     "map_flight_lines", "terrain_profile_along_track",
+    "plot_airspace_map", "plot_oceanic_tracks", "plot_vertical_profile",
+    "plot_conflict_matrix", "map_airspace",
     # Exports
     "to_excel", "to_pilot_excel", "to_foreflight_csv",
     "to_honeywell_fms", "to_er2_csv", "to_icartt",
     "to_kml", "to_gpx", "to_txt",
     # Airspace
     "Airspace", "AirspaceConflict", "OpenAIPClient",
-    "check_airspace_conflicts", "fetch_and_check", "clear_airspace_cache",
+    "check_airspace_conflicts", "check_airspace_proximity",
+    "fetch_and_check", "clear_airspace_cache",
+    "classify_severity", "FAATFRClient", "NASRAirspaceSource",
+    "convert_agl_floors", "filter_by_schedule",
+    "summarize_airspaces",
+    "OceanicTrack", "FlightPlanDBClient",
     # Campaign
     "Campaign",
 ]

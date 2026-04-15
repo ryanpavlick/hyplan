@@ -627,7 +627,6 @@ def plot_vertical_profile(
         Matplotlib Figure and Axes.
     """
     import math
-    from shapely.geometry import box as box_geom
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -691,7 +690,7 @@ def plot_vertical_profile(
         d_start = start_frac * total_dist_nm
         d_end = end_frac * total_dist_nm
 
-        sev = classify_severity(a.airspace_type)
+        classify_severity(a.airspace_type)
         color, alpha = _profile_colors.get(a.airspace_class, ("#90a4ae", 0.12))
         hatch = "///" if getattr(a, "floor_reference", "MSL") == "SFC" else None
 
@@ -793,13 +792,10 @@ def plot_oceanic_tracks(
         # Color by direction
         if t.east_levels:
             color, style = "#2e7d32", "-"
-            direction = "E"
         elif t.west_levels:
             color, style = "#1565c0", "-"
-            direction = "W"
         else:
             color, style = "gray", "--"
-            direction = "?"
 
         lons, lats = zip(*[(w[0], w[1]) for w in t.waypoints])
         ax.plot(lons, lats, style, color=color, linewidth=1.8, alpha=0.8,

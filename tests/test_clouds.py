@@ -1,6 +1,5 @@
 """Tests for hyplan.clouds (date range logic, no Google Earth Engine required)."""
 
-import json
 import pytest
 import pandas as pd
 import matplotlib
@@ -168,10 +167,8 @@ class TestOpenMeteoCloudFraction:
 
         gdf = _mock_gdf([("Box1", 34.4, -119.8)])
 
-        with patch("hyplan.clouds._requests.get" if hasattr(OpenMeteoCloudFraction, "_requests") else "requests.get", return_value=mock_resp) as mock_get:
+        with patch("hyplan.clouds._requests.get" if hasattr(OpenMeteoCloudFraction, "_requests") else "requests.get", return_value=mock_resp):
             # Patch at the import location inside the method
-            import hyplan.clouds as _clouds_mod
-            original_fetch = OpenMeteoCloudFraction.fetch
 
             src = OpenMeteoCloudFraction()
             # Use a direct mock of requests inside fetch
@@ -337,7 +334,7 @@ class TestSummarizeCloudFractionByDOY:
                     "cloud_fraction": 0.0 if doy <= 5 else 1.0,
                 })
         df = pd.DataFrame(rows)
-        unsmoothed = summarize_cloud_fraction_by_doy(df)
+        summarize_cloud_fraction_by_doy(df)
         smoothed = summarize_cloud_fraction_by_doy(df, window=5)
         # The smoothed version should have intermediate values near the step
         step_val = smoothed[smoothed["day_of_year"] == 5]["cloud_fraction_mean"].iloc[0]

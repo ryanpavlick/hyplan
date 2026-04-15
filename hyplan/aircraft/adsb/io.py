@@ -64,7 +64,7 @@ def load_flights(
     Returns:
         List of cleaned ``traffic.core.Flight`` objects.
     """
-    traffic = _require_traffic()
+    _require_traffic()
     from traffic.core import Traffic
 
     # --- Load source ---

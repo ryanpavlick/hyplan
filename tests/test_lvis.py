@@ -1,7 +1,5 @@
 """Comprehensive tests for the LVIS instrument model."""
 
-import os
-import tempfile
 
 import pytest
 import numpy as np

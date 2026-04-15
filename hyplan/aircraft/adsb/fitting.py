@@ -49,7 +49,6 @@ def fit_schedules(
     Returns:
         :class:`FitResult` with fitted schedules, profiles, and metrics.
     """
-    import pandas as pd
 
     # --- Split by phase ---
     climb_df = airdata_df[airdata_df["phase"] == "climb"]

@@ -27,7 +27,6 @@ from hyplan.airspace import (
     _extract_entry_exit,
     _is_schedule_active,
     filter_by_schedule,
-    OceanicTrack,
     FlightPlanDBClient,
 )
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError

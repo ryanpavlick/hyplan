@@ -7,28 +7,20 @@ use synthetic data only.
 
 from __future__ import annotations
 
-import datetime
-import math
-import tempfile
 
 import matplotlib
 matplotlib.use("Agg")
 
 import numpy as np
 import pytest
-from pint import Quantity
 
 from hyplan import (
-    Aircraft,
     Airport,
     AVIRIS3,
     ConstantWindField,
-    DubinsPath3D,
     DynamicAviation_B200,
     FlightLine,
     StillAirField,
-    TwinOtter,
-    Waypoint,
     box_around_center_line,
     compute_flight_plan,
     generate_swath_polygon,
@@ -37,7 +29,6 @@ from hyplan import (
     ureg,
 )
 from hyplan.exports import (
-    extract_waypoints,
     to_kml,
     to_gpx,
 )

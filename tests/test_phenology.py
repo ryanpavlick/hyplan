@@ -1,7 +1,6 @@
 """Tests for hyplan.phenology (no network calls, all earthaccess mocked)."""
 
 import datetime as dt
-import json
 
 import matplotlib
 matplotlib.use("Agg")
@@ -9,7 +8,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock, patch
 
 from hyplan.phenology import (
     extract_phenology_stages,

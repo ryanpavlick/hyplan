@@ -1,4 +1,5 @@
 """Tests for hyplan.terrain (unit-testable parts, no network)."""
+# ruff: noqa: E402
 
 import os
 import pytest

@@ -1,4 +1,5 @@
 """Tests for hyplan.flight_plan."""
+# ruff: noqa: E402
 
 import numpy as np
 import pytest

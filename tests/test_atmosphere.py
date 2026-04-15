@@ -1,7 +1,5 @@
 """Tests for the ISA atmosphere model and airspeed conversions."""
 
-import numpy as np
-import pytest
 
 from hyplan.atmosphere import (
     temperature_at,

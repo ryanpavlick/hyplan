@@ -9,7 +9,7 @@ import numpy as np
 import pymap3d.aer
 import pymap3d.los
 
-from ..exceptions import HyPlanRuntimeError, HyPlanValueError
+from ..exceptions import HyPlanValueError
 from .elevation import get_elevations, get_min_max_elevations
 from .io import generate_demfile, load_dem
 

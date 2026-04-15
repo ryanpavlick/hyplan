@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, List, Union
 
 import numpy as np
 import pandas as pd
@@ -168,7 +168,7 @@ def resolve_wind_field(
 
     lat_min, lat_max = float(lats.min()) - margin_deg, float(lats.max()) + margin_deg
     lon_min, lon_max = float(lons.min()) - margin_deg, float(lons.max()) + margin_deg
-    alt_max_ft = float(alts.max())
+    float(alts.max())
 
     time_min = pd.Timestamp(times.min()).to_pydatetime()
     time_max = pd.Timestamp(times.max()).to_pydatetime()

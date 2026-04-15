@@ -438,8 +438,7 @@ def filter_by_schedule(
     Returns:
         Filtered list of airspaces that are active at the given time.
     """
-    import re
-    from datetime import datetime as _dt, timezone as _tz, timedelta
+    from datetime import datetime as _dt, timezone as _tz
 
     if at_datetime is None:
         at_datetime = _dt.now(_tz.utc)
@@ -1269,7 +1268,7 @@ class FAATFRClient:
             notam_key = props.get("NOTAM_KEY", "")
             notam_id = FAATFRClient._extract_notam_id(notam_key)
             title = props.get("TITLE", "")
-            state = props.get("STATE", "")
+            props.get("STATE", "")
 
             # Enrich with tfrapi metadata if available
             meta = meta_map.get(notam_id, {})

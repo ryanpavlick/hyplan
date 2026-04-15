@@ -36,9 +36,9 @@ from ..atmosphere import cas_to_tas, mach_to_tas
 from ..dubins3d import DubinsPath3D
 from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..units import ureg
+from ..waypoint import Waypoint
 
 logger = logging.getLogger(__name__)
-from ..waypoint import Waypoint
 
 
 # ---------------------------------------------------------------------------
