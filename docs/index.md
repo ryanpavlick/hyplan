@@ -71,6 +71,7 @@ api/swath
 api/sun
 api/glint
 api/clouds
+api/phenology
 api/satellites
 api/airspace
 ```

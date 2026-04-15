@@ -44,31 +44,13 @@ def _earthdata_login():
 
     Raises :class:`~hyplan.exceptions.HyPlanRuntimeError` if ``earthaccess``
     is not installed or login fails.
+
+    .. deprecated::
+        This is a thin wrapper around :func:`hyplan._auth._earthdata_login`.
     """
-    try:
-        import earthaccess
-    except ImportError:
-        raise HyPlanRuntimeError(
-            "earthaccess is required for NASA Earthdata authentication. "
-            "Install with: pip install hyplan[winds]"
-        )
+    from .._auth import _earthdata_login as _login
 
-    # Try non-interactive strategies first
-    for strategy in ("environment", "netrc"):
-        try:
-            auth = earthaccess.login(strategy=strategy)
-            if auth.authenticated:
-                return earthaccess.get_requests_https_session()
-        except Exception:
-            continue
-
-    raise HyPlanRuntimeError(
-        "NASA Earthdata login failed. Authenticate via one of:\n"
-        "  1. Set EARTHDATA_TOKEN environment variable\n"
-        "  2. Add to ~/.netrc:\n"
-        "     machine urs.earthdata.nasa.gov login <user> password <pass>\n"
-        "Register at https://urs.earthdata.nasa.gov if needed."
-    )
+    return _login()
 
 
 # ---------------------------------------------------------------------------
