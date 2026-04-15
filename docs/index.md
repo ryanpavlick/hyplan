@@ -8,6 +8,12 @@ sensor modeling, swath coverage, solar glint prediction, cloud analysis,
 terrain-aware calculations, and mission logistics including airport selection
 and aircraft performance.
 
+```{tip}
+HyPlan modules are classified as **Stable** or **Experimental**.
+Stable APIs will not change in backward-incompatible ways within a
+major version.  See {doc}`stability` for details.
+```
+
 ## Getting Started
 
 ```{toctree}
@@ -16,6 +22,7 @@ and aircraft performance.
 installation
 concepts
 architecture
+stability
 tutorial
 ```
 

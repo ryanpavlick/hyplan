@@ -75,6 +75,10 @@ version_file = "hyplan/_version.py"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:traitlets",
+    "ignore::DeprecationWarning:traittypes",
+]
 
 [tool.mypy]
 python_version = "3.9"
