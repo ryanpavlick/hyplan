@@ -34,7 +34,7 @@ def _merra2_url(dt: datetime.date) -> str:
     """Build the OPeNDAP URL for a single MERRA-2 daily file."""
     stream = _merra2_stream(dt.year)
     return (
-        f"https://goldsmr5.gesdisc.eosdis.nasa.gov/opendap/"
+        f"dap2://goldsmr5.gesdisc.eosdis.nasa.gov/opendap/"
         f"MERRA2/M2I3NPASM.5.12.4/{dt.year:04d}/{dt.month:02d}/"
         f"MERRA2_{stream}.inst3_3d_asm_Np.{dt.year:04d}{dt.month:02d}{dt.day:02d}.nc4"
     )

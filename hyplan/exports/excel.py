@@ -8,6 +8,8 @@ Two formats:
   MovingLines ``_for_pilots.xlsx`` format.
 """
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -39,7 +41,7 @@ def to_excel(
     plan: gpd.GeoDataFrame,
     filepath: str,
     aircraft=None,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
     mission_name: str = "",
 ) -> None:
     """Write a full MovingLines-compatible working Excel file.
@@ -60,7 +62,7 @@ def to_excel(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     # Compute UTC base (minutes from midnight)
@@ -161,7 +163,7 @@ def to_pilot_excel(
     plan: gpd.GeoDataFrame,
     filepath: str,
     aircraft=None,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
     mission_name: str = "",
     coord_format: str = "DD MM",
     include_mag_heading: bool = False,
@@ -187,7 +189,7 @@ def to_pilot_excel(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     if takeoff_time:

@@ -39,4 +39,4 @@ class DEMGrid:
 
     @property
     def shape(self) -> Tuple[int, int]:
-        return self.array.shape
+        return self.array.shape  # type: ignore[no-any-return]

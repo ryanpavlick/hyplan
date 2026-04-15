@@ -134,7 +134,7 @@ class GFSWindField(_GriddedWindField):
                 "cfgrib (with eccodes) is required for GFS GRIB2 data. "
                 "Install with: pip install cfgrib"
             )
-        import requests
+        import requests  # type: ignore[import-untyped]
 
         xr = _require_xarray()
 
@@ -247,16 +247,16 @@ class GFSWindField(_GriddedWindField):
                 os.unlink(tmpfile)
 
         # Ensure lat and lev are ascending for np.searchsorted
-        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:
-            self._lats = self._lats[::-1]
-            self._u_data = self._u_data[:, :, ::-1, :]
-            self._v_data = self._v_data[:, :, ::-1, :]
-        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:
-            self._levs = self._levs[::-1]
-            self._u_data = self._u_data[:, ::-1, :, :]
-            self._v_data = self._v_data[:, ::-1, :, :]
+        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:  # type: ignore[arg-type, index]
+            self._lats = self._lats[::-1]  # type: ignore[index]
+            self._u_data = self._u_data[:, :, ::-1, :]  # type: ignore[index]
+            self._v_data = self._v_data[:, :, ::-1, :]  # type: ignore[index]
+        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:  # type: ignore[arg-type, index]
+            self._levs = self._levs[::-1]  # type: ignore[index]
+            self._u_data = self._u_data[:, ::-1, :, :]  # type: ignore[index]
+            self._v_data = self._v_data[:, ::-1, :, :]  # type: ignore[index]
 
         logger.info(
             "GFS wind slab loaded: %d levels, %d lats, %d lons",
-            len(self._levs), len(self._lats), len(self._lons),
+            len(self._levs), len(self._lats), len(self._lons),  # type: ignore[arg-type]
         )

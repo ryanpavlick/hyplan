@@ -60,10 +60,10 @@ def _validate_inputs(**kwargs) -> None:
         - Length-related parameters (`altitude`, `box_length`, `box_width`) are checked for dimensionality if they are `ureg.Quantity` and converted to meters.
         - Unknown parameters will be ignored, with a warning logged.
     """
-    rules: Dict[str, Callable[[Union[float, Polygon, bool, None]], bool]] = {
-        'altitude': lambda x: isinstance(x, (float, ureg.Quantity)) and x > 0,
-        'box_length': lambda x: isinstance(x, (float, ureg.Quantity)) and x > 0,
-        'box_width': lambda x: isinstance(x, (float, ureg.Quantity)) and x > 0,
+    rules: Dict[str, Callable[[Union[float, Quantity, Polygon, bool, None]], Optional[bool]]] = {
+        'altitude': lambda x: isinstance(x, (float, Quantity)) and x > 0,
+        'box_length': lambda x: isinstance(x, (float, Quantity)) and x > 0,
+        'box_width': lambda x: isinstance(x, (float, Quantity)) and x > 0,
         'overlap': lambda x: isinstance(x, (float, int)) and 0 <= x <= 100,
         'starting_point': lambda x: x in {"edge", "center"},
         'azimuth': lambda x: isinstance(x, float),
@@ -74,7 +74,7 @@ def _validate_inputs(**kwargs) -> None:
     for key, value in kwargs.items():
         if key in {'altitude', 'box_length', 'box_width'}:
             # Validate and process length-related parameters
-            if isinstance(value, ureg.Quantity):
+            if isinstance(value, Quantity):
                 if not value.check("[length]"):
                     raise HyPlanValueError(f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}.")
                 value = value.m_as("meter")  # Convert to meters
@@ -107,12 +107,12 @@ def _validate_inputs(**kwargs) -> None:
         
 def box_around_center_line(
     instrument: ScanningSensor,
-    altitude_msl: ureg.Quantity,
+    altitude_msl: Quantity,
     lat0: float,
     lon0: float,
     azimuth: float,
-    box_length: ureg.Quantity,
-    box_width: ureg.Quantity,
+    box_length: Quantity,
+    box_width: Quantity,
     box_name: str = "Line",
     start_numbering: int = 1,
     overlap: float = 20,
@@ -167,7 +167,7 @@ def box_around_center_line(
     # Compute swath spacing and number of lines
     # Note: swath_width expects AGL; using MSL as approximation
     swath = instrument.swath_width(altitude_msl)
-    if not isinstance(swath, ureg.Quantity):
+    if not isinstance(swath, Quantity):
         swath = ureg.Quantity(swath, "meter")
     if swath <= 0:
         raise HyPlanValueError(f"Invalid swath width {swath}. Must be positive.")
@@ -179,7 +179,7 @@ def box_around_center_line(
     if polygon:
         along_track_buffer = 2000.0
         polygon = buffer_polygon_along_azimuth(polygon, along_track_buffer, swath.magnitude/2, azimuth)
-        box_length += ureg.Quantity(along_track_buffer, "meter")
+        box_length += ureg.Quantity(along_track_buffer, "meter")  # type: ignore[misc]
 
     nlines = max(1, int(np.ceil((box_width / swath_spacing).m_as("dimensionless"))))
 
@@ -229,7 +229,7 @@ def box_around_center_line(
 
 def box_around_polygon(
     instrument: ScanningSensor,
-    altitude_msl: ureg.Quantity,
+    altitude_msl: Quantity,
     polygon: Polygon,
     azimuth: Optional[float] = None,
     box_name: str = "Line",
@@ -423,7 +423,7 @@ def box_around_polygon_terrain(
     safe_altitude_m   = safe_altitude.m_as("meter")
     min_line_length_m = min_line_length.m_as("meter")
     mode3             = target_agl is not None
-    target_agl_m      = target_agl.m_as("meter") if mode3 else None
+    target_agl_m      = target_agl.m_as("meter") if mode3 else None  # type: ignore[union-attr]
 
     dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
 
@@ -550,8 +550,8 @@ def _generate_box_dem(
             corner_lats.append(lat)
             corner_lons.append(lon)
 
-    return terrain.generate_demfile(
-        np.array(corner_lats), wrap_to_180(np.array(corner_lons))
+    return terrain.generate_demfile(  # type: ignore[no-any-return]
+        np.array(corner_lats), wrap_to_180(np.array(corner_lons))  # type: ignore[arg-type]
     )
 
 
@@ -613,7 +613,7 @@ def altitude_msl_for_pixel_size(
     """
     min_elev, _ = terrain.get_min_max_elevations(dem_file)
     altitude_agl = instrument.altitude_agl_for_ground_sample_distance(pixel_size)
-    return altitude_agl + ureg.Quantity(float(min_elev), "meter")
+    return altitude_agl + ureg.Quantity(float(min_elev), "meter")  # type: ignore[no-any-return]
 
 
 def box_around_center_terrain(
@@ -681,7 +681,7 @@ def box_around_center_terrain(
         azimuth=azimuth,
         polygon=polygon,
     )
-    azimuth = wrap_to_180(azimuth)
+    azimuth = wrap_to_180(azimuth)  # type: ignore[assignment]
 
     rect = _rectangle_polygon(
         lat0, lon0, azimuth,

@@ -5,6 +5,8 @@ missions for archived data. We emit a planned-track file by linearly
 interpolating along the flight plan at a configurable interval.
 """
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -20,9 +22,9 @@ def to_icartt(
     pi_name: str = "",
     institution: str = "",
     mission_name: str = "",
-    flight_date: datetime.date = None,
+    flight_date: datetime.date | None = None,
     aircraft=None,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
     interval_seconds: float = 60.0,
     revision: str = "RA",
     revision_comments: str = "RA: Planned flight track - pre-flight",
@@ -59,7 +61,7 @@ def to_icartt(
                         + takeoff_time.minute * 60
                         + takeoff_time.second)
     else:
-        base_seconds = 0.0
+        base_seconds = 0.0  # type: ignore[assignment]
 
     # Interpolate along the flight plan
     wps = extract_waypoints(plan)

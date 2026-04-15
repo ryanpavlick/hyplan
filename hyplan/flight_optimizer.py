@@ -7,6 +7,8 @@ nearest-neighbour heuristic, respecting endurance limits, daily flight-time
 caps, and refueling constraints to produce a feasible multi-day schedule.
 """
 
+from __future__ import annotations
+
 import itertools
 import logging
 from typing import Optional, Tuple
@@ -61,7 +63,7 @@ def _transit_time(aircraft: Aircraft, start_wp: Waypoint, end_wp: Waypoint) -> f
         Transit time in hours.
     """
     info = aircraft.time_to_cruise(start_wp, end_wp)
-    return info["total_time"].m_as(ureg.hour)
+    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
 
 
 def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float:
@@ -76,7 +78,7 @@ def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float
         Total departure time in hours.
     """
     info = aircraft.time_to_takeoff(airport, wp)
-    return info["total_time"].m_as(ureg.hour)
+    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
 
 
 def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
@@ -91,7 +93,7 @@ def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
         Total return time in hours.
     """
     info = aircraft.time_to_return(wp, airport)
-    return info["total_time"].m_as(ureg.hour)
+    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
 
 
 def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=None) -> float:
@@ -109,7 +111,7 @@ def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=
     """
     if cruise_speed is None:
         cruise_speed = aircraft.cruise_speed_at(flight_line.altitude_msl)
-    return (flight_line.length / cruise_speed).m_as(ureg.hour)
+    return (flight_line.length / cruise_speed).m_as(ureg.hour)  # type: ignore[no-any-return]
 
 
 def build_graph(
@@ -428,10 +430,10 @@ def greedy_optimize(
     flight_lines: list,
     airports: list,
     takeoff_airport: Airport,
-    return_airport: Airport = None,
-    max_endurance: float = None,
+    return_airport: Airport | None = None,
+    max_endurance: float | None = None,
     refuel_time: float = 0.5,
-    max_daily_flight_time: float = None,
+    max_daily_flight_time: float | None = None,
     takeoff_landing_overhead: float = 0.25,
     max_days: int = 1,
 ) -> dict:
@@ -492,8 +494,8 @@ def greedy_optimize(
     # Reverse lookup: key -> FlightLine
     key_to_line = {v: k for k, v in line_keys.items()}
 
-    visited_lines = set()
-    skipped_lines = set()
+    visited_lines: set[str] = set()
+    skipped_lines: set[str] = set()
 
     route = []
     flight_sequence = []
@@ -527,11 +529,11 @@ def greedy_optimize(
 
             if line_key is not None:
                 # Fly to the line and along it
-                exit_node = _opposite_endpoint(entry_node)
+                exit_node = _opposite_endpoint(entry_node)  # type: ignore[arg-type]
                 time_along_line = G[entry_node][exit_node]["weight"]
 
-                daily_time += time_to_entry
-                time_since_refuel += time_to_entry
+                daily_time += time_to_entry  # type: ignore[operator]
+                time_since_refuel += time_to_entry  # type: ignore[operator]
                 route.append(entry_node)
 
                 daily_time += time_along_line
@@ -540,7 +542,7 @@ def greedy_optimize(
 
                 # Record the flight line (in the direction flown)
                 fl = key_to_line[line_key]
-                if entry_node.endswith("_end"):
+                if entry_node.endswith("_end"):  # type: ignore[union-attr]
                     flight_sequence.append(fl.reverse())
                 else:
                     flight_sequence.append(fl)

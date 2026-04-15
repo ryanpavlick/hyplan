@@ -4,6 +4,7 @@ Coordinate conversions, distance calculations, and geometric operations
 on the WGS84 ellipsoid. All distance and bearing calculations use
 Vincenty's inverse and direct formulae via the ``pymap3d`` library.
 
+
 References
 ----------
 Vincenty, T. (1975). Direct and inverse solutions of geodesics on the
@@ -14,6 +15,8 @@ Hirsch, M. (2018). PyMap3D: 3-D coordinate conversions for terrestrial
 and geospace environments. *Journal of Open Source Software*, 3(23), 580.
 doi:10.21105/joss.00580
 """
+
+from __future__ import annotations
 
 import datetime
 import numpy as np
@@ -43,7 +46,7 @@ def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         numpy.ndarray or float: Angle(s) wrapped to [-180, 180).
     """
     lon = np.mod(np.array(lon) + 180.0, 360.0) - 180.0
-    return np.squeeze(lon)
+    return np.squeeze(lon)  # type: ignore[no-any-return]
 
 
 def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
@@ -56,7 +59,7 @@ def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
     Returns:
         numpy.ndarray: Angle(s) wrapped to [0, 360).
     """
-    return np.squeeze(np.mod(np.array(angle), 360.0))
+    return np.squeeze(np.mod(np.array(angle), 360.0))  # type: ignore[no-any-return]
 
 
 _timezone_finder = None
@@ -109,7 +112,7 @@ def get_timezone(latitude: float, longitude: float) -> str:
         raise HyPlanValueError(
             f"Could not determine timezone for ({latitude}, {longitude})"
         )
-    return tz
+    return str(tz)
 
 
 def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
@@ -135,7 +138,7 @@ def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
     """
     if polygon is None:
         logging.debug("Polygon validation skipped because input is None.")
-        return  # No validation needed for None
+        return None  # No validation needed for None
 
     if not isinstance(polygon, Polygon):
         if isinstance(polygon, MultiPolygon):
@@ -308,7 +311,7 @@ def haversine(
     a = np.sin(delta_phi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(delta_lambda / 2) ** 2
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-    return radius * c
+    return radius * c  # type: ignore[no-any-return]
 
 def random_points_in_polygon(polygon: Polygon, k: int) -> List[Point]:
     """
@@ -423,6 +426,10 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
         yr = xt * np.sin(azimuth_radians) + yt * np.cos(azimuth_radians)
 
         # Compute bounding box in rotated space
+        minx_r: float
+        miny_r: float
+        maxx_r: float
+        maxy_r: float
         minx_r, miny_r, maxx_r, maxy_r = np.min(xr), np.min(yr), np.max(xr), np.max(yr)
         xbound_r = np.array([minx_r, minx_r, maxx_r, maxx_r, minx_r])
         ybound_r = np.array([miny_r, maxy_r, maxy_r, miny_r, miny_r])
@@ -471,10 +478,10 @@ def rectangle_dimensions(
 
     if azimuth is None:
         if length1 >= length2:
-            azimuth = wrap_to_180(az1)
+            azimuth = float(wrap_to_180(az1))
             length_m, width_m = float(length1), float(length2)
         else:
-            azimuth = wrap_to_180(az2)
+            azimuth = float(wrap_to_180(az2))
             length_m, width_m = float(length2), float(length1)
     else:
         az1_diff = abs(wrap_to_180(float(az1) - azimuth))
@@ -542,7 +549,7 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
         if value <= 0:
             raise HyPlanValueError("Distance must be greater than 0.")
 
-    azimuth = wrap_to_180(azimuth)
+    azimuth = float(wrap_to_180(azimuth))
 
     try:
         # Transform to UTM
@@ -631,7 +638,7 @@ def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, 
 # ---------------------------------------------------------------------------
 
 def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
-                         date: datetime.date = None) -> float:
+                         date: datetime.date | None = None) -> float:
     """Return magnetic declination in degrees (positive = east).
 
     Uses the optional ``geomag`` library (WMM model). ``geomag`` is not on
@@ -658,7 +665,7 @@ def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
         ) from e
     if date is None:
         date = datetime.date.today()
-    return geomag.declination(lat, lon, alt_m / 1000.0, date)
+    return geomag.declination(lat, lon, alt_m / 1000.0, date)  # type: ignore[no-any-return]
 
 
 def true_to_magnetic(heading: float, declination: float) -> float:

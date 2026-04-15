@@ -97,7 +97,7 @@ class CasMachSchedule:
     crossover_ft: float
 
     def __post_init__(self) -> None:
-        self.cas = self.cas.to(ureg.knot)
+        self.cas = self.cas.to(ureg.knot)  # type: ignore[assignment]
 
     def tas_at(self, altitude: Quantity) -> Quantity:
         """True airspeed at *altitude* under ISA."""
@@ -140,7 +140,7 @@ class TasSchedule:
     def tas_at(self, altitude: Quantity) -> Quantity:
         """Interpolated TAS at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
-        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot
+        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot  # type: ignore[no-any-return]
 
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
@@ -198,17 +198,17 @@ class VerticalProfile:
         """Interpolated vertical rate at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
         fpm = float(np.interp(alt_ft, self._alts_ft, self._rates_fpm))
-        return fpm * ureg.feet / ureg.minute
+        return fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
     @property
     def sea_level_rate(self) -> Quantity:
         """Rate at the lowest altitude breakpoint (first row)."""
-        return self._rates_fpm[0] * ureg.feet / ureg.minute
+        return self._rates_fpm[0] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
     @property
     def ceiling_rate(self) -> Quantity:
         """Rate at the highest altitude breakpoint (last row)."""
-        return self._rates_fpm[-1] * ureg.feet / ureg.minute
+        return self._rates_fpm[-1] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ class Aircraft:
         Returns ``(pitch_min, pitch_max)`` in degrees.  ``pitch_min`` is
         negative (descent), ``pitch_max`` is positive (climb).
         """
-        tas = speed if speed is not None else self.cruise_speed_at(self.service_ceiling)
+        tas = speed if speed is not None else self.cruise_speed_at(self.service_ceiling)  # type: ignore[arg-type]
         tas_mps = tas.m_as(ureg.meter / ureg.second)
 
         climb_rate = self.climb_profile.sea_level_rate
@@ -433,13 +433,13 @@ class Aircraft:
         * ``"two_point"`` — analytical log formula (linear ROC model).
         * ``"full"`` — numerical trapezoidal integration.
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.cruise_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
 
         if end_altitude > self.service_ceiling:
             raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
@@ -505,8 +505,8 @@ class Aircraft:
 
         Returns ``(times, altitudes)`` as numpy arrays in minutes and feet.
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if end_altitude <= start_altitude:
             return np.array([0.0]), np.array([start_altitude.magnitude])
@@ -580,13 +580,13 @@ class Aircraft:
         Uses the descent profile (altitude-indexed ROD).  Integration
         strategy matches the climb profile mode.
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.descent_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
 
         if start_altitude <= end_altitude:
             return 0 * ureg.minute, 0 * ureg.nautical_mile
@@ -693,11 +693,11 @@ class Aircraft:
                 and the returned path length / timing account for wind.
         """
         true_air_speed = true_air_speed or self.cruise_speed_at(
-            end_waypoint.altitude_msl
+            end_waypoint.altitude_msl  # type: ignore[arg-type]
         )
 
-        start_altitude = start_waypoint.altitude_msl.to(ureg.feet)
-        end_altitude = end_waypoint.altitude_msl.to(ureg.feet)
+        start_altitude = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
+        end_altitude = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
 
         pitch_min, pitch_max = self.pitch_limits(true_air_speed)
 

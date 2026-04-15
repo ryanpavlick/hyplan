@@ -207,4 +207,4 @@ def _to_datetime(ts) -> datetime.datetime:
     """Convert a numpy/pandas timestamp to a stdlib datetime."""
     if isinstance(ts, datetime.datetime):
         return ts
-    return pd.Timestamp(ts).to_pydatetime()
+    return pd.Timestamp(ts).to_pydatetime()  # type: ignore[no-any-return]

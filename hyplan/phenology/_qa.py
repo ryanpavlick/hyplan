@@ -141,4 +141,4 @@ def convert_mcd12q2_dates(raw_values: np.ndarray) -> np.ndarray:
         doys = np.array([d.timetuple().tm_yday for d in dates], dtype=np.float64)
         result[valid] = doys
 
-    return result
+    return result  # type: ignore[no-any-return]

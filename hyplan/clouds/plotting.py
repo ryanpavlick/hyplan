@@ -83,21 +83,21 @@ def plot_cloud_fraction_spatial(
 
     for idx, (name, da) in enumerate(spatial_data.items()):
         ax = axes[idx // ncols, idx % ncols]
-        im = ax.pcolormesh(
-            da.coords["longitude"], da.coords["latitude"], da.values,
+        im = ax.pcolormesh(  # type: ignore[attr-defined]
+            da.coords["longitude"], da.coords["latitude"], da.values,  # type: ignore[attr-defined]
             cmap="viridis_r", vmin=0, vmax=1,
         )
         if overlay_gdf is not None:
             row = overlay_gdf[overlay_gdf["Name"] == name]
             if not row.empty:
                 row.boundary.plot(ax=ax, edgecolor="red", linewidth=1.5)
-        ax.set_title(name)
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
+        ax.set_title(name)  # type: ignore[attr-defined]
+        ax.set_xlabel("Longitude")  # type: ignore[attr-defined]
+        ax.set_ylabel("Latitude")  # type: ignore[attr-defined]
         fig.colorbar(im, ax=ax, label="Cloud Fraction")
 
     for idx in range(n, nrows * ncols):
-        axes[idx // ncols, idx % ncols].set_visible(False)
+        axes[idx // ncols, idx % ncols].set_visible(False)  # type: ignore[attr-defined]
 
     fig.tight_layout()
     return fig

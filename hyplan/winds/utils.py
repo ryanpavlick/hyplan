@@ -171,7 +171,7 @@ def _wind_factor_from_uv(
             f"Headwind {headwind_mps:.1f} m/s exceeds TAS "
             f"{tas_mps:.1f} m/s on heading {heading_deg:.0f}°; unflyable."
         )
-    return tas_mps / ground_speed_mps
+    return tas_mps / ground_speed_mps  # type: ignore[no-any-return]
 
 
 def _resolve_wind_factor(
@@ -187,7 +187,7 @@ def _resolve_wind_factor(
 ) -> float:
     """Compute wind factor using wind_source (preferred) or legacy scalars."""
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
         return _wind_factor_from_uv(tas, heading_deg, u, v)
     return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
 
@@ -283,7 +283,7 @@ def _resolve_track_hold_solution(
     v = None
 
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
     elif wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is not None:
         ws = wind_speed.m_as(ureg.meter / ureg.second)
         wind_from_rad = np.radians(wind_direction)
@@ -318,7 +318,7 @@ def _resolve_wind_uv(
     Returns ``None`` when no wind is available (still-air path).
     """
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
         u_mps = u.m_as(ureg.meter / ureg.second)
         v_mps = v.m_as(ureg.meter / ureg.second)
         if abs(u_mps) < 1e-10 and abs(v_mps) < 1e-10:

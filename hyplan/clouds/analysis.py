@@ -110,11 +110,11 @@ def simulate_visits(
     crosses_year = day_start > day_stop
 
     visit_days = []
-    visit_tracker = {}
-    rest_days = {}
+    visit_tracker: dict[int, dict] = {}
+    rest_days: dict[int, list] = {}
 
     for year in range(year_start, year_stop + 1):
-        visited_polygons = set()
+        visited_polygons: set[str] = set()
         remaining_polygons = set(df['polygon_id'].unique())
         visit_tracker[year] = {}
         rest_days[year] = []

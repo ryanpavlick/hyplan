@@ -10,6 +10,8 @@ Provides Folium interactive maps (:func:`map_flight_lines`,
 (:func:`terrain_profile_along_track`).
 """
 
+from __future__ import annotations
+
 import folium
 import geopandas as gpd
 import numpy as np
@@ -37,7 +39,7 @@ __all__ = [
 
 def map_flight_lines(
     flight_lines: List[FlightLine],
-    center: Tuple[float, float] = None,
+    center: Tuple[float, float] | None = None,
     zoom_start: int = 6,
     line_color: str = "blue",
     line_weight: int = 3
@@ -60,7 +62,7 @@ def map_flight_lines(
     if center is None:
         lats = [fl.lat1 for fl in flight_lines]
         lons = [fl.lon1 for fl in flight_lines]
-        center = (np.mean(lats), np.mean(lons))
+        center = (float(np.mean(lats)), float(np.mean(lons)))
     
     # Create the folium map centered at the computed center.
     m = folium.Map(location=center, zoom_start=zoom_start)
@@ -133,7 +135,6 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
     ax.set_ylabel("Latitude")
     plt.legend()
     plt.grid()
-    plt.show()
 
 
 def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray]:
@@ -261,7 +262,6 @@ def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Option
     ax.set_title("Altitude vs. Time Trajectory")
     ax.legend()
     ax.grid(True)
-    plt.show()
 
 
 # ---------------------------------------------------------------------------

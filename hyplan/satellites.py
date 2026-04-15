@@ -285,7 +285,7 @@ def compute_ground_track(
         radians=False,
     )
 
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]
 
     gdf = gpd.GeoDataFrame(
         {
@@ -326,9 +326,9 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """
     n = len(lats)
     if n == 0:
-        return np.zeros(0)
+        return np.zeros(0)  # type: ignore[no-any-return]
     if n == 1:
-        return np.zeros(1)
+        return np.zeros(1)  # type: ignore[no-any-return]
     # pyproj.Geod.inv is fully vectorized; pymap3d.vincenty.vdist falls into a
     # scalar-only branch on degenerate equator-parallel pairs.
     fwd_az, _, _ = _GEOD_WGS84.inv(lons[:-1], lats[:-1], lons[1:], lats[1:])
@@ -336,7 +336,7 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     headings = np.empty(n)
     headings[:-1] = fwd_az
     headings[-1] = fwd_az[-1]
-    return headings
+    return headings  # type: ignore[no-any-return]
 
 
 def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float) -> List[Tuple[int, int]]:
@@ -441,7 +441,7 @@ def compute_swath_footprint(
         star_lons = wrap_to_180(star_lons)
 
         # Build polygon: port side forward, starboard side reversed
-        poly_lons = np.concatenate([port_lons, star_lons[::-1]])
+        poly_lons = np.concatenate([port_lons, star_lons[::-1]])  # type: ignore[index]
         poly_lats = np.concatenate([port_lats, star_lats[::-1]])
 
         # Check for antimeridian crossing (large longitude jump)
@@ -617,8 +617,8 @@ def find_overpasses(
 def find_all_overpasses(
     satellites: Optional[List[Union[str, SatelliteInfo]]] = None,
     region: Union[Polygon, gpd.GeoDataFrame] = None,
-    start_time: datetime = None,
-    end_time: datetime = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
     max_sza: Optional[float] = None,
     **kwargs,
 ) -> gpd.GeoDataFrame:
@@ -644,7 +644,7 @@ def find_all_overpasses(
     for sat in satellites:
         try:
             gdf = find_overpasses(
-                sat, region, start_time, end_time,
+                sat, region, start_time, end_time,  # type: ignore[arg-type]
                 max_sza=max_sza, **kwargs,
             )
             if not gdf.empty:
@@ -727,7 +727,7 @@ def compute_overpass_overlap(
 
             # Compute area in km^2 using UTM
             centroid = intersection.centroid
-            to_utm, from_utm = get_utm_transforms(centroid.x, centroid.y)
+            to_utm, from_utm = get_utm_transforms(centroid.x, centroid.y)  # type: ignore[call-arg]
             intersection_utm = intersection  # simplified: use degree-based area
             try:
                 from shapely.ops import transform

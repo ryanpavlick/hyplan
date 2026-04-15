@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import pymap3d.vincenty
+from pint import Quantity
 
 from .units import ureg
 from .exceptions import HyPlanValueError, HyPlanTypeError
@@ -48,10 +49,10 @@ def _to_length_quantity(value, label="value"):
 def racetrack(
     center: tuple,
     heading: float,
-    altitude: Union[float, "ureg.Quantity"],
-    leg_length: Union[float, "ureg.Quantity"],
+    altitude: Union[float, "Quantity"],
+    leg_length: Union[float, "Quantity"],
     n_legs: int = 1,
-    offset: Union[float, "ureg.Quantity", list] = 0,
+    offset: Union[float, "Quantity", list] = 0,
     altitudes: Optional[list] = None,
     stack_altitudes: Optional[list] = None,
 ) -> List[Waypoint]:
@@ -153,7 +154,7 @@ def racetrack(
         waypoints.append(Waypoint(
             latitude=float(start_lat),
             longitude=float(start_lon),
-            heading=wrap_to_360(fwd_az),
+            heading=wrap_to_360(fwd_az),  # type: ignore[arg-type]
             altitude_msl=alt,
             name=f"Leg{i+1}_start",
             segment_type="pattern",
@@ -161,7 +162,7 @@ def racetrack(
         waypoints.append(Waypoint(
             latitude=float(end_lat),
             longitude=float(end_lon),
-            heading=wrap_to_360(fwd_az),
+            heading=wrap_to_360(fwd_az),  # type: ignore[arg-type]
             altitude_msl=alt,
             name=f"Leg{i+1}_end",
             segment_type="pattern_turn",
@@ -173,8 +174,8 @@ def racetrack(
 def rosette(
     center: tuple,
     heading: float,
-    altitude: Union[float, "ureg.Quantity"],
-    radius: Union[float, "ureg.Quantity"],
+    altitude: Union[float, "Quantity"],
+    radius: Union[float, "Quantity"],
     n_lines: int = 3,
     angles: Optional[List[float]] = None,
 ) -> List[Waypoint]:
@@ -226,12 +227,14 @@ def rosette(
         wp2 = fl.waypoint2
         waypoints.append(Waypoint(
             latitude=wp1.latitude, longitude=wp1.longitude,
-            heading=wp1.heading, altitude_msl=wp1.altitude_msl,
+            heading=wp1.heading,  # type: ignore[arg-type]
+            altitude_msl=wp1.altitude_msl,
             name=f"L{i+1}_start", segment_type="pattern",
         ))
         waypoints.append(Waypoint(
             latitude=wp2.latitude, longitude=wp2.longitude,
-            heading=wp2.heading, altitude_msl=wp2.altitude_msl,
+            heading=wp2.heading,  # type: ignore[arg-type]
+            altitude_msl=wp2.altitude_msl,
             name=f"L{i+1}_end", segment_type="pattern_turn",
         ))
 
@@ -241,8 +244,8 @@ def rosette(
 def polygon(
     center: tuple,
     heading: float,
-    altitude: Union[float, "ureg.Quantity"],
-    radius: Union[float, "ureg.Quantity"],
+    altitude: Union[float, "Quantity"],
+    radius: Union[float, "Quantity"],
     n_sides: int = 4,
     aspect_ratio: float = 1.0,
     closed: bool = True,
@@ -309,7 +312,7 @@ def polygon(
         waypoints.append(Waypoint(
             latitude=lat_i,
             longitude=lon_i,
-            heading=tangent_heading,
+            heading=tangent_heading,  # type: ignore[arg-type]
             altitude_msl=alt,
             name=f"V{i+1}",
             segment_type="pattern",
@@ -320,7 +323,7 @@ def polygon(
         waypoints.append(Waypoint(
             latitude=waypoints[0].latitude,
             longitude=waypoints[0].longitude,
-            heading=waypoints[0].heading,
+            heading=waypoints[0].heading,  # type: ignore[arg-type]
             altitude_msl=alt,
             name="V1",
             segment_type="pattern",
@@ -332,9 +335,9 @@ def polygon(
 def sawtooth(
     center: tuple,
     heading: float,
-    altitude_min: Union[float, "ureg.Quantity"],
-    altitude_max: Union[float, "ureg.Quantity"],
-    leg_length: Union[float, "ureg.Quantity"],
+    altitude_min: Union[float, "Quantity"],
+    altitude_max: Union[float, "Quantity"],
+    leg_length: Union[float, "Quantity"],
     n_cycles: int = 1,
 ) -> List[Waypoint]:
     """Generate an oscillating altitude profile along a straight track.
@@ -379,10 +382,10 @@ def sawtooth(
         if dist_from_start == 0:
             lat, lon = float(start_lat), float(start_lon)
         else:
-            lat, lon = pymap3d.vincenty.vreckon(
+            lat, lon = pymap3d.vincenty.vreckon(  # type: ignore[assignment]
                 start_lat, start_lon, dist_from_start, heading
             )
-            lon = wrap_to_180(lon)
+            lon = wrap_to_180(lon)  # type: ignore[assignment]
 
         # Altitude alternates: starts at max, then min, max, min, ...
         alt = alt_max if i % 2 == 0 else alt_min
@@ -390,7 +393,7 @@ def sawtooth(
         waypoints.append(Waypoint(
             latitude=float(lat),
             longitude=float(lon),
-            heading=wp_heading,
+            heading=wp_heading,  # type: ignore[arg-type]
             altitude_msl=alt,
             name=f"ST{i+1}",
             segment_type="pattern_turn",
@@ -402,9 +405,9 @@ def sawtooth(
 def spiral(
     center: tuple,
     heading: float,
-    altitude_start: Union[float, "ureg.Quantity"],
-    altitude_end: Union[float, "ureg.Quantity"],
-    radius: Union[float, "ureg.Quantity"],
+    altitude_start: Union[float, "Quantity"],
+    altitude_end: Union[float, "Quantity"],
+    radius: Union[float, "Quantity"],
     n_turns: float = 3.0,
     direction: str = "right",
     points_per_turn: int = 36,
@@ -489,7 +492,7 @@ def spiral(
         waypoints.append(Waypoint(
             latitude=float(lat),
             longitude=float(lon),
-            heading=tangent,
+            heading=tangent,  # type: ignore[arg-type]
             altitude_msl=alt,
             name=f"SP{i+1}",
             segment_type="pattern",
@@ -500,7 +503,7 @@ def spiral(
 
 def flight_lines_to_waypoint_path(
     flight_lines: List[FlightLine],
-    altitude: Union[float, "ureg.Quantity", None] = None,
+    altitude: Union[float, "Quantity", None] = None,
 ) -> List[Waypoint]:
     """Convert a list of FlightLine objects into a connected waypoint path.
 
@@ -525,7 +528,7 @@ def flight_lines_to_waypoint_path(
             seg_type = "pattern_turn" if j == 1 else "pattern"
             waypoints.append(Waypoint(
                 latitude=wp.latitude, longitude=wp.longitude,
-                heading=wp.heading, altitude_msl=alt,
+                heading=wp.heading, altitude_msl=alt,  # type: ignore[arg-type]
                 speed=wp.speed, name=name, segment_type=seg_type,
             ))
 
@@ -535,11 +538,11 @@ def flight_lines_to_waypoint_path(
 def coordinated_line(
     center: tuple,
     heading: float,
-    primary_leg_length: Union[float, "ureg.Quantity"],
+    primary_leg_length: Union[float, "Quantity"],
     primary_aircraft: Aircraft,
     secondary_aircraft: Aircraft,
-    primary_altitude: Union[float, "ureg.Quantity"],
-    secondary_altitude: Union[float, "ureg.Quantity"],
+    primary_altitude: Union[float, "Quantity"],
+    secondary_altitude: Union[float, "Quantity"],
     ground_speed_ratio: Union[float, List[float], None] = None,
     primary_name: str = "P3",
     secondary_name: str = "ER2",
@@ -601,14 +604,14 @@ def coordinated_line(
         altitude_msl=pri_alt, site_name=primary_name,
     )
     primary_wps = [
-        Waypoint(pri_fl.lat1, pri_fl.lon1, pri_fl.waypoint1.heading, pri_alt,
+        Waypoint(pri_fl.lat1, pri_fl.lon1, pri_fl.waypoint1.heading, pri_alt,  # type: ignore[arg-type]
                  name=f"{primary_name}_start", segment_type="pattern"),
-        Waypoint(pri_fl.lat2, pri_fl.lon2, pri_fl.waypoint1.heading, pri_alt,
+        Waypoint(pri_fl.lat2, pri_fl.lon2, pri_fl.waypoint1.heading, pri_alt,  # type: ignore[arg-type]
                  name=f"{primary_name}_end", segment_type="pattern_turn"),
     ]
 
     # Center waypoint (at secondary altitude for the overflying aircraft)
-    center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,
+    center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,  # type: ignore[arg-type]
                          name="C1", segment_type="pattern")
 
     # Secondary flight lines for each ratio
@@ -621,9 +624,9 @@ def coordinated_line(
         )
         suffix = f"_r{i+1}" if len(ratios) > 1 else ""
         secondary_pairs.append([
-            Waypoint(sec_fl.lat1, sec_fl.lon1, sec_fl.waypoint1.heading, sec_alt,
+            Waypoint(sec_fl.lat1, sec_fl.lon1, sec_fl.waypoint1.heading, sec_alt,  # type: ignore[arg-type]
                      name=f"{secondary_name}_start{suffix}", segment_type="pattern"),
-            Waypoint(sec_fl.lat2, sec_fl.lon2, sec_fl.waypoint1.heading, sec_alt,
+            Waypoint(sec_fl.lat2, sec_fl.lon2, sec_fl.waypoint1.heading, sec_alt,  # type: ignore[arg-type]
                      name=f"{secondary_name}_end{suffix}", segment_type="pattern_turn"),
         ])
 

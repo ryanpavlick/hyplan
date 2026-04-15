@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Cache management
 # ---------------------------------------------------------------------------
 
-def get_cache_root(custom_path: str = None) -> str:
+def get_cache_root(custom_path: str | None = None) -> str:
     """Get the root directory for caching files."""
     return custom_path or os.environ.get("HYPLAN_CACHE_ROOT", f"{tempfile.gettempdir()}/hyplan")
 
@@ -103,10 +103,10 @@ def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, 
         for i, line in enumerate(file):
             tile = line.strip()
             try:
-                lat, _, lon = tile.replace("_COG", "").split("_")[3:6]
-                lon = -1 * float(lon[1:]) if "W" in lon else float(lon[1:])
-                lat = -1 * float(lat[1:]) if "S" in lat else float(lat[1:])
-                bbox = box(lon, lat, lon + 1, lat + 1)
+                lat_str, _, lon_str = tile.replace("_COG", "").split("_")[3:6]
+                lon_f = -1 * float(lon_str[1:]) if "W" in lon_str else float(lon_str[1:])
+                lat_f = -1 * float(lat_str[1:]) if "S" in lat_str else float(lat_str[1:])
+                bbox = box(lon_f, lat_f, lon_f + 1, lat_f + 1)
                 idx.insert(i, bbox.bounds)
                 tile_bboxes.append((tile, bbox))
             except Exception as e:

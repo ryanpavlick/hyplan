@@ -11,6 +11,8 @@ Waypoint properties at each endpoint (heading, altitude, position) are
 derived automatically from the geodesic geometry via Vincenty's formulae.
 """
 
+from __future__ import annotations
+
 from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from pint import Quantity
 from typing import Optional, List, Dict, Union
@@ -118,7 +120,7 @@ class FlightLine:
     @property
     def altitude_msl(self) -> Quantity:
         """Flight altitude MSL (from waypoint1)."""
-        return self._waypoint1.altitude_msl
+        return self._waypoint1.altitude_msl  # type: ignore[return-value]
 
     @altitude_msl.setter
     def altitude_msl(self, value: Quantity):
@@ -184,7 +186,7 @@ class FlightLine:
         if not isinstance(altitude, Quantity):
             altitude = ureg.Quantity(altitude, "meter")
         else:
-            altitude = altitude.to("meter")
+            altitude = altitude.to("meter")  # type: ignore[assignment]
 
         if altitude.magnitude < 0:
             raise HyPlanValueError(
@@ -208,7 +210,7 @@ class FlightLine:
         lon1: float,
         length: Quantity,
         az: float,
-        altitude_msl: Quantity = None,
+        altitude_msl: Quantity | None = None,
         site_name: Optional[str] = None,
         site_description: Optional[str] = None,
         investigator: Optional[str] = None,
@@ -240,7 +242,7 @@ class FlightLine:
 
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=lat1, longitude=lon1, heading=float(az) % 360,
                        altitude_msl=alt,
                        name=f"{site_name}_start" if site_name else "start")
@@ -260,7 +262,7 @@ class FlightLine:
         lon1: float,
         lat2: float,
         lon2: float,
-        altitude_msl: Quantity = None,
+        altitude_msl: Quantity | None = None,
         site_name: Optional[str] = None,
         site_description: Optional[str] = None,
         investigator: Optional[str] = None,
@@ -283,7 +285,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=lat1, longitude=lon1,
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -304,7 +306,7 @@ class FlightLine:
         lon: float,
         length: Quantity,
         az: float,
-        altitude_msl: Quantity = None,
+        altitude_msl: Quantity | None = None,
         site_name: Optional[str] = None,
         site_description: Optional[str] = None,
         investigator: Optional[str] = None,
@@ -340,7 +342,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=float(lat1), longitude=float(lon1),
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -421,7 +423,7 @@ class FlightLine:
         )
 
         track_lon = wrap_to_180(track_lon)
-        return LineString(zip(track_lon, track_lat))
+        return LineString(zip(track_lon, track_lat))  # type: ignore[arg-type]
 
     def reverse(self) -> "FlightLine":
         """
@@ -461,8 +463,8 @@ class FlightLine:
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_north_m, offset_east_m)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_north_m, offset_east_m)
 
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
@@ -490,8 +492,8 @@ class FlightLine:
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, abs(offset_distance), perpendicular_az)
 
         new_lon1, new_lon2 = wrap_to_180(new_lon1), wrap_to_180(new_lon2)
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
@@ -524,8 +526,8 @@ class FlightLine:
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_end, (self.az21.magnitude + 180.0) % 360.0)
 
         new_lon1, new_lon2 = wrap_to_180(new_lon1), wrap_to_180(new_lon2)
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
@@ -606,11 +608,11 @@ class FlightLine:
                 current_start_lat, current_start_lon = pymap3d.vincenty.vreckon(
                     end_lat, end_lon, gap_length_m, self.az12.magnitude
                 )
-                current_start_lon = wrap_to_180(current_start_lon)
+                current_start_lon = float(wrap_to_180(current_start_lon))
             elif gap_length:
                 break  # remaining length is less than the gap
             else:
-                current_start_lat, current_start_lon = end_lat, end_lon
+                current_start_lat, current_start_lon = float(end_lat), float(end_lon)
 
         return segments
 

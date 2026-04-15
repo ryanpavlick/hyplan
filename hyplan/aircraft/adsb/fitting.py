@@ -334,9 +334,9 @@ def _rdp_core(points: np.ndarray, epsilon: float) -> np.ndarray:
     if max_dist > epsilon:
         left = _rdp_core(points[: max_idx + 1], epsilon)
         right = _rdp_core(points[max_idx:], epsilon)
-        return np.vstack([left[:-1], right])
+        return np.vstack([left[:-1], right])  # type: ignore[no-any-return]
     else:
-        return np.array([points[0], points[-1]])
+        return np.array([points[0], points[-1]])  # type: ignore[no-any-return]
 
 
 # ------------------------------------------------------------------
@@ -353,7 +353,7 @@ def _reject_outliers(arr: np.ndarray, sigma: float) -> np.ndarray:
     if std < 1e-9:
         return arr
     mask = np.abs(arr - med) <= sigma * std
-    return arr[mask]
+    return arr[mask]  # type: ignore[no-any-return]
 
 
 def _compute_metrics(

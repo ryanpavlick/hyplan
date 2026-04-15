@@ -4,6 +4,8 @@ Click on an ipyleaflet map to place waypoints, drag markers to reposition,
 and edit properties in a synchronized ipydatagrid table.
 """
 
+from __future__ import annotations
+
 import ipywidgets as widgets
 import ipyleaflet
 from ipydatagrid import DataGrid

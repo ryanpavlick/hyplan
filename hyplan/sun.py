@@ -289,7 +289,7 @@ def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: fl
     """
     ts = pd.DatetimeIndex([dt], tz='UTC')
     azimuth, zenith, *_ = sunpos(ts, latitude, longitude, elevation=elevation)
-    return azimuth[0]
+    return azimuth[0]  # type: ignore[no-any-return]
 
 
 def solar_position_increments(

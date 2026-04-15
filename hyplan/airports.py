@@ -11,6 +11,8 @@ https://github.com/davidmegginson/ourairports-data.
 Licensed under the Public Domain (CC0).
 """
 
+from __future__ import annotations
+
 import os
 import threading
 import geopandas as gpd
@@ -48,11 +50,11 @@ class _AirportDB:
 
     def load(
         self,
-        countries: List[str] = None,
-        min_runway_length: int = None,
-        runway_surface: Union[str, List[str]] = None,
-        airport_types: List[str] = None,
-        cache_dir: Union[str, Path] = None,
+        countries: List[str] | None = None,
+        min_runway_length: int | None = None,
+        runway_surface: Union[str, List[str]] | None = None,
+        airport_types: List[str] | None = None,
+        cache_dir: Union[str, Path] | None = None,
         refresh: bool = False,
     ) -> None:
         """Download (if needed) and load airport/runway data."""
@@ -239,7 +241,7 @@ def _filter_airports_by_type(df_airports: pd.DataFrame, airport_types: List[str]
     """
     return df_airports[df_airports['type'].isin(airport_types)]
 
-def _filter_runways(df_runways: pd.DataFrame, length_ft: int = None, surface: Union[str, List[str]] = None, partial_match: bool = False) -> pd.DataFrame:
+def _filter_runways(df_runways: pd.DataFrame, length_ft: int | None = None, surface: Union[str, List[str]] | None = None, partial_match: bool = False) -> pd.DataFrame:
     """
     Filter runways based on minimum length and/or surface type.
 
@@ -268,11 +270,11 @@ def _filter_runways(df_runways: pd.DataFrame, length_ft: int = None, surface: Un
 
 def load_airports(
     filepath: str,
-    countries: List[str] = None,
-    min_runway_length: int = None,
-    runway_surface: Union[str, List[str]] = None,
-    airport_types: List[str] = None,
-    runways_filepath: str = None
+    countries: List[str] | None = None,
+    min_runway_length: int | None = None,
+    runway_surface: Union[str, List[str]] | None = None,
+    airport_types: List[str] | None = None,
+    runways_filepath: str | None = None
 ) -> gpd.GeoDataFrame:
     """
     Load and preprocess airport data from a CSV file with optional filters.
@@ -353,11 +355,11 @@ def load_runways(filepath: str) -> pd.DataFrame:
     return df_runways
 
 def initialize_data(
-    countries: List[str] = None,
-    min_runway_length: int = None,
-    runway_surface: Union[str, List[str]] = None,
-    airport_types: List[str] = None,
-    cache_dir: Union[str, Path] = None,
+    countries: List[str] | None = None,
+    min_runway_length: int | None = None,
+    runway_surface: Union[str, List[str]] | None = None,
+    airport_types: List[str] | None = None,
+    cache_dir: Union[str, Path] | None = None,
     refresh: bool = False
 ) -> None:
     """Initialize airport and runway data with filtering options.
@@ -389,7 +391,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
     _, tree_idx = gdf_airports.sindex.nearest(point)
-    return gdf_airports.iloc[tree_idx[0]]['icao_code']
+    return gdf_airports.iloc[tree_idx[0]]['icao_code']  # type: ignore[no-any-return]
 
 def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     """Find the N nearest airports to a given latitude and longitude.
@@ -401,7 +403,7 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
     point = Point(lon, lat)
     distances = gdf_airports.geometry.distance(point)
     nearest_idxs = distances.nsmallest(n).index
-    return gdf_airports.loc[nearest_idxs, 'icao_code'].tolist()
+    return gdf_airports.loc[nearest_idxs, 'icao_code'].tolist()  # type: ignore[no-any-return]
 
 def airports_within_radius(
     lat: float, lon: float, radius: float, unit: str = "kilometers",
@@ -456,7 +458,7 @@ def get_airport_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
         icao_codes = [icao_codes]
     return gdf_airports[gdf_airports['icao_code'].isin(icao_codes)]
 
-def get_longest_runway(icao: str) -> float:
+def get_longest_runway(icao: str) -> float | None:
     """Return the length in feet of the longest runway at the given airport.
 
     Returns:
@@ -468,7 +470,7 @@ def get_longest_runway(icao: str) -> float:
         return None
     return float(rows['length_ft'].max())
 
-def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, List[str]] = None) -> None:
+def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, List[str]] | None = None) -> None:
     """
     Generate a GeoJSON file of the airports using GeoPandas with CRS explicitly set to EPSG:4326.
 

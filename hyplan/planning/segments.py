@@ -121,7 +121,7 @@ def process_flight_phase(
     end: Union[Airport, Waypoint],
     phase_info: dict,
     segment_name: str,
-    override_segment_type: str = None,
+    override_segment_type: str | None = None,
 ) -> List[dict]:
     """
     Process a flight phase using the detailed phase_info.

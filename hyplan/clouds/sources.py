@@ -97,7 +97,7 @@ def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
     result = result.set("satellite", image.get("satellite"))
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry") -> "ee.Feature":
@@ -117,7 +117,7 @@ def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry")
         scale=1000
     )
     cloud_fraction = reduction.get('state_1km')
-    return ee.Feature(None, {
+    return ee.Feature(None, {  # type: ignore[no-any-return]
         'date_char': image.get('date_char'),
         'cloud_fraction': cloud_fraction,
         'satellite': image.get('satellite'),
@@ -308,7 +308,7 @@ class OpenMeteoCloudFraction:
             DataFrame with columns ``polygon_id``, ``year``,
             ``day_of_year``, ``cloud_fraction`` (0.0-1.0).
         """
-        import requests as _requests
+        import requests as _requests  # type: ignore[import-untyped]
 
         if "Name" not in polygons.columns:
             raise HyPlanValueError(
@@ -544,7 +544,7 @@ def fetch_cloud_fraction_spatial(
                 f"GEE download URL generation failed for {name}"
             ) from exc
 
-        import requests as _requests
+        import requests as _requests  # type: ignore[import-untyped]
         import io
         resp = _requests.get(url, timeout=120)
         if resp.status_code != 200:

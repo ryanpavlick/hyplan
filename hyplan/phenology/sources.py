@@ -177,7 +177,7 @@ def _search_granules(
         "CMR search for %s (%s to %s): %d granules",
         short_name, date_start, date_stop, len(results),
     )
-    return results
+    return results  # type: ignore[no-any-return]
 
 
 def _download_granules(granules: list, cache_dir: str) -> list[str]:
@@ -208,7 +208,7 @@ def _find_subdataset(hdf_path: str, name_fragment: str) -> str | None:
     with rio.open(hdf_path) as src:
         for sds_name, _sds_desc in src.subdatasets:
             if name_fragment in sds_name:
-                return sds_name
+                return sds_name  # type: ignore[no-any-return]
     return None
 
 
@@ -405,13 +405,13 @@ def _extract_phenology_from_granule(
         # Convert epoch days to DOY
         doys = _qa.convert_mcd12q2_dates(masked.data)
         # Apply the QA mask to DOY values
-        doy_masked = np.ma.masked_array(doys, mask=masked.mask | np.isnan(doys))
+        doy_masked: np.ma.MaskedArray = np.ma.masked_array(doys, mask=masked.mask | np.isnan(doys))
 
         if doy_masked.count() > 0:
-            result[stage_name] = float(np.ma.mean(doy_masked))
+            result[stage_name] = float(np.ma.mean(doy_masked))  # type: ignore[assignment]
             any_valid = True
         else:
-            result[stage_name] = np.nan
+            result[stage_name] = np.nan  # type: ignore[assignment]
 
     return result if any_valid else None
 
@@ -515,13 +515,13 @@ def fetch_phenology(
     # Determine which short_names to query
     if product in ("ndvi", "evi"):
         if satellite == "terra":
-            short_names = [config["short_name"]]
+            short_names = [config["short_name"]]  # type: ignore[index]
         elif satellite == "aqua":
-            short_names = [config["short_name_aqua"]]
+            short_names = [config["short_name_aqua"]]  # type: ignore[index]
         else:  # combined
-            short_names = [config["short_name"], config["short_name_aqua"]]
+            short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]
     else:
-        short_names = [config["short_name"]]
+        short_names = [config["short_name"]]  # type: ignore[index]
 
     # Authenticate
     from .._auth import _earthdata_login
@@ -556,11 +556,11 @@ def fetch_phenology(
                 try:
                     if product == "phenology":
                         result = _extract_phenology_from_granule(
-                            hdf_path, geom, config,
+                            hdf_path, geom, config,  # type: ignore[arg-type]
                         )
                     else:
                         result = _extract_vi_from_granule(
-                            hdf_path, geom, config, spatial_mode,
+                            hdf_path, geom, config, spatial_mode,  # type: ignore[arg-type]
                         )
                 except Exception:
                     logger.warning(
@@ -579,7 +579,7 @@ def fetch_phenology(
         if product == "phenology":
             return pd.DataFrame(
                 columns=["polygon_id", "year"] + list(
-                    _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()
+                    _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()  # type: ignore[index]
                 )
             )
         elif spatial_mode == "mean":
@@ -671,11 +671,11 @@ def fetch_phenology_spatial(
     date_stop = f"{year_stop}-12-31"
 
     if satellite == "terra":
-        short_names = [config["short_name"]]
+        short_names = [config["short_name"]]  # type: ignore[index]
     elif satellite == "aqua":
-        short_names = [config["short_name_aqua"]]
+        short_names = [config["short_name_aqua"]]  # type: ignore[index]
     else:
-        short_names = [config["short_name"], config["short_name_aqua"]]
+        short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]
 
     from .._auth import _earthdata_login
 
@@ -701,18 +701,18 @@ def fetch_phenology_spatial(
             for hdf_path in hdf_paths:
                 try:
                     data, transform = _read_and_clip_subdataset(
-                        hdf_path, config["subdataset"], geom,
+                        hdf_path, config["subdataset"], geom,  # type: ignore[index]
                     )
                     qa, _ = _read_and_clip_subdataset(
-                        hdf_path, config["qa_subdataset"], geom,
+                        hdf_path, config["qa_subdataset"], geom,  # type: ignore[index]
                     )
 
-                    masked = config["qa_func"](data, qa)
-                    if "valid_range" in config:
-                        lo, hi = config["valid_range"]
+                    masked = config["qa_func"](data, qa)  # type: ignore[index]
+                    if "valid_range" in config:  # type: ignore[operator]
+                        lo, hi = config["valid_range"]  # type: ignore[index]
                         masked = np.ma.masked_outside(masked, lo, hi)
 
-                    scaled = masked.astype(np.float64) * config["scale_factor"]
+                    scaled = masked.astype(np.float64) * config["scale_factor"]  # type: ignore[index]
                     all_arrays.append(scaled)
                 except Exception:
                     logger.warning(

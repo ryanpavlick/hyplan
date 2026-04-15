@@ -29,7 +29,7 @@ def ray_terrain_intersection(
     az: np.ndarray,
     tilt: np.ndarray,
     precision: float = 10.0,
-    dem_file: str = None
+    dem_file: str | None = None
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Batch computation of ray-terrain intersections using a DEM for multiple observer positions.
@@ -91,6 +91,7 @@ def ray_terrain_intersection(
         dem_lons = np.concatenate([lon0, np.atleast_1d(lon_ell)])
         dem_file = generate_demfile(dem_lats, dem_lons)
 
+    assert dem_file is not None  # guaranteed by auto_dem branch above
     min_elev, max_elev = get_min_max_elevations(dem_file)
     max_elev = min(h0, max_elev)
     if np.any(min_elev > h0):
@@ -228,4 +229,4 @@ def surface_normal_at(
     magnitudes = np.sqrt(np.sum(normals ** 2, axis=1, keepdims=True))
     normals /= magnitudes
 
-    return normals
+    return normals  # type: ignore[no-any-return]

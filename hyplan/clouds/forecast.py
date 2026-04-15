@@ -60,7 +60,7 @@ class OpenMeteoCloudForecast:
               ``cloud_fraction``, ``cloud_fraction_low``,
               ``cloud_fraction_mid``, ``cloud_fraction_high``.
         """
-        import requests as _requests
+        import requests as _requests  # type: ignore[import-untyped]
 
         if "Name" not in polygons.columns:
             raise HyPlanValueError(

@@ -4,6 +4,8 @@ Add, select/deselect, and reorder flight lines on an ipyleaflet map
 with a sidebar list for sequencing.
 """
 
+from __future__ import annotations
+
 import ipywidgets as widgets
 import ipyleaflet
 

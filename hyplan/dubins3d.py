@@ -47,6 +47,7 @@ import math
 from typing import Optional, Tuple, Union
 
 import numpy as np
+from pint import Quantity
 from shapely.geometry import LineString
 from shapely.ops import transform
 
@@ -206,7 +207,7 @@ class _Dubins2D:
 
         q[0] = q[0] * self.rhomin + self.qi[0]
         q[1] = q[1] * self.rhomin + self.qi[1]
-        q[2] = _mod2pi(q[2])
+        q[2] = _mod2pi(q[2])  # type: ignore[arg-type]
         return q
 
 
@@ -225,7 +226,7 @@ def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray
         q[0] = qi[0] + math.cos(qi[2]) * offset
         q[1] = qi[1] + math.sin(qi[2]) * offset
         q[2] = qi[2]
-    return q
+    return q  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +341,7 @@ class _TrochoidDubins2D:
             q_air[1] + self.wind_v * time_offset,
             q_air[2],  # heading in air frame
         ])
-        return q_ground
+        return q_ground  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +604,7 @@ def _try_to_construct(
     # Horizontal 2D Dubins: (x, y, heading)
     qi2d = np.array([qi[0], qi[1], qi[3]])
     qf2d = np.array([qf[0], qf[1], qf[3]])
+    d_lat: Union[_Dubins2D, _TrochoidDubins2D]
     if wind is not None:
         d_lat = _TrochoidDubins2D(
             qi2d, qf2d, horizontal_radius, airspeed, wind[0], wind[1],
@@ -707,15 +709,15 @@ def _sample_3d_path(
 
         if is_trochoid:
             # Convert air-frame arc length to time, then sample ground track
-            time_offset = q_sz[0] / d_lat.airspeed if d_lat.airspeed > 0 else 0.0
-            q_xy = d_lat.get_coordinates_at(time_offset)
+            time_offset = q_sz[0] / d_lat.airspeed if d_lat.airspeed > 0 else 0.0  # type: ignore[union-attr]
+            q_xy = d_lat.get_coordinates_at(time_offset)  # type: ignore[arg-type]
         else:
             # Standard: sample by arc-length directly
-            q_xy = d_lat.get_coordinates_at(q_sz[0])
+            q_xy = d_lat.get_coordinates_at(q_sz[0])  # type: ignore[arg-type]
 
         points[i] = [q_xy[0], q_xy[1], q_sz[1], q_xy[2], q_sz[2]]
 
-    return points
+    return points  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -759,7 +761,7 @@ class DubinsPath3D:
         self,
         start: Waypoint,
         end: Waypoint,
-        speed: Union[ureg.Quantity, float],
+        speed: Union[Quantity, float],
         bank_angle: float,
         pitch_min: float = -10.0,
         pitch_max: float = 10.0,
@@ -862,7 +864,7 @@ class DubinsPath3D:
         return self._geometry_3d
 
     @property
-    def length(self) -> ureg.Quantity:
+    def length(self) -> Quantity:
         """Total 3D path length (air-path distance).
 
         This is the distance traveled through the air mass, not the
@@ -873,17 +875,17 @@ class DubinsPath3D:
         the airspeed-integrated path used for timing calculations
         (i.e. ``time = length / TAS``).
         """
-        return self._length
+        return self._length  # type: ignore[no-any-return]
 
     @property
     def points(self) -> np.ndarray:
         """Sampled points as array of (lat, lon, alt_m, heading_deg, pitch_deg)."""
-        return self._points
+        return self._points  # type: ignore[no-any-return]
 
     @property
-    def min_turn_radius(self) -> ureg.Quantity:
+    def min_turn_radius(self) -> Quantity:
         """Minimum 3D turn radius in meters."""
-        return self._rhomin * ureg.meter
+        return self._rhomin * ureg.meter  # type: ignore[no-any-return]
 
     def to_dict(self) -> dict:
         """Dictionary representation."""
@@ -894,8 +896,8 @@ class DubinsPath3D:
             "start_lon": self.start.longitude,
             "end_lat": self.end.latitude,
             "end_lon": self.end.longitude,
-            "start_altitude": self.start.altitude_msl.m_as(ureg.meter),
-            "end_altitude": self.end.altitude_msl.m_as(ureg.meter),
+            "start_altitude": self.start.altitude_msl.m_as(ureg.meter),  # type: ignore[union-attr]
+            "end_altitude": self.end.altitude_msl.m_as(ureg.meter),  # type: ignore[union-attr]
             "start_heading": self.start.heading,
             "end_heading": self.end.heading,
             "distance": self.length.m_as(ureg.nautical_mile),

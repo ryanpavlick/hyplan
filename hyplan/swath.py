@@ -61,9 +61,9 @@ def _resolve_swath_boresight_azimuths(
             f"heading_mode must be 'track' or 'crabbed', got {heading_mode!r}"
         )
     if heading_deg is not None:
-        return np.full_like(track_azimuths, heading_deg % 360.0)
+        return np.full_like(track_azimuths, heading_deg % 360.0)  # type: ignore[no-any-return]
     if crab_angle_deg is not None:
-        return (track_azimuths + crab_angle_deg) % 360.0
+        return (track_azimuths + crab_angle_deg) % 360.0  # type: ignore[no-any-return]
     raise ValueError(
         "heading_mode='crabbed' requires either crab_angle_deg or heading_deg"
     )

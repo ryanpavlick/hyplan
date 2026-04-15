@@ -7,9 +7,11 @@ projection, and multi-camera rig configurations for stereo coverage
 planning.
 """
 
+from __future__ import annotations
+
 import warnings
 from typing import List, Tuple, Dict
-from pint import Quantity
+from pint import Quantity, Unit
 import numpy as np
 from shapely.geometry import Polygon as ShapelyPolygon
 
@@ -88,23 +90,23 @@ class FrameCamera(Sensor):
     def ifov_x(self) -> float:
         """Instantaneous field of view per pixel across-track (microradians)."""
         pixel_size = self.sensor_width / self.resolution_x
-        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6
+        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6  # type: ignore[no-any-return]
 
     @property
     def ifov_y(self) -> float:
         """Instantaneous field of view per pixel along-track (microradians)."""
         pixel_size = self.sensor_height / self.resolution_y
-        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6
+        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6  # type: ignore[no-any-return]
 
     @property
     def fov_x(self) -> float:
         """Calculate horizontal Field of View (FoV) in degrees."""
-        return 2 * np.degrees(np.arctan((self.sensor_width / (2 * self.focal_length)).magnitude))
+        return 2 * np.degrees(np.arctan((self.sensor_width / (2 * self.focal_length)).magnitude))  # type: ignore[no-any-return]
 
     @property
     def fov_y(self) -> float:
         """Calculate vertical Field of View (FoV) in degrees."""
-        return 2 * np.degrees(np.arctan((self.sensor_height / (2 * self.focal_length)).magnitude))
+        return 2 * np.degrees(np.arctan((self.sensor_height / (2 * self.focal_length)).magnitude))  # type: ignore[no-any-return]
 
     def ground_sample_distance(self, altitude_agl: Quantity) -> Dict[str, Quantity]:
         """
@@ -124,8 +126,8 @@ class FrameCamera(Sensor):
 
         if self.tilt_angle == 0.0:
             return {
-                "x": (2 * altitude_agl * np.tan(np.radians(self.fov_x / (2 * self.resolution_x)))),
-                "y": (2 * altitude_agl * np.tan(np.radians(self.fov_y / (2 * self.resolution_y))))
+                "x": (2 * altitude_agl * np.tan(np.radians(self.fov_x / (2 * self.resolution_x)))),  # type: ignore[dict-item,no-any-return]
+                "y": (2 * altitude_agl * np.tan(np.radians(self.fov_y / (2 * self.resolution_y))))  # type: ignore[dict-item,no-any-return]
             }
 
         # Tilted camera: GSD varies along the tilt axis
@@ -170,7 +172,7 @@ class FrameCamera(Sensor):
         gsd_x = self._validate_quantity(gsd_x, ureg.meter)
         gsd_y = self._validate_quantity(gsd_y, ureg.meter)
 
-        return max(
+        return max(  # type: ignore[return-value,no-any-return]
             gsd_x / (2 * np.tan(np.radians(self.fov_x / (2 * self.resolution_x)))),
             gsd_y / (2 * np.tan(np.radians(self.fov_y / (2 * self.resolution_y))))
         )
@@ -268,7 +270,7 @@ class FrameCamera(Sensor):
             Scale denominator N such that the image scale is 1:N.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return (altitude_agl / self.focal_length).to_reduced_units().magnitude
+        return (altitude_agl / self.focal_length).to_reduced_units().magnitude  # type: ignore[no-any-return]
 
     def altitude_for_scale(self, scale_denominator: float) -> Quantity:
         """Altitude AGL required for a given image scale (1:N).
@@ -279,7 +281,7 @@ class FrameCamera(Sensor):
         Returns:
             Required altitude AGL in meters.
         """
-        return (self.focal_length * scale_denominator).to(ureg.meter)
+        return (self.focal_length * scale_denominator).to(ureg.meter)  # type: ignore[return-value,no-any-return]
 
     def focal_length_for_gsd(self, altitude_agl: Quantity, target_gsd: Quantity) -> Quantity:
         """Required focal length for a target GSD at a given altitude.
@@ -296,7 +298,7 @@ class FrameCamera(Sensor):
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         target_gsd = self._validate_quantity(target_gsd, ureg.meter)
         pixel_size = self.sensor_width / self.resolution_x
-        return (altitude_agl * pixel_size / target_gsd).to(ureg.mm)
+        return (altitude_agl * pixel_size / target_gsd).to(ureg.mm)  # type: ignore[return-value,no-any-return]
 
     def line_spacing(self, altitude_agl: Quantity, sidelap_pct: float = 60.0) -> Quantity:
         """Flight line spacing from sidelap percentage.
@@ -309,7 +311,7 @@ class FrameCamera(Sensor):
             Center-to-center distance between parallel flight lines in meters.
         """
         footprint = self.footprint_at(altitude_agl)
-        return footprint["width"] * (1 - sidelap_pct / 100)
+        return footprint["width"] * (1 - sidelap_pct / 100)  # type: ignore[return-value,no-any-return]
 
     def trigger_distance(self, altitude_agl: Quantity, overlap_pct: float = 80.0) -> Quantity:
         """Along-track distance between camera exposures from overlap percentage.
@@ -322,7 +324,7 @@ class FrameCamera(Sensor):
             Distance between exposure centers in meters.
         """
         footprint = self.footprint_at(altitude_agl)
-        return footprint["height"] * (1 - overlap_pct / 100)
+        return footprint["height"] * (1 - overlap_pct / 100)  # type: ignore[return-value,no-any-return]
 
     def trigger_interval(self, altitude_agl: Quantity, ground_speed: Quantity,
                          overlap_pct: float = 80.0) -> Quantity:
@@ -338,7 +340,7 @@ class FrameCamera(Sensor):
         """
         ground_speed = self._validate_quantity(ground_speed, ureg.meter / ureg.second)
         dist = self.trigger_distance(altitude_agl, overlap_pct)
-        return (dist / ground_speed).to(ureg.second)
+        return (dist / ground_speed).to(ureg.second)  # type: ignore[return-value,no-any-return]
 
     def coverage_buffer(self, altitude_agl: Quantity, overlap_pct: float = 80.0,
                         n_frames: int = 4) -> Quantity:
@@ -355,7 +357,7 @@ class FrameCamera(Sensor):
         Returns:
             Buffer distance in meters.
         """
-        return self.trigger_distance(altitude_agl, overlap_pct) * n_frames
+        return self.trigger_distance(altitude_agl, overlap_pct) * n_frames  # type: ignore[return-value,no-any-return]
 
     def critical_ground_speed(self, altitude_agl: Quantity) -> Quantity:
         """
@@ -370,7 +372,7 @@ class FrameCamera(Sensor):
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         pixel_size = self.ground_sample_distance(altitude_agl)["y"]  # Along-track GSD
         frame_period = (1 / self.frame_rate).to(ureg.s)
-        return pixel_size / frame_period
+        return pixel_size / frame_period  # type: ignore[return-value,no-any-return]
 
     def base_height_ratio(self, altitude_agl: Quantity, overlap_pct: float = 80.0) -> float:
         """Base-to-height ratio for stereo photogrammetry.
@@ -388,7 +390,7 @@ class FrameCamera(Sensor):
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         baseline = self.trigger_distance(altitude_agl, overlap_pct)
-        return (baseline / altitude_agl).to_reduced_units().magnitude
+        return (baseline / altitude_agl).to_reduced_units().magnitude  # type: ignore[no-any-return]
 
     def vertical_accuracy(self, altitude_agl: Quantity, overlap_pct: float = 80.0,
                           sigma_parallax: float = 0.5) -> Quantity:
@@ -408,10 +410,10 @@ class FrameCamera(Sensor):
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         bh = self.base_height_ratio(altitude_agl, overlap_pct)
         gsd_y = self.ground_sample_distance(altitude_agl)["y"]
-        return (sigma_parallax * gsd_y / bh).to(ureg.meter)
+        return (sigma_parallax * gsd_y / bh).to(ureg.meter)  # type: ignore[return-value,no-any-return]
 
     def range_accuracy(self, altitude_agl: Quantity, baseline: Quantity,
-                       sigma_q: float = None) -> Quantity:
+                       sigma_q: float | None = None) -> Quantity:
         """Stereo range accuracy using the range-error formula.
 
         ``σ_R = R² × σ_q / B`` where *R* is the slant range from the
@@ -435,13 +437,13 @@ class FrameCamera(Sensor):
             sigma_q = (self.ifov_y * 1e-6) / 3.0
         tilt_rad = np.radians(self.tilt_angle)
         slant_range = altitude_agl / np.cos(tilt_rad) if self.tilt_angle > 0 else altitude_agl
-        return (slant_range ** 2 * sigma_q / baseline).to(ureg.meter)
+        return (slant_range ** 2 * sigma_q / baseline).to(ureg.meter)  # type: ignore[return-value,no-any-return]
 
-    def _validate_quantity(self, value: Quantity, expected_unit: Quantity) -> Quantity:
+    def _validate_quantity(self, value: Quantity, expected_unit: Quantity | Unit) -> Quantity:
         """Validates and converts a quantity to the expected unit."""
         if not isinstance(value, Quantity):
             raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
-        return value.to(expected_unit)
+        return value.to(expected_unit)  # type: ignore[return-value]
 
     @staticmethod
     def _corner_rotation(tilt_angle, tilt_direction, cross_track_offset):
@@ -479,7 +481,7 @@ class FrameCamera(Sensor):
             x1, y1 = corners[(i + 1) % 4]
             for t in np.linspace(0, 1, edge_points, endpoint=False):
                 rays.append([x0 + t * (x1 - x0), y0 + t * (y1 - y0), 1.0])
-        return np.array(rays)
+        return np.array(rays)  # type: ignore[no-any-return]
 
     def ground_footprint(
         self,
@@ -487,11 +489,11 @@ class FrameCamera(Sensor):
         cross_track_offset: float = 0.0,
         *,
         edge_points: int = 10,
-        lat: float = None,
-        lon: float = None,
-        altitude_msl: float = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        altitude_msl: float | None = None,
         heading: float = 0.0,
-        dem_file: str = None,
+        dem_file: str | None = None,
     ) -> ShapelyPolygon:
         """Project the sensor perimeter onto the ground as a Shapely Polygon.
 
@@ -550,7 +552,7 @@ class FrameCamera(Sensor):
                 azimuth_cam = np.degrees(np.arctan2(ray[0], ray[1]))
                 azimuth_geo = (heading + azimuth_cam) % 360
                 clat, clon, celev = ray_terrain_intersection(
-                    lat, lon, altitude_msl,
+                    lat, lon, altitude_msl,  # type: ignore[arg-type]
                     np.array([azimuth_geo]), np.array([90.0 - depression]),
                     dem_file=dem_file,
                 )
@@ -628,7 +630,7 @@ class FrameCamera(Sensor):
             azimuth_geo = (heading + azimuth_cam) % 360
 
             clat, clon, calt = ray_terrain_intersection(
-                lat, lon, altitude_msl,
+                lat, lon, altitude_msl,  # type: ignore[arg-type]
                 np.array([azimuth_geo]), np.array([90.0 - depression]),
                 dem_file=dem_file,
             )
@@ -672,7 +674,7 @@ class MultiCameraRig(Sensor):
         widths = [c["camera"].swath_width(altitude_agl) for c in self.cameras]
         # Simple approach: sum unique cross-track contributions
         # For cameras at different cross-track angles this is an approximation
-        return max(widths, key=lambda w: w.magnitude)
+        return max(widths, key=lambda w: w.magnitude)  # type: ignore[no-any-return]
 
     def ground_sample_distance(self, altitude_agl: Quantity) -> Dict[str, Quantity]:
         """Finest GSD across all cameras."""
@@ -696,11 +698,11 @@ class MultiCameraRig(Sensor):
         altitude_agl: Quantity,
         *,
         edge_points: int = 10,
-        lat: float = None,
-        lon: float = None,
-        altitude_msl: float = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        altitude_msl: float | None = None,
         heading: float = 0.0,
-        dem_file: str = None,
+        dem_file: str | None = None,
     ) -> List[Dict]:
         """Project each camera's sensor perimeter onto the ground.
 
@@ -783,7 +785,7 @@ class MultiCameraRig(Sensor):
 
     def line_spacing(self, altitude_agl: Quantity, sidelap_pct: float = 60.0) -> Quantity:
         """Flight line spacing from sidelap and combined swath width."""
-        return self.swath_width(altitude_agl) * (1 - sidelap_pct / 100)
+        return self.swath_width(altitude_agl) * (1 - sidelap_pct / 100)  # type: ignore[return-value,no-any-return]
 
     @classmethod
     def quakes_i(cls) -> "MultiCameraRig":

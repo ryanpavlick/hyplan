@@ -40,7 +40,7 @@ def setup_logging(
             logger.removeHandler(h)
     handler = _logging.StreamHandler()
     handler.setFormatter(_logging.Formatter(format))
-    handler._hyplan_managed = True
+    handler._hyplan_managed = True  # type: ignore[attr-defined]
     logger.addHandler(handler)
     logger.setLevel(level)
     logger.propagate = False

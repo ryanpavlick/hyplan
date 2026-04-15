@@ -23,7 +23,7 @@ def magnitude_in(value, unit) -> float:
     shorter, and doesn't need this helper.
     """
     if hasattr(value, "to"):
-        return value.m_as(unit)
+        return value.m_as(unit)  # type: ignore[no-any-return]
     return float(value)
 
 def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
@@ -48,7 +48,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
-    return (distance * units[from_unit]).m_as(units[to_unit])
+    return (distance * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     """
@@ -72,7 +72,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (speed * units[from_unit]).m_as(units[to_unit])
+    return (speed * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     """
@@ -95,7 +95,7 @@ def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (angle * units[from_unit]).m_as(units[to_unit])
+    return (angle * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     """
@@ -118,7 +118,7 @@ def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (time * units[from_unit]).m_as(units[to_unit])
+    return (time * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
     """

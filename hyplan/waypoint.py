@@ -1,5 +1,7 @@
 """Waypoint class for flight planning."""
 
+from __future__ import annotations
+
 import logging
 import warnings
 from typing import Union, Dict
@@ -8,6 +10,7 @@ import pymap3d
 from shapely.geometry import Point
 
 from .geometry import wrap_to_180, wrap_to_360
+from pint import Quantity
 from .units import ureg
 from .exceptions import HyPlanTypeError, HyPlanValueError
 
@@ -20,11 +23,11 @@ class Waypoint:
         latitude: float,
         longitude: float,
         heading: float,
-        altitude_msl: Union[ureg.Quantity, float, None] = None,
-        name: str = None,
-        speed: Union[ureg.Quantity, float, None] = None,
-        delay: Union[ureg.Quantity, float, None] = None,
-        segment_type: str = None,
+        altitude_msl: Union[Quantity, float, None] = None,
+        name: str | None = None,
+        speed: Union[Quantity, float, None] = None,
+        delay: Union[Quantity, float, None] = None,
+        segment_type: str | None = None,
     ):
         """
         Initialize a Waypoint object.
@@ -86,8 +89,8 @@ class Waypoint:
 
     def offset_north_east(
         self,
-        offset_north: Union[ureg.Quantity, float],
-        offset_east: Union[ureg.Quantity, float],
+        offset_north: Union[Quantity, float],
+        offset_east: Union[Quantity, float],
     ) -> "Waypoint":
         """Return a new Waypoint translated by geodetic N/E offsets.
 
@@ -115,8 +118,8 @@ class Waypoint:
         )
         return Waypoint(
             latitude=round(new_lat, 6),
-            longitude=round(wrap_to_180(new_lon), 6),
-            heading=self.heading,
+            longitude=round(wrap_to_180(new_lon), 6),  # type: ignore[arg-type]
+            heading=self.heading,  # type: ignore[arg-type]
             altitude_msl=self.altitude_msl,
             name=self.name,
             speed=self.speed,

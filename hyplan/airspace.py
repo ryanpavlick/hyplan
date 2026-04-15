@@ -44,18 +44,24 @@ Key functions
   properties for display.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, TYPE_CHECKING, Union
 
-import requests
+import requests  # type: ignore[import-untyped]
 from shapely.geometry import Polygon, MultiPolygon, box as box_geom, shape
 from shapely.geometry.base import BaseGeometry
 from shapely import STRtree
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from shapely.geometry import LineString
 
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .terrain import get_cache_root
@@ -850,9 +856,9 @@ class OpenAIPClient:
         if country is None:
             countries = [None]
         elif isinstance(country, str):
-            countries = [country]
+            countries = [country]  # type: ignore[list-item]
         else:
-            countries = list(country)
+            countries = list(country)  # type: ignore[arg-type]
 
         cache_dir = _get_airspace_cache_dir()
         cache_key_str = _cache_key(bounds, countries)
@@ -867,7 +873,7 @@ class OpenAIPClient:
         min_lon, min_lat, max_lon, max_lat = bounds
 
         seen_ids: set = set()
-        items: List[dict] = []
+        items: List[dict] = []  # type: ignore[no-redef]
         for c in countries:
             page_items = self._fetch_all_pages(bounds, c)
             for it in page_items:
@@ -1189,12 +1195,12 @@ class FAATFRClient:
 
         if bounds is not None:
             bbox = box_geom(*bounds)
-            airspaces = [a for a in airspaces if a.geometry.intersects(bbox)]
+            airspaces = [a for a in airspaces if a.geometry.intersects(bbox)]  # type: ignore[union-attr]
 
         if effective_only:
-            airspaces = self._filter_effective(airspaces)
+            airspaces = self._filter_effective(airspaces)  # type: ignore[assignment, arg-type]
 
-        return airspaces
+        return airspaces  # type: ignore[return-value]
 
     @staticmethod
     def _parse_date_from_description(description: str) -> Optional[str]:
@@ -1479,7 +1485,7 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])
+        return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
     def _feature_to_airspace(feature: dict) -> Optional[Airspace]:
@@ -1643,7 +1649,7 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])
+        return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
     def _sfra_feature_to_airspace(feature: dict) -> Optional[Airspace]:
@@ -1783,7 +1789,7 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])
+        return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
     def _class_feature_to_airspace(feature: dict) -> Optional[Airspace]:

@@ -25,8 +25,8 @@ class PlannerState(HasTraits):
     """
 
     aircraft = Instance(Aircraft, allow_none=True)
-    waypoints = List()
-    flight_lines = List()
+    waypoints = List()  # type: ignore[var-annotated]
+    flight_lines = List()  # type: ignore[var-annotated]
     selected_indices = List(Int())
 
     def append_waypoint(self, waypoint: Waypoint) -> None:

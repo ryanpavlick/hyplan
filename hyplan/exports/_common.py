@@ -5,6 +5,8 @@ used by every export format. Kept private (single underscore prefix)
 because the API surface lives in the per-format modules.
 """
 
+from __future__ import annotations
+
 import datetime
 import math
 import warnings
@@ -113,7 +115,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
 
 
 def generate_wp_names(n: int, prefix: str = "H",
-                      date: datetime.date = None) -> List[str]:
+                      date: datetime.date | None = None) -> List[str]:
     """Generate MovingLines-compatible 5-char waypoint names.
 
     Pattern: ``{prefix}{day:02d}{wp:02d}`` — e.g. ``'H2101'`` for prefix

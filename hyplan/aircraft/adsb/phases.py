@@ -98,7 +98,7 @@ def _label_heuristic(
     """Pure-numpy heuristic phase labeler."""
     n = len(altitude_ft)
     if n == 0:
-        return np.array([], dtype=object)
+        return np.array([], dtype=object)  # type: ignore[no-any-return]
 
     # Step 1: smooth vertical rate with rolling median (window=5)
     vs_smooth = _rolling_median(vertical_rate_fpm, window=5)
@@ -124,14 +124,14 @@ def _rolling_median(arr: np.ndarray, window: int) -> np.ndarray:
     """Compute a rolling median over *arr* with edge-clamped padding."""
     n = len(arr)
     if n <= window:
-        return np.full(n, np.median(arr))
+        return np.full(n, np.median(arr))  # type: ignore[no-any-return]
     half = window // 2
     padded = np.pad(arr, half, mode="edge")
     # Use stride tricks for a vectorized sliding window
     shape = (n, window)
     strides = (padded.strides[0], padded.strides[0])
     windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
-    return np.median(windows, axis=1)
+    return np.median(windows, axis=1)  # type: ignore[no-any-return]
 
 
 def _refine_cruise(
@@ -208,6 +208,6 @@ def _timestamps_to_seconds(timestamps: np.ndarray) -> np.ndarray:
     """Convert a numpy array of timestamps to float seconds from epoch."""
     if np.issubdtype(timestamps.dtype, np.datetime64):
         epoch = np.datetime64(0, "s")
-        return (timestamps - epoch) / np.timedelta64(1, "s")
+        return (timestamps - epoch) / np.timedelta64(1, "s")  # type: ignore[no-any-return]
     # Already numeric (e.g. from pandas .values on a numeric column)
-    return timestamps.astype(float)
+    return timestamps.astype(float)  # type: ignore[no-any-return]

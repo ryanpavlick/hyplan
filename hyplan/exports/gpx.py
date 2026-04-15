@@ -1,5 +1,7 @@
 """GPX route export for hyplan flight plans."""
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -13,7 +15,7 @@ def to_gpx(
     plan: gpd.GeoDataFrame,
     filepath: str,
     mission_name: str = "",
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
 ) -> None:
     """Write a GPX route file.
 

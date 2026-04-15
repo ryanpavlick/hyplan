@@ -5,6 +5,8 @@ all build a comma-separated waypoint listing from the same shared
 :func:`~hyplan.exports._common.extract_waypoints` table.
 """
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -22,7 +24,7 @@ __all__ = ["to_foreflight_csv", "to_honeywell_fms", "to_er2_csv"]
 def to_foreflight_csv(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
 ) -> None:
     """Write a ForeFlight-compatible CSV file.
 
@@ -37,7 +39,7 @@ def to_foreflight_csv(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     seen_names = set()
@@ -73,7 +75,7 @@ def to_foreflight_csv(
 def to_honeywell_fms(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
 ) -> None:
     """Write a Honeywell FMS-compatible CSV file.
 
@@ -88,7 +90,7 @@ def to_honeywell_fms(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     seen_names = set()
@@ -117,7 +119,7 @@ def to_honeywell_fms(
 def to_er2_csv(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
 ) -> None:
     """Write an ER-2-compatible CSV file.
 
@@ -131,7 +133,7 @@ def to_er2_csv(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     if takeoff_time:

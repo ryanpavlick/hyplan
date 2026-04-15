@@ -92,7 +92,7 @@ class Campaign:
             self._bounds = bounds
         else:
             self._polygon = polygon
-            self._bounds = polygon.bounds  # (minx, miny, maxx, maxy)
+            self._bounds = polygon.bounds  # type: ignore[union-attr]
 
         self._name = name
         self._country = country
@@ -197,7 +197,7 @@ class Campaign:
             )
         if flight_lines is None:
             flight_lines = self.flight_lines
-        return check_airspace_conflicts(flight_lines, self._airspaces)
+        return check_airspace_conflicts(flight_lines, self._airspaces)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Flight lines and groups
@@ -241,7 +241,7 @@ class Campaign:
             "line_ids": line_ids,
         }
         if generation_params is not None:
-            group["generation"] = generation_params
+            group["generation"] = generation_params  # type: ignore[assignment]
 
         self._groups.append(group)
         logger.info(
@@ -449,7 +449,7 @@ def _write_json(filepath: str, data: dict) -> None:
 def _read_json(filepath: str) -> dict:
     """Read a JSON file and return the parsed dict."""
     with open(filepath) as f:
-        return json.load(f)
+        return json.load(f)  # type: ignore[no-any-return]
 
 
 def _flight_line_from_geojson(feature: dict) -> FlightLine:

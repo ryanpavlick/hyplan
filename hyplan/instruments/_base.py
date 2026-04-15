@@ -1,8 +1,10 @@
 """Base class and structural protocol for HyPlan sensor models."""
 
+from __future__ import annotations
+
 from typing import Protocol, Tuple, runtime_checkable
 
-from pint import Quantity
+from pint import Quantity, Unit
 
 from ..exceptions import HyPlanTypeError
 from ..units import ureg  # noqa: F401 — available to subclasses via this module
@@ -20,7 +22,7 @@ class Sensor:
     def __str__(self) -> str:
         return self.name
 
-    def _validate_quantity(self, value: Quantity, expected_unit: Quantity) -> Quantity:
+    def _validate_quantity(self, value: Quantity, expected_unit: Quantity | Unit) -> Quantity:
         """
         Validate that a value is a pint Quantity and convert it to the expected unit.
 
@@ -36,7 +38,7 @@ class Sensor:
         """
         if not isinstance(value, Quantity):
             raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
-        return value.to(expected_unit)
+        return value.to(expected_unit)  # type: ignore[return-value]
 
 
 @runtime_checkable

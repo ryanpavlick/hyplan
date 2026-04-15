@@ -81,4 +81,4 @@ class GMAOWindField(_GriddedWindField):
         frac_ns = ((raw_time - 1 - np.floor(raw_time - 1)) * 86400e9).astype(
             "timedelta64[ns]"
         )
-        return _GMAO_EPOCH + days + frac_ns
+        return _GMAO_EPOCH + days + frac_ns  # type: ignore[no-any-return]

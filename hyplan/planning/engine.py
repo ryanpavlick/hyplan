@@ -131,7 +131,7 @@ def compute_flight_plan(
         mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
         takeoff_wind_uv = _resolve_wind_uv(
             mid_lat, mid_lon,
-            first_target.altitude_msl, _current_time(),
+            first_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
             wind_source, wind_speed, wind_direction,
         )
         takeoff_info = aircraft.time_to_takeoff(
@@ -166,8 +166,8 @@ def compute_flight_plan(
             mid_lon = longitudes[mid_idx]
 
             sol = _resolve_track_hold_solution(
-                fl_tas, track_deg,
-                mid_lat, mid_lon,
+                fl_tas, track_deg,  # type: ignore[arg-type]
+                mid_lat, mid_lon,  # type: ignore[arg-type]
                 segment.altitude_msl, _current_time(),
                 wind_source, wind_speed, wind_direction,
             )
@@ -203,23 +203,23 @@ def compute_flight_plan(
             cumulative_minutes += time_to_segment
 
         # Insert loiter segment if the current waypoint has a delay.
-        if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:
+        if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:  # type: ignore[union-attr]
             from shapely.geometry import Point as _Point
-            loiter_time = segment.delay.m_as(ureg.minute)
+            loiter_time = segment.delay.m_as(ureg.minute)  # type: ignore[union-attr]
             records.append({
-                "geometry": _Point(segment.longitude, segment.latitude),
-                "start_lat": segment.latitude,
-                "start_lon": segment.longitude,
-                "end_lat": segment.latitude,
-                "end_lon": segment.longitude,
-                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
-                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+                "geometry": _Point(segment.longitude, segment.latitude),  # type: ignore[union-attr]
+                "start_lat": segment.latitude,  # type: ignore[union-attr]
+                "start_lon": segment.longitude,  # type: ignore[union-attr]
+                "end_lat": segment.latitude,  # type: ignore[union-attr]
+                "end_lon": segment.longitude,  # type: ignore[union-attr]
+                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
+                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
                 "segment_type": "loiter",
-                "segment_name": segment.name,
+                "segment_name": segment.name,  # type: ignore[union-attr]
                 "distance": 0.0,
                 "time_to_segment": loiter_time,
-                "start_heading": segment.heading,
-                "end_heading": segment.heading
+                "start_heading": segment.heading,  # type: ignore[union-attr]
+                "end_heading": segment.heading  # type: ignore[union-attr]
             })
             cumulative_minutes += loiter_time
 
@@ -236,12 +236,12 @@ def compute_flight_plan(
             # realistic turn between legs.
             departing_is_pattern = (
                 is_waypoint(segment) and is_waypoint(end)
-                and segment.segment_type == "pattern"
-                and end.segment_type in ("pattern", "pattern_turn")
+                and segment.segment_type == "pattern"  # type: ignore[union-attr]
+                and end.segment_type in ("pattern", "pattern_turn")  # type: ignore[union-attr,operator]
             )
             if departing_is_pattern:
                 rec = _direct_segment_record(
-                    start_wp, end_wp, aircraft, segment.segment_type,
+                    start_wp, end_wp, aircraft, segment.segment_type,  # type: ignore[union-attr,arg-type]
                     wind_speed=wind_speed, wind_direction=wind_direction,
                     wind_source=wind_source, segment_time=_current_time(),
                 )
@@ -251,14 +251,14 @@ def compute_flight_plan(
 
             # Use per-waypoint speed override if set on the departing waypoint.
             speed_override = None
-            if is_waypoint(segment) and segment.speed is not None:
-                speed_override = segment.speed
+            if is_waypoint(segment) and segment.speed is not None:  # type: ignore[union-attr]
+                speed_override = segment.speed  # type: ignore[union-attr]
 
             mid_lat = (start_wp.latitude + end_wp.latitude) / 2
             mid_lon = (start_wp.longitude + end_wp.longitude) / 2
             cruise_wind_uv = _resolve_wind_uv(
                 mid_lat, mid_lon,
-                end_wp.altitude_msl, _current_time(),
+                end_wp.altitude_msl, _current_time(),  # type: ignore[arg-type]
                 wind_source, wind_speed, wind_direction,
             )
             cruise_info = aircraft.time_to_cruise(
@@ -276,10 +276,10 @@ def compute_flight_plan(
                 # otherwise process_flight_phase determines the type from altitude.
                 wp_seg_type = None
                 if is_waypoint(segment):
-                    wp_seg_type = segment.segment_type
+                    wp_seg_type = segment.segment_type  # type: ignore[union-attr]
                 cruise_records = process_flight_phase(
                     start_wp, end_wp, cruise_info, phase_name,
-                    override_segment_type=wp_seg_type,
+                    override_segment_type=wp_seg_type,  # type: ignore[arg-type]
                 )
                 for r in cruise_records:
                     cumulative_minutes += r["time_to_segment"]
@@ -294,7 +294,7 @@ def compute_flight_plan(
         mid_lon = (last_target.longitude + return_airport.longitude) / 2
         return_wind_uv = _resolve_wind_uv(
             mid_lat, mid_lon,
-            last_target.altitude_msl, _current_time(),
+            last_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
             wind_source, wind_speed, wind_direction,
         )
         return_info = aircraft.time_to_return(

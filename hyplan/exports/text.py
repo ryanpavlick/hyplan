@@ -7,6 +7,8 @@ Two formats:
   and HySpex line-scanner crews.
 """
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -20,7 +22,7 @@ __all__ = ["to_txt", "to_trackair"]
 def to_txt(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
 ) -> None:
     """Write a plain text waypoint file.
 
@@ -35,7 +37,7 @@ def to_txt(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     if takeoff_time:

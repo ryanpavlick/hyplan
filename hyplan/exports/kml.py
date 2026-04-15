@@ -1,5 +1,7 @@
 """KML / KMZ export for Google Earth visualization of flight plans."""
 
+from __future__ import annotations
+
 import datetime
 
 import geopandas as gpd
@@ -12,7 +14,7 @@ __all__ = ["to_kml"]
 def to_kml(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    takeoff_time: datetime.datetime = None,
+    takeoff_time: datetime.datetime | None = None,
     altitude_exaggeration: float = 1.0,
 ) -> None:
     """Write a KML (and optionally KMZ) file for Google Earth.
@@ -31,7 +33,7 @@ def to_kml(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     if takeoff_time:
