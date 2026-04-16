@@ -220,6 +220,74 @@ def _list_subdatasets(hdf_path: str) -> list[tuple[str, str]]:
         return list(zip(src.subdatasets, src.subdatasets))
 
 
+def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarray, dict]:
+    """Read a subdataset from a MODIS HDF4-EOS file using pyhdf.
+
+    Returns the data array and metadata dict with grid parameters.
+    """
+    try:
+        from pyhdf.SD import SD, SDC
+    except ImportError:
+        raise HyPlanRuntimeError(
+            "pyhdf is required to read MODIS HDF4 files. "
+            "Install with: pip install pyhdf"
+        )
+
+    hdf = SD(hdf_path, SDC.READ)
+
+    # Find matching subdataset
+    datasets = hdf.datasets()
+    match = None
+    for ds_name in datasets:
+        if subdataset_name in ds_name:
+            match = ds_name
+            break
+    if match is None:
+        hdf.end()
+        raise HyPlanRuntimeError(
+            f"Subdataset '{subdataset_name}' not found in {hdf_path}. "
+            f"Available: {list(datasets.keys())}"
+        )
+
+    sds = hdf.select(match)
+    data = sds.get()
+    attrs = sds.attributes()
+    sds.endaccess()
+
+    # Get grid metadata from global attributes
+    grid_meta = {}
+    global_attrs = hdf.attributes()
+    for attr_name in ("StructMetadata.0", "CoreMetadata.0"):
+        if attr_name in global_attrs:
+            grid_meta[attr_name] = global_attrs[attr_name]
+
+    hdf.end()
+    return data, grid_meta
+
+
+def _parse_modis_grid_bounds(grid_meta: dict) -> tuple[float, float, float, float]:
+    """Extract MODIS sinusoidal grid bounds from StructMetadata.0.
+
+    Returns (ulx, uly, lrx, lry) in sinusoidal meters.
+    """
+    import re
+    struct = grid_meta.get("StructMetadata.0", "")
+
+    ul_match = re.search(r"UpperLeftPointMtrs=\(([^,]+),([^)]+)\)", struct)
+    lr_match = re.search(r"LowerRightMtrs=\(([^,]+),([^)]+)\)", struct)
+
+    if ul_match and lr_match:
+        ulx = float(ul_match.group(1))
+        uly = float(ul_match.group(2))
+        lrx = float(lr_match.group(1))
+        lry = float(lr_match.group(2))
+        return ulx, uly, lrx, lry
+
+    raise HyPlanRuntimeError(
+        "Could not parse MODIS grid bounds from StructMetadata.0"
+    )
+
+
 def _read_and_clip_subdataset(
     hdf_path: str,
     subdataset_name: str,
@@ -227,56 +295,48 @@ def _read_and_clip_subdataset(
 ) -> tuple[np.ndarray, "rasterio.Affine"]:
     """Read a subdataset, reproject to WGS84, clip to polygon.
 
+    Uses pyhdf to read HDF4-EOS files (GDAL HDF4 driver not required),
+    then rasterio for reprojection and clipping.
+
     Returns the clipped data array and its transform.
     """
     rio = _require_rasterio()
     from rasterio.crs import CRS
+    from rasterio.io import MemoryFile
     from rasterio.mask import mask as rio_mask
+    from rasterio.transform import from_bounds
     from rasterio.warp import Resampling, calculate_default_transform, reproject
 
-    # Find matching subdataset
-    with rio.open(hdf_path) as hdf:
-        sds_uri = None
-        for sds in hdf.subdatasets:
-            if subdataset_name in sds:
-                sds_uri = sds
-                break
-        if sds_uri is None:
-            raise HyPlanRuntimeError(
-                f"Subdataset '{subdataset_name}' not found in {hdf_path}. "
-                f"Available: {hdf.subdatasets}"
-            )
+    # Read data from HDF4 using pyhdf
+    data, grid_meta = _read_hdf4_subdataset(hdf_path, subdataset_name)
+    ulx, uly, lrx, lry = _parse_modis_grid_bounds(grid_meta)
 
-    # Open subdataset and reproject to WGS84
+    nrows, ncols = data.shape
+    src_crs = CRS.from_proj4(
+        "+proj=sinu +lon_0=0 +x_0=0 +y_0=0 "
+        "+R=6371007.181 +units=m +no_defs"
+    )
+    src_transform = from_bounds(ulx, lry, lrx, uly, ncols, nrows)
+
+    # Reproject to WGS84
     dst_crs = CRS.from_epsg(4326)
+    transform, width, height = calculate_default_transform(
+        src_crs, dst_crs, ncols, nrows,
+        left=ulx, bottom=lry, right=lrx, top=uly,
+    )
 
-    with rio.open(sds_uri) as src:
-        src_crs = src.crs
-        if src_crs is None:
-            # MODIS sinusoidal projection string
-            src_crs = CRS.from_proj4(
-                "+proj=sinu +lon_0=0 +x_0=0 +y_0=0 "
-                "+R=6371007.181 +units=m +no_defs"
-            )
+    reprojected = np.empty((height, width), dtype=data.dtype)
+    reproject(
+        source=data,
+        destination=reprojected,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=transform,
+        dst_crs=dst_crs,
+        resampling=Resampling.nearest,
+    )
 
-        transform, width, height = calculate_default_transform(
-            src_crs, dst_crs, src.width, src.height, *src.bounds,
-        )
-
-        reprojected = np.empty((height, width), dtype=src.dtypes[0])
-        reproject(
-            source=src.read(1),
-            destination=reprojected,
-            src_transform=src.transform,
-            src_crs=src_crs,
-            dst_transform=transform,
-            dst_crs=dst_crs,
-            resampling=Resampling.nearest,
-        )
-
-    # Build an in-memory dataset for masking
-    from rasterio.io import MemoryFile
-
+    # Clip to polygon using in-memory GeoTIFF
     profile = {
         "driver": "GTiff",
         "height": height,
@@ -290,7 +350,6 @@ def _read_and_clip_subdataset(
     with MemoryFile() as memfile:
         with memfile.open(**profile) as mem_ds:
             mem_ds.write(reprojected, 1)
-
             clipped, clipped_transform = rio_mask(
                 mem_ds,
                 [polygon_geom.__geo_interface__],
@@ -427,12 +486,22 @@ def fetch_phenology(
     year_stop: int = 2022,
     satellite: str = "terra",
     spatial_mode: str = "mean",
+    source: str = "appeears",
 ) -> pd.DataFrame:
     """Fetch historical vegetation phenology data for flight planning.
 
-    Searches NASA EarthData for the requested MODIS product, downloads
-    granules to the local cache, clips to each polygon, applies QA
-    filtering, and returns a tidy DataFrame.
+    Two data sources are available:
+
+    - **AppEEARS** (``source="appeears"``, default): Submits a point
+      sample request to NASA's AppEEARS service, which extracts time
+      series server-side and returns only the values.  Fast (minutes)
+      but samples at polygon centroids rather than full spatial averaging.
+
+    - **Granule download** (``source="granules"``): Downloads full MODIS
+      HDF4 granules via ``earthaccess``, clips to each polygon, and
+      computes spatial statistics locally.  Slower (downloads GBs of
+      data) but provides full spatial coverage including ``pixel_stats``
+      mode.
 
     Parameters
     ----------
@@ -452,6 +521,10 @@ def fetch_phenology(
         ``"mean"`` for a single spatial mean per polygon per timestep,
         or ``"pixel_stats"`` for mean/std/min/max/count.
         Default ``"mean"``.  Ignored for ``product="phenology"``.
+        ``"pixel_stats"`` requires ``source="granules"``.
+    source : str
+        ``"appeears"`` (default) for fast server-side extraction, or
+        ``"granules"`` for full granule download with local processing.
 
     Returns
     -------
@@ -501,6 +574,73 @@ def fetch_phenology(
             f"Use 'mean' or 'pixel_stats'."
         )
 
+    if source not in ("appeears", "granules"):
+        raise HyPlanValueError(
+            f"Unknown source: {source!r}. Use 'appeears' or 'granules'."
+        )
+
+    if spatial_mode == "pixel_stats" and source == "appeears":
+        raise HyPlanValueError(
+            "spatial_mode='pixel_stats' requires source='granules'. "
+            "AppEEARS returns point samples, not pixel-level statistics."
+        )
+
+    if product == "phenology" and source == "appeears":
+        raise HyPlanValueError(
+            "product='phenology' (MCD12Q2 transitions) is not yet "
+            "supported via AppEEARS. Use source='granules'."
+        )
+
+    # ── AppEEARS path (fast, server-side extraction) ──
+    if source == "appeears":
+        from ._appeears import fetch_appeears_timeseries
+
+        gdf = gpd.read_file(polygon_file)
+        if "Name" not in gdf.columns:
+            raise HyPlanValueError(
+                "Polygon file must contain a 'Name' column."
+            )
+
+        # Map satellite choice to AppEEARS product key
+        appeears_product = product
+        if satellite == "aqua" and product in ("ndvi", "evi"):
+            appeears_product = f"{product}_aqua"
+
+        coords = []
+        for _, row in gdf.iterrows():
+            c = row.geometry.centroid
+            coords.append({
+                "id": row["Name"],
+                "latitude": c.y,
+                "longitude": c.x,
+            })
+
+        df = fetch_appeears_timeseries(
+            coordinates=coords,
+            product=appeears_product,
+            year_start=year_start,
+            year_stop=year_stop,
+        )
+
+        if satellite == "combined" and product in ("ndvi", "evi"):
+            # Also fetch Aqua and merge
+            df_aqua = fetch_appeears_timeseries(
+                coordinates=coords,
+                product=f"{product}_aqua",
+                year_start=year_start,
+                year_stop=year_stop,
+            )
+            df = pd.concat([df, df_aqua], ignore_index=True)
+            df = (
+                df.groupby(["polygon_id", "year", "day_of_year"], as_index=False)
+                .agg(date=("date", "first"), value=("value", "mean"))
+            )
+
+        return df.sort_values(
+            ["polygon_id", "year", "day_of_year"]
+        ).reset_index(drop=True)
+
+    # ── Granule download path (slow, full spatial processing) ──
     # Load and validate polygons
     gdf = gpd.read_file(polygon_file)
     if "Name" not in gdf.columns:
