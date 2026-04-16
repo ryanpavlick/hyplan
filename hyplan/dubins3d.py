@@ -15,10 +15,12 @@ validates centre-angle excursions against the pitch bounds.
 
 When a wind vector is supplied, the horizontal sub-problem switches
 from circular arcs to **trochoidal** arcs (circles drifting with the
-wind).  The solver finds the time-optimal path in the air-relative
-frame using an iterative target-drift algorithm, then samples the
-ground track with cumulative wind displacement applied.  Path length
-and timing are always expressed in the air frame (see
+wind).  The solver finds the time-optimal BSB (Bang-Straight-Bang)
+path in the air-relative frame using an iterative moving-target
+method, then samples the ground track with cumulative wind
+displacement to produce trochoids.  CCC paths (RLR/LRL) are
+disabled for wind cases to avoid degenerate multi-loop solutions.
+Path length and timing are always expressed in the air frame (see
 :attr:`DubinsPath3D.length`).
 
 References
@@ -236,16 +238,14 @@ def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray
 class _TrochoidDubins2D:
     """Wind-aware 2D Dubins solver with trochoidal ground tracks.
 
-    Solves for the time-optimal path in the air-relative frame, then
-    provides ground-frame sampling where turning arcs become trochoids
-    (circles + wind drift).
+    Pure Python port of the Sachdev, Moon et al. (2023) algorithm from
+    ``github.com/castacks/trochoids``.  Solves for the time-optimal
+    BSB (Bang-Straight-Bang) trochoidal path by:
 
-    The approach:
-    1. Iteratively solve: guess total time T, place the air-frame target
-       at ``qf_ground - wind * T``, solve standard Dubins, update T.
-    2. Once converged, store the air-frame Dubins solution.
-    3. ``get_coordinates_at(offset)`` returns ground-frame positions by
-       adding cumulative wind drift to air-frame positions.
+    1. Transforming to wind-aligned frame.
+    2. For each BSB type, computing turning circle centers and solving
+       for t1/t2 analytically (RSR/LSL) or via Newton-Raphson (RSL/LSR).
+    3. Sampling the ground track using trochoidal equations (Eqs 18-21).
 
     Args:
         qi: Start pose [x, y, heading] in ground frame (meters, radians).
@@ -254,94 +254,70 @@ class _TrochoidDubins2D:
         airspeed: True airspeed in m/s.
         wind_u: Eastward wind component in m/s.
         wind_v: Northward wind component in m/s.
-        disable_ccc: If True, disable CCC (RLR/LRL) path types.
+        disable_ccc: Unused (kept for interface compatibility).
+
+    Raises:
+        HyPlanValueError: If wind speed >= airspeed (infeasible).
     """
 
-    def __init__(
-        self,
-        qi: np.ndarray,
-        qf: np.ndarray,
-        rhomin: float,
-        airspeed: float,
-        wind_u: float,
-        wind_v: float,
-        disable_ccc: bool = False,
-    ):
+    _EPS = 1e-6
+    _M2PI = 2 * math.pi
+
+    def __init__(self, qi, qf, rhomin, airspeed, wind_u, wind_v,
+                 disable_ccc=False):
         self.qi = qi.copy()
         self.qf = qf.copy()
         self.rhomin = rhomin
         self.airspeed = airspeed
-        self.wind_u = wind_u  # eastward (x-direction in UTM)
-        self.wind_v = wind_v  # northward (y-direction in UTM)
+        self.wind_u = wind_u
+        self.wind_v = wind_v
 
-        # Iteratively solve for the time-optimal air-frame path.
-        # The air-frame target drifts at -wind relative to the aircraft's
-        # starting position, so qf_air = qf_ground - wind * T.
-        self._solve_iterative(disable_ccc)
+        wind_speed = math.sqrt(wind_u**2 + wind_v**2)
+        if wind_speed >= airspeed:
+            raise HyPlanValueError(
+                f"Wind speed ({wind_speed:.1f} m/s) exceeds or equals "
+                f"airspeed ({airspeed:.1f} m/s). Path is infeasible.")
 
-    def _solve_iterative(self, disable_ccc: bool, max_iter: int = 20, tol: float = 0.1):
-        """Find the air-frame Dubins path that accounts for wind drift."""
-        # Initial guess: still-air path
-        d_still = _Dubins2D(self.qi, self.qf, self.rhomin, disable_ccc)
-        T = d_still.maneuver.length / self.airspeed if self.airspeed > 0 else 0.0
+        from ._trochoid_solver import solve_trochoid
+        self._sol = solve_trochoid(qi, qf, rhomin, airspeed, wind_u, wind_v)
+        self._total_time = self._sol["total_time"]
 
-        for _ in range(max_iter):
-            # Place target in air frame: ground target drifts by -wind*T
-            qf_air = self.qf.copy()
-            qf_air[0] -= self.wind_u * T
-            qf_air[1] -= self.wind_v * T
-            # Heading stays the same (air heading = desired ground heading
-            # only if we ignore crab angle — we'll handle that below)
-
-            d_air = _Dubins2D(self.qi, qf_air, self.rhomin, disable_ccc)
-            T_new = d_air.maneuver.length / self.airspeed if self.airspeed > 0 else 0.0
-
-            if abs(T_new - T) < tol:
-                T = T_new
-                break
-            T = T_new
-
-        self._air_dubins = d_air
-        self._total_time = T
+        # maneuver: air-frame arc length in meters for 3D solver
+        air_len = self._total_time * airspeed
+        self._maneuver = _DubinsSegment(0, 0, 0, air_len, "TRO")
 
     @property
     def maneuver(self) -> _DubinsSegment:
-        """The air-frame Dubins maneuver (segment lengths in air-frame meters)."""
-        return self._air_dubins.maneuver
+        """Air-frame maneuver (length in meters for 3D compatibility)."""
+        return self._maneuver
 
     @property
     def total_time(self) -> float:
-        """Total path time in seconds."""
+        """Total traversal time in seconds."""
         return self._total_time
 
     @property
     def ground_length(self) -> float:
         """Approximate ground-track length in meters."""
-        # Sample and compute cumulative distance
+        if self._total_time <= 0:
+            return 0.0
         n = 50
-        pts = np.array([self.get_coordinates_at(i * self._total_time / (n - 1))
-                        for i in range(n)])
+        pts = np.array([self.get_coordinates_at(
+            i * self._total_time / (n - 1)) for i in range(n)])
         diffs = np.diff(pts[:, :2], axis=0)
         return float(np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)))
 
     def get_coordinates_at(self, time_offset: float) -> np.ndarray:
         """Get ground-frame (x, y, heading) at a given time offset.
 
-        The air-frame position is computed from the standard Dubins path,
-        then wind drift is added to get the ground-frame position.
-        Turn segments produce trochoidal ground tracks.
+        Uses trochoidal equations in wind frame (Eqs 18-21 of Sachdev
+        et al.), then rotates back to inertial frame. The returned
+        heading is the ground-track direction.
         """
-        # Air-frame arc-length offset
-        arc_offset = time_offset * self.airspeed
-        # Air-frame position (circle/line geometry, no wind)
-        q_air = self._air_dubins.get_coordinates_at(arc_offset)
-        # Ground-frame position = air position + wind * time
-        q_ground = np.array([
-            q_air[0] + self.wind_u * time_offset,
-            q_air[1] + self.wind_v * time_offset,
-            q_air[2],  # heading in air frame
-        ])
-        return q_ground  # type: ignore[no-any-return]
+        from ._trochoid_solver import sample_trochoid
+        return sample_trochoid(
+            self._sol, time_offset, self.airspeed,
+            self.wind_u, self.wind_v)
 
 
 # ---------------------------------------------------------------------------
