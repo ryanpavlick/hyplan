@@ -361,17 +361,39 @@ class FlightLine:
     # ------------------------------------------------------------------
 
     def clip_to_polygon(
-        self, clip_polygon: Union[Polygon, MultiPolygon]
+        self,
+        clip_polygon: Union[Polygon, MultiPolygon],
+        merge_gap: Union[Quantity, float, None] = ureg.Quantity(10, "nautical_mile"),
     ) -> Optional[List["FlightLine"]]:
         """
         Clip the flight line to a specified polygon.
 
+        When clipping produces multiple segments (e.g. a coastline inlet
+        splits the line), adjacent fragments separated by less than
+        *merge_gap* are merged into a single continuous line.  This
+        prevents short gaps from fragmenting what should be a single
+        pass — at typical survey speeds a 10 nm gap is under 3 minutes
+        of flight.
+
         Args:
-            clip_polygon (Union[Polygon, MultiPolygon]): The polygon to clip the flight line to.
+            clip_polygon (Union[Polygon, MultiPolygon]): The polygon to
+                clip the flight line to.
+            merge_gap: Maximum gap between adjacent fragments to merge.
+                Accepts a pint Quantity or a plain float (assumed meters).
+                Set to ``None`` or ``0`` to disable merging.
 
         Returns:
-            Optional[List["FlightLine"]]: A list of resulting FlightLine(s), or None if no intersection exists.
+            Optional[List["FlightLine"]]: A list of resulting
+            FlightLine(s), or None if no intersection exists.
         """
+        if merge_gap is not None:
+            if isinstance(merge_gap, Quantity):
+                merge_gap_m = merge_gap.m_as("meter")
+            else:
+                merge_gap_m = float(merge_gap)
+        else:
+            merge_gap_m = 0.0
+
         clipped_geometry = self.geometry.intersection(clip_polygon)
 
         if clipped_geometry.is_empty:
@@ -387,10 +409,38 @@ class FlightLine:
                 return [self._from_geometry(clipped_geometry)]
 
         if isinstance(clipped_geometry, MultiLineString):
+            segments = list(clipped_geometry.geoms)
+
+            # Merge adjacent segments with small gaps
+            if merge_gap_m > 0 and len(segments) > 1:
+                merged = [segments[0]]
+                for seg in segments[1:]:
+                    prev = merged[-1]
+                    # Gap between end of previous and start of current
+                    gap_deg = prev.coords[-1][0] - seg.coords[0][0]
+                    gap_lat = prev.coords[-1][1] - seg.coords[0][1]
+                    gap_m = np.sqrt(
+                        (gap_deg * 111_000 * np.cos(np.radians(prev.coords[-1][1]))) ** 2
+                        + (gap_lat * 111_000) ** 2
+                    )
+                    if gap_m <= merge_gap_m:
+                        # Merge: create a line from prev start to seg end
+                        merged[-1] = LineString([prev.coords[0], seg.coords[-1]])
+                        logger.debug(
+                            f"Merged fragments with {gap_m:.0f} m gap "
+                            f"(threshold {merge_gap_m:.0f} m)."
+                        )
+                    else:
+                        merged.append(seg)
+                segments = merged
+
             results = []
-            for i, segment in enumerate(clipped_geometry.geoms):
-                new_site_name = f"{self.site_name}_{i:02d}" if self.site_name else f"Segment_{i:02d}"
-                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was split into segment: {new_site_name}")
+            for i, segment in enumerate(segments):
+                new_site_name = (
+                    f"{self.site_name}_{i:02d}" if len(segments) > 1
+                    else self.site_name
+                ) if self.site_name else f"Segment_{i:02d}"
+                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} clipped: {new_site_name}")
                 results.append(self._from_geometry(segment, site_name=new_site_name))
             return results
 
