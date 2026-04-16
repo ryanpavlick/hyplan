@@ -508,7 +508,7 @@ def find_overpasses(
 
     # Extract region polygon
     if isinstance(region, gpd.GeoDataFrame):
-        region_poly = region.geometry.unary_union.convex_hull
+        region_poly = region.geometry.union_all().convex_hull
     else:
         region_poly = region
 
@@ -727,7 +727,7 @@ def compute_overpass_overlap(
 
             # Compute area in km^2 using UTM
             centroid = intersection.centroid
-            to_utm, from_utm = get_utm_transforms(centroid.x, centroid.y)  # type: ignore[call-arg]
+            to_utm, from_utm = get_utm_transforms(centroid)
             intersection_utm = intersection  # simplified: use degree-based area
             try:
                 from shapely.ops import transform

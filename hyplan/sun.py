@@ -26,6 +26,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Union
+import matplotlib
 import matplotlib.pyplot as plt
 from .exceptions import HyPlanValueError
 
@@ -397,5 +398,6 @@ def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     ax2.legend(loc='upper right')
 
     plt.title('Solar Azimuth and Elevation Plot')
-    plt.show()
+    if matplotlib.get_backend().lower() != "agg":
+        plt.show()
 

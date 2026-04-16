@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict
 
 import geopandas as gpd
+import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -186,4 +187,5 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
         plt.ylabel('Polygon ID')
         plt.legend(loc='upper right')
         plt.tight_layout()
-        plt.show()
+        if matplotlib.get_backend().lower() != "agg":
+            plt.show()
