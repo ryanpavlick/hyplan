@@ -4,7 +4,7 @@ import pytest
 import networkx as nx
 from hyplan.units import ureg
 from hyplan.flight_line import FlightLine
-from hyplan.aircraft import DynamicAviation_B200
+from hyplan.aircraft import KingAirB200
 from hyplan.airports import Airport, initialize_data
 from hyplan.flight_optimizer import build_graph, greedy_optimize, _opposite_endpoint
 from hyplan.exceptions import HyPlanValueError
@@ -18,7 +18,7 @@ def init_airport_data():
 
 @pytest.fixture
 def b200():
-    return DynamicAviation_B200()
+    return KingAirB200()
 
 
 @pytest.fixture

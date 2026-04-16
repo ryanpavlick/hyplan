@@ -6,7 +6,7 @@ preserved.
 
 Typical usage::
 
-    from hyplan import compute_flight_plan, DynamicAviation_B200
+    from hyplan import compute_flight_plan, KingAirB200
     from hyplan.exports import to_pilot_excel, to_foreflight_csv
 
     plan = compute_flight_plan(aircraft, waypoints, ...)

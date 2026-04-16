@@ -4,7 +4,7 @@ HyPlan - Planning software for airborne remote sensing science campaigns.
 Core objects are re-exported here for convenience::
 
     from hyplan import FlightLine, FlightBox, Airport, ureg
-    from hyplan import DynamicAviation_B200, AVIRIS3
+    from hyplan import KingAirB200, AVIRIS3
 
 Specialized modules (clouds, terrain, satellites, glint, sun) should be
 imported directly::
@@ -75,9 +75,9 @@ from .aircraft import (  # noqa: F401
     NASA_P3,
     NASA_WB57,
     NASA_B777,
-    DynamicAviation_B200,
-    DynamicAviation_DH8,
-    DynamicAviation_A90,
+    KingAirB200,
+    Dash8,
+    KingAirA90,
     C130,
     BAe146,
     Learjet,
@@ -188,7 +188,7 @@ __all__ = [
     "Aircraft",
     "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",
     "NASA_WB57", "NASA_B777",
-    "DynamicAviation_B200", "DynamicAviation_DH8", "DynamicAviation_A90",
+    "KingAirB200", "Dash8", "KingAirA90",
     "C130", "BAe146", "Learjet", "TwinOtter",
     # Airports
     "Airport", "initialize_data",

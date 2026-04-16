@@ -78,7 +78,7 @@ Core classes and functions are re-exported from the top-level `hyplan` package
 for convenience:
 
 ```python
-from hyplan import FlightLine, Airport, AVIRIS3, DynamicAviation_B200, ureg
+from hyplan import FlightLine, Airport, AVIRIS3, KingAirB200, ureg
 ```
 
 Specialized modules with heavier or optional dependencies should be imported

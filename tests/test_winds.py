@@ -23,7 +23,7 @@ from hyplan.flight_plan import (
 )
 from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
-from hyplan.aircraft import DynamicAviation_B200 as B200
+from hyplan.aircraft import KingAirB200 as B200
 
 
 # ---------------------------------------------------------------------------

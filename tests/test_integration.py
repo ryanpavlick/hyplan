@@ -11,7 +11,7 @@ from shapely.geometry import Polygon
 
 from hyplan import (
     AVIRIS3,
-    DynamicAviation_B200,
+    KingAirB200,
     box_around_polygon,
     compute_flight_plan,
     greedy_optimize,
@@ -31,7 +31,7 @@ def init_airport_data():
 
 @pytest.fixture(scope="module")
 def aircraft():
-    return DynamicAviation_B200()
+    return KingAirB200()
 
 
 @pytest.fixture(scope="module")

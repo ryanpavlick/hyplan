@@ -31,9 +31,9 @@ __all__ = [
     "NASA_P3",
     "NASA_WB57",
     "NASA_B777",
-    "DynamicAviation_DH8",
-    "DynamicAviation_A90",
-    "DynamicAviation_B200",
+    "Dash8",
+    "KingAirA90",
+    "KingAirB200",
     "C130",
     "BAe146",
     "Learjet",
@@ -445,15 +445,11 @@ class NASA_B777(Aircraft):
 
 
 # ---------------------------------------------------------------------------
-# Dynamic Aviation contract aircraft
+# King Air and Dash 8 turboprops
 # ---------------------------------------------------------------------------
 
-class DynamicAviation_DH8(Aircraft):
-    """Dynamic Aviation DHC-8 Dash 8 twin-turboprop aircraft.
-
-    See also:
-        https://www.dynamicaviation.com/fleet-dash-8
-    """
+class Dash8(Aircraft):
+    """DHC-8 Dash 8 twin-turboprop aircraft."""
 
     def __init__(self):
         cruise = TasSchedule(points=[
@@ -463,7 +459,7 @@ class DynamicAviation_DH8(Aircraft):
         super().__init__(
             aircraft_type="Dash 8",
             tail_number="Unknown",
-            operator="Dynamic Aviation",
+            operator="Unknown",
             service_ceiling=25000 * ureg.feet,
             approach_speed=110 * ureg.knot,
             climb_schedule=cruise,
@@ -484,8 +480,8 @@ class DynamicAviation_DH8(Aircraft):
         )
 
 
-class DynamicAviation_A90(Aircraft):
-    """Dynamic Aviation Beechcraft King Air A90 twin-turboprop aircraft.
+class KingAirA90(Aircraft):
+    """Beechcraft King Air A90 twin-turboprop aircraft.
 
     See also:
         https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90
@@ -499,7 +495,7 @@ class DynamicAviation_A90(Aircraft):
         super().__init__(
             aircraft_type="King Air 90",
             tail_number="Unknown",
-            operator="Dynamic Aviation",
+            operator="Unknown",
             service_ceiling=30000 * ureg.feet,
             approach_speed=110 * ureg.knot,
             climb_schedule=cruise,
@@ -520,8 +516,8 @@ class DynamicAviation_A90(Aircraft):
         )
 
 
-class DynamicAviation_B200(Aircraft):
-    """Dynamic Aviation Beechcraft King Air B200 twin-turboprop aircraft.
+class KingAirB200(Aircraft):
+    """Beechcraft King Air B200 twin-turboprop aircraft.
 
     See also:
         https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A200
@@ -535,7 +531,7 @@ class DynamicAviation_B200(Aircraft):
         super().__init__(
             aircraft_type="King Air 200",
             tail_number="Unknown",
-            operator="Dynamic Aviation",
+            operator="Unknown",
             service_ceiling=35000 * ureg.feet,
             approach_speed=120 * ureg.knot,
             climb_schedule=cruise,

@@ -7,7 +7,7 @@ from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
 from hyplan.aircraft import (
     NASA_GIII,
-    DynamicAviation_B200,
+    KingAirB200,
 )
 from hyplan.flight_plan import compute_flight_plan
 from hyplan.airports import Airport
@@ -15,7 +15,7 @@ from hyplan.airports import Airport
 
 @pytest.fixture
 def b200():
-    return DynamicAviation_B200()
+    return KingAirB200()
 
 
 @pytest.fixture

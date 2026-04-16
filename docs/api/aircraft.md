@@ -24,9 +24,9 @@ are included; custom aircraft can be created by instantiating
 .. autoclass:: hyplan.aircraft.NASA_P3
 .. autoclass:: hyplan.aircraft.NASA_WB57
 .. autoclass:: hyplan.aircraft.NASA_B777
-.. autoclass:: hyplan.aircraft.DynamicAviation_DH8
-.. autoclass:: hyplan.aircraft.DynamicAviation_A90
-.. autoclass:: hyplan.aircraft.DynamicAviation_B200
+.. autoclass:: hyplan.aircraft.Dash8
+.. autoclass:: hyplan.aircraft.KingAirA90
+.. autoclass:: hyplan.aircraft.KingAirB200
 .. autoclass:: hyplan.aircraft.C130
 .. autoclass:: hyplan.aircraft.BAe146
 .. autoclass:: hyplan.aircraft.Learjet

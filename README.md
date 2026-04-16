@@ -107,9 +107,9 @@ flight_line = FlightLine.start_length_azimuth(
 ### Compute a flight plan
 
 ```python
-from hyplan import DynamicAviation_B200, Airport, compute_flight_plan, plot_flight_plan
+from hyplan import KingAirB200, Airport, compute_flight_plan, plot_flight_plan
 
-aircraft = DynamicAviation_B200()
+aircraft = KingAirB200()
 departure = Airport("KSBA")
 destination = Airport("KBUR")
 

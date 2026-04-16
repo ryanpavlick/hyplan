@@ -7,7 +7,7 @@ import geopandas as gpd
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
-from hyplan.aircraft import DynamicAviation_B200
+from hyplan.aircraft import KingAirB200
 from hyplan.airports import Airport, initialize_data
 from hyplan.exceptions import HyPlanValueError
 from hyplan.flight_plan import (
@@ -24,7 +24,7 @@ def init_airport_data():
 
 @pytest.fixture
 def b200():
-    return DynamicAviation_B200()
+    return KingAirB200()
 
 
 @pytest.fixture

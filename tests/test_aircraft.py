@@ -15,7 +15,7 @@ from hyplan.aircraft import (
     NASA_GIII,
     NASA_GIV,
     NASA_GV,
-    DynamicAviation_B200 as B200,
+    KingAirB200 as B200,
     C130,
     TwinOtter,
 )

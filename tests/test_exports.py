@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from hyplan import DynamicAviation_B200, compute_flight_plan
+from hyplan import KingAirB200, compute_flight_plan
 from hyplan.airports import Airport, initialize_data
 from hyplan.exports import (
     extract_waypoints,
@@ -123,7 +123,7 @@ class TestGenerateWpNames:
 def flight_plan():
     """Create a sample flight plan for testing exports."""
     initialize_data(countries=["US"])
-    b200 = DynamicAviation_B200()
+    b200 = KingAirB200()
     kedw = Airport("KEDW")
     wps = [
         Waypoint(34.7, -118.2, 0.0,
@@ -529,7 +529,7 @@ class TestExportContentValidation:
 def flight_plan_with_lines():
     """Flight plan containing FlightLine segments for TrackAir testing."""
     initialize_data(countries=["US"])
-    b200 = DynamicAviation_B200()
+    b200 = KingAirB200()
     kedw = Airport("KEDW")
     fl1 = FlightLine.start_length_azimuth(
         lat1=34.5, lon1=-118.0,

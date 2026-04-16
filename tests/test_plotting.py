@@ -170,9 +170,9 @@ class TestPlotAltitudeTrajectory:
         plt.close("all")
 
     def test_with_aircraft_no_terrain(self):
-        from hyplan.aircraft import DynamicAviation_B200
+        from hyplan.aircraft import KingAirB200
         gdf = _make_simple_flight_plan_gdf()
-        ac = DynamicAviation_B200()
+        ac = KingAirB200()
         plot_altitude_trajectory(gdf, aircraft=ac, show_terrain=False)
         plt.close("all")
 

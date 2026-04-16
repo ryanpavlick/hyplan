@@ -18,7 +18,7 @@ from hyplan import (
     Airport,
     AVIRIS3,
     ConstantWindField,
-    DynamicAviation_B200,
+    KingAirB200,
     FlightLine,
     StillAirField,
     box_around_center_line,
@@ -98,7 +98,7 @@ class TestSimpleSurvey:
     """Generate flight lines, compute a plan in still air, verify output."""
 
     def test_plan_segments(self):
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
         lines = _make_lines(n=3)
 
         plan = compute_flight_plan(
@@ -147,7 +147,7 @@ class TestWindAwareSurvey:
 
     def test_headwind_increases_time(self):
         """East-west lines with westerly wind should take longer than still air."""
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
         lines = _make_lines(n=2, azimuth=90.0)
 
         plan_still = compute_flight_plan(
@@ -171,7 +171,7 @@ class TestWindAwareSurvey:
 
     def test_wind_populates_crab_angle(self):
         """Crosswind should produce non-zero crab angles."""
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
         lines = _make_lines(n=1, azimuth=0.0)  # north-south line
 
         plan = compute_flight_plan(
@@ -250,7 +250,7 @@ class TestAirportMission:
     """Full mission with takeoff, flight lines, and return to airport."""
 
     def test_departure_return(self, airport_db):
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
         departure = Airport("KSBA")
         lines = _make_lines(n=3)
 
@@ -277,7 +277,7 @@ class TestAirportMission:
 
     def test_exports(self, airport_db, tmp_path):
         """Verify that a plan can be exported to KML and GPX."""
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
         departure = Airport("KSBA")
         lines = _make_lines(n=2)
 
@@ -360,7 +360,7 @@ class TestFlightBoxWorkflow:
 
     def test_box_to_plan(self):
         sensor = AVIRIS3()
-        aircraft = DynamicAviation_B200()
+        aircraft = KingAirB200()
 
         lines = box_around_center_line(
             instrument=sensor,
