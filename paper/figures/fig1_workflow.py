@@ -58,6 +58,17 @@ def side_arrow(x1, y1, x2, y2, color):
     )
 
 
+def iter_arrow(x1, y1, x2, y2, color, rad=0.3):
+    """Curved double-headed arrow to indicate iteration."""
+    ax.annotate(
+        "", xy=(x2, y2), xytext=(x1, y1),
+        arrowprops=dict(arrowstyle="<|-|>", color=color, lw=0.9,
+                        linestyle="--",
+                        connectionstyle=f"arc3,rad={rad}"),
+        zorder=2,
+    )
+
+
 # ── Main pipeline ──
 xs = [0.8, 3.0, 5.2, 7.4, 9.6]
 labels = [
@@ -110,20 +121,33 @@ for (hx, hy), lab in zip(how_positions, how_labels):
 # ── "When to fly" inputs (blue, bottom) ──
 when_y = -0.8
 bg_when = FancyBboxPatch(
-    (1.5, when_y - 0.45), 7.4, 0.9,
+    (-0.3, when_y - 0.45), 9.2, 0.9,
     boxstyle="round,pad=0.1", facecolor=C_BG_WHEN,
     edgecolor=C_WHEN, linewidth=0.8, linestyle="--", zorder=1,
 )
 ax.add_patch(bg_when)
-ax.text(1.7, when_y + 0.35, "When to fly", fontsize=7, fontweight="bold",
+ax.text(-0.05, when_y + 0.35, "When to fly", fontsize=7, fontweight="bold",
         color=C_WHEN, va="center", zorder=4)
 
-when_positions = [(3.5, when_y), (5.5, when_y + 0.15), (7.5, when_y - 0.15)]
-when_labels = ["Cloud\nclimatology", "Vegetation\nphenology", "Solar\ngeometry"]
-for (wx, wy), lab in zip(when_positions, when_labels):
-    side_label(wx, wy, lab, C_WHEN)
-    target_x = min(xs[1:4], key=lambda sx: abs(sx - wx))
-    side_arrow(wx, wy + 0.35, target_x, y_main - 0.4, C_WHEN)
+# Phenology and cloud climatology inform when to schedule the campaign
+# based on the study area; cloud climatology additionally iterates with
+# the mission plan (campaign duration depends on clear-sky probability
+# and per-sortie flight time).
+side_label(1.1, when_y + 0.15, "Vegetation\nphenology", C_WHEN)
+side_arrow(1.1, when_y + 0.5, xs[0] + 0.15, y_main - 0.4, C_WHEN)
+
+side_label(2.6, when_y + 0.15, "Cloud\nclimatology", C_WHEN)
+# Cloud → Study Area (scheduling input)
+side_arrow(2.6, when_y + 0.5, xs[0] + 0.5, y_main - 0.4, C_WHEN)
+# Cloud ↔ Mission Plan (iterative: campaign duration estimate)
+iter_arrow(2.9, when_y + 0.5, xs[3] - 0.3, y_main - 0.4, C_WHEN, rad=-0.25)
+
+side_label(5.8, when_y + 0.15, "Solar\ngeometry", C_WHEN)
+side_arrow(5.8, when_y + 0.5, xs[3] - 0.4, y_main - 0.4, C_WHEN)
+
+# Cloud forecasts → Mission Plan (near-real-time, day-of-flight)
+side_label(7.6, when_y + 0.15, "Cloud\nforecasts", C_WHEN)
+side_arrow(7.6, when_y + 0.5, xs[3] + 0.1, y_main - 0.4, C_WHEN)
 
 fig.tight_layout(pad=0.5)
 fig.savefig("paper/figures/fig1_workflow.png", dpi=300, bbox_inches="tight",

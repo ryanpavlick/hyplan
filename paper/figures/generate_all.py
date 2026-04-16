@@ -19,7 +19,7 @@ from matplotlib.colors import LightSource
 from shapely.geometry import shape
 
 from hyplan import (
-    AVIRIS3, DynamicAviation_B200,
+    AVIRIS3, KingAirB200,
     Airport, initialize_data,
     FlightLine, box_around_polygon,
     compute_flight_plan,
@@ -32,7 +32,7 @@ from hyplan.terrain import generate_demfile
 
 # ── Shared setup ──
 sensor = AVIRIS3()
-aircraft = DynamicAviation_B200()
+aircraft = KingAirB200()
 flight_altitude = ureg.Quantity(20000, "feet")
 alt_m = flight_altitude.m_as("meter")
 

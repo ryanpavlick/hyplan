@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 
 from hyplan import (
-    AVIRIS3, DynamicAviation_B200,
+    AVIRIS3, KingAirB200,
     Airport, initialize_data,
     box_around_polygon_terrain,
     compute_flight_plan, ConstantWindField,
@@ -22,7 +22,7 @@ from hyplan import (
 
 # ── Setup ──
 sensor = AVIRIS3()
-aircraft = DynamicAviation_B200()
+aircraft = KingAirB200()
 flight_altitude = ureg.Quantity(25000, "feet")
 cruise_speed = aircraft.cruise_speed_at(flight_altitude)
 bank_angle = 25.0

@@ -186,3 +186,6 @@ hyplan/_version.py
 
 # Claude Code plans
 plans/
+
+# JOSS paper build artifacts (inara)
+paper/jats/

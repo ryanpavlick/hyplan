@@ -20,6 +20,12 @@ Cox, C. and Munk, W. (1954). Measurement of the roughness of the sea
 surface from photographs of the sun's glitter. *Journal of the Optical
 Society of America*, 44(11), 838-850. doi:10.1364/JOSA.44.000838
 
+Ayasse, A. K., Thorpe, A. K., Cusworth, D. H., Kort, E. A., Gorchov
+Negron, A., Heckler, J., Asner, G., and Duren, R. M. (2022). Methane
+remote sensing and emission quantification of offshore shallow water
+oil and gas platforms in the Gulf of Mexico. *Environmental Research
+Letters*, 17(8), 084039. doi:10.1088/1748-9326/ac8566
+
 Solar position via the ``sunposition`` library:
 Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
 radiation applications. *Solar Energy*, 76(5), 577-589.
@@ -67,6 +73,11 @@ class GlintArc:
     At the arc midpoint the bank angle tilts the nadir-pointing sensor so
     that VZA = bank_angle and the view azimuth opposes the solar azimuth,
     producing a glint angle of zero (perfect specular reflection).
+
+    This implements the glint-arc observing strategy used by Ayasse et al.
+    (2022) for airborne methane detection over offshore oil and gas
+    platforms in the Gulf of Mexico
+    (https://doi.org/10.1088/1748-9326/ac8566).
 
     Args:
         target_lat: Latitude of the target in decimal degrees.
@@ -647,6 +658,10 @@ def compute_glint_arc(
     output_geometry: str = "geographic",
 ) -> gpd.GeoDataFrame:
     """Compute glint angles across a glint arc's sensor swath.
+
+    Evaluates the glint-arc observing strategy of Ayasse et al. (2022)
+    (https://doi.org/10.1088/1748-9326/ac8566), developed for airborne
+    methane detection over offshore oil and gas platforms.
 
     Args:
         glint_arc: GlintArc object defining the arc flight path.
