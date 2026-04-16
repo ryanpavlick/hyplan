@@ -695,7 +695,7 @@ class TwinOtter(Aircraft):
             aircraft_type="DHC-6 Twin Otter",
             tail_number="Unknown",
             operator="Various",
-            service_ceiling=10000 * ureg.feet,
+            service_ceiling=25000 * ureg.feet,
             approach_speed=70 * ureg.knot,
             climb_schedule=cruise,
             cruise_schedule=cruise,
@@ -707,7 +707,7 @@ class TwinOtter(Aircraft):
             descent_profile=VerticalProfile(points=[
                 (0 * ureg.feet, 430 * ureg.feet / ureg.minute),
             ]),
-            turn_model=TurnModel(max_bank_deg=15.0),
+            turn_model=TurnModel(max_bank_deg=25.0),
             engine_type="turboprop",
             range=800 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
