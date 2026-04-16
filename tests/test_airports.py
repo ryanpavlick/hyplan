@@ -1,12 +1,17 @@
 """Tests for hyplan.airports."""
 
+import os
 import pytest
+import pandas as pd
 from hyplan.airports import (
     Airport,
     initialize_data,
     find_nearest_airport,
     find_nearest_airports,
     airports_within_radius,
+    get_runway_details,
+    get_longest_runway,
+    generate_geojson,
 )
 
 
@@ -64,3 +69,67 @@ class TestAirportSearch:
         )
         assert len(gdf) > 0
         assert "geometry" in gdf.columns
+
+
+class TestGetRunwayDetails:
+    def test_returns_dataframe(self):
+        df = get_runway_details("KSBA")
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) > 0
+
+    def test_contains_expected_columns(self):
+        df = get_runway_details("KSBA")
+        for col in ["airport_ident", "length_ft", "width_ft", "surface"]:
+            assert col in df.columns
+
+    def test_all_rows_match_icao(self):
+        df = get_runway_details("KSBA")
+        assert (df["airport_ident"] == "KSBA").all()
+
+    def test_accepts_list_of_icao_codes(self):
+        df = get_runway_details(["KSBA", "KLAX"])
+        assert set(df["airport_ident"].unique()) <= {"KSBA", "KLAX"}
+        assert len(df) > 0
+
+
+class TestGetLongestRunway:
+    def test_returns_float(self):
+        result = get_longest_runway("KSBA")
+        assert isinstance(result, float)
+        assert result > 0
+
+    def test_large_airport_has_long_runway(self):
+        result = get_longest_runway("KLAX")
+        # LAX has runways over 10000 ft
+        assert result > 10000
+
+    def test_unknown_airport_returns_none(self):
+        result = get_longest_runway("ZZZZ")
+        assert result is None
+
+
+class TestGenerateGeojson:
+    def test_creates_file(self, tmp_path):
+        filepath = str(tmp_path / "test_airports.geojson")
+        generate_geojson(filepath=filepath, icao_codes=["KSBA"])
+        assert os.path.exists(filepath)
+        assert os.path.getsize(filepath) > 0
+
+    def test_subset_icao_single_string(self, tmp_path):
+        filepath = str(tmp_path / "single.geojson")
+        generate_geojson(filepath=filepath, icao_codes="KSBA")
+        assert os.path.exists(filepath)
+
+    def test_subset_icao_list(self, tmp_path):
+        filepath = str(tmp_path / "multi.geojson")
+        generate_geojson(filepath=filepath, icao_codes=["KSBA", "KLAX"])
+        assert os.path.exists(filepath)
+
+
+class TestAirportRunwaysProperty:
+    def test_runways_property_returns_dataframe(self):
+        apt = Airport("KSBA")
+        df = apt.runways
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) > 0
+        assert (df["airport_ident"] == "KSBA").all()

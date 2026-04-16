@@ -637,3 +637,216 @@ class TestGriddedInterpolation:
         # Should clamp to nearest grid corner: lat=30, lon=-120
         assert u.m_as("m/s") == pytest.approx(30.0, abs=0.5)
         assert v.m_as("m/s") == pytest.approx(-120.0, abs=0.5)
+
+
+# ---------------------------------------------------------------------------
+# wind_field_from_plan factory
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch, MagicMock
+from hyplan.winds.factory import wind_field_from_plan
+from hyplan.exceptions import HyPlanValueError
+
+
+class _MockAirport:
+    """Lightweight stand-in for Airport to avoid loading the OurAirports DB."""
+
+    def __init__(self, latitude: float, longitude: float):
+        self.latitude = latitude
+        self.longitude = longitude
+
+
+class TestWindFieldFromPlanStillAir:
+    """source='still_air' should return StillAirField without network access."""
+
+    def test_returns_still_air_field(self):
+        wp1 = Waypoint(34.0, -118.0, 0.0,
+                       altitude_msl=ureg.Quantity(20000, "feet"), name="A")
+        wp2 = Waypoint(34.5, -117.5, 0.0,
+                       altitude_msl=ureg.Quantity(20000, "feet"), name="B")
+        result = wind_field_from_plan(
+            source="still_air",
+            flight_sequence=[wp1, wp2],
+            takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+        )
+        assert isinstance(result, StillAirField)
+
+    def test_still_air_case_insensitive(self):
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        result = wind_field_from_plan(
+            source="  Still_Air  ",
+            flight_sequence=[wp],
+            takeoff_time=datetime.datetime(2024, 1, 1),
+        )
+        assert isinstance(result, StillAirField)
+
+
+class TestWindFieldFromPlanBoundingBox:
+    """Verify lat/lon/time bounding box extraction."""
+
+    def test_bounding_box_from_waypoints(self):
+        wp1 = Waypoint(33.0, -119.0, 0.0, altitude_msl=ureg.Quantity(20000, "feet"))
+        wp2 = Waypoint(35.0, -117.0, 0.0, altitude_msl=ureg.Quantity(20000, "feet"))
+
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockMERRA2:
+            MockMERRA2.return_value = MagicMock()
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[wp1, wp2],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+                margin_deg=2.0,
+            )
+            kwargs = MockMERRA2.call_args.kwargs
+            assert kwargs["lat_min"] == pytest.approx(33.0 - 2.0)
+            assert kwargs["lat_max"] == pytest.approx(35.0 + 2.0)
+            assert kwargs["lon_min"] == pytest.approx(-119.0 - 2.0)
+            assert kwargs["lon_max"] == pytest.approx(-117.0 + 2.0)
+
+    def test_bounding_box_from_flight_lines(self):
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(50000, "meter"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="TestLine",
+        )
+
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockMERRA2:
+            MockMERRA2.return_value = MagicMock()
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[fl],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+                margin_deg=1.0,
+            )
+            kwargs = MockMERRA2.call_args.kwargs
+            # Flight line endpoints define the box
+            lat_min_expected = min(fl.waypoint1.latitude, fl.waypoint2.latitude) - 1.0
+            lat_max_expected = max(fl.waypoint1.latitude, fl.waypoint2.latitude) + 1.0
+            assert kwargs["lat_min"] == pytest.approx(lat_min_expected)
+            assert kwargs["lat_max"] == pytest.approx(lat_max_expected)
+
+    def test_time_bounds(self):
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        takeoff = datetime.datetime(2024, 6, 15, 12, 0)
+
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockMERRA2:
+            MockMERRA2.return_value = MagicMock()
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[wp],
+                takeoff_time=takeoff,
+                margin_hours=3.0,
+            )
+            kwargs = MockMERRA2.call_args.kwargs
+            assert kwargs["time_start"] == takeoff - datetime.timedelta(hours=3.0)
+            assert kwargs["time_end"] == takeoff + datetime.timedelta(hours=8.0 + 3.0)
+
+    def test_airports_expand_bounding_box(self):
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        # Airports far from the waypoint
+        takeoff_apt = _MockAirport(latitude=30.0, longitude=-122.0)
+        return_apt = _MockAirport(latitude=38.0, longitude=-114.0)
+
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockMERRA2:
+            MockMERRA2.return_value = MagicMock()
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[wp],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+                takeoff_airport=takeoff_apt,
+                return_airport=return_apt,
+                margin_deg=2.0,
+            )
+            kwargs = MockMERRA2.call_args.kwargs
+            # lat range should include airport latitudes
+            assert kwargs["lat_min"] == pytest.approx(30.0 - 2.0)
+            assert kwargs["lat_max"] == pytest.approx(38.0 + 2.0)
+            assert kwargs["lon_min"] == pytest.approx(-122.0 - 2.0)
+            assert kwargs["lon_max"] == pytest.approx(-114.0 + 2.0)
+
+
+class TestWindFieldFromPlanUnknownSource:
+    """Unknown source should raise HyPlanValueError."""
+
+    def test_unknown_source_raises(self):
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        with pytest.raises(HyPlanValueError, match="Unknown wind source"):
+            wind_field_from_plan(
+                source="noaa_rap",
+                flight_sequence=[wp],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+            )
+
+    def test_empty_sequence_raises(self):
+        with pytest.raises(HyPlanValueError, match="empty"):
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+            )
+
+
+class TestWindFieldFromPlanMockedProviders:
+    """Each provider constructor should be called with correct bbox args."""
+
+    def _make_sequence(self):
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        return [wp]
+
+    def test_merra2_dispatch(self):
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockCls:
+            MockCls.return_value = MagicMock()
+            result = wind_field_from_plan(
+                source="merra2",
+                flight_sequence=self._make_sequence(),
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+            )
+            MockCls.assert_called_once()
+            assert result is MockCls.return_value
+
+    def test_gmao_dispatch(self):
+        with patch("hyplan.winds.providers.gmao.GMAOWindField") as MockCls:
+            MockCls.return_value = MagicMock()
+            result = wind_field_from_plan(
+                source="gmao",
+                flight_sequence=self._make_sequence(),
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+            )
+            MockCls.assert_called_once()
+            assert result is MockCls.return_value
+
+    def test_gfs_dispatch(self):
+        with patch("hyplan.winds.providers.gfs.GFSWindField") as MockCls:
+            MockCls.return_value = MagicMock()
+            result = wind_field_from_plan(
+                source="gfs",
+                flight_sequence=self._make_sequence(),
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+            )
+            MockCls.assert_called_once()
+            assert result is MockCls.return_value
+
+    def test_flight_altitude_overrides_sequence(self):
+        """Explicit flight_altitude should be used instead of sequence altitudes."""
+        wp = Waypoint(34.0, -118.0, 0.0,
+                      altitude_msl=ureg.Quantity(20000, "feet"))
+        custom_alt = ureg.Quantity(40000, "feet")
+
+        with patch("hyplan.winds.providers.merra2.MERRA2WindField") as MockCls:
+            MockCls.return_value = MagicMock()
+            wind_field_from_plan(
+                source="merra2",
+                flight_sequence=[wp],
+                takeoff_time=datetime.datetime(2024, 6, 15, 12, 0),
+                flight_altitude=custom_alt,
+            )
+            kwargs = MockCls.call_args.kwargs
+            # Higher flight altitude -> lower pressure_min_hpa
+            # 40000 ft is about 188 hPa, so pressure_min should be < 100
+            assert kwargs["pressure_min_hpa"] < 200

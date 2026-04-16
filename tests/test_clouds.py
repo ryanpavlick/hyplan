@@ -523,3 +523,151 @@ class TestFetchCloudForecast:
 
         with pytest.raises(Exception, match="Unknown"):
             fetch_cloud_forecast(str(path), source="gfs")
+
+
+# ---------------------------------------------------------------------------
+# Cloud fraction spatial plotting
+# ---------------------------------------------------------------------------
+
+import numpy as np
+import xarray as xr
+from hyplan.clouds.plotting import (
+    plot_cloud_fraction_spatial,
+    plot_yearly_cloud_fraction_heatmaps_with_visits,
+)
+
+
+class TestPlotCloudFractionSpatial:
+    """Tests for plot_cloud_fraction_spatial."""
+
+    def _make_spatial_data(self, n_sites=2):
+        """Create synthetic spatial_data dict of xarray DataArrays."""
+        data = {}
+        for i in range(n_sites):
+            da = xr.DataArray(
+                np.random.rand(10, 10),
+                dims=["latitude", "longitude"],
+                coords={
+                    "latitude": np.linspace(34.0 + i * 0.2, 34.1 + i * 0.2, 10),
+                    "longitude": np.linspace(-119.0, -118.9, 10),
+                },
+            )
+            data[f"Site{chr(65 + i)}"] = da
+        return data
+
+    def test_returns_figure(self):
+        spatial_data = self._make_spatial_data(1)
+        fig = plot_cloud_fraction_spatial(spatial_data)
+        assert isinstance(fig, plt.Figure)
+        plt.close("all")
+
+    def test_multiple_sites(self):
+        spatial_data = self._make_spatial_data(3)
+        fig = plot_cloud_fraction_spatial(spatial_data, ncols=2)
+        assert isinstance(fig, plt.Figure)
+        # 3 sites with ncols=2 -> 2 rows, 4 subplot axes total (1 hidden)
+        axes = fig.get_axes()
+        # At least 3 visible axes for the 3 sites
+        visible = [ax for ax in axes if ax.get_visible()]
+        # colorbars also create axes, so just check figure exists
+        assert len(visible) >= 3
+        plt.close("all")
+
+    def test_single_column(self):
+        spatial_data = self._make_spatial_data(2)
+        fig = plot_cloud_fraction_spatial(spatial_data, ncols=1)
+        assert isinstance(fig, plt.Figure)
+        plt.close("all")
+
+    def test_empty_spatial_data_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+
+        with pytest.raises(HyPlanValueError, match="empty"):
+            plot_cloud_fraction_spatial({})
+
+
+class TestPlotYearlyCloudFractionHeatmapsWithVisits:
+    """Tests for plot_yearly_cloud_fraction_heatmaps_with_visits."""
+
+    def _make_cloud_df(self, year=2023, day_start=1, day_stop=30, polygons=None):
+        if polygons is None:
+            polygons = ["A", "B"]
+        rows = []
+        for day in range(day_start, day_stop + 1):
+            for poly in polygons:
+                cf = 0.05 if day % 3 == 0 else 0.50
+                rows.append({
+                    "polygon_id": poly,
+                    "year": year,
+                    "day_of_year": day,
+                    "cloud_fraction": cf,
+                })
+        return pd.DataFrame(rows)
+
+    def _make_visit_tracker(self, year=2023, polygons=None):
+        if polygons is None:
+            polygons = ["A", "B"]
+        # Mark a visit on day 3 for each polygon
+        return {year: {poly: [3] for poly in polygons}}
+
+    def _make_rest_days(self, year=2023):
+        return {year: [4]}
+
+    def test_runs_without_error(self):
+        df = self._make_cloud_df()
+        visit_tracker = self._make_visit_tracker()
+        rest_days = self._make_rest_days()
+
+        # Should complete without raising
+        plot_yearly_cloud_fraction_heatmaps_with_visits(
+            df, visit_tracker, rest_days,
+            cloud_fraction_threshold=0.10,
+            day_start=1, day_stop=30,
+        )
+        plt.close("all")
+
+    def test_exclude_weekends(self):
+        df = self._make_cloud_df()
+        visit_tracker = self._make_visit_tracker()
+        rest_days = self._make_rest_days()
+
+        plot_yearly_cloud_fraction_heatmaps_with_visits(
+            df, visit_tracker, rest_days,
+            cloud_fraction_threshold=0.10,
+            exclude_weekends=True,
+            day_start=1, day_stop=30,
+        )
+        plt.close("all")
+
+    def test_empty_visit_tracker(self):
+        df = self._make_cloud_df()
+        plot_yearly_cloud_fraction_heatmaps_with_visits(
+            df, visit_tracker={}, rest_days={},
+            day_start=1, day_stop=30,
+        )
+        plt.close("all")
+
+    def test_missing_columns_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+
+        bad_df = pd.DataFrame({"x": [1], "y": [2]})
+        with pytest.raises(HyPlanValueError, match="columns"):
+            plot_yearly_cloud_fraction_heatmaps_with_visits(
+                bad_df, visit_tracker={}, rest_days={},
+            )
+
+    def test_multiple_years(self):
+        df1 = self._make_cloud_df(year=2022)
+        df2 = self._make_cloud_df(year=2023)
+        df = pd.concat([df1, df2], ignore_index=True)
+        visit_tracker = {
+            2022: {"A": [3], "B": [6]},
+            2023: {"A": [9], "B": [12]},
+        }
+        rest_days = {2022: [4], 2023: [10]}
+
+        plot_yearly_cloud_fraction_heatmaps_with_visits(
+            df, visit_tracker, rest_days,
+            day_start=1, day_stop=30,
+        )
+        plt.close("all")

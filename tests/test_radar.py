@@ -2,8 +2,12 @@
 
 import pytest
 import numpy as np
+from shapely.geometry import Polygon, box
 from hyplan.units import ureg
-from hyplan.instruments import SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
+from hyplan.instruments import (
+    SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband,
+    check_lband_radar_exclusions, RadarExclusionConflict,
+)
 
 
 @pytest.fixture
@@ -242,3 +246,132 @@ class TestInterferometricLineSpacing:
         spacing_full = lband.interferometric_line_spacing(altitude, overlap_fraction=0.0)
         spacing_half = lband.interferometric_line_spacing(altitude, overlap_fraction=0.5)
         assert spacing_half.magnitude == pytest.approx(spacing_full.magnitude * 0.5, rel=0.01)
+
+
+class TestCheckLbandRadarExclusions:
+    """Tests for check_lband_radar_exclusions conflict detection."""
+
+    @pytest.fixture
+    def exclusion_geojson(self):
+        """A minimal GeoJSON FeatureCollection with a single exclusion zone."""
+        # Create a circle-like polygon around a known point (Oklahoma City area)
+        center_lon, center_lat = -97.6225, 35.402222
+        # ~10 NMI radius ~ 0.165 degrees
+        radius_deg = 0.165
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"name": "TEST_RADAR"},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [center_lon - radius_deg, center_lat - radius_deg],
+                                [center_lon + radius_deg, center_lat - radius_deg],
+                                [center_lon + radius_deg, center_lat + radius_deg],
+                                [center_lon - radius_deg, center_lat + radius_deg],
+                                [center_lon - radius_deg, center_lat - radius_deg],
+                            ]
+                        ],
+                    },
+                }
+            ],
+        }
+
+    def test_no_conflict_far_away(self, exclusion_geojson):
+        """Polygon far from the exclusion zone should produce no conflicts."""
+        far_polygon = box(-120.0, 34.0, -119.5, 34.5)
+        conflicts = check_lband_radar_exclusions(far_polygon, geojson=exclusion_geojson)
+        assert conflicts == []
+
+    def test_conflict_overlapping_zone(self, exclusion_geojson):
+        """Polygon overlapping the exclusion zone should produce a conflict."""
+        overlapping = box(-97.7, 35.3, -97.5, 35.5)
+        conflicts = check_lband_radar_exclusions(overlapping, geojson=exclusion_geojson)
+        assert len(conflicts) == 1
+        assert isinstance(conflicts[0], RadarExclusionConflict)
+        assert conflicts[0].radar_name == "TEST_RADAR"
+        assert conflicts[0].swath_index == 0
+
+    def test_conflict_has_intersection_geometry(self, exclusion_geojson):
+        """Conflict intersection should be a non-empty geometry."""
+        overlapping = box(-97.7, 35.3, -97.5, 35.5)
+        conflicts = check_lband_radar_exclusions(overlapping, geojson=exclusion_geojson)
+        assert not conflicts[0].intersection.is_empty
+
+    def test_multiple_swaths(self, exclusion_geojson):
+        """Multiple swath polygons should be checked; only overlapping ones reported."""
+        far = box(-120.0, 34.0, -119.5, 34.5)
+        overlapping = box(-97.7, 35.3, -97.5, 35.5)
+        conflicts = check_lband_radar_exclusions([far, overlapping], geojson=exclusion_geojson)
+        assert len(conflicts) == 1
+        assert conflicts[0].swath_index == 1  # second polygon
+
+    def test_single_polygon_normalised_to_list(self, exclusion_geojson):
+        """A single Polygon (not in a list) should work."""
+        far = box(-120.0, 34.0, -119.5, 34.5)
+        conflicts = check_lband_radar_exclusions(far, geojson=exclusion_geojson)
+        assert isinstance(conflicts, list)
+
+    def test_invalid_geojson_type_raises(self):
+        """Non-FeatureCollection GeoJSON should raise."""
+        bad_geojson = {"type": "Feature", "properties": {}, "geometry": None}
+        with pytest.raises(Exception):
+            check_lband_radar_exclusions(box(0, 0, 1, 1), geojson=bad_geojson)
+
+    def test_empty_features_returns_no_conflicts(self):
+        """FeatureCollection with no features should return empty list."""
+        empty_fc = {"type": "FeatureCollection", "features": []}
+        conflicts = check_lband_radar_exclusions(box(0, 0, 1, 1), geojson=empty_fc)
+        assert conflicts == []
+
+    def test_bundled_geojson_loads(self):
+        """The bundled FAA exclusion zone file should load and work."""
+        # Use a polygon in the middle of the Pacific (no conflicts expected)
+        far_polygon = box(-170.0, 20.0, -169.0, 21.0)
+        conflicts = check_lband_radar_exclusions(far_polygon)
+        assert isinstance(conflicts, list)
+        assert len(conflicts) == 0
+
+
+class TestUAVSARModelProperties:
+    """Test UAVSAR model constructors and basic property access."""
+
+    def test_lband_ground_range_resolution(self):
+        lband = UAVSAR_Lband()
+        grr = lband.ground_range_resolution(12500 * ureg.meter)
+        assert grr.check("[length]")
+        assert grr.magnitude > 0
+
+    def test_lband_swath_width(self):
+        lband = UAVSAR_Lband()
+        sw = lband.swath_width(12500 * ureg.meter)
+        assert sw.check("[length]")
+        # UAVSAR L-band has a wide swath: should be several km
+        assert sw.m_as("km") > 1.0
+
+    def test_pband_ground_range_resolution(self):
+        pband = UAVSAR_Pband()
+        grr = pband.ground_range_resolution(12500 * ureg.meter)
+        assert grr.magnitude > 0
+        # P-band has 20 MHz BW, should be coarser than L-band (80 MHz)
+        lband = UAVSAR_Lband()
+        lband_grr = lband.ground_range_resolution(12500 * ureg.meter)
+        assert grr.magnitude > lband_grr.magnitude
+
+    def test_kaband_swath_width(self):
+        kaband = UAVSAR_Kaband()
+        sw = kaband.swath_width(12500 * ureg.meter)
+        assert sw.magnitude > 0
+
+    def test_lband_peak_power_set(self):
+        lband = UAVSAR_Lband()
+        assert lband.peak_power is not None
+        assert lband.peak_power.m_as("watt") == pytest.approx(3100)
+
+    def test_pband_peak_power_set(self):
+        pband = UAVSAR_Pband()
+        assert pband.peak_power is not None
+        assert pband.peak_power.m_as("watt") == pytest.approx(2000)

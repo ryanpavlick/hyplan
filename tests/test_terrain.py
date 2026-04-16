@@ -349,3 +349,129 @@ class TestSurfaceNormalAt:
         normals = surface_normal_at(lats, lons, flat_dem_path)
         magnitudes = np.sqrt(np.sum(normals ** 2, axis=1))
         np.testing.assert_allclose(magnitudes, 1.0, atol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# terrain_elevation_along_track
+# ---------------------------------------------------------------------------
+
+from hyplan.terrain import terrain_elevation_along_track
+from hyplan.flight_line import FlightLine
+from hyplan.units import ureg
+
+
+class TestTerrainElevationAlongTrack:
+    @pytest.fixture
+    def flat_dem_path(self, tmp_path):
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        path = str(tmp_path / "flat_track.tif")
+        _write_synthetic_dem(path, 35.0, -111.0, lambda r, c: 500.0, size=200)
+        return path
+
+    @pytest.fixture
+    def sloped_dem_path(self, tmp_path):
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        path = str(tmp_path / "sloped_track.tif")
+        # Elevation ramps from 100 to ~1090 across rows (north to south)
+        _write_synthetic_dem(path, 35.0, -111.0, lambda r, c: 100.0 + r * 10.0, size=200)
+        return path
+
+    @pytest.fixture
+    def flight_line_ns(self):
+        """A short north-south flight line near the DEM center."""
+        return FlightLine.start_length_azimuth(
+            lat1=35.02, lon1=-111.0,
+            length=ureg.Quantity(5000, "meter"),
+            az=180,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="NS_line",
+        )
+
+    def test_flat_dem_returns_constant(self, flat_dem_path, flight_line_ns):
+        result = terrain_elevation_along_track(flight_line_ns, flat_dem_path)
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"min", "mean", "max"}
+        assert result["min"] == pytest.approx(500.0, abs=5.0)
+        assert result["max"] == pytest.approx(500.0, abs=5.0)
+        assert result["mean"] == pytest.approx(500.0, abs=5.0)
+
+    def test_sloped_dem_min_less_than_max(self, sloped_dem_path, flight_line_ns):
+        result = terrain_elevation_along_track(flight_line_ns, sloped_dem_path)
+        assert result["min"] < result["max"]
+        assert result["min"] <= result["mean"] <= result["max"]
+
+    def test_custom_precision(self, flat_dem_path, flight_line_ns):
+        result = terrain_elevation_along_track(flight_line_ns, flat_dem_path, precision=50.0)
+        assert isinstance(result, dict)
+        assert result["min"] == pytest.approx(500.0, abs=5.0)
+
+
+# ---------------------------------------------------------------------------
+# terrain_aspect_azimuth
+# ---------------------------------------------------------------------------
+
+from hyplan.terrain import terrain_aspect_azimuth
+from shapely.geometry import box
+
+
+class TestTerrainAspectAzimuth:
+    @pytest.fixture
+    def east_slope_dem_path(self, tmp_path):
+        """DEM that slopes upward to the east with quadratic curvature.
+
+        Uses c**2 so that gradient magnitude increases eastward, ensuring
+        the 25th-percentile threshold in terrain_aspect_azimuth retains
+        the majority of pixels (those with the strongest eastward gradient).
+        """
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        path = str(tmp_path / "east_slope.tif")
+        _write_synthetic_dem(
+            path, 35.0, -111.0,
+            lambda r, c: 500.0 + (c ** 2) * 0.1,
+            size=100,
+        )
+        return path
+
+    @pytest.fixture
+    def south_slope_dem_path(self, tmp_path):
+        """DEM that slopes upward to the south with quadratic curvature.
+
+        In a north-up raster, rows increase southward, so row-increasing
+        elevation means the surface rises toward the south.  The quadratic
+        term ensures varying gradient magnitudes across the raster.
+        """
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        path = str(tmp_path / "south_slope.tif")
+        _write_synthetic_dem(
+            path, 35.0, -111.0,
+            lambda r, c: 500.0 + (r ** 2) * 0.1,
+            size=100,
+        )
+        return path
+
+    @pytest.fixture
+    def survey_polygon(self):
+        """Small polygon around the DEM center."""
+        return box(-111.02, 34.98, -110.98, 35.02)
+
+    def test_east_slope_downslope_points_west(self, east_slope_dem_path, survey_polygon):
+        """Surface rises eastward, so downslope should point roughly west (~270)."""
+        azimuth = terrain_aspect_azimuth(survey_polygon, dem_file=east_slope_dem_path)
+        assert isinstance(azimuth, float)
+        # West is 270, allow some tolerance
+        assert 240.0 < azimuth < 300.0, f"Expected ~270 but got {azimuth}"
+
+    def test_south_slope_downslope_points_north(self, south_slope_dem_path, survey_polygon):
+        """Surface rises southward (rows increase), so downslope should point roughly north (~0/360)."""
+        azimuth = terrain_aspect_azimuth(survey_polygon, dem_file=south_slope_dem_path)
+        assert isinstance(azimuth, float)
+        # North is 0/360, so azimuth should be close to 0 or 360
+        assert azimuth < 30.0 or azimuth > 330.0, f"Expected ~0/360 but got {azimuth}"
+
+    def test_returns_float_in_range(self, east_slope_dem_path, survey_polygon):
+        azimuth = terrain_aspect_azimuth(survey_polygon, dem_file=east_slope_dem_path)
+        assert 0.0 <= azimuth < 360.0
