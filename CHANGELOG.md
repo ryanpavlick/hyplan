@@ -11,11 +11,13 @@ guarantees described in the [stability guide](docs/stability.md).
 ### API stability
 
 Modules are now classified as **Stable** or **Experimental**.
-Stable APIs (flight lines, terrain, swath, planning, winds, aircraft,
-exports, airports, atmosphere) will not break within the 1.x series.
-Experimental modules (LVIS, radar, frame camera, GUI, campaign, clouds,
-phenology, satellites, glint, airspace, Dubins paths, flight patterns,
-plotting) work and are tested but may change based on user feedback.
+Stable APIs will not break within the 1.x series; algorithms, defaults,
+and datasets may still be improved. Stable modules include: flight lines,
+terrain, swath, planning, winds, aircraft, exports, airports, atmosphere,
+flight box, flight optimizer, sun, glint, clouds, phenology, satellites,
+airspace, Dubins paths, flight patterns, plotting, geometry, and units.
+Experimental modules (LVIS, radar, frame camera, GUI, campaign) work and
+are tested but their signatures may still change based on user feedback.
 
 See `docs/stability.md` for the full listing and deprecation policy.
 

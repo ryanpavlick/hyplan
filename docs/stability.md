@@ -34,13 +34,22 @@ specific version if you depend on exact signatures.
 | `hyplan.flight_box` | Flight box generation from center lines and polygons |
 | `hyplan.flight_optimizer` | Graph-based flight line ordering |
 | `hyplan.sun` | Solar position and illumination windows |
+| `hyplan.glint` | Specular reflection (sun glint) prediction |
+| `hyplan.clouds` | Cloud fraction climatology and forecasts |
+| `hyplan.phenology` | Vegetation phenology from MODIS |
+| `hyplan.satellites` | Satellite overpass prediction |
+| `hyplan.airspace` | Airspace conflict detection (OpenAIP, FAA TFR/NASR) |
+| `hyplan.dubins3d` | 3D minimum-turn path planning |
+| `hyplan.flight_patterns` | Pattern generators (racetrack, rosette, spiral, etc.) |
+| `hyplan.plotting` | Folium maps, altitude profiles, terrain cross-sections |
 | `hyplan.geometry` | Geodesic math and coordinate utilities |
 | `hyplan.units` | Pint unit registry and conversion helpers |
 
 ```{note}
-Aircraft models are stable in their API, but individual aircraft
-parameters (cruise speed, climb rate, endurance) will continue to be
-refined as ADS-B calibration data becomes available.
+Stable means the public API will not break within 1.x. Algorithms,
+defaults, datasets, and edge-case behavior may still be improved.
+Aircraft parameters (cruise speed, climb rate, endurance) will
+continue to be refined as ADS-B calibration data becomes available.
 ```
 
 ### Experimental
@@ -52,14 +61,6 @@ refined as ADS-B calibration data becomes available.
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
 | `hyplan.gui` | Interactive Jupyter widgets (waypoint editor, flight line manager) |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |
-| `hyplan.clouds` | Cloud fraction climatology and forecasts |
-| `hyplan.phenology` | Vegetation phenology from MODIS |
-| `hyplan.satellites` | Satellite overpass prediction |
-| `hyplan.glint` | Specular reflection (sun glint) prediction |
-| `hyplan.airspace` | Airspace conflict detection (OpenAIP, FAA TFR/NASR) |
-| `hyplan.dubins3d` | 3D minimum-turn path planning |
-| `hyplan.flight_patterns` | Pattern generators (racetrack, rosette, spiral, etc.) |
-| `hyplan.plotting` | Folium maps, altitude profiles, terrain cross-sections |
 
 ## Deprecation policy
 
