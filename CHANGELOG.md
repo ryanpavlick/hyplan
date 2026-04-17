@@ -52,7 +52,16 @@ See `docs/stability.md` for the full listing and deprecation policy.
 ### Known limitations
 
 - Aircraft performance parameters are approximate and will be refined
-  with ADS-B calibration data in future releases.
+  with ADS-B calibration data in future releases. Infrastructure for
+  fitting models to ADS-B tracks exists in `hyplan.aircraft.adsb` but
+  that calibration work is ongoing.
 - Cloud fraction sources (GEE vs Open-Meteo/ERA5) differ in spatial
   resolution and interpretation — see module docstrings.
 - Terrain intersection uses fixed-step ray marching, not root-finding.
+- Flight optimizer does not yet incorporate environmental constraints
+  (solar windows, cloud forecasts, airspace conflicts); these are
+  applied as separate filtering steps outside the optimizer.
+- CCC (RLR/LRL) Dubins path types are disabled under wind — only
+  BSB (bang-straight-bang) paths are solved for trochoidal cases
+  to avoid degenerate multi-loop solutions. This may produce slightly
+  longer paths in rare geometries where a CCC solution would be shorter.
