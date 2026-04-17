@@ -23,6 +23,7 @@ from .forecast import (  # noqa: F401
     fetch_cloud_forecast,
 )
 from .plotting import (  # noqa: F401
+    plot_cloud_forecast,
     plot_cloud_fraction_spatial,
     plot_doy_cloud_fraction,
     plot_yearly_cloud_fraction_heatmaps_with_visits,
@@ -51,5 +52,6 @@ __all__ = [
     "OpenMeteoCloudForecast",
     "fetch_cloud_forecast",
     "fetch_cloud_fraction_spatial",
+    "plot_cloud_forecast",
     "plot_cloud_fraction_spatial",
 ]

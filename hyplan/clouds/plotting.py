@@ -104,6 +104,93 @@ def plot_cloud_fraction_spatial(
     return fig
 
 
+def plot_cloud_forecast(
+    forecast_df: pd.DataFrame,
+    threshold: float = 0.25,
+    ax: "plt.Axes | None" = None,
+    cmap: str = "RdYlGn_r",
+    annotate: bool = True,
+    figsize: tuple[float, float] = (12, 4),
+    title: str = "Cloud Cover Forecast",
+) -> "plt.Axes":
+    """Heatmap of cloud cover forecast with go/no-go threshold.
+
+    Args:
+        forecast_df: DataFrame with ``polygon_id``, ``date``,
+            ``cloud_fraction`` columns (e.g. from
+            :func:`~hyplan.clouds.fetch_cloud_forecast`).
+        threshold: Cloud fraction threshold for go/no-go classification.
+        ax: Matplotlib Axes to plot on.  Created if ``None``.
+        cmap: Matplotlib colormap name.
+        annotate: If ``True``, print percentage values in each cell.
+        figsize: Figure size when *ax* is ``None``.
+        title: Plot title.
+
+    Returns:
+        The matplotlib Axes.
+    """
+    import matplotlib.patches as mpatches
+
+    required_columns = {"polygon_id", "date", "cloud_fraction"}
+    if not required_columns.issubset(forecast_df.columns):
+        raise HyPlanValueError(
+            f"Input DataFrame must contain columns: {required_columns}"
+        )
+
+    try:
+        import seaborn as sns
+    except ImportError:
+        raise HyPlanRuntimeError(
+            "seaborn is required for cloud forecast heatmaps. "
+            "Install it with: pip install hyplan[clouds]"
+        )
+
+    pivot = forecast_df.pivot(
+        index="polygon_id", columns="date", values="cloud_fraction"
+    )
+    pivot = pivot.sort_index()
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
+
+    norm = mcolors.TwoSlopeNorm(vcenter=threshold, vmin=0.0, vmax=1.0)
+
+    sns.heatmap(
+        pivot,
+        ax=ax,
+        cmap=cmap,
+        norm=norm,
+        annot=annotate,
+        fmt=".0%" if annotate else "",
+        linewidths=0.5,
+        linecolor="gray",
+        square=True,
+        cbar_kws={"label": "Cloud Fraction"},
+    )
+
+    # Format x-tick labels as "Mon\nApr 17"
+    date_labels = [
+        pd.Timestamp(d).strftime("%a\n%b %d") for d in pivot.columns
+    ]
+    ax.set_xticklabels(date_labels, rotation=0, ha="center")
+
+    # Draw green borders around "go" cells
+    for i in range(pivot.shape[0]):
+        for j in range(pivot.shape[1]):
+            if pivot.iloc[i, j] <= threshold:
+                ax.add_patch(
+                    mpatches.Rectangle(
+                        (j, i), 1, 1,
+                        fill=False, edgecolor="green", linewidth=2.5,
+                    )
+                )
+
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_title(title)
+    return ax
+
+
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
     cloud_data_df: pd.DataFrame, visit_tracker: Dict[int, Dict[str, list]], rest_days: Dict[int, list],
     cloud_fraction_threshold: float = 0.10, exclude_weekends: bool = False,
