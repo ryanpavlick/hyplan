@@ -89,7 +89,6 @@ api/airspace
 
 api/campaign
 api/exports
-api/gui
 api/plotting
 ```
 

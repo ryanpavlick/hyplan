@@ -51,7 +51,6 @@ clouds = ["earthengine-api", "seaborn"]
 phenology = ["earthaccess", "xarray"]
 winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
 adsb = ["traffic>=2.8"]
-gui = ["ipyleaflet", "ipywidgets>=8", "ipydatagrid"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [project.urls]
@@ -75,10 +74,7 @@ version_file = "hyplan/_version.py"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
-filterwarnings = [
-    "ignore::DeprecationWarning:traitlets",
-    "ignore::DeprecationWarning:traittypes",
-]
+filterwarnings = []
 
 [tool.mypy]
 python_version = "3.9"

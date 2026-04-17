@@ -98,11 +98,9 @@ See: [Terrain](api/terrain.md), [Swath](api/swath.md)
 Flight plans are exported to pilot-facing formats (ForeFlight CSV, Honeywell
 FMS, Excel briefing sheets), archival formats (ICARTT, KML, GPX), and
 plain text. {mod}`hyplan.plotting` provides Folium maps, altitude profiles,
-and terrain cross-sections. The optional {mod}`hyplan.gui` package adds
-interactive Jupyter widgets for waypoint editing and flight-line sequencing.
+and terrain cross-sections.
 
-See: [Exports](api/exports.md), [Plotting](api/plotting.md),
-[GUI](api/gui.md)
+See: [Exports](api/exports.md), [Plotting](api/plotting.md)
 
 ## Supporting modules
 

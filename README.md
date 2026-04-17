@@ -37,7 +37,6 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
 - **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, polygon, and coordinated dual-aircraft (five-point line) flight patterns for profiling, survey, and multi-platform missions
 - **Geospatial export** — Output to Excel, KML, GPX, ForeFlight CSV, Honeywell FMS, ER-2, ICARTT, and interactive Folium maps
-- **Interactive planning** — Jupyter widget for map-based waypoint placement, pattern generation, and flight box creation
 
 ---
 
@@ -67,7 +66,6 @@ pip install -e .
 
 - **Google Earth Engine** (`earthengine-api`) — optional for `hyplan.clouds` (MODIS path); the Open-Meteo path requires no extra dependencies
 - **Wind fields** (`xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib`) — install with `pip install hyplan[winds]` for MERRA-2, GFS, and GEOS-FP wind data
-- **GUI widgets** (`ipyleaflet`, `ipywidgets`, `ipydatagrid`) — install with `pip install hyplan[gui]`
 
 ### API keys
 
@@ -173,7 +171,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
  │instruments/│ │ aircraft   │ │ sun      │ │ airports │ │ geometry │
  │ line_scan  │ │ atmosphere │ │ glint    │ │ airspace │ │ units    │
  │ lvis       │ │ dubins3d   │ │ terrain  │ │satellites│ │ plotting │
- │ radar      │ │            │ │ clouds   │ │ exports  │ │ gui      │
+ │ radar      │ │            │ │ clouds   │ │ exports  │ │          │
  │ frame_cam  │ │            │ │ winds    │ │          │ │ download │
  │swath       │ │            │ │          │ │          │ │exceptions│
  └────────────┘ └────────────┘ └──────────┘ └──────────┘ └──────────┘
@@ -211,7 +209,6 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `geometry` | Geospatial utilities (haversine, coordinate transforms, polygons) |
 | `units` | Unit conversions using Pint (meters, feet, knots, etc.) |
 | `plotting` | Interactive Folium map generation and altitude profiles |
-| `gui` | Interactive Jupyter map-based flight planning with ipyleaflet |
 | `download` | File download utility with chunked transfer and timeout support |
 | `exceptions` | HyPlan exception hierarchy for targeted error handling |
 
@@ -239,7 +236,6 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
 | [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, and polygon flight patterns |
-| [interactive_planning.ipynb](notebooks/interactive_planning.ipynb) | Interactive map-based flight planning with waypoint editing and pattern generation |
 
 ### Instruments & Sensors
 

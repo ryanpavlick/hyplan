@@ -16,7 +16,7 @@ and datasets may still be improved. Stable modules include: flight lines,
 terrain, swath, planning, winds, aircraft, exports, airports, atmosphere,
 flight box, flight optimizer, sun, glint, clouds, phenology, satellites,
 airspace, Dubins paths, flight patterns, plotting, geometry, and units.
-Experimental modules (LVIS, radar, frame camera, GUI, campaign) work and
+Experimental modules (LVIS, radar, frame camera, campaign) work and
 are tested but their signatures may still change based on user feedback.
 
 See `docs/stability.md` for the full listing and deprecation policy.

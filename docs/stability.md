@@ -59,7 +59,6 @@ continue to be refined as ADS-B calibration data becomes available.
 | `hyplan.instruments.LVIS` | Full-waveform lidar sensor model |
 | `hyplan.instruments.SidelookingRadar` | SAR sensor model (UAVSAR variants) |
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
-| `hyplan.gui` | Interactive Jupyter widgets (waypoint editor, flight line manager) |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |
 
 ## Deprecation policy
