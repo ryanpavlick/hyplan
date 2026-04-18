@@ -289,12 +289,13 @@ class _TrochoidDubins2D:
     @property
     def maneuver(self) -> _DubinsSegment:
         """Air-frame maneuver (length in meters for 3D compatibility)."""
-        return self._maneuver
+        maneuver: _DubinsSegment = self._maneuver
+        return maneuver
 
     @property
     def total_time(self) -> float:
         """Total traversal time in seconds."""
-        return self._total_time
+        return float(self._total_time)
 
     @property
     def ground_length(self) -> float:

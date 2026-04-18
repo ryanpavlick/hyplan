@@ -8,7 +8,7 @@ import math
 import numpy as np
 
 
-def _mod2pi(angle: float) -> float:
+def _mod2pi(angle: "float | np.floating | np.ndarray") -> "float | np.floating | np.ndarray":
     return angle % (2.0 * math.pi)
 
 
@@ -308,17 +308,18 @@ def sample_trochoid(sol: dict, time_offset: float,
         yw = -(Va / (del2 * w)) * math.cos(del2 * w * t_param + phi2) + yt20
         air_hdg_w = del2 * w * t_param + phi2
 
-    cos_w = sol["cos_w"]
-    sin_w = sol["sin_w"]
-    gx = xw * cos_w - yw * sin_w
-    gy = xw * sin_w + yw * cos_w
+    cos_w: float = sol["cos_w"]
+    sin_w: float = sol["sin_w"]
+    gx: float = xw * cos_w - yw * sin_w
+    gy: float = xw * sin_w + yw * cos_w
 
     psi_w = math.atan2(wind_v, wind_u)
     air_hdg = air_hdg_w + psi_w
-    ground_heading = math.atan2(
+    ground_heading: float = math.atan2(
         Va * math.sin(air_hdg) + wind_v,
         Va * math.cos(air_hdg) + wind_u)
 
-    return np.array([gx, gy, ground_heading])
+    result: np.ndarray = np.array([gx, gy, ground_heading], dtype=np.float64)
+    return result
 
 

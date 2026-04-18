@@ -13,11 +13,8 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Optional
-
-import numpy as np
 import pandas as pd
-import requests
+import requests  # type: ignore[import-untyped]
 
 from ..exceptions import HyPlanRuntimeError
 
@@ -47,7 +44,7 @@ def _get_credentials() -> tuple[str, str]:
     import netrc
     try:
         info = netrc.netrc().authenticators("urs.earthdata.nasa.gov")
-        if info:
+        if info and info[0] is not None and info[2] is not None:
             return info[0], info[2]
     except (FileNotFoundError, netrc.NetrcParseError):
         pass
@@ -72,7 +69,7 @@ def _login() -> str:
         raise HyPlanRuntimeError(
             f"AppEEARS login failed (HTTP {resp.status_code}): {resp.text}"
         )
-    return resp.json()["token"]
+    return str(resp.json()["token"])
 
 
 def fetch_appeears_timeseries(

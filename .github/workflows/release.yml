@@ -1,14 +1,17 @@
-name: Update CITATION.cff
+name: Release
 
 on:
-  push:
-    tags: ['[0-9]*']  # Matches version tags like 0.9.3, 1.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.0)'
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  update-citation:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,16 +20,33 @@ jobs:
 
       - name: Update CITATION.cff version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ github.event.inputs.version }}
           sed -i "s/^version: .*/version: ${VERSION}/" CITATION.cff
           echo "Updated CITATION.cff to version ${VERSION}"
 
-      - name: Commit and push
+      - name: Commit and tag
         run: |
+          VERSION=${{ github.event.inputs.version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet CITATION.cff || {
-            git add CITATION.cff
-            git commit -m "Update CITATION.cff to ${GITHUB_REF#refs/tags/}"
-            git push
-          }
+          git add CITATION.cff
+          git commit -m "Release ${VERSION}"
+          git tag "${VERSION}"
+          git push origin main --tags
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          # Extract the section for this version (between ## vX.Y.Z and the next ## or EOF)
+          awk "/^## v${VERSION}\$/{found=1; next} /^## /{if(found) exit} found{print}" CHANGELOG.md > /tmp/release_notes.md
+          echo "Extracted $(wc -l < /tmp/release_notes.md) lines of release notes"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          gh release create "${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file /tmp/release_notes.md

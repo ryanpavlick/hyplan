@@ -251,7 +251,6 @@ def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarr
 
     sds = hdf.select(match)
     data = sds.get()
-    attrs = sds.attributes()
     sds.endaccess()
 
     # Get grid metadata from global attributes
@@ -300,7 +299,7 @@ def _read_and_clip_subdataset(
 
     Returns the clipped data array and its transform.
     """
-    rio = _require_rasterio()
+    _require_rasterio()
     from rasterio.crs import CRS
     from rasterio.io import MemoryFile
     from rasterio.mask import mask as rio_mask
