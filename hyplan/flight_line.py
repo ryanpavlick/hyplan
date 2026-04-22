@@ -356,6 +356,58 @@ class FlightLine:
                    site_name=site_name, site_description=site_description,
                    investigator=investigator)
 
+    @classmethod
+    def from_geojson(cls, feature: Dict) -> "FlightLine":
+        """Reconstruct a FlightLine from a GeoJSON Feature dict.
+
+        The feature must have a ``LineString`` geometry with at least two
+        coordinates.  Properties ``altitude_msl``, ``site_name``,
+        ``site_description``, and ``investigator`` are read if present.
+
+        Args:
+            feature: GeoJSON Feature dict with LineString geometry.
+
+        Returns:
+            A new FlightLine.
+
+        Raises:
+            HyPlanValueError: If the geometry is degenerate (start == end).
+        """
+        coords = feature["geometry"]["coordinates"]
+        props = feature.get("properties", {})
+
+        lon1, lat1 = coords[0][0], coords[0][1]
+        lon2, lat2 = coords[-1][0], coords[-1][1]
+        alt_m = props.get("altitude_msl")
+
+        if lat1 == lat2 and lon1 == lon2:
+            raise HyPlanValueError(
+                f"Degenerate flight line in GeoJSON: start == end ({lat1}, {lon1})"
+            )
+
+        _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+        _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
+
+        alt = ureg.Quantity(alt_m, "meter") if alt_m is not None else None
+
+        wp1 = Waypoint(
+            latitude=lat1, longitude=lon1,
+            heading=float(az12) % 360,
+            altitude_msl=alt,
+        )
+        wp2 = Waypoint(
+            latitude=lat2, longitude=lon2,
+            heading=(float(az21) + 180.0) % 360,
+            altitude_msl=alt,
+        )
+        return cls(
+            waypoint1=wp1,
+            waypoint2=wp2,
+            site_name=props.get("site_name"),
+            site_description=props.get("site_description"),
+            investigator=props.get("investigator"),
+        )
+
     # ------------------------------------------------------------------
     # Transform methods
     # ------------------------------------------------------------------

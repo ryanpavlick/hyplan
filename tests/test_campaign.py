@@ -253,6 +253,74 @@ class TestCampaignFlightLines:
         assert len(c.flight_lines) == 1
         assert c.groups[0]["name"] == "Second"
 
+    def test_remove_flight_line_updates_group_membership(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        fl1 = _make_flight_line("A")
+        fl2 = _make_flight_line("B")
+        c.add_flight_lines([fl1, fl2], group_name="Pair")
+        assert len(c.flight_lines) == 2
+        c.remove_flight_line("line_001")
+        assert len(c.flight_lines) == 1
+        assert c.groups[0]["line_ids"] == ["line_002"]
+
+    def test_remove_flight_line_removes_empty_group(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        fl = _make_flight_line()
+        c.add_flight_lines([fl], group_name="Solo")
+        c.remove_flight_line("line_001")
+        assert len(c.flight_lines) == 0
+        assert len(c.groups) == 0
+
+    def test_remove_flight_line_nonexistent_raises(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        with pytest.raises(HyPlanValueError, match="not found"):
+            c.remove_flight_line("line_999")
+
+    def test_replace_flight_line_preserves_id_and_group(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        fl = _make_flight_line("Original")
+        c.add_flight_lines([fl], group_name="G")
+        new_fl = _make_flight_line("Replaced")
+        c.replace_flight_line("line_001", new_fl)
+        assert c.flight_lines[0].site_name == "Replaced"
+        assert c.flight_line_ids == ["line_001"]
+        assert c.groups[0]["line_ids"] == ["line_001"]
+
+    def test_replace_flight_line_nonexistent_raises(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        with pytest.raises(HyPlanValueError, match="not found"):
+            c.replace_flight_line("line_999", _make_flight_line())
+
+    def test_flight_lines_to_geojson(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        fl = _make_flight_line("GeoLine")
+        c.add_flight_lines([fl])
+        fc = c.flight_lines_to_geojson()
+        assert fc["type"] == "FeatureCollection"
+        assert len(fc["features"]) == 1
+        assert fc["features"][0]["id"] == "line_001"
+        assert fc["features"][0]["properties"]["line_id"] == "line_001"
+        assert fc["features"][0]["properties"]["site_name"] == "GeoLine"
+
+    def test_revision_increments_on_mutations(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        initial_rev = c.revision
+        fl = _make_flight_line()
+        c.add_flight_lines([fl])
+        assert c.revision == initial_rev + 1
+        c.replace_flight_line("line_001", _make_flight_line("New"))
+        assert c.revision == initial_rev + 2
+        c.remove_flight_line("line_001")
+        assert c.revision == initial_rev + 3
+
+    def test_campaign_id_is_stable(self):
+        c = Campaign("Test", bounds=SAMPLE_BOUNDS)
+        cid = c.campaign_id
+        assert isinstance(cid, str)
+        assert len(cid) > 0
+        c.add_flight_lines([_make_flight_line()])
+        assert c.campaign_id == cid  # unchanged by mutations
+
 
 # ---------------------------------------------------------------------------
 # TestCampaignPersistence
@@ -397,6 +465,33 @@ class TestCampaignPersistence:
         with open(os.path.join(save_path, "campaign.json")) as f:
             meta = json.load(f)
         assert meta["version"] == 1
+
+    def test_revision_metadata_roundtrip(self, tmp_path):
+        c = Campaign("Rev Test", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        original_id = c.campaign_id
+        original_rev = c.revision
+
+        save_path = str(tmp_path / "rev_campaign")
+        c.save(save_path)
+
+        loaded = Campaign.load(save_path)
+        assert loaded.campaign_id == original_id
+        assert loaded.revision == original_rev
+        assert loaded.updated_at is not None
+
+    def test_revision_metadata_in_campaign_json(self, tmp_path):
+        c = Campaign("Meta Test", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        save_path = str(tmp_path / "meta_campaign")
+        c.save(save_path)
+
+        with open(os.path.join(save_path, "campaign.json")) as f:
+            meta = json.load(f)
+        assert "campaign_id" in meta
+        assert "revision" in meta
+        assert "updated_at" in meta
+        assert meta["revision"] >= 1
 
 
 # ---------------------------------------------------------------------------

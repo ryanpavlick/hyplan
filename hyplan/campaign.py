@@ -108,6 +108,12 @@ class Campaign:
         self._line_counter: int = 0
         self._group_counter: int = 0
 
+        # Revision metadata
+        import uuid
+        self._campaign_id: str = str(uuid.uuid4())
+        self._revision: int = 0
+        self._updated_at: str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
@@ -147,6 +153,18 @@ class Campaign:
     @property
     def groups(self) -> List[dict]:
         return list(self._groups)
+
+    @property
+    def campaign_id(self) -> str:
+        return self._campaign_id
+
+    @property
+    def revision(self) -> int:
+        return self._revision
+
+    @property
+    def updated_at(self) -> str:
+        return self._updated_at
 
     # ------------------------------------------------------------------
     # Airspace
@@ -244,6 +262,8 @@ class Campaign:
             group["generation"] = generation_params  # type: ignore[assignment]
 
         self._groups.append(group)
+        self._revision += 1
+        self._updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
         logger.info(
             "Added group '%s' with %d lines to campaign '%s'",
             group["name"], len(line_ids), self._name,
@@ -263,7 +283,83 @@ class Campaign:
         for line_id in group["line_ids"]:
             self._flight_lines.pop(line_id, None)
         self._groups.remove(group)
+        self._revision += 1
+        self._updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
         logger.info("Removed group '%s' from campaign '%s'", group_id, self._name)
+
+    def remove_flight_line(self, line_id: str) -> None:
+        """Remove a flight line by ID and update group memberships.
+
+        Removes *line_id* from the campaign-wide flight-line registry and
+        from any groups that reference it.  Groups left with no remaining
+        lines are removed.
+
+        Args:
+            line_id: Stable campaign line ID, e.g. ``"line_001"``.
+
+        Raises:
+            HyPlanValueError: If *line_id* is not present in the campaign.
+        """
+        if line_id not in self._flight_lines:
+            raise HyPlanValueError(f"Flight line '{line_id}' not found.")
+
+        self._flight_lines.pop(line_id)
+
+        empty_group_ids = []
+        for group in self._groups:
+            if line_id in group["line_ids"]:
+                group["line_ids"] = [lid for lid in group["line_ids"] if lid != line_id]
+                if not group["line_ids"]:
+                    empty_group_ids.append(group["id"])
+
+        if empty_group_ids:
+            self._groups = [g for g in self._groups if g["id"] not in empty_group_ids]
+
+        self._revision += 1
+        self._updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        logger.info(
+            "Removed flight line '%s' from campaign '%s'%s",
+            line_id, self._name,
+            f" and removed {len(empty_group_ids)} empty group(s)" if empty_group_ids else "",
+        )
+
+    def replace_flight_line(self, line_id: str, line: FlightLine) -> None:
+        """Replace an existing flight line in place, preserving its ID.
+
+        Args:
+            line_id: Stable campaign line ID to replace.
+            line: New :class:`~hyplan.flight_line.FlightLine` object.
+
+        Raises:
+            HyPlanValueError: If *line_id* is not present in the campaign.
+            HyPlanValueError: If *line* is not a ``FlightLine`` instance.
+        """
+        if line_id not in self._flight_lines:
+            raise HyPlanValueError(f"Flight line '{line_id}' not found.")
+        if not isinstance(line, FlightLine):
+            raise HyPlanValueError("line must be a FlightLine instance.")
+
+        self._flight_lines[line_id] = line
+        self._revision += 1
+        self._updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        logger.info("Replaced flight line '%s' in campaign '%s'", line_id, self._name)
+
+    def flight_lines_to_geojson(self) -> dict:
+        """Return all campaign flight lines as a GeoJSON FeatureCollection.
+
+        Each feature includes the stable ``line_id`` in both the feature
+        ``id`` field and in ``properties.line_id``.
+        """
+        features = []
+        for line_id, fl in self._flight_lines.items():
+            feature = fl.to_geojson()
+            feature["id"] = line_id
+            feature["properties"]["line_id"] = line_id
+            features.append(feature)
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+        }
 
     # ------------------------------------------------------------------
     # Persistence — save
@@ -285,6 +381,9 @@ class Campaign:
             "version": 1,
             "name": self._name,
             "country": self._country,
+            "campaign_id": self._campaign_id,
+            "revision": self._revision,
+            "updated_at": self._updated_at,
             "fetched_at": self._fetch_timestamp,
             "line_counter": self._line_counter,
             "group_counter": self._group_counter,
@@ -317,17 +416,10 @@ class Campaign:
             os.makedirs(fl_dir, exist_ok=True)
 
             # all_lines.geojson — FeatureCollection with IDs
-            features = []
-            for line_id, fl in self._flight_lines.items():
-                feature = fl.to_geojson()
-                feature["id"] = line_id
-                feature["properties"]["line_id"] = line_id
-                features.append(feature)
-
-            _write_json(os.path.join(fl_dir, "all_lines.geojson"), {
-                "type": "FeatureCollection",
-                "features": features,
-            })
+            _write_json(
+                os.path.join(fl_dir, "all_lines.geojson"),
+                self.flight_lines_to_geojson(),
+            )
 
             # groups.json
             _write_json(os.path.join(fl_dir, "groups.json"), {
@@ -372,6 +464,10 @@ class Campaign:
         campaign._fetch_timestamp = meta.get("fetched_at")
         campaign._line_counter = meta.get("line_counter", 0)
         campaign._group_counter = meta.get("group_counter", 0)
+        if "campaign_id" in meta:
+            campaign._campaign_id = meta["campaign_id"]
+        campaign._revision = meta.get("revision", 0)
+        campaign._updated_at = meta.get("updated_at", campaign._updated_at)
 
         # airspaces.json (optional)
         airspace_file = os.path.join(path, "airspaces.json")
@@ -391,7 +487,7 @@ class Campaign:
             fc = _read_json(fl_file)
             for feature in fc.get("features", []):
                 line_id = feature.get("id") or feature["properties"].get("line_id")
-                fl = _flight_line_from_geojson(feature)
+                fl = FlightLine.from_geojson(feature)
                 campaign._flight_lines[line_id] = fl
             logger.info("Loaded %d flight lines from %s", len(campaign._flight_lines), fl_file)
 
