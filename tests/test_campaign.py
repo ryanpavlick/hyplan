@@ -521,3 +521,234 @@ class TestCampaignDisplay:
         r = repr(c)
         assert "Campaign(" in r
         assert "Test" in r
+
+
+# ---------------------------------------------------------------------------
+# TestCampaignPatterns
+# ---------------------------------------------------------------------------
+
+
+class TestCampaignPatterns:
+    """Pattern collection: add, remove, replace, lookup, persistence."""
+
+    def _add_rosette(self, c, n_lines=3):
+        from hyplan.flight_patterns import rosette
+        pat = rosette(
+            center=(34.0, -118.0), heading=0.0,
+            altitude=ureg.Quantity(3000, "meter"),
+            radius=ureg.Quantity(10, "km"),
+            n_lines=n_lines,
+        )
+        return c.add_pattern(pat), pat
+
+    def _add_spiral(self, c):
+        from hyplan.flight_patterns import spiral
+        pat = spiral(
+            center=(34.0, -118.0), heading=0.0,
+            altitude_start=ureg.Quantity(1000, "meter"),
+            altitude_end=ureg.Quantity(3000, "meter"),
+            radius=ureg.Quantity(2, "km"),
+            n_turns=2, points_per_turn=18,
+        )
+        return c.add_pattern(pat), pat
+
+    def test_add_rosette_assigns_pattern_id(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c)
+        assert pid == "pattern_001"
+        assert pat.pattern_id == "pattern_001"
+        assert len(c.patterns) == 1
+
+    def test_add_rosette_rekeys_lines_with_global_ids(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=3)
+        assert list(pat.lines.keys()) == ["line_001", "line_002", "line_003"]
+
+    def test_pattern_line_ids_share_namespace_with_free_standing(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()], group_name="standalone")
+        # First standalone line is line_001; pattern starts at line_002
+        pid, pat = self._add_rosette(c, n_lines=2)
+        assert list(pat.lines.keys()) == ["line_002", "line_003"]
+
+    def test_remove_pattern(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, _ = self._add_rosette(c)
+        c.remove_pattern(pid)
+        assert len(c.patterns) == 0
+
+    def test_remove_pattern_unknown_raises(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        with pytest.raises(HyPlanValueError, match="not found"):
+            c.remove_pattern("pattern_999")
+
+    def test_replace_pattern_preserves_pattern_id(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=3)
+        new_pat = pat.regenerate(n_lines=5)
+        c.replace_pattern(pid, new_pat)
+        replaced = c.get_pattern(pid)
+        assert replaced.pattern_id == pid
+        assert len(replaced.lines) == 5
+
+    def test_replace_pattern_assigns_fresh_line_ids(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=3)
+        old_ids = list(pat.lines.keys())
+        new_pat = pat.regenerate(n_lines=3)
+        c.replace_pattern(pid, new_pat)
+        new_ids = list(c.get_pattern(pid).lines.keys())
+        assert set(new_ids).isdisjoint(set(old_ids))
+
+    def test_get_line_finds_pattern_lines(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=2)
+        any_id = list(pat.lines.keys())[0]
+        fl = c.get_line(any_id)
+        assert fl is pat.lines[any_id]
+
+    def test_get_line_finds_free_standing(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        fl = c.get_line("line_001")
+        assert fl.site_name == "Test Line"
+
+    def test_get_line_unknown_raises(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        with pytest.raises(HyPlanValueError, match="not found"):
+            c.get_line("line_999")
+
+    def test_find_pattern_for_line(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])  # line_001 (free-standing)
+        pid, pat = self._add_rosette(c, n_lines=2)
+        pattern_line_id = list(pat.lines.keys())[0]
+        assert c.find_pattern_for_line(pattern_line_id) is pat
+        assert c.find_pattern_for_line("line_001") is None
+        assert c.find_pattern_for_line("nonexistent") is None
+
+    def test_all_flight_lines_includes_pattern_lines(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        self._add_rosette(c, n_lines=3)
+        assert len(c.all_flight_lines()) == 4
+
+    def test_replace_line_anywhere_routes_to_pattern(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=3)
+        target_id = list(pat.lines.keys())[1]
+        new_fl = _make_flight_line(site_name="Replaced")
+        c.replace_line_anywhere(target_id, new_fl)
+        # Pattern still owns the line, with the same id
+        assert target_id in c.get_pattern(pid).lines
+        assert c.get_pattern(pid).lines[target_id].site_name == "Replaced"
+
+    def test_replace_line_anywhere_routes_to_free_standing(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        new_fl = _make_flight_line(site_name="Updated")
+        c.replace_line_anywhere("line_001", new_fl)
+        assert c.get_line("line_001").site_name == "Updated"
+
+    def test_remove_line_anywhere_drops_pattern_leg(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=3)
+        target_id = list(pat.lines.keys())[1]
+        c.remove_line_anywhere(target_id)
+        assert target_id not in c.get_pattern(pid).lines
+        assert len(c.get_pattern(pid).lines) == 2
+
+    def test_remove_last_pattern_leg_removes_pattern(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_rosette(c, n_lines=1)
+        only_id = list(pat.lines.keys())[0]
+        c.remove_line_anywhere(only_id)
+        assert pid not in c.pattern_ids
+
+    def test_add_spiral_stores_waypoints(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        pid, pat = self._add_spiral(c)
+        loaded = c.get_pattern(pid)
+        assert loaded.is_waypoint_based
+        assert len(loaded.waypoints) == len(pat.waypoints)
+
+    def test_revision_bumped_on_pattern_mutations(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        r0 = c.revision
+        pid, pat = self._add_rosette(c)
+        assert c.revision == r0 + 1
+        c.replace_pattern(pid, pat.regenerate(n_lines=4))
+        assert c.revision == r0 + 2
+        c.remove_pattern(pid)
+        assert c.revision == r0 + 3
+
+    def test_flight_lines_to_geojson_includes_pattern_lines(self):
+        c = Campaign("T", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        pid, pat = self._add_rosette(c, n_lines=2)
+        fc = c.flight_lines_to_geojson()
+        assert len(fc["features"]) == 3
+        pattern_features = [f for f in fc["features"]
+                            if f["properties"].get("pattern_id") == pid]
+        assert len(pattern_features) == 2
+
+    def test_save_and_load_roundtrip_with_patterns(self, tmp_path):
+        c = Campaign("RT", bounds=SAMPLE_BOUNDS)
+        c.add_flight_lines([_make_flight_line()])
+        rid, rosette_pat = self._add_rosette(c, n_lines=2)
+        sid, spiral_pat = self._add_spiral(c)
+
+        c.save(str(tmp_path))
+        loaded = Campaign.load(str(tmp_path))
+
+        assert loaded.pattern_ids == [rid, sid]
+        # Counters are restored, so further additions don't collide
+        assert loaded._pattern_counter == 2  # type: ignore[attr-defined]
+        # Line counter advances past pattern lines
+        loaded.add_flight_lines([_make_flight_line()])
+        assert loaded._line_counter > 3  # type: ignore[attr-defined]
+        # Rosette lines preserved
+        ros = loaded.get_pattern(rid)
+        assert len(ros.lines) == len(rosette_pat.lines)
+        # Spiral waypoints preserved
+        sp = loaded.get_pattern(sid)
+        assert len(sp.waypoints) == len(spiral_pat.waypoints)
+
+
+# ---------------------------------------------------------------------------
+# TestComputePlanWithPatterns
+# ---------------------------------------------------------------------------
+
+
+class TestComputePlanWithPatterns:
+    """compute_flight_plan accepts Pattern in the sequence and expands it."""
+
+    def test_pattern_alone_in_sequence(self):
+        from hyplan.aircraft import KingAirB200
+        from hyplan.planning.engine import compute_flight_plan
+        from hyplan.flight_patterns import racetrack
+        b200 = KingAirB200()
+        pat = racetrack(
+            center=(34.0, -118.0), heading=0.0,
+            altitude=ureg.Quantity(20000, "feet"),
+            leg_length=ureg.Quantity(30, "km"),
+            n_legs=3, offset=ureg.Quantity(2, "km"),
+        )
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[pat])
+        assert len(plan) >= 3
+
+    def test_pattern_mixed_with_free_standing_line(self):
+        from hyplan.aircraft import KingAirB200
+        from hyplan.planning.engine import compute_flight_plan
+        from hyplan.flight_patterns import spiral
+        b200 = KingAirB200()
+        fl = _make_flight_line(site_name="Stand-alone")
+        pat = spiral(
+            center=(34.5, -118.5), heading=0.0,
+            altitude_start=ureg.Quantity(2000, "meter"),
+            altitude_end=ureg.Quantity(4000, "meter"),
+            radius=ureg.Quantity(2, "km"), n_turns=1,
+        )
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[fl, pat])
+        # Expanded sequence has at least 1 flight_line + many waypoint legs
+        assert len(plan) >= 2

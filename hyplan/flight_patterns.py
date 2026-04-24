@@ -1,8 +1,13 @@
 """Flight pattern generators for atmospheric sampling.
 
-Each generator returns an ordered list of Waypoint objects with
-segment_type="pattern" so that compute_flight_plan() labels the
-connecting legs accordingly.
+Each generator returns a :class:`~hyplan.pattern.Pattern` object that
+bundles the generated flight lines or waypoints with the parameters used
+to produce them.  Line-based patterns (``racetrack``, ``rosette``) carry
+``FlightLine`` objects.  Continuous-track patterns (``polygon``,
+``sawtooth``, ``spiral``) carry ``Waypoint`` objects with
+``segment_type="pattern"`` so ``compute_flight_plan()`` labels the
+connecting legs accordingly.  ``compute_flight_plan`` accepts
+:class:`Pattern` in its flight sequence and expands it inline.
 """
 
 from typing import List, Optional, Union
@@ -17,6 +22,8 @@ from .geometry import wrap_to_180, wrap_to_360
 from .waypoint import Waypoint
 from .flight_line import FlightLine
 from .aircraft import Aircraft
+from .pattern import Pattern
+from .glint import GlintArc
 
 __all__ = [
     "racetrack",
@@ -24,26 +31,28 @@ __all__ = [
     "polygon",
     "sawtooth",
     "spiral",
+    "glint_arc",
     "flight_lines_to_waypoint_path",
     "coordinated_line",
 ]
 
 
 def _to_length_quantity(value, label="value"):
-    """Convert a length value to a pint Quantity.
-
-    Args:
-        value: Float (interpreted as meters) or pint Quantity with length units.
-        label: Parameter name for error messages.
-
-    Returns:
-        pint Quantity in meters.
-    """
+    """Convert a length value to a pint Quantity."""
     if isinstance(value, (int, float)):
         return ureg.Quantity(float(value), "meter")
     if hasattr(value, 'units') and value.check('[length]'):
         return value.to(ureg.meter)
     raise HyPlanTypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
+
+
+def _length_m(value, label="value") -> float:
+    return _to_length_quantity(value, label).m_as(ureg.meter)
+
+
+def _lines_dict(lines: List[FlightLine]) -> dict:
+    """Key a list of FlightLines with sequential leg_N ids."""
+    return {f"leg_{i+1}": fl for i, fl in enumerate(lines)}
 
 
 def racetrack(
@@ -55,15 +64,17 @@ def racetrack(
     offset: Union[float, "Quantity", list] = 0,
     altitudes: Optional[list] = None,
     stack_altitudes: Optional[list] = None,
-) -> List[Waypoint]:
-    """Generate parallel out-and-back legs.
+    name: Optional[str] = None,
+) -> Pattern:
+    """Generate parallel out-and-back flight lines.
 
     Handles racetracks, lawnmowers, bowling alleys, vertical walls,
-    and stacked patterns through parameter variation.
+    and stacked patterns through parameter variation. Consecutive legs
+    alternate direction so end-to-start transitions are short turns.
 
     Args:
         center: (lat, lon) center point of the pattern.
-        heading: Bearing of the legs in degrees from north.
+        heading: Bearing of the first leg in degrees from north.
         altitude: Altitude MSL for all legs (overridden by altitudes if given).
         leg_length: Length of each leg.
         n_legs: Number of parallel legs (default 1).
@@ -73,36 +84,34 @@ def racetrack(
             Overrides altitude for each leg. Enables vertical walls.
         stack_altitudes: Repeat the entire pattern at each altitude in this list.
             Produces n_legs * len(stack_altitudes) total legs.
+        name: Pattern display name (default "Racetrack").
 
     Returns:
-        List of Waypoint objects with segment_type="pattern".
+        A line-based :class:`Pattern` (``kind="racetrack"``).
     """
     center_lat, center_lon = center
-    half_len_m = _to_length_quantity(leg_length, "leg_length").magnitude / 2.0
-    if half_len_m <= 0:
+    leg_len_q = _to_length_quantity(leg_length, "leg_length")
+    if leg_len_q.magnitude <= 0:
         raise HyPlanValueError("leg_length must be positive")
     heading = float(heading)
 
-    # Build per-leg crosstrack offsets (meters from center)
+    # Per-leg crosstrack offsets (meters from pattern center)
     if isinstance(offset, list):
         if len(offset) != n_legs:
             raise HyPlanValueError(f"offset list length ({len(offset)}) must equal n_legs ({n_legs})")
-        offsets_m = [_to_length_quantity(o, "offset").magnitude for o in offset]
+        offsets_m = [_length_m(o, "offset") for o in offset]
     else:
-        spacing_m = _to_length_quantity(offset, "offset").magnitude
-        # Center the legs: offsets are symmetric around 0
+        spacing_m = _length_m(offset, "offset")
         offsets_m = [spacing_m * (i - (n_legs - 1) / 2.0) for i in range(n_legs)]
 
-    # Build per-leg altitudes
+    # Per-leg altitudes
     if stack_altitudes is not None:
-        # Repeat pattern at each stack altitude
         stack_alts = [_to_length_quantity(a, "stack_altitudes") for a in stack_altitudes]
         all_offsets = []
         all_alts = []
         for sa in stack_alts:
             all_offsets.extend(offsets_m)
             if altitudes is not None:
-                # per-leg altitudes override stack altitude
                 all_alts.extend([_to_length_quantity(a, "altitudes") for a in altitudes])
             else:
                 all_alts.extend([sa] * n_legs)
@@ -116,59 +125,55 @@ def racetrack(
         default_alt = _to_length_quantity(altitude, "altitude")
         leg_alts = [default_alt] * n_legs
 
-    # Perpendicular direction for crosstrack offsets
     perp_az = heading + 90.0
+    fwd_heading = heading % 360.0
+    rev_heading = (heading + 180.0) % 360.0
 
-    waypoints = []
+    lines = []
     for i, (ct_offset, alt) in enumerate(zip(offsets_m, leg_alts)):
-        # Compute the center of this leg (offset from pattern center)
         if ct_offset != 0:
             leg_center_lat, leg_center_lon = pymap3d.vincenty.vreckon(
                 center_lat, center_lon, abs(ct_offset),
-                perp_az if ct_offset >= 0 else perp_az - 180
+                perp_az if ct_offset >= 0 else perp_az - 180,
             )
             leg_center_lon = wrap_to_180(leg_center_lon)
         else:
             leg_center_lat, leg_center_lon = center_lat, center_lon
 
-        # Alternate direction: odd-indexed legs go in reverse
-        if i % 2 == 0:
-            fwd_az = heading
-            rev_az = (heading + 180.0) % 360.0
-        else:
-            fwd_az = (heading + 180.0) % 360.0
-            rev_az = heading
+        leg_az = fwd_heading if i % 2 == 0 else rev_heading
 
-        # Start point: half_len behind center along fwd_az
-        start_lat, start_lon = pymap3d.vincenty.vreckon(
-            leg_center_lat, leg_center_lon, half_len_m, rev_az
-        )
-        start_lon = wrap_to_180(start_lon)
-
-        # End point: half_len ahead of center along fwd_az
-        end_lat, end_lon = pymap3d.vincenty.vreckon(
-            leg_center_lat, leg_center_lon, half_len_m, fwd_az
-        )
-        end_lon = wrap_to_180(end_lon)
-
-        waypoints.append(Waypoint(
-            latitude=float(start_lat),
-            longitude=float(start_lon),
-            heading=wrap_to_360(fwd_az),  # type: ignore[arg-type]
+        lines.append(FlightLine.center_length_azimuth(
+            lat=float(leg_center_lat),
+            lon=float(leg_center_lon),
+            length=leg_len_q,
+            az=leg_az,
             altitude_msl=alt,
-            name=f"Leg{i+1}_start",
-            segment_type="pattern",
-        ))
-        waypoints.append(Waypoint(
-            latitude=float(end_lat),
-            longitude=float(end_lon),
-            heading=wrap_to_360(fwd_az),  # type: ignore[arg-type]
-            altitude_msl=alt,
-            name=f"Leg{i+1}_end",
-            segment_type="pattern_turn",
+            site_name=f"Leg{i+1}",
         ))
 
-    return waypoints
+    params = {
+        "center_lat": float(center_lat),
+        "center_lon": float(center_lon),
+        "heading": heading,
+        "altitude_msl_m": _length_m(altitude, "altitude"),
+        "leg_length_m": leg_len_q.m_as(ureg.meter),
+        "n_legs": int(n_legs),
+        "offset_m": (
+            [_length_m(o, "offset") for o in offset]
+            if isinstance(offset, list) else _length_m(offset, "offset")
+        ),
+    }
+    if altitudes is not None:
+        params["altitudes_m"] = [_length_m(a, "altitudes") for a in altitudes]
+    if stack_altitudes is not None:
+        params["stack_altitudes_m"] = [_length_m(a, "stack_altitudes") for a in stack_altitudes]
+
+    return Pattern(
+        kind="racetrack",
+        name=name or "Racetrack",
+        params=params,
+        lines=_lines_dict(lines),
+    )
 
 
 def rosette(
@@ -178,12 +183,13 @@ def rosette(
     radius: Union[float, "Quantity"],
     n_lines: int = 3,
     angles: Optional[List[float]] = None,
-) -> List[Waypoint]:
-    """Generate radial lines through a center point.
+    name: Optional[str] = None,
+) -> Pattern:
+    """Generate radial flight lines through a center point.
 
-    Creates a FlightLine centered on the point and rotates it for each
-    line angle. Each line is a full diameter crossing through center.
-    Produces 2 * n_lines waypoints.
+    Creates a FlightLine centered on the point along the first angle, then
+    rotates it for each subsequent line angle. Each line is a full diameter
+    crossing through center.
 
     Args:
         center: (lat, lon) center point.
@@ -194,12 +200,14 @@ def rosette(
             180/n_lines degree intervals.
         angles: Explicit angles for each line (degrees from north).
             Overrides n_lines and heading.
+        name: Pattern display name (default "Rosette").
 
     Returns:
-        List of Waypoint objects with segment_type="pattern".
+        A line-based :class:`Pattern` (``kind="rosette"``).
     """
     center_lat, center_lon = center
-    diameter = _to_length_quantity(radius, "radius") * 2
+    radius_q = _to_length_quantity(radius, "radius")
+    diameter = radius_q * 2
     if diameter.magnitude <= 0:
         raise HyPlanValueError("radius must be positive")
     alt = _to_length_quantity(altitude, "altitude")
@@ -209,36 +217,40 @@ def rosette(
     else:
         line_angles = [heading + i * (180.0 / n_lines) for i in range(n_lines)]
 
-    # Create the base flight line centered on the point along the first angle
     base_line = FlightLine.center_length_azimuth(
         lat=center_lat, lon=center_lon,
         length=diameter, az=line_angles[0],
         altitude_msl=alt,
+        site_name="L1",
     )
 
-    waypoints = []
+    lines = []
     for i, angle in enumerate(line_angles):
-        # Rotate the base line to the desired angle
         rotation = angle - line_angles[0]
-        fl = base_line.rotate_around_midpoint(rotation) if rotation != 0 else base_line
+        if rotation == 0:
+            fl = base_line
+        else:
+            fl = base_line.rotate_around_midpoint(rotation)
+            fl.site_name = f"L{i+1}"
+        lines.append(fl)
 
-        # Use the FlightLine's waypoints directly, overriding name and segment_type
-        wp1 = fl.waypoint1
-        wp2 = fl.waypoint2
-        waypoints.append(Waypoint(
-            latitude=wp1.latitude, longitude=wp1.longitude,
-            heading=wp1.heading,  # type: ignore[arg-type]
-            altitude_msl=wp1.altitude_msl,
-            name=f"L{i+1}_start", segment_type="pattern",
-        ))
-        waypoints.append(Waypoint(
-            latitude=wp2.latitude, longitude=wp2.longitude,
-            heading=wp2.heading,  # type: ignore[arg-type]
-            altitude_msl=wp2.altitude_msl,
-            name=f"L{i+1}_end", segment_type="pattern_turn",
-        ))
+    params = {
+        "center_lat": float(center_lat),
+        "center_lon": float(center_lon),
+        "heading": float(heading),
+        "altitude_msl_m": alt.m_as(ureg.meter),
+        "radius_m": radius_q.m_as(ureg.meter),
+        "n_lines": int(n_lines),
+    }
+    if angles is not None:
+        params["angles"] = [float(a) for a in angles]
 
-    return waypoints
+    return Pattern(
+        kind="rosette",
+        name=name or "Rosette",
+        params=params,
+        lines=_lines_dict(lines),
+    )
 
 
 def polygon(
@@ -249,7 +261,8 @@ def polygon(
     n_sides: int = 4,
     aspect_ratio: float = 1.0,
     closed: bool = True,
-) -> List[Waypoint]:
+    name: Optional[str] = None,
+) -> Pattern:
     """Generate a regular polygon perimeter (or stretched polygon).
 
     Replaces separate rectangle() and circle() generators.
@@ -264,44 +277,39 @@ def polygon(
             polygon. 2.0 = twice as long as wide. Default 1.0.
         closed: If True, last waypoint repeats the first to close the loop.
             Default True.
+        name: Pattern display name (default "Polygon").
 
     Returns:
-        List of Waypoint objects with segment_type="pattern".
+        A waypoint-based :class:`Pattern` (``kind="polygon"``).
     """
     center_lat, center_lon = center
-    radius_m = _to_length_quantity(radius, "radius").magnitude
+    radius_q = _to_length_quantity(radius, "radius")
+    radius_m = radius_q.magnitude
     if radius_m <= 0:
         raise HyPlanValueError("radius must be positive")
     alt = _to_length_quantity(altitude, "altitude")
     heading_rad = np.radians(heading)
 
-    # Compute vertex positions on the circumscribed ellipse
     angles = np.linspace(0, 2 * np.pi, n_sides, endpoint=False)
 
     waypoints = []
     vertex_coords = []
 
     for angle in angles:
-        # Unit circle position
-        x = np.sin(angle)  # crosstrack (east-like in heading frame)
-        y = np.cos(angle)  # along-track (north-like in heading frame)
-
-        # Apply aspect ratio: stretch along heading axis
+        x = np.sin(angle)
+        y = np.cos(angle)
         y *= aspect_ratio
 
-        # Convert to bearing and distance from center
-        # Rotate from heading-frame to geographic bearing
         dx = x * np.cos(heading_rad) + y * np.sin(heading_rad)
         dy = -x * np.sin(heading_rad) + y * np.cos(heading_rad)
 
         dist = radius_m * np.sqrt(dx**2 + dy**2)
-        bearing = np.degrees(np.arctan2(dx, dy))  # atan2(east, north) = bearing
+        bearing = np.degrees(np.arctan2(dx, dy))
 
         vlat, vlon = pymap3d.vincenty.vreckon(center_lat, center_lon, dist, bearing)
         vlon = wrap_to_180(vlon)
         vertex_coords.append((float(vlat), float(vlon)))
 
-    # Compute tangent headings at each vertex
     n = len(vertex_coords)
     for i in range(n):
         lat_i, lon_i = vertex_coords[i]
@@ -319,7 +327,6 @@ def polygon(
         ))
 
     if closed:
-        # Repeat first vertex to close the loop
         waypoints.append(Waypoint(
             latitude=waypoints[0].latitude,
             longitude=waypoints[0].longitude,
@@ -329,7 +336,22 @@ def polygon(
             segment_type="pattern",
         ))
 
-    return waypoints
+    params = {
+        "center_lat": float(center_lat),
+        "center_lon": float(center_lon),
+        "heading": float(heading),
+        "altitude_msl_m": alt.m_as(ureg.meter),
+        "radius_m": radius_q.m_as(ureg.meter),
+        "n_sides": int(n_sides),
+        "aspect_ratio": float(aspect_ratio),
+        "closed": bool(closed),
+    }
+    return Pattern(
+        kind="polygon",
+        name=name or "Polygon",
+        params=params,
+        waypoints=waypoints,
+    )
 
 
 def sawtooth(
@@ -339,7 +361,8 @@ def sawtooth(
     altitude_max: Union[float, "Quantity"],
     leg_length: Union[float, "Quantity"],
     n_cycles: int = 1,
-) -> List[Waypoint]:
+    name: Optional[str] = None,
+) -> Pattern:
     """Generate an oscillating altitude profile along a straight track.
 
     Args:
@@ -349,12 +372,14 @@ def sawtooth(
         altitude_max: Top of each oscillation.
         leg_length: Total track length.
         n_cycles: Number of up-down cycles.
+        name: Pattern display name (default "Sawtooth").
 
     Returns:
-        List of Waypoint objects with segment_type="pattern".
+        A waypoint-based :class:`Pattern` (``kind="sawtooth"``).
     """
     center_lat, center_lon = center
-    total_len_m = _to_length_quantity(leg_length, "leg_length").magnitude
+    leg_len_q = _to_length_quantity(leg_length, "leg_length")
+    total_len_m = leg_len_q.magnitude
     if total_len_m <= 0:
         raise HyPlanValueError("leg_length must be positive")
     alt_min = _to_length_quantity(altitude_min, "altitude_min")
@@ -364,20 +389,17 @@ def sawtooth(
     n_points = 2 * n_cycles + 1
     half_len = total_len_m / 2.0
 
-    # Start point: half_len behind center
     start_lat, start_lon = pymap3d.vincenty.vreckon(
         center_lat, center_lon, half_len, (heading + 180.0) % 360.0
     )
     start_lon = wrap_to_180(start_lon)
 
-    # Spacing between waypoints along track
     spacing = total_len_m / (n_points - 1) if n_points > 1 else 0
 
     wp_heading = wrap_to_360(heading)
     waypoints = []
 
     for i in range(n_points):
-        # Position along track
         dist_from_start = spacing * i
         if dist_from_start == 0:
             lat, lon = float(start_lat), float(start_lon)
@@ -387,7 +409,6 @@ def sawtooth(
             )
             lon = wrap_to_180(lon)  # type: ignore[assignment]
 
-        # Altitude alternates: starts at max, then min, max, min, ...
         alt = alt_max if i % 2 == 0 else alt_min
 
         waypoints.append(Waypoint(
@@ -399,7 +420,21 @@ def sawtooth(
             segment_type="pattern_turn",
         ))
 
-    return waypoints
+    params = {
+        "center_lat": float(center_lat),
+        "center_lon": float(center_lon),
+        "heading": heading,
+        "altitude_min_m": alt_min.m_as(ureg.meter),
+        "altitude_max_m": alt_max.m_as(ureg.meter),
+        "leg_length_m": leg_len_q.m_as(ureg.meter),
+        "n_cycles": int(n_cycles),
+    }
+    return Pattern(
+        kind="sawtooth",
+        name=name or "Sawtooth",
+        params=params,
+        waypoints=waypoints,
+    )
 
 
 def spiral(
@@ -411,7 +446,8 @@ def spiral(
     n_turns: float = 3.0,
     direction: str = "right",
     points_per_turn: int = 36,
-) -> List[Waypoint]:
+    name: Optional[str] = None,
+) -> Pattern:
     """Generate a helical spiral pattern for vertical profiling.
 
     The aircraft flies a constant-radius circle while ascending or
@@ -430,9 +466,10 @@ def spiral(
             (counterclockwise). Default "right".
         points_per_turn: Number of waypoints per revolution. Default 36
             (one every 10 degrees).
+        name: Pattern display name (default "Spiral").
 
     Returns:
-        List of Waypoint objects with segment_type="pattern".
+        A waypoint-based :class:`Pattern` (``kind="spiral"``).
 
     Raises:
         HyPlanValueError: If n_turns <= 0, points_per_turn < 3, or direction
@@ -446,45 +483,38 @@ def spiral(
         raise HyPlanValueError(f"direction must be 'right' or 'left', got '{direction}'")
 
     center_lat, center_lon = center
-    radius_m = _to_length_quantity(radius, "radius").magnitude
+    radius_q = _to_length_quantity(radius, "radius")
+    radius_m = radius_q.magnitude
     if radius_m <= 0:
         raise HyPlanValueError("radius must be positive")
     alt_start = _to_length_quantity(altitude_start, "altitude_start")
     alt_end = _to_length_quantity(altitude_end, "altitude_end")
 
-    # Total number of angular steps
     total_steps = int(n_turns * points_per_turn)
     if total_steps < 1:
         total_steps = 1
 
-    # Angular increment per step (degrees)
     angle_step = 360.0 / points_per_turn
     if direction == "left":
         angle_step = -angle_step
 
-    # Altitude interpolation (as pint Quantities)
     alt_start_m = alt_start.m_as(ureg.meter)
     alt_end_m = alt_end.m_as(ureg.meter)
 
     waypoints = []
     for i in range(total_steps + 1):
-        # Bearing from center to this point on the circle
-        bearing = heading + i * angle_step
-        bearing = bearing % 360.0
+        bearing = (heading + i * angle_step) % 360.0
 
-        # Position on the circle
         lat, lon = pymap3d.vincenty.vreckon(
             center_lat, center_lon, radius_m, bearing
         )
         lon = wrap_to_180(lon)
 
-        # Tangent heading (perpendicular to radial bearing)
         if direction == "right":
             tangent = wrap_to_360(bearing + 90.0)
         else:
             tangent = wrap_to_360(bearing - 90.0)
 
-        # Altitude: linear interpolation
         frac = i / total_steps if total_steps > 0 else 0.0
         alt_m = alt_start_m + (alt_end_m - alt_start_m) * frac
         alt = ureg.Quantity(alt_m, "meter")
@@ -498,7 +528,141 @@ def spiral(
             segment_type="pattern",
         ))
 
-    return waypoints
+    params = {
+        "center_lat": float(center_lat),
+        "center_lon": float(center_lon),
+        "heading": float(heading),
+        "altitude_start_m": alt_start_m,
+        "altitude_end_m": alt_end_m,
+        "radius_m": radius_q.m_as(ureg.meter),
+        "n_turns": float(n_turns),
+        "direction": direction,
+        "points_per_turn": int(points_per_turn),
+    }
+    return Pattern(
+        kind="spiral",
+        name=name or "Spiral",
+        params=params,
+        waypoints=waypoints,
+    )
+
+
+def glint_arc(
+    center: tuple,
+    observation_datetime,
+    altitude: Union[float, "Quantity"],
+    speed: Union[float, "Quantity"],
+    bank_angle: Optional[float] = None,
+    bank_direction: str = "right",
+    collection_length: Union[float, "Quantity", None] = None,
+    densify_m: float = 200.0,
+    name: Optional[str] = None,
+) -> Pattern:
+    """Generate a banked specular-glint arc as a waypoint pattern.
+
+    Wraps :class:`~hyplan.glint.GlintArc` (Ayasse et al. 2022) so the arc
+    can be carried inside a :class:`Pattern` and round-tripped through
+    :meth:`Pattern.regenerate` and Campaign persistence.  At the arc
+    midpoint the bank angle tilts the sensor to view the target with a
+    glint angle of zero (perfect specular reflection); the rest of the
+    arc keeps glint within a narrow band around it.
+
+    Args:
+        center: ``(target_lat, target_lon)`` of the surface point being
+            observed.
+        observation_datetime: UTC datetime for solar position. Same
+            ``takeoff_time`` value used elsewhere in the planner.
+        altitude: Aircraft altitude MSL.
+        speed: Aircraft true airspeed used for turn-radius computation
+            (typically ``aircraft.cruise_speed_at(altitude)``).
+        bank_angle: Bank angle in degrees. ``None`` (default) auto-selects
+            the solar zenith angle (valid only when SZA <= 60°).
+        bank_direction: ``"right"`` (default) or ``"left"``.
+        collection_length: Optional arc length to limit the collection
+            (Quantity or float meters). ``None`` uses the full 180° arc.
+        densify_m: Spacing of the densified arc waypoints, in meters.
+        name: Pattern display name (default ``"Glint Arc"``).
+
+    Returns:
+        A waypoint-based :class:`Pattern` (``kind="glint_arc"``) whose
+        waypoints trace the densified arc with per-segment headings.
+
+    Raises:
+        HyPlanValueError: If solar zenith is too small (<5°) or too large
+            (>60° without an explicit ``bank_angle``), or if
+            ``bank_direction`` is not "left"/"right".
+    """
+    target_lat, target_lon = center
+    alt_q = _to_length_quantity(altitude, "altitude")
+    if isinstance(speed, (int, float)):
+        speed_q = ureg.Quantity(float(speed), ureg.meter / ureg.second)
+    elif hasattr(speed, "units") and speed.check("[speed]"):
+        speed_q = speed.to(ureg.meter / ureg.second)
+    else:
+        raise HyPlanTypeError("speed must be a float (m/s) or a pint Quantity with speed units")
+
+    cl_q = None
+    if collection_length is not None:
+        cl_q = _to_length_quantity(collection_length, "collection_length")
+
+    arc = GlintArc(
+        target_lat=float(target_lat),
+        target_lon=float(target_lon),
+        observation_datetime=observation_datetime,
+        altitude_msl=alt_q,
+        speed=speed_q,
+        bank_angle=bank_angle,
+        bank_direction=bank_direction,
+        collection_length=cl_q,
+    )
+
+    track = arc.track(precision=float(densify_m))
+    coords = list(track.coords)  # [(lon, lat), ...]
+    waypoints: List[Waypoint] = []
+    n = len(coords)
+    for i, (lon, lat) in enumerate(coords):
+        if i < n - 1:
+            lon_next, lat_next = coords[i + 1]
+            _, az = pymap3d.vincenty.vdist(float(lat), float(lon), float(lat_next), float(lon_next))
+            heading = wrap_to_360(float(az))
+        else:
+            heading = waypoints[-1].heading if waypoints else 0.0
+        waypoints.append(Waypoint(
+            latitude=float(lat),
+            longitude=float(lon),
+            heading=heading,  # type: ignore[arg-type]
+            altitude_msl=alt_q,
+            name=f"GA{i+1}",
+            segment_type="pattern",
+        ))
+
+    obs_iso = observation_datetime.isoformat() if hasattr(observation_datetime, "isoformat") else str(observation_datetime)
+
+    params = {
+        "center_lat": float(target_lat),
+        "center_lon": float(target_lon),
+        "altitude_msl_m": alt_q.m_as(ureg.meter),
+        "speed_mps": speed_q.m_as(ureg.meter / ureg.second),
+        "observation_datetime": obs_iso,
+        # bank_angle: store the *input* (None = auto from SZA) so that
+        # regenerate() with a different observation_datetime still
+        # auto-derives correctly.
+        "bank_angle": (float(bank_angle) if bank_angle is not None else None),
+        "bank_direction": bank_direction,
+        "collection_length_m": (cl_q.m_as(ureg.meter) if cl_q is not None else None),
+        "densify_m": float(densify_m),
+        # Effective values from this generation, for display only:
+        "effective_bank_angle": float(arc.bank_angle),
+        "solar_azimuth": float(arc.solar_azimuth),
+        "solar_zenith": float(arc.solar_zenith),
+    }
+
+    return Pattern(
+        kind="glint_arc",
+        name=name or "Glint Arc",
+        params=params,
+        waypoints=waypoints,
+    )
 
 
 def flight_lines_to_waypoint_path(
@@ -584,7 +748,6 @@ def coordinated_line(
     heading = float(heading)
     fwd_az = wrap_to_360(heading)
 
-    # Compute or validate speed ratio(s)
     if ground_speed_ratio is None:
         sec_speed = secondary_aircraft.cruise_speed_at(sec_alt)
         pri_speed = primary_aircraft.cruise_speed_at(pri_alt)
@@ -598,7 +761,6 @@ def coordinated_line(
         if r <= 0:
             raise HyPlanValueError("ground_speed_ratio must be positive")
 
-    # Primary flight line → waypoints
     pri_fl = FlightLine.center_length_azimuth(
         center_lat, center_lon, pri_len, heading,
         altitude_msl=pri_alt, site_name=primary_name,
@@ -610,11 +772,9 @@ def coordinated_line(
                  name=f"{primary_name}_end", segment_type="pattern_turn"),
     ]
 
-    # Center waypoint (at secondary altitude for the overflying aircraft)
     center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,  # type: ignore[arg-type]
                          name="C1", segment_type="pattern")
 
-    # Secondary flight lines for each ratio
     secondary_pairs = []
     for i, r in enumerate(ratios):
         sec_len = pri_len * r

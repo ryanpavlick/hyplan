@@ -62,6 +62,7 @@ from .units import ureg, convert_distance, convert_speed, convert_angle, convert
 
 # Flight geometry
 from .flight_line import FlightLine  # noqa: F401
+from .pattern import Pattern  # noqa: F401
 from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size  # noqa: F401
 
 # Aircraft
@@ -183,7 +184,7 @@ __all__ = [
     # Units
     "ureg", "convert_distance", "convert_speed", "convert_angle", "convert_time", "altitude_to_flight_level",
     # Flight geometry
-    "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
+    "FlightLine", "Pattern", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
     "Aircraft",
     "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",

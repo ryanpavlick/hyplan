@@ -37,7 +37,7 @@ def _direct_segment_record(
 ) -> dict:
     """Create a direct great-circle segment between two pattern waypoints.
 
-    Used for densely-spaced pattern waypoints (spiral, rosette, etc.) where
+    Used for densely-spaced pattern waypoints (spiral, polygon, etc.) where
     a Dubins path would distort the intended geometry.
     """
     from shapely.geometry import LineString as _LineString
