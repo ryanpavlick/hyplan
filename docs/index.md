@@ -53,6 +53,7 @@ api/dubins3d
 :caption: Instruments
 
 api/sensors
+api/awp
 ```
 
 ```{toctree}

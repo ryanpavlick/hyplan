@@ -74,6 +74,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
 | [lidar_lvis_planning.ipynb](lidar_lvis_planning.ipynb) | Plan LVIS lidar missions: pulse rate, swath geometry, altitude constraints, and coverage optimization. | When planning lidar missions where pulse density and footprint size drive the design. |
+| [awp_planning.ipynb](awp_planning.ipynb) | Plan Aerosol Wind Profiler missions: dual-LOS geometry, profile spacing, stable-leg feasibility, and vector-profile placement along a flight plan. | When planning coherent Doppler wind-lidar missions where long straight legs and profile density matter more than swath width. |
 | [radar_sar_missions.ipynb](radar_sar_missions.ipynb) | Plan SAR radar missions: side-looking geometry, incidence angle, swath width, and look-direction constraints. | When planning SAR missions where look angle and offset geometry matter. |
 | [frame_camera_planning.ipynb](frame_camera_planning.ipynb) | Plan frame camera missions: GSD, footprint, forward/side overlap, and frame rate requirements. | When planning aerial photography or photogrammetry with frame cameras. |
 | [stereo_oblique_planning.ipynb](stereo_oblique_planning.ipynb) | Plan stereo and oblique camera missions: convergence angle, base-to-height ratio, and tilted sensor geometry. | When planning stereo photogrammetry or oblique imaging missions. |
@@ -142,6 +143,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | glint_analysis | No | None | None | No |
 | glint_arc_planning | No | None | None | No |
 | lidar_lvis_planning | No | None | None | No |
+| awp_planning | No | None | None | No |
 | radar_sar_missions | No | None | None | No |
 | frame_camera_planning | No | None | None | No |
 | stereo_oblique_planning | No | None | None | No |

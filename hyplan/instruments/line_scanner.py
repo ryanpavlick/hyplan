@@ -288,10 +288,14 @@ def create_sensor(sensor_type: str) -> Sensor:
         HyPlanValueError: If the specified sensor_type is not found in SENSOR_REGISTRY.
     """
     from .lvis import LVIS
+    from .awp import AerosolWindProfiler
     from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
 
     _extra = {
         "LVIS": LVIS,
+        "AWP": AerosolWindProfiler,
+        "AerosolWindProfiler": AerosolWindProfiler,
+        "Aerosol Wind Profiler": AerosolWindProfiler,
         "UAVSAR_Lband": UAVSAR_Lband,
         "UAVSAR L-band": UAVSAR_Lband,
         "UAVSAR_Pband": UAVSAR_Pband,

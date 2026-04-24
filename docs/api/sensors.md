@@ -40,6 +40,14 @@ re-exported from the top-level `hyplan` namespace for convenience.
    :show-inheritance:
 ```
 
+## Profiling lidar
+
+```{eval-rst}
+.. autoclass:: hyplan.instruments.ProfilingLidar
+
+.. autoclass:: hyplan.instruments.AerosolWindProfiler
+```
+
 ## Radar
 
 ```{eval-rst}
