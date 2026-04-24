@@ -143,7 +143,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | glint_analysis | No | None | None | No |
 | glint_arc_planning | No | None | None | No |
 | lidar_lvis_planning | No | None | None | No |
-| awp_planning | No | None | None | No |
+| awp_planning | Optional (terrain demo) | None | None | No |
 | radar_sar_missions | No | None | None | No |
 | frame_camera_planning | No | None | None | No |
 | stereo_oblique_planning | No | None | None | No |

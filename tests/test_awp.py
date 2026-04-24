@@ -3,6 +3,7 @@
 import datetime as dt
 
 import geopandas as gpd
+import numpy as np
 import pytest
 from shapely.geometry import LineString
 
@@ -96,6 +97,50 @@ class TestAwpHelpers:
         )
         gdf = awp_profile_locations_for_flight_line(short_line, altitude_agl=12 * ureg.kilometer)
         assert gdf.empty
+
+    def test_profile_locations_for_flight_line_terrain_aware(self, flight_line, monkeypatch):
+        monkeypatch.setattr("hyplan.awp.generate_demfile", lambda lats, lons: "fake-dem.tif")
+
+        def fake_get_elevations(lats, lons, dem_file):
+            assert dem_file == "fake-dem.tif"
+            return np.linspace(500.0, 1100.0, len(lats))
+
+        def fake_ray_terrain_intersection(lat0, lon0, h0, az, tilt, precision=10.0, dem_file=None):
+            lat0 = np.asarray(lat0, dtype=float)
+            lon0 = np.asarray(lon0, dtype=float)
+            az = np.asarray(az, dtype=float)
+            offset_lon = np.where(az < 180.0, 0.04, -0.04)
+            offset_lat = np.full(len(lat0), 0.02)
+            offset_alt = np.where(az < 180.0, 950.0, 875.0)
+            return lat0 + offset_lat, lon0 + offset_lon, offset_alt
+
+        monkeypatch.setattr("hyplan.awp.get_elevations", fake_get_elevations)
+        monkeypatch.setattr("hyplan.awp.ray_terrain_intersection", fake_ray_terrain_intersection)
+
+        gdf = awp_profile_locations_for_flight_line(
+            flight_line,
+            ground_speed=225 * ureg.meter / ureg.second,
+            start_time=dt.datetime(2025, 1, 1, 12, 0, 0),
+            terrain_aware=True,
+            terrain_precision=40 * ureg.meter,
+        )
+
+        assert not gdf.empty
+        assert gdf["terrain_elevation_m"].iloc[0] == pytest.approx(500.0)
+        assert gdf["terrain_elevation_m"].iloc[-1] == pytest.approx(1100.0)
+        assert gdf["altitude_agl_m"].iloc[0] == pytest.approx(11500.0)
+        assert gdf["altitude_agl_m"].iloc[-1] == pytest.approx(10900.0)
+        assert gdf["los1_alt_m"].iloc[0] == pytest.approx(875.0)
+        assert gdf["los2_alt_m"].iloc[0] == pytest.approx(950.0)
+        assert gdf["los_surface_separation_m"].notna().all()
+
+    def test_profile_locations_for_flight_line_terrain_aware_rejects_altitude_agl(self, flight_line):
+        with pytest.raises(ValueError, match="terrain_aware=True"):
+            awp_profile_locations_for_flight_line(
+                flight_line,
+                altitude_agl=12 * ureg.kilometer,
+                terrain_aware=True,
+            )
 
     def test_flag_awp_stable_segments(self):
         plan = gpd.GeoDataFrame(
