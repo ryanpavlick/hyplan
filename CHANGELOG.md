@@ -14,6 +14,8 @@ Backwards-compatible feature release. The flight-line optimizer now accepts hete
     - `lines_covered` (`int`) and `lines_skipped` (`list[str]`) keep the pre-v1.2 line-leg semantics: a line-based Pattern contributes one per internal leg (legs of a skipped Pattern appear in `lines_skipped` as `"{item_key}:{line_id}"`); waypoint-based Patterns and bare Waypoints contribute zero on either side.
     - For all-FlightLine input the item and line pairs are equivalent.
 - **`hyplan.plotting.plot_flight_plan`**: now renders `Pattern` objects in the `flight_sequence` overlay by drawing each constituent leg (line-based) or waypoint (waypoint-based), labeling the first child with the pattern name. Previously, Patterns were silently omitted from the overlay.
+- **Loiter hold-orbit geometry** (`hyplan.planning.segments.loiter_orbit_geometry`): `compute_flight_plan` now renders a real circular hold orbit for `loiter` segments (right-hand turn at the aircraft's `cruise_deg` bank angle, radius from `v² / (g · tan φ)`) instead of a single-point geometry. The loiter row's `distance` becomes the actual ground covered during the loiter (cruise speed × delay) rather than zero. With no `altitude_msl` on the Waypoint, the planner falls back to the prior Point geometry / zero distance.
+- **`Waypoint` round-trip serialization**: `Waypoint.to_dict()` now includes all eight fields (`speed`, `delay`, `segment_type` were missing). New companion `Waypoint.from_dict(d)` classmethod reconstructs a Waypoint from a `to_dict` dictionary, supporting full round-trip identity.
 
 ## v1.1.0 — 2026-04-26
 
