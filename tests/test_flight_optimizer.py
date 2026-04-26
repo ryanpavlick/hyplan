@@ -6,6 +6,7 @@ from hyplan.units import ureg
 from hyplan.flight_line import FlightLine
 from hyplan.flight_patterns import racetrack, sawtooth
 from hyplan.pattern import Pattern
+from hyplan.waypoint import Waypoint
 from hyplan.aircraft import KingAirB200
 from hyplan.airports import Airport, initialize_data
 from hyplan.flight_optimizer import (
@@ -522,3 +523,150 @@ class TestPatternEndpoints:
             n_cycles=2,
         )
         assert st.exit_waypoint is st.waypoints[-1]
+
+
+# ---------------------------------------------------------------------------
+# Bare Waypoint atomicity tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def bare_waypoint():
+    """A bare Waypoint near Santa Barbara at 8000 ft with a 5-minute loiter."""
+    return Waypoint(
+        latitude=34.45,
+        longitude=-119.85,
+        heading=0.0,
+        altitude_msl=ureg.Quantity(8_000, "foot"),
+        delay=ureg.Quantity(5, "minute"),
+        name="LOITER_SBA",
+    )
+
+
+class TestWaypointAtomicity:
+    """Bare Waypoint is atomic in greedy_optimize — its delay never splits."""
+
+    def test_bare_waypoint_orderable(self, b200, bare_waypoint, free_lines_far_and_near, airports):
+        """A bare Waypoint is reorderable relative to free flight lines."""
+        fl_near, fl_far = free_lines_far_and_near
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[fl_far, bare_waypoint, fl_near],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+        )
+        seq = result["flight_sequence"]
+        # The bare Waypoint appears in the output exactly once, as a Waypoint.
+        wps_in_seq = [x for x in seq if isinstance(x, Waypoint)]
+        assert len(wps_in_seq) == 1
+        assert wps_in_seq[0] is bare_waypoint
+        # Free flight lines appear separately.
+        free_lines = [x for x in seq if isinstance(x, FlightLine)]
+        free_names = {x.site_name for x in free_lines}
+        assert "FL_NEAR" in free_names
+        assert "FL_FAR" in free_names
+        # Starting from KSBA, the optimizer should not pick FL_FAR first —
+        # both bare_waypoint and FL_NEAR are closer.
+        first = seq[0]
+        first_name = first.name if isinstance(first, Waypoint) else first.site_name
+        assert first_name != "FL_FAR"
+
+    def test_bare_waypoint_zero_internal_time_when_no_delay(self, b200, airports):
+        """A Waypoint with delay=None gets a zero-weight forward along-edge."""
+        wp = Waypoint(
+            latitude=34.45,
+            longitude=-119.85,
+            heading=0.0,
+            altitude_msl=ureg.Quantity(8_000, "foot"),
+            name="NO_DELAY_WP",
+        )
+        assert wp.delay is None
+        G = build_graph(b200, [wp], airports)
+        item_keys = G.graph["item_keys"]
+        _, key = item_keys[0]
+        assert G[f"{key}_start"][f"{key}_end"]["weight"] == 0.0
+
+    def test_bare_waypoint_internal_time_equals_delay(self, b200, airports):
+        """A Waypoint's along-edge weight equals delay converted to hours."""
+        wp = Waypoint(
+            latitude=34.45,
+            longitude=-119.85,
+            heading=0.0,
+            altitude_msl=ureg.Quantity(8_000, "foot"),
+            delay=ureg.Quantity(10, "minute"),
+            name="DELAY_WP",
+        )
+        G = build_graph(b200, [wp], airports)
+        item_keys = G.graph["item_keys"]
+        _, key = item_keys[0]
+        weight = G[f"{key}_start"][f"{key}_end"]["weight"]
+        assert weight == pytest.approx(10.0 / 60.0)
+
+    def test_bare_waypoint_no_reverse_along_edge(self, b200, bare_waypoint, airports):
+        """Atomicity is structural: forward along-edge exists, reverse does NOT."""
+        G = build_graph(b200, [bare_waypoint], airports)
+        item_keys = G.graph["item_keys"]
+        _, key = item_keys[0]
+        assert G.has_edge(f"{key}_start", f"{key}_end")  # forward exists
+        assert not G.has_edge(f"{key}_end", f"{key}_start")  # reverse does NOT
+
+    def test_bare_waypoint_with_long_delay_remains_atomic(self, b200, airports):
+        """A Waypoint with a delay long relative to endurance stays intact.
+
+        Mirrors the Pattern atomicity-under-tight-endurance test: regardless
+        of when the optimizer schedules the loiter, it cannot be split — the
+        single forward along-edge of weight = delay is atomic.
+        """
+        wp = Waypoint(
+            latitude=34.45,
+            longitude=-119.85,
+            heading=0.0,
+            altitude_msl=ureg.Quantity(8_000, "foot"),
+            delay=ureg.Quantity(45, "minute"),
+            name="LONG_LOITER",
+        )
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[wp],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=2.0,
+        )
+        seq = result["flight_sequence"]
+        wps_in_seq = [x for x in seq if isinstance(x, Waypoint)]
+        assert len(wps_in_seq) == 1
+        assert wps_in_seq[0] is wp
+
+    def test_mixed_sequence_flightline_pattern_waypoint(
+        self, b200, racetrack_pattern, free_lines_far_and_near, bare_waypoint, airports
+    ):
+        """Input combining all three item kinds preserves all atomicity invariants."""
+        fl_near, fl_far = free_lines_far_and_near
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[fl_far, racetrack_pattern, bare_waypoint, fl_near],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+        )
+        seq = result["flight_sequence"]
+        patterns = [x for x in seq if isinstance(x, Pattern)]
+        wps = [x for x in seq if isinstance(x, Waypoint)]
+        flines = [x for x in seq if isinstance(x, FlightLine)]
+        # Each kind appears with the expected count.
+        assert len(patterns) == 1
+        assert len(wps) == 1
+        assert len(flines) == 2
+        # Identity is preserved (same object instances flow through).
+        assert patterns[0] is racetrack_pattern
+        assert wps[0] is bare_waypoint
+        free_names = {x.site_name for x in flines}
+        assert free_names == {"FL_NEAR", "FL_FAR"}
+        # The pattern's internal lines are NOT broken out as separate items.
+        racetrack_line_ids = set(racetrack_pattern.line_ids)
+        for fl in flines:
+            assert fl.site_name not in racetrack_line_ids
