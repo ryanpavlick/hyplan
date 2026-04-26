@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
+from hyplan.pattern import Pattern
 from hyplan.waypoint import is_waypoint
 from hyplan.units import ureg
 
@@ -113,7 +114,10 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
         flight_plan_gdf (GeoDataFrame): Flight plan from compute_flight_plan().
         takeoff_airport (Airport): Departure airport (plotted as red star).
         return_airport (Airport): Arrival airport (plotted as blue star).
-        flight_sequence (list): Sequence of FlightLine and Waypoint objects.
+        flight_sequence (list): Sequence of FlightLine, Pattern, and/or Waypoint
+            objects. Patterns are rendered by drawing each of their internal
+            FlightLine legs (line-based) or Waypoint elements (waypoint-based)
+            with the pattern name as the legend label on the first child only.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     flight_plan_gdf.plot(ax=ax, column="segment_type", legend=True, cmap="viridis")
@@ -122,9 +126,19 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
     ax.scatter(takeoff_airport.longitude, takeoff_airport.latitude, color='red', marker='*', s=200, label='Takeoff Airport')
     ax.scatter(return_airport.longitude, return_airport.latitude, color='blue', marker='*', s=200, label='Return Airport')
 
-    # Plot waypoints and flight lines from the flight sequence.
+    # Plot waypoints, flight lines, and patterns from the flight sequence.
     for item in flight_sequence:
-        if is_waypoint(item):
+        if isinstance(item, Pattern):
+            if item.is_line_based:
+                for idx, fl in enumerate(item.lines.values()):
+                    x, y = zip(*fl.geometry.coords)
+                    label = item.name if idx == 0 else None
+                    ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=label)
+            else:
+                for idx, wp in enumerate(item.waypoints):
+                    label = item.name if idx == 0 else None
+                    ax.scatter(wp.longitude, wp.latitude, color='green', marker='o', s=100, label=label)
+        elif is_waypoint(item):
             ax.scatter(item.longitude, item.latitude, color='green', marker='o', s=100, label=item.name)
         elif isinstance(item, FlightLine):
             x, y = zip(*item.geometry.coords)

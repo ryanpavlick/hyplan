@@ -107,6 +107,26 @@ This design makes patterns reusable and editable:
 - `Campaign` can persist patterns with stable `pattern_id` and `line_id`
   values for interactive tools.
 
+### Patterns are atomic in the flight-line optimizer
+
+When a `Pattern` appears in
+{func}`~hyplan.flight_optimizer.greedy_optimize`'s input sequence alongside
+free-standing {class}`~hyplan.flight_line.FlightLine` items, the optimizer
+treats it as a single indivisible visit item. Concretely:
+
+- The optimizer **may** reorder whole patterns relative to free
+  flight lines.
+- The optimizer **may not** split a pattern apart: once it begins a
+  pattern, it visits every element of that pattern in pattern definition
+  order before moving on to any other item.
+- Pattern traversal direction is fixed (entry → exit). Reversal is not
+  supported in this release.
+
+Endurance and refueling feasibility evaluate the pattern as one chunk:
+if `transit_in + pattern_internal_time + transit_out` would exceed
+remaining endurance, the optimizer schedules a refuel **before** the
+pattern, never inside it.
+
 ## Aircraft speed profiles
 
 Aircraft performance is modeled with piecewise-linear speed profiles — a

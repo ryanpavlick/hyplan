@@ -22,6 +22,7 @@ import datetime
 import numpy as np
 import random
 import logging
+import warnings
 from functools import lru_cache
 from typing import Optional, Tuple, Callable, Union, List
 from shapely.affinity import affine_transform, translate
@@ -450,9 +451,19 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
     try:
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(polygon)
 
-        # Transform to UTM and calculate convex hull and minimum rotated rectangle
+        # Transform to UTM and calculate convex hull and minimum rotated rectangle.
+        # shapely 2.1.x / GEOS 3.13's oriented_envelope emits a benign
+        # "divide by zero" / "invalid value" RuntimeWarning from inside the
+        # rotating-calipers algorithm even on perfectly valid inputs; the
+        # returned geometry is still correct. Silence just that warning here.
         polygon_utm = transform(wgs84_to_utm, polygon).convex_hull
-        mrr = polygon_utm.minimum_rotated_rectangle
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"(divide by zero|invalid value) encountered in oriented_envelope",
+                category=RuntimeWarning,
+            )
+            mrr = polygon_utm.minimum_rotated_rectangle
 
         # Transform results back to WGS84
         mrr_wgs84 = transform(utm_to_wgs84, mrr)
