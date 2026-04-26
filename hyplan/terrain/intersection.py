@@ -40,7 +40,8 @@ def ray_terrain_intersection(
         lon0 (np.ndarray): Array of observer longitudes (degrees).
         h0 (float): Altitude of the observer above the ellipsoid (meters).
         az (np.ndarray): Azimuth angle of the ray (degrees).
-        tilt (np.ndarray): Tilt angle of the ray below horizontal (degrees, 0-90).
+        tilt (np.ndarray): Off-nadir tilt angle from vertical (degrees, 0-90),
+            where ``0`` is nadir and ``90`` is horizontal.
         precision (float): Precision of the slant range sampling (meters).
         dem_file (str): Path to the DEM file. If None, one will be generated.
 
@@ -51,7 +52,7 @@ def ray_terrain_intersection(
 
     Raises:
         ValueError: If tilt or azimuth values are out of range, or if tilt is too close
-            to horizontal (+-90 deg) where slant-range geometry is undefined.
+            to horizontal (90 deg) where slant-range geometry is undefined.
     """
     lat0 = np.atleast_1d(lat0)
     lon0 = np.atleast_1d(lon0)
@@ -110,7 +111,7 @@ def ray_terrain_intersection(
     # cross-observer false positives.
     rs = np.arange(lower_bound.min(), upper_bound.max() + precision, precision)
 
-    tilt_el = tilt - 90.0  # Convert depression angle to elevation angle for aer2geodetic
+    tilt_el = tilt - 90.0  # Convert off-nadir-from-vertical tilt to elevation angle
 
     lats, lons, alts = pymap3d.aer.aer2geodetic(
         az[np.newaxis, :], tilt_el[np.newaxis, :], rs[:, np.newaxis],

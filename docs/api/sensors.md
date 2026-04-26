@@ -40,11 +40,31 @@ re-exported from the top-level `hyplan` namespace for convenience.
    :show-inheritance:
 ```
 
-## Profiling lidar
+## Profiling lidars
+
+Nadir-pointing single-beam atmospheric profilers (no cross-track swath).
+For a detailed walk-through, see {doc}`profiling_lidar`.
 
 ```{eval-rst}
 .. autoclass:: hyplan.instruments.ProfilingLidar
+   :show-inheritance:
 
+.. autoclass:: hyplan.instruments.HSRL2
+   :show-inheritance:
+
+.. autoclass:: hyplan.instruments.HALO
+   :show-inheritance:
+
+.. autoclass:: hyplan.instruments.CPL
+   :show-inheritance:
+```
+
+## Doppler wind lidar
+
+Dual-line-of-sight profiler for vector wind retrieval. See {doc}`awp`
+for planning helpers.
+
+```{eval-rst}
 .. autoclass:: hyplan.instruments.AerosolWindProfiler
 ```
 

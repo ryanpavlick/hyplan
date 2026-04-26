@@ -19,6 +19,7 @@ on:
       - "notebooks/tutorial.ipynb"
       - "notebooks/export_formats.ipynb"
       - "notebooks/aircraft_performance.ipynb"
+      - "notebooks/profiling_lidar_planning.ipynb"
       - ".github/workflows/notebooks.yml"
 
 jobs:
@@ -34,6 +35,8 @@ jobs:
           - export_formats.ipynb
           # Exercises the Aircraft base class and several subclasses.
           - aircraft_performance.ipynb
+          # Exercises the ProfilingLidar family (HSRL-2, HALO, CPL).
+          - profiling_lidar_planning.ipynb
 
     steps:
       - uses: actions/checkout@v4

@@ -289,6 +289,7 @@ def create_sensor(sensor_type: str) -> Sensor:
     """
     from .lvis import LVIS
     from .awp import AerosolWindProfiler
+    from .profilinglidar import HSRL2, HALO, CPL
     from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
 
     _extra = {
@@ -296,6 +297,13 @@ def create_sensor(sensor_type: str) -> Sensor:
         "AWP": AerosolWindProfiler,
         "AerosolWindProfiler": AerosolWindProfiler,
         "Aerosol Wind Profiler": AerosolWindProfiler,
+        "HSRL-2": HSRL2,
+        "HSRL2": HSRL2,
+        "HSRL": HSRL2,
+        "HALO": HALO,
+        "High Altitude Lidar Observatory": HALO,
+        "CPL": CPL,
+        "Cloud Physics Lidar": CPL,
         "UAVSAR_Lband": UAVSAR_Lband,
         "UAVSAR L-band": UAVSAR_Lband,
         "UAVSAR_Pband": UAVSAR_Pband,

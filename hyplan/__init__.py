@@ -122,8 +122,14 @@ from .instruments import (  # noqa: F401
     LVIS_LENS_WIDE,
     LVIS_LENSES,
     LVIS,
-    ProfilingLidar,
     AerosolWindProfiler,
+    flag_awp_stable_segments,
+    awp_profile_locations_for_flight_line,
+    awp_profile_locations_for_plan,
+    ProfilingLidar,
+    HSRL2,
+    HALO,
+    CPL,
     RadarExclusionConflict,
     check_lband_radar_exclusions,
     SidelookingRadar,
@@ -131,8 +137,6 @@ from .instruments import (  # noqa: F401
     UAVSAR_Pband,
     UAVSAR_Kaband,
 )
-from .awp import flag_awp_stable_segments, awp_profile_locations_for_flight_line, awp_profile_locations_for_plan  # noqa: F401
-
 # Waypoint and Dubins path planning
 from .waypoint import Waypoint  # noqa: F401
 from .dubins3d import DubinsPath3D  # noqa: F401
@@ -206,7 +210,7 @@ __all__ = [
     "SENSOR_REGISTRY", "create_sensor",
     "FrameCamera", "MultiCameraRig",
     "LVISLens", "LVIS_LENS_NARROW", "LVIS_LENS_MEDIUM", "LVIS_LENS_WIDE", "LVIS_LENSES", "LVIS",
-    "ProfilingLidar", "AerosolWindProfiler",
+    "AerosolWindProfiler", "ProfilingLidar", "HSRL2", "HALO", "CPL",
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",
     # Dubins

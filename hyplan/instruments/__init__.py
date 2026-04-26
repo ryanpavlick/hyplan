@@ -34,7 +34,13 @@ from .lvis import (
     LVIS_LENSES,
     LVIS,
 )
-from .awp import ProfilingLidar, AerosolWindProfiler
+from .awp import (
+    AerosolWindProfiler,
+    flag_awp_stable_segments,
+    awp_profile_locations_for_flight_line,
+    awp_profile_locations_for_plan,
+)
+from .profilinglidar import ProfilingLidar, HSRL2, HALO, CPL
 from .radar import (
     RadarExclusionConflict,
     check_lband_radar_exclusions,
@@ -59,7 +65,9 @@ __all__ = [
     # LVIS lidar
     "LVISLens", "LVIS_LENS_NARROW", "LVIS_LENS_MEDIUM", "LVIS_LENS_WIDE", "LVIS_LENSES", "LVIS",
     # Profiling lidars
-    "ProfilingLidar", "AerosolWindProfiler",
+    "AerosolWindProfiler",
+    "flag_awp_stable_segments", "awp_profile_locations_for_flight_line", "awp_profile_locations_for_plan",
+    "ProfilingLidar", "HSRL2", "HALO", "CPL",
     # SAR radar
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",

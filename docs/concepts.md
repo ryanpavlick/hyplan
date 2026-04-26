@@ -38,9 +38,25 @@ All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
 - {class}`~hyplan.instruments.FrameCamera` — Frame cameras defined by
   sensor dimensions, focal length, resolution, and frame rate.
 
-All sensor types provide `half_angle` and `swath_width(altitude_agl)` so they
+- {class}`~hyplan.instruments.ProfilingLidar` — Nadir-pointing single-beam
+  atmospheric profiling lidars ({class}`~hyplan.instruments.HSRL2`,
+  {class}`~hyplan.instruments.HALO`, {class}`~hyplan.instruments.CPL`).
+  Defined by laser wavelengths, pulse rate, telescope/beam optics, vertical
+  bin resolution, and FPGA-averaged sampling rate. These instruments record
+  a vertical column directly beneath the platform and have no cross-track
+  swath; horizontal resolution is set by post-processing averaging.
+
+- {class}`~hyplan.instruments.AerosolWindProfiler` — Doppler wind lidar
+  with dual line-of-sight geometry (NASA Langley AWP). Modeled separately
+  from `ProfilingLidar` because the dual-LOS vector-retrieval geometry
+  needs a different abstraction.
+
+Imaging and scanning sensors (`LineScanner`, `SidelookingRadar`, `LVIS`,
+`FrameCamera`) provide `half_angle` and `swath_width(altitude_agl)` so they
 work with {func}`~hyplan.swath.generate_swath_polygon`,
 {func}`~hyplan.flight_box.generate_flight_lines`, and other planning tools.
+Profiling lidars do not have a cross-track swath and use their own geometry
+helpers (e.g., `footprint_diameter`, `horizontal_resolution`).
 
 ## Flight planning workflow
 
