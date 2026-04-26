@@ -738,3 +738,119 @@ class TestCoverageCounts:
         assert result["items_covered"] == 4
         # 5 actual flight-line legs: 3 racetrack legs + 2 free FlightLines.
         assert result["lines_covered"] == 5
+
+    def test_items_covered_never_negative_when_all_items_infeasible(
+        self, b200, racetrack_pattern, airports
+    ):
+        """Regression: items_covered must be 0, not negative, when nothing was flown.
+
+        The previous implementation computed
+        ``items_covered = len(visited_items) - len(skipped_items)``, which
+        went negative whenever any item was skipped without anything else
+        flown.
+        """
+        # Endurance below takeoff_landing_overhead — nothing can launch.
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[racetrack_pattern],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=0.1,
+            takeoff_landing_overhead=0.25,
+        )
+        assert result["items_covered"] == 0
+        assert result["lines_covered"] == 0
+        # Pattern is the sole input, so its key is the only entry in items_skipped.
+        assert len(result["items_skipped"]) == 1
+        assert result["flight_sequence"] == []
+
+    def test_lines_skipped_expands_skipped_line_based_pattern(
+        self, b200, racetrack_pattern, airports
+    ):
+        """A skipped line-based Pattern expands to one ``lines_skipped`` entry per leg."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[racetrack_pattern],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=0.1,
+            takeoff_landing_overhead=0.25,
+        )
+        assert result["lines_covered"] == 0
+        # The racetrack has 3 internal legs — each should appear in lines_skipped
+        # as "{item_key}:{line_id}".
+        assert len(result["lines_skipped"]) == 3
+        item_key = result["items_skipped"][0]
+        for leg_key, line_id in zip(result["lines_skipped"], racetrack_pattern.line_ids):
+            assert leg_key.startswith(f"{item_key}:")
+            assert leg_key == f"{item_key}:{line_id}"
+
+    def test_waypoint_skipped_contributes_zero_lines_skipped(
+        self, b200, bare_waypoint, airports
+    ):
+        """A skipped bare Waypoint shows up in items_skipped but not in lines_skipped."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[bare_waypoint],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=0.1,
+            takeoff_landing_overhead=0.25,
+        )
+        assert result["items_covered"] == 0
+        assert result["items_skipped"] == [bare_waypoint.name]
+        # No along-line collection -> no lines_skipped contribution.
+        assert result["lines_skipped"] == []
+
+    def test_mixed_skips_keep_item_and_line_counts_consistent(
+        self, b200, free_lines_far_and_near, airports
+    ):
+        """Mixed scheduled + skipped input keeps the four counts mutually consistent.
+
+        One short FlightLine near KSBA flies; one pattern with very long legs
+        and one Waypoint with a multi-hour delay are infeasible under the
+        chosen endurance and end up skipped.
+        """
+        fl_near, _fl_far = free_lines_far_and_near
+        # A line-based pattern whose internal traversal alone exceeds endurance.
+        big_rt = racetrack(
+            center=(34.4, -119.8),
+            heading=90.0,
+            altitude=ureg.Quantity(8_000, "foot"),
+            leg_length=ureg.Quantity(1_500, "kilometer"),
+            n_legs=2,
+            offset=ureg.Quantity(2, "kilometer"),
+            name="HUGE_RT",
+        )
+        # A Waypoint whose loiter delay alone exceeds endurance.
+        long_loiter = Waypoint(
+            latitude=34.45, longitude=-119.85, heading=0.0,
+            altitude_msl=ureg.Quantity(8_000, "foot"),
+            delay=ureg.Quantity(10, "hour"),
+            name="ENDLESS_LOITER",
+        )
+
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[fl_near, big_rt, long_loiter],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=1.5,
+        )
+
+        # Item-level: exactly one item flew, two were skipped.
+        assert result["items_covered"] == 1
+        assert len(result["items_skipped"]) == 2
+        assert set(result["items_skipped"]) == {"HUGE_RT", "ENDLESS_LOITER"}
+
+        # Line-level: 1 leg flew (the FlightLine); the skipped pattern's
+        # 2 legs appear in lines_skipped, and the skipped Waypoint adds nothing.
+        assert result["lines_covered"] == 1
+        assert len(result["lines_skipped"]) == 2
+        for leg_key in result["lines_skipped"]:
+            assert leg_key.startswith("HUGE_RT:")
+        assert all("ENDLESS_LOITER" not in leg_key for leg_key in result["lines_skipped"])

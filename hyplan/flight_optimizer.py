@@ -219,6 +219,28 @@ def _item_line_count(item) -> int:
     return 1
 
 
+def _item_skipped_line_keys(item, key: str) -> list:
+    """Stable line-leg identifiers for an item that the optimizer skipped.
+
+    Used to expand the per-item ``skipped_items`` set into the line-leg
+    granularity historically reported by ``lines_skipped``. The returned
+    keys are namespaced under the item's optimizer key so they remain
+    unique across the result.
+
+    - FlightLine: ``[key]``
+    - Line-based Pattern: ``[f"{key}:{line_id}", ...]`` for each internal leg
+    - Waypoint-based Pattern: ``[]`` (no along-line collection)
+    - Bare Waypoint: ``[]`` (no along-line collection)
+    """
+    if isinstance(item, Pattern):
+        if item.is_line_based:
+            return [f"{key}:{line_id}" for line_id in item.line_ids]
+        return []
+    if isinstance(item, Waypoint):
+        return []
+    return [key]
+
+
 def _item_base_key(item, fallback_index: int) -> str:
     """Derive a stable graph-node base key for a visit item.
 
@@ -661,15 +683,19 @@ def greedy_optimize(
               objects in the order they were scheduled. FlightLines may be
               reversed from their original orientation; Patterns and bare
               Waypoints appear unchanged (direction-locked entry -> exit).
-            - "items_covered": number of visit items completed (each
-              Pattern, FlightLine, or Waypoint counts as 1).
-            - "items_skipped": list of item keys that were infeasible.
-            - "lines_covered": number of actual flight-line legs covered.
-              A line-based Pattern contributes one per internal leg; a
-              waypoint-based Pattern or bare Waypoint contributes 0. For
-              all-FlightLine input this equals ``items_covered``.
-            - "lines_skipped": alias for ``items_skipped`` retained for
-              backward compatibility.
+            - "items_covered": ``int`` — number of completed visit items
+              (each Pattern, FlightLine, or Waypoint counts as 1).
+            - "items_skipped": ``list[str]`` — keys of visit items the
+              optimizer was unable to schedule.
+            - "lines_covered": ``int`` — number of actual flight-line legs
+              completed. A line-based Pattern contributes one per internal
+              leg; a waypoint-based Pattern or bare Waypoint contributes 0.
+              For all-FlightLine input this equals ``items_covered``.
+            - "lines_skipped": ``list[str]`` — keys of the actual
+              flight-line legs that were skipped. A skipped line-based
+              Pattern is expanded to ``"{item_key}:{line_id}"`` for each
+              of its internal legs; skipped waypoint-based Patterns and
+              bare Waypoints contribute nothing.
             - "route": list of node names traversed
             - "total_time": total mission time in hours (across all days)
             - "daily_times": list of flight time per day
@@ -765,9 +791,8 @@ def greedy_optimize(
                 visited_items.add(item_key)
                 current_node = exit_node
 
-                items_flown = len(visited_items) - len(skipped_items)
                 logger.info(
-                    f"  Flew {item_key} ({items_flown}/{len(flight_lines)}), "
+                    f"  Flew {item_key} ({len(visited_items)}/{len(flight_lines)}), "
                     f"day time: {daily_time:.2f}h, since refuel: {time_since_refuel:.2f}h"
                 )
             else:
@@ -839,14 +864,28 @@ def greedy_optimize(
         if key not in visited_items and key not in skipped_items:
             skipped_items.add(key)
 
-    items_flown = len(visited_items) - len(skipped_items)
-    skipped_list = list(skipped_items)
+    # items_covered is just the count of items the optimizer actually flew.
+    # skipped_items is a disjoint set of items it never reached, so the two
+    # sum to len(flight_lines); they must not be combined arithmetically.
+    items_flown = len(visited_items)
+    items_skipped_list = list(skipped_items)
+
     # Count actual flight-line legs covered: each line-based Pattern
     # contributes len(pattern.lines), each FlightLine contributes 1, and
     # waypoint-based Patterns and bare Waypoints contribute 0. For
-    # all-FlightLine input this matches the historical lines_covered
-    # semantics (and equals items_flown).
+    # all-FlightLine input this matches the pre-v1.2 lines_covered
+    # semantics (and equals items_covered).
     lines_flown = sum(_item_line_count(item) for item in flight_sequence)
+
+    # Symmetrically, expand skipped items down to line-leg keys: a skipped
+    # line-based Pattern's legs each appear in lines_skipped, while a
+    # skipped Waypoint or waypoint-based Pattern contributes nothing.
+    skipped_key_to_item = {key: item for item, key in item_keys if key in skipped_items}
+    lines_skipped_list = [
+        leg_key
+        for key, item in skipped_key_to_item.items()
+        for leg_key in _item_skipped_line_keys(item, key)
+    ]
 
     logger.info(
         f"Optimization complete: {items_flown}/{len(flight_lines)} items covered "
@@ -861,9 +900,9 @@ def greedy_optimize(
         "total_time": total_time,
         "daily_times": daily_times,
         "items_covered": items_flown,
-        "items_skipped": skipped_list,
+        "items_skipped": items_skipped_list,
         "lines_covered": lines_flown,
-        "lines_skipped": skipped_list,
+        "lines_skipped": lines_skipped_list,
         "refuel_stops": refuel_stops,
         "days_used": len(daily_times),
         "takeoff_airport": takeoff_airport,
