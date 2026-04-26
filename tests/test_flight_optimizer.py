@@ -120,7 +120,9 @@ class TestGreedyOptimize:
         )
         expected_keys = {
             "flight_sequence", "route", "total_time", "daily_times",
-            "lines_covered", "lines_skipped", "refuel_stops",
+            "lines_covered", "lines_skipped",
+            "items_covered", "items_skipped",
+            "refuel_stops",
             "days_used", "takeoff_airport", "return_airport", "graph",
         }
         assert expected_keys.issubset(result.keys())
@@ -670,3 +672,69 @@ class TestWaypointAtomicity:
         racetrack_line_ids = set(racetrack_pattern.line_ids)
         for fl in flines:
             assert fl.site_name not in racetrack_line_ids
+
+
+# ---------------------------------------------------------------------------
+# Result schema: items_covered vs lines_covered semantics
+# ---------------------------------------------------------------------------
+
+
+class TestCoverageCounts:
+    """``lines_covered`` keeps its pre-v1.2 line-leg meaning; ``items_covered`` is new."""
+
+    def test_flightline_only_lines_equals_items(self, b200, flight_lines, airports):
+        """For all-FlightLine input the two pairs of fields agree."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=flight_lines,
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+        )
+        assert result["items_covered"] == len(flight_lines)
+        assert result["lines_covered"] == len(flight_lines)
+        assert result["items_skipped"] == result["lines_skipped"] == []
+
+    def test_pattern_lines_covered_counts_all_legs(self, b200, racetrack_pattern, airports):
+        """A 3-leg line-based Pattern contributes 3 to lines_covered, 1 to items_covered."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[racetrack_pattern],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+        )
+        # Sanity: the racetrack fixture has 3 internal legs.
+        assert len(racetrack_pattern.lines) == 3
+        assert result["items_covered"] == 1
+        assert result["lines_covered"] == 3
+
+    def test_waypoint_contributes_zero_lines(self, b200, bare_waypoint, airports):
+        """A bare Waypoint counts as one item but zero flight-line legs."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[bare_waypoint],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+        )
+        assert result["items_covered"] == 1
+        assert result["lines_covered"] == 0
+
+    def test_mixed_input_counts(self, b200, racetrack_pattern, free_lines_far_and_near, bare_waypoint, airports):
+        """Mixed input: items_covered counts each visit item; lines_covered counts legs."""
+        fl_near, fl_far = free_lines_far_and_near
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[fl_far, racetrack_pattern, bare_waypoint, fl_near],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+        )
+        # 4 visit items: 1 pattern + 1 waypoint + 2 free lines.
+        assert result["items_covered"] == 4
+        # 5 actual flight-line legs: 3 racetrack legs + 2 free FlightLines.
+        assert result["lines_covered"] == 5
