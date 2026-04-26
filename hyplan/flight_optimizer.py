@@ -1,10 +1,14 @@
-"""Graph-based flight line ordering and multi-day scheduling.
+"""Graph-based visit-item ordering and multi-day scheduling.
 
-Builds a weighted directed graph where nodes are flight-line endpoints and
+Builds a weighted directed graph where nodes are visit-item endpoints and
 airports, and edge weights are transit times computed from aircraft
-performance.  :func:`greedy_optimize` traverses this graph with a
+performance. :func:`greedy_optimize` traverses this graph with a
 nearest-neighbour heuristic, respecting endurance limits, daily flight-time
 caps, and refueling constraints to produce a feasible multi-day schedule.
+
+Visit items may be free-standing :class:`~hyplan.flight_line.FlightLine`
+objects, atomic :class:`~hyplan.pattern.Pattern` objects, or bare
+:class:`~hyplan.waypoint.Waypoint` objects with optional loiter delay.
 """
 
 from __future__ import annotations
@@ -647,12 +651,12 @@ def greedy_optimize(
     max_days: int = 1,
 ) -> dict:
     """
-    Greedy nearest-neighbor optimization of flight line ordering.
+    Greedy nearest-neighbor optimization of visit-item ordering.
 
-    Builds a graph of all flight lines and airports, then iteratively
-    selects the closest feasible unvisited flight line, inserting refuel
-    stops when endurance limits would be exceeded. Supports multi-day
-    missions where daily flight time resets each day.
+    Builds a graph of all visit items and airports, then iteratively
+    selects the closest feasible unvisited item, inserting refuel stops
+    when endurance limits would be exceeded. Supports multi-day missions
+    where daily flight time resets each day.
 
     Args:
         aircraft: Aircraft performing the mission.
