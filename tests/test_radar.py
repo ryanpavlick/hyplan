@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-from shapely.geometry import Polygon, box
+from shapely.geometry import box
 from hyplan.units import ureg
 from hyplan.instruments import (
     SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband,

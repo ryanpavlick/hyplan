@@ -1,7 +1,9 @@
 """Tests for hyplan.clouds (date range logic, no Google Earth Engine required)."""
 
 import pytest
+import numpy as np
 import pandas as pd
+import xarray as xr
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -16,6 +18,10 @@ from hyplan.clouds import (
     fetch_cloud_forecast,
     summarize_cloud_fraction_by_doy,
     plot_doy_cloud_fraction,
+)
+from hyplan.clouds.plotting import (
+    plot_cloud_fraction_spatial,
+    plot_yearly_cloud_fraction_heatmaps_with_visits,
 )
 
 
@@ -528,14 +534,6 @@ class TestFetchCloudForecast:
 # ---------------------------------------------------------------------------
 # Cloud fraction spatial plotting
 # ---------------------------------------------------------------------------
-
-import numpy as np
-import xarray as xr
-from hyplan.clouds.plotting import (
-    plot_cloud_fraction_spatial,
-    plot_yearly_cloud_fraction_heatmaps_with_visits,
-)
-
 
 class TestPlotCloudFractionSpatial:
     """Tests for plot_cloud_fraction_spatial."""

@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-
-from shapely.geometry import mapping
+from typing import Dict, List
 
 from .flight_line import FlightLine
 from .waypoint import Waypoint

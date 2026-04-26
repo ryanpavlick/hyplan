@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from shapely.geometry import Point, Polygon, LineString
 
 from hyplan.satellites import (
@@ -267,7 +267,6 @@ class TestFetchTle:
         """Test that fetch_tle calls download_file when cache is stale."""
         cache_dir = tmp_path / "tle_cache"
         cache_dir.mkdir()
-        tle_file = cache_dir / "25544.tle"
 
         def fake_download(filepath, url, replace=False):
             with open(filepath, "w") as f:
