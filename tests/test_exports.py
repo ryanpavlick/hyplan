@@ -5,6 +5,15 @@ import os
 
 import pytest
 
+# geomag is part of the [mag] extra; the magnetic-declination tests below
+# require it but the rest of this file does not. Gate the dependent class
+# rather than failing collection in a base install.
+try:
+    import geomag  # noqa: F401
+    HAS_GEOMAG = True
+except ImportError:  # pragma: no cover
+    HAS_GEOMAG = False
+
 from hyplan import KingAirB200, compute_flight_plan
 from hyplan.airports import Airport, initialize_data
 from hyplan.exports import (
@@ -74,6 +83,7 @@ class TestCoordinateFormatting:
 # Magnetic declination
 # -------------------------------------------------------------------------
 
+@pytest.mark.skipif(not HAS_GEOMAG, reason="geomag not installed (install with [mag] extra)")
 class TestMagneticDeclination:
 
     def test_declination_returns_float(self):

@@ -702,7 +702,10 @@ def compute_overpass_overlap(
 
         for _, segment in flight_plan_gdf.iterrows():
             seg_geom = segment["geometry"]
-            if seg_geom is None or seg_geom.is_empty:
+            # Skip rows where geometry is missing. GeoPandas may return None,
+            # NaN, or other non-geometry sentinels depending on version, so
+            # duck-type instead of None-only.
+            if not hasattr(seg_geom, "is_empty") or seg_geom.is_empty:
                 continue
 
             # Compute time offset
