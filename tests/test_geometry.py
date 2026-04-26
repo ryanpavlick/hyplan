@@ -25,7 +25,7 @@ from hyplan.geometry import (
     true_to_magnetic,
     get_timezone,
 )
-from hyplan.exceptions import HyPlanValueError, HyPlanTypeError
+from hyplan.exceptions import HyPlanValueError, HyPlanTypeError, HyPlanRuntimeError
 
 
 # ---------------------------------------------------------------------------
@@ -409,3 +409,98 @@ class TestGetTimezone:
     def test_invalid_longitude(self):
         with pytest.raises(HyPlanValueError):
             get_timezone(0.0, 200.0)
+
+
+class TestGetTimezoneFinderRecovery:
+    """Tests for the numba-locator recovery path in ``_get_timezone_finder``.
+
+    When ``timezonefinder`` raises the specific
+    ``RuntimeError: cannot cache function ... no locator available`` error
+    that some numba caching environments produce, ``_get_timezone_finder``
+    should disable numba JIT, re-import ``timezonefinder``, and try once
+    more. Other RuntimeErrors should not trigger the recovery.
+    """
+
+    def setup_method(self):
+        # Reset the singleton between tests so each one re-runs the import path.
+        from hyplan import geometry
+        geometry._timezone_finder = None
+
+    def teardown_method(self):
+        # Don't leak the disabled-JIT env var or the singleton state.
+        import os
+        from hyplan import geometry
+        os.environ.pop("NUMBA_DISABLE_JIT", None)
+        geometry._timezone_finder = None
+
+    def test_recovers_from_numba_locator_error(self, monkeypatch):
+        from hyplan import geometry
+
+        attempts = {"count": 0}
+
+        class FakeTF:
+            """First instantiation raises the known numba RuntimeError;
+            second instantiation (after the recovery path) succeeds."""
+            def __init__(self):
+                attempts["count"] += 1
+                if attempts["count"] == 1:
+                    raise RuntimeError(
+                        "cannot cache function 'pt_in_poly_python': "
+                        "no locator available for file '...'"
+                    )
+
+            def timezone_at(self, lat, lng):
+                return "America/Los_Angeles"
+
+        # Both the initial import and the post-recovery re-import resolve
+        # to the fake. The recovery flow purges sys.modules and re-imports,
+        # so we patch the helper that performs the import.
+        monkeypatch.setattr(geometry, "_import_timezonefinder", lambda: FakeTF)
+        monkeypatch.setattr(
+            geometry,
+            "_disable_numba_and_reimport_timezonefinder",
+            lambda: FakeTF,
+        )
+
+        tf = geometry._get_timezone_finder()
+        assert isinstance(tf, FakeTF)
+        assert attempts["count"] == 2  # one failed, one succeeded
+
+    def test_does_not_recover_from_unrelated_runtime_error(self, monkeypatch):
+        from hyplan import geometry
+
+        class FakeTF:
+            def __init__(self):
+                raise RuntimeError("something unrelated and unrecoverable")
+
+        monkeypatch.setattr(geometry, "_import_timezonefinder", lambda: FakeTF)
+        # If the recovery path were taken, we'd get a different error message.
+        # The original RuntimeError must propagate unchanged.
+        with pytest.raises(RuntimeError, match="something unrelated"):
+            geometry._get_timezone_finder()
+
+    def test_raises_hyplan_runtime_error_when_recovery_also_fails(
+        self, monkeypatch
+    ):
+        from hyplan import geometry
+
+        class FailingTF:
+            def __init__(self):
+                raise RuntimeError(
+                    "cannot cache function 'pt_in_poly_python': "
+                    "no locator available for file '...'"
+                )
+
+        class StillFailingTF:
+            def __init__(self):
+                raise RuntimeError("post-recovery failure")
+
+        monkeypatch.setattr(geometry, "_import_timezonefinder", lambda: FailingTF)
+        monkeypatch.setattr(
+            geometry,
+            "_disable_numba_and_reimport_timezonefinder",
+            lambda: StillFailingTF,
+        )
+
+        with pytest.raises(HyPlanRuntimeError, match="even after disabling numba JIT"):
+            geometry._get_timezone_finder()

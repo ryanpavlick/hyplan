@@ -34,6 +34,8 @@ from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
 from .exceptions import HyPlanTypeError, HyPlanValueError, HyPlanRuntimeError
 
+logger = logging.getLogger(__name__)
+
 
 def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
     """
@@ -65,22 +67,95 @@ def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
 _timezone_finder = None
 
 
+def _import_timezonefinder():
+    """Import ``timezonefinder.TimezoneFinder`` or raise a clear error."""
+    try:
+        from timezonefinder import TimezoneFinder
+        return TimezoneFinder
+    except ImportError as e:
+        raise HyPlanRuntimeError(
+            "get_timezone requires the 'timezonefinder' package. "
+            "Install it with: pip install timezonefinder"
+        ) from e
+
+
+def _is_numba_locator_failure(exc: BaseException) -> bool:
+    """Identify the specific numba caching failure we know how to recover from.
+
+    When numba's ``@njit(cache=True)`` decorators can't determine where to
+    write their cache, they raise ``RuntimeError`` with a message of the
+    form ``"cannot cache function '...': no locator available for file
+    '...'"``. This shows up in some environments (transient ``__pycache__``
+    state, unusual install layouts, certain Python path resolutions) when
+    ``timezonefinder`` first JIT-compiles its polygon-test routines. It is
+    safely recoverable by disabling numba JIT and re-importing
+    ``timezonefinder`` to pick up its non-numba fallback.
+    """
+    if not isinstance(exc, RuntimeError):
+        return False
+    msg = str(exc)
+    return "no locator available" in msg and "cache" in msg
+
+
+def _disable_numba_and_reimport_timezonefinder():
+    """Force ``timezonefinder`` to use its pure-Python fallback path.
+
+    Sets ``NUMBA_DISABLE_JIT=1`` and evicts ``timezonefinder`` and ``numba``
+    from ``sys.modules`` so the next import re-runs ``utils_numba.py``'s
+    ``except ImportError: ... _numba_replacements`` branch (or skips
+    ``cache=True`` entirely under disabled JIT). Returns the freshly
+    imported ``TimezoneFinder`` class.
+    """
+    import os
+    import sys
+
+    os.environ["NUMBA_DISABLE_JIT"] = "1"
+    for mod in [m for m in sys.modules if m == "numba" or m.startswith("numba.")
+                or m == "timezonefinder" or m.startswith("timezonefinder.")]:
+        del sys.modules[mod]
+    return _import_timezonefinder()
+
+
 def _get_timezone_finder():
     """Lazily instantiate a single ``TimezoneFinder``.
 
     ``TimezoneFinder()`` loads tens of MB of polygon data on first use, so
     we keep a module-level singleton instead of constructing one per call.
+
+    Includes a one-shot recovery path for the known
+    ``RuntimeError: cannot cache function ... no locator available``
+    failure that ``timezonefinder``'s numba-decorated functions can raise
+    in some environments. If the standard instantiation hits that error,
+    we disable numba JIT process-wide and re-import ``timezonefinder`` so
+    it falls back to the pure-Python implementations bundled in
+    ``timezonefinder._numba_replacements``. Any other failure is re-raised
+    unchanged.
     """
     global _timezone_finder
-    if _timezone_finder is None:
-        try:
-            from timezonefinder import TimezoneFinder
-        except ImportError as e:
-            raise HyPlanRuntimeError(
-                "get_timezone requires the 'timezonefinder' package. "
-                "Install it with: pip install timezonefinder"
-            ) from e
+    if _timezone_finder is not None:
+        return _timezone_finder
+
+    TimezoneFinder = _import_timezonefinder()
+    try:
         _timezone_finder = TimezoneFinder()
+    except RuntimeError as e:
+        if not _is_numba_locator_failure(e):
+            raise
+        logger.warning(
+            "timezonefinder hit a numba caching error (%s); falling back to "
+            "the pure-Python implementation by disabling numba JIT.",
+            e,
+        )
+        TimezoneFinder = _disable_numba_and_reimport_timezonefinder()
+        try:
+            _timezone_finder = TimezoneFinder()
+        except Exception as e2:
+            raise HyPlanRuntimeError(
+                "TimezoneFinder() failed even after disabling numba JIT. "
+                "This usually indicates a deeper environment issue with the "
+                "'timezonefinder' install. See: "
+                "https://timezonefinder.michelfe.it/"
+            ) from e2
     return _timezone_finder
 
 
