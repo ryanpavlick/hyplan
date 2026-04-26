@@ -22,6 +22,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 ## Features
 
 - **Flight planning** — Define flight lines, generate multi-line coverage patterns, and compute complete mission plans with takeoff, transit, data collection, and landing segments
+- **Pattern workflows** — Build reusable racetrack, rosette, polygon, sawtooth, spiral, and glint-arc patterns as first-class objects that can be edited, serialized, and re-planned
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
 - **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
 - **Lidar & radar** — LVIS full-waveform lidar and UAVSAR L/P/Ka-band SAR sensor models
@@ -35,7 +36,8 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
-- **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, polygon, and coordinated dual-aircraft (five-point line) flight patterns for profiling, survey, and multi-platform missions
+- **Flight patterns** — Generate racetrack, rosette, spiral, sawtooth, polygon, glint-arc, and coordinated dual-aircraft (five-point line) flight patterns for profiling, survey, and multi-platform missions
+- **Campaign persistence** — Organize free-standing lines and reusable patterns with stable IDs, revision metadata, and plain-folder persistence suitable for interactive planning tools
 - **Geospatial export** — Output to Excel, KML, GPX, ForeFlight CSV, Honeywell FMS, ER-2, ICARTT, and interactive Folium maps
 
 ---
@@ -115,6 +117,34 @@ plan = compute_flight_plan(aircraft, [flight_line], departure, destination)
 plot_flight_plan(plan, departure, destination, [flight_line])
 ```
 
+### Build a reusable pattern and store it in a campaign
+
+```python
+from hyplan import Campaign, NASA_GIII, racetrack, compute_flight_plan, ureg
+
+campaign = Campaign(
+    "LA Basin Demo",
+    bounds=(-119.0, 33.5, -117.5, 34.5),
+)
+
+pattern = racetrack(
+    center=(34.0, -118.2),
+    heading=90.0,
+    altitude=12_000 * ureg.meter,
+    leg_length=80 * ureg.kilometer,
+    n_legs=3,
+    offset=8 * ureg.kilometer,
+    name="Basin Wall",
+)
+
+pattern_id = campaign.add_pattern(pattern)
+plan = compute_flight_plan(NASA_GIII(), [campaign.get_pattern(pattern_id)])
+```
+
+Patterns are first-class objects in HyPlan. They can be regenerated with
+parameter overrides, edited line-by-line, saved inside a `Campaign`, and
+expanded directly by `compute_flight_plan()`.
+
 ### Optimize flight line ordering
 
 ```python
@@ -156,6 +186,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
                         │    Flight Planning     │
                         ├────────────────────────┤
                         │  flight_line           │
+                        │  pattern               │
                         │  flight_box            │
                         │  flight_plan           │
                         │  flight_optimizer      │
@@ -181,12 +212,13 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 |--------|-------------|
 | | **Flight Planning** |
 | `flight_line` | Create, modify, split, clip, and export individual flight lines |
+| `pattern` | First-class reusable flight-pattern container with regeneration and serialization |
 | `flight_box` | Generate parallel flight lines covering a geographic area |
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
-| `flight_patterns` | Flight pattern generators (racetrack, rosette, spiral, sawtooth, polygon, coordinated line) |
+| `flight_patterns` | Flight pattern generators returning `Pattern` objects (racetrack, rosette, spiral, sawtooth, polygon, glint arc, coordinated line) |
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
-| `campaign` | Campaign manager for organizing flight lines, caching reference data, and persisting plans |
+| `campaign` | Campaign manager for organizing free-standing lines and patterns, caching reference data, tracking revisions, and persisting plans |
 | | **Instruments** |
 | `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
 | `swath` | Sensor swath coverage with terrain integration |
@@ -235,7 +267,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [flight_optimizer_demo.ipynb](notebooks/flight_optimizer_demo.ipynb) | Greedy line ordering with endurance constraints, refueling, and multi-day scheduling |
 | [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
-| [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, and polygon flight patterns |
+| [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
 
 ### Instruments & Sensors
 
@@ -322,7 +354,15 @@ If you use HyPlan in your research, please cite it as:
 
 ## License
 
-HyPlan is licensed under the Apache License, Version 2.0. See [`LICENSE.md`](LICENSE.md) for details.
+HyPlan is licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE)
+or [`LICENSE.md`](LICENSE.md) for details.
+
+## Project Files
+
+- [`LICENSE`](LICENSE) / [`LICENSE.md`](LICENSE.md) — project license and third-party notices
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — development and pull-request workflow
+- [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — acknowledged project contributors
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — community expectations for collaboration
 
 ## Bundled data and attribution
 

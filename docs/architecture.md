@@ -7,10 +7,10 @@ or module with a well-defined interface.
 ## Data flow
 
 ```text
-FlightLine / Waypoint
+FlightLine / Waypoint / Pattern
         │
         ▼
-FlightBox / FlightPatterns   ──▶   flight sequence
+FlightBox / FlightPatterns   ──▶   Campaign / flight sequence
                                         │
                           Aircraft ──▶   │   ◀── WindField
                                         ▼
@@ -32,8 +32,10 @@ defined by two endpoints, an altitude, and metadata. Flight lines are
 generated individually or in bulk via
 {func}`~hyplan.flight_box.box_around_center_line` (parallel coverage of a
 study area) and the pattern generators in {mod}`hyplan.flight_patterns`
-(racetracks, rosettes, spirals, polygons). Intermediate route points use
-{class}`~hyplan.waypoint.Waypoint`.
+(racetracks, rosettes, spirals, polygons). Pattern generators now return
+{class}`~hyplan.pattern.Pattern`, which preserves generator parameters and
+element ordering for reuse, editing, and persistence. Intermediate route
+points use {class}`~hyplan.waypoint.Waypoint`.
 
 See: [Flight Lines](api/flight_line.md),
 [Waypoints](api/waypoint.md),
@@ -43,11 +45,11 @@ See: [Flight Lines](api/flight_line.md),
 ### Planning
 
 {func}`~hyplan.planning.compute_flight_plan` is the main orchestrator. It
-takes an ordered sequence of flight lines and waypoints, connects them
-with 3-D Dubins paths ({mod}`hyplan.dubins3d`), classifies each segment
-(takeoff, climb, transit, flight line, descent, approach), and returns a
-{class}`~geopandas.GeoDataFrame` with timing, distance, altitude, and
-geometry for every segment. The
+takes an ordered sequence of flight lines, waypoints, and patterns,
+connects them with 3-D Dubins paths ({mod}`hyplan.dubins3d`), classifies
+each segment (takeoff, climb, transit, flight line, descent, approach,
+pattern), and returns a {class}`~geopandas.GeoDataFrame` with timing,
+distance, altitude, and geometry for every segment. The
 {mod}`hyplan.flight_optimizer` provides graph-based line ordering with
 endurance constraints and refueling stops.
 
@@ -112,7 +114,8 @@ See: [Exports](api/exports.md), [Plotting](api/plotting.md)
 | {mod}`hyplan.satellites` | Satellite overpass prediction and temporal coincidence |
 | {mod}`hyplan.airspace` | Airspace conflict detection (OpenAIP, FAA TFR/NASR) |
 | {mod}`hyplan.airports` | Airport database and runway queries |
-| {mod}`hyplan.campaign` | Persistent folder structure for a study area |
+| {mod}`hyplan.campaign` | Persistent folder structure, revision metadata, and mutation API for a study area |
+| {mod}`hyplan.pattern` | Serializable reusable pattern object returned by pattern generators |
 
 ## Units
 
