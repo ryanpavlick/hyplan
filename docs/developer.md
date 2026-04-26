@@ -12,14 +12,14 @@ when it has clearly separable concerns (e.g. base class vs providers).
 | Package | Contents |
 |---------|----------|
 | `aircraft/` | `_base.py` (base class), `_models.py` (15 aircraft), `adsb/` (internal) |
-| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `frame_camera.py`, `radar.py` |
+| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `frame_camera.py`, `radar.py`, `awp.py`, `profilinglidar.py` |
 | `winds/` | `base.py`, `simple.py`, `gridded.py`, `factory.py`, `utils.py`, `providers/` |
 | `planning/` | `engine.py` (orchestrator), `segments.py` (record builders) |
 | `exports/` | `_common.py` (shared), one file per format (`excel.py`, `csv.py`, ...) |
-| `gui/` | `_state.py` (shared state), `waypoint_editor.py`, `flight_line_manager.py` |
 
-Single-file modules (`terrain.py`, `flight_line.py`, `dubins3d.py`, etc.)
-stay as single files until they outgrow their scope.
+Single-file modules (`terrain.py`, `flight_line.py`, `pattern.py`,
+`campaign.py`, `dubins3d.py`, etc.) stay as single files until they
+outgrow their scope.
 
 ### Naming conventions
 
@@ -79,6 +79,17 @@ files with only re-imports.
 2. Re-export from `hyplan/exports/__init__.py`
 3. Add to `hyplan/__init__.py` if it should be a top-level import
 
+### Adding or updating a pattern generator
+
+1. Implement the generator in `hyplan/flight_patterns.py`
+2. Return a `hyplan.pattern.Pattern`, not a bare list
+3. Store enough plain-JSON-compatible parameters in `Pattern.params` to
+   support `Pattern.regenerate()`
+4. If the pattern is line-based, populate `Pattern.lines`; if it is
+   waypoint-based, populate `Pattern.waypoints`
+5. Add tests for generation, serialization round-trip, and campaign
+   persistence when relevant
+
 ## Where future refactors should land
 
 | If you are adding... | Put it in... |
@@ -86,6 +97,8 @@ files with only re-imports.
 | A new data source for winds | `winds/providers/` |
 | Wind vector math or heading/track solvers | `winds/utils.py` |
 | A new flight pattern generator | `flight_patterns.py` |
+| Shared reusable pattern behavior | `pattern.py` |
+| Campaign persistence or mutation behavior | `campaign.py` |
 | A new segment type or record builder | `planning/segments.py` |
 | Changes to the planning orchestrator | `planning/engine.py` |
 | A new aircraft model | `aircraft/_models.py` |

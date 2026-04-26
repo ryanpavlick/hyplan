@@ -22,6 +22,7 @@ from ..aircraft import Aircraft
 from ..airports import Airport
 from ..waypoint import Waypoint, is_waypoint
 from ..flight_line import FlightLine
+from ..pattern import Pattern
 from ..geometry import process_linestring
 from ..exceptions import HyPlanValueError
 from ..winds.utils import (
@@ -40,7 +41,7 @@ __all__ = [
 
 def compute_flight_plan(
     aircraft: Aircraft,
-    flight_sequence: List[Union[FlightLine, Waypoint]],
+    flight_sequence: List[Union[FlightLine, Waypoint, Pattern]],
     takeoff_airport: Optional[Airport] = None,
     return_airport: Optional[Airport] = None,
     start_offset: float = 5,
@@ -112,6 +113,15 @@ def compute_flight_plan(
         if takeoff_time is None:
             return None
         return takeoff_time + datetime.timedelta(minutes=cumulative_minutes)
+    # Expand Patterns into their underlying flight lines or waypoints.
+    expanded: list = []
+    for seg in flight_sequence:
+        if isinstance(seg, Pattern):
+            expanded.extend(seg.elements())
+        else:
+            expanded.append(seg)
+    flight_sequence = expanded
+
     # Apply offsets to flight lines, if applicable.
     flight_sequence = [
         seg.offset_along(ureg.Quantity(-start_offset, "nautical_mile"),
@@ -229,11 +239,10 @@ def compute_flight_plan(
             start_wp = segment.waypoint2 if isinstance(segment, FlightLine) else segment
             end_wp = end.waypoint1 if isinstance(end, FlightLine) else end
 
-            # For intra-pattern waypoints (e.g. spiral, polygon, within a
-            # racetrack leg), connect with a direct segment to preserve the
-            # original pattern geometry.  Inter-leg transitions (marked
-            # "pattern_turn") fall through to Dubins so the aircraft gets a
-            # realistic turn between legs.
+            # For intra-pattern waypoints (e.g. spiral, polygon), connect
+            # with a direct segment to preserve the original pattern
+            # geometry.  Transitions marked "pattern_turn" fall through to
+            # Dubins so the aircraft gets a realistic turn.
             departing_is_pattern = (
                 is_waypoint(segment) and is_waypoint(end)
                 and segment.segment_type == "pattern"  # type: ignore[union-attr]

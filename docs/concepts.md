@@ -38,9 +38,25 @@ All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
 - {class}`~hyplan.instruments.FrameCamera` — Frame cameras defined by
   sensor dimensions, focal length, resolution, and frame rate.
 
-All sensor types provide `half_angle` and `swath_width(altitude_agl)` so they
+- {class}`~hyplan.instruments.ProfilingLidar` — Nadir-pointing single-beam
+  atmospheric profiling lidars ({class}`~hyplan.instruments.HSRL2`,
+  {class}`~hyplan.instruments.HALO`, {class}`~hyplan.instruments.CPL`).
+  Defined by laser wavelengths, pulse rate, telescope/beam optics, vertical
+  bin resolution, and FPGA-averaged sampling rate. These instruments record
+  a vertical column directly beneath the platform and have no cross-track
+  swath; horizontal resolution is set by post-processing averaging.
+
+- {class}`~hyplan.instruments.AerosolWindProfiler` — Doppler wind lidar
+  with dual line-of-sight geometry (NASA Langley AWP). Modeled separately
+  from `ProfilingLidar` because the dual-LOS vector-retrieval geometry
+  needs a different abstraction.
+
+Imaging and scanning sensors (`LineScanner`, `SidelookingRadar`, `LVIS`,
+`FrameCamera`) provide `half_angle` and `swath_width(altitude_agl)` so they
 work with {func}`~hyplan.swath.generate_swath_polygon`,
 {func}`~hyplan.flight_box.generate_flight_lines`, and other planning tools.
+Profiling lidars do not have a cross-track swath and use their own geometry
+helpers (e.g., `footprint_diameter`, `horizontal_resolution`).
 
 ## Flight planning workflow
 
@@ -53,16 +69,43 @@ A typical mission planning workflow:
 2. **Generate coverage patterns** — Use
    {func}`~hyplan.flight_box.box_around_center_line` or
    {func}`~hyplan.flight_box.box_around_polygon` to create parallel flight
-   lines covering a target area, spaced by the sensor's swath width.
+   lines covering a target area, spaced by the sensor's swath width, or
+   use generators in {mod}`hyplan.flight_patterns` to create reusable
+   {class}`~hyplan.pattern.Pattern` objects such as racetracks,
+   polygons, spirals, and glint arcs.
 
-3. **Compute the mission plan** — Use
+3. **Organize a campaign** — Use {class}`~hyplan.campaign.Campaign` to
+   store free-standing lines, reusable patterns, and reference data with
+   stable IDs and revision metadata.
+
+4. **Compute the mission plan** — Use
    {func}`~hyplan.planning.compute_flight_plan` with an aircraft and
    departure/destination airports to generate a complete flight plan with
    climb, transit, data collection, descent, and landing segments.
 
-4. **Analyze constraints** — Check solar glint angles
+5. **Analyze constraints** — Check solar glint angles
    ({mod}`hyplan.glint`), cloud climatology ({mod}`hyplan.clouds`),
    and terrain interactions ({mod}`hyplan.terrain`).
+
+## Pattern model
+
+HyPlan pattern generators return {class}`~hyplan.pattern.Pattern`
+objects rather than plain waypoint lists.
+
+- **Line-based patterns** contain ordered
+  {class}`~hyplan.flight_line.FlightLine` legs, such as racetracks and
+  rosettes.
+- **Waypoint-based patterns** contain ordered
+  {class}`~hyplan.waypoint.Waypoint` elements, such as spirals,
+  sawtooths, polygons, and glint arcs.
+
+This design makes patterns reusable and editable:
+
+- `Pattern.regenerate()` recreates a pattern from its stored generator
+  parameters with selective overrides.
+- `compute_flight_plan()` can expand a `Pattern` directly.
+- `Campaign` can persist patterns with stable `pattern_id` and `line_id`
+  values for interactive tools.
 
 ## Aircraft speed profiles
 

@@ -35,6 +35,7 @@ tutorial
 api/flight_line
 api/waypoint
 api/flight_box
+api/pattern
 api/flight_patterns
 api/flight_plan
 api/flight_optimizer
@@ -45,6 +46,7 @@ api/flight_optimizer
 :caption: Aircraft & navigation
 
 api/aircraft
+api/airports
 api/dubins3d
 ```
 
@@ -53,6 +55,8 @@ api/dubins3d
 :caption: Instruments
 
 api/sensors
+api/profiling_lidar
+api/awp
 ```
 
 ```{toctree}

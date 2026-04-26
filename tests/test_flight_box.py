@@ -432,7 +432,6 @@ class TestBoxAroundCenterLineValidation:
         )
         # When not alternating, all forward azimuths should be similar
         # Normalize to [0, 360) to handle wrap-around (e.g. 0 vs 360)
-        import numpy as np
         azimuths = [fl.az12.magnitude % 360 for fl in lines]
         for az in azimuths:
             diff = abs(az - azimuths[0])

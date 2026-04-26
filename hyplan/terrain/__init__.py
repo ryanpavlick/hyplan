@@ -48,8 +48,8 @@ Assumptions and limitations
   purposes the ~20 m geoid-ellipsoid separation is small relative to
   typical AGL flight altitudes (hundreds to thousands of meters).
 
-References
-----------
+Terrain references
+------------------
 Data source: Copernicus DEM GLO-30, European Space Agency, distributed
 via AWS Open Data (s3://copernicus-dem-30m).
 """

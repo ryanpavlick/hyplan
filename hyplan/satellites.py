@@ -5,8 +5,8 @@ using Skyfield's SGP4 implementation, and computes ground tracks, swath
 footprints, and spatial overlap with study areas. Supports 15+ satellite
 missions including PACE, Landsat-8/9, Sentinel-2A/B, and ICESat-2.
 
-References
-----------
+Satellite references
+--------------------
 Rhodes, B. (2019). Skyfield: High precision research-grade positions
 for planets and Earth satellites generator.
 https://rhodesmill.org/skyfield/
@@ -702,7 +702,10 @@ def compute_overpass_overlap(
 
         for _, segment in flight_plan_gdf.iterrows():
             seg_geom = segment["geometry"]
-            if seg_geom is None or seg_geom.is_empty:
+            # Skip rows where geometry is missing. GeoPandas may return None,
+            # NaN, or other non-geometry sentinels depending on version, so
+            # duck-type instead of None-only.
+            if not hasattr(seg_geom, "is_empty") or seg_geom.is_empty:
                 continue
 
             # Compute time offset

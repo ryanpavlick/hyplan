@@ -82,6 +82,33 @@ class TestFlightLineOperations:
         assert gj["type"] == "Feature"
         assert gj["geometry"]["type"] == "LineString"
 
+    def test_from_geojson_roundtrip(self, sample_flight_line):
+        gj = sample_flight_line.to_geojson()
+        restored = FlightLine.from_geojson(gj)
+        assert restored.lat1 == pytest.approx(sample_flight_line.lat1, abs=1e-4)
+        assert restored.lon1 == pytest.approx(sample_flight_line.lon1, abs=1e-4)
+        assert restored.lat2 == pytest.approx(sample_flight_line.lat2, abs=1e-4)
+        assert restored.lon2 == pytest.approx(sample_flight_line.lon2, abs=1e-4)
+        assert restored.altitude_msl.m_as("meter") == pytest.approx(
+            sample_flight_line.altitude_msl.m_as("meter"), rel=1e-3
+        )
+        assert restored.site_name == sample_flight_line.site_name
+
+    def test_from_geojson_preserves_metadata(self):
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(10, "km"), az=90,
+            altitude_msl=ureg.Quantity(3000, "meter"),
+            site_name="Test Line",
+            site_description="A test",
+            investigator="Dr. Smith",
+        )
+        gj = fl.to_geojson()
+        restored = FlightLine.from_geojson(gj)
+        assert restored.site_name == "Test Line"
+        assert restored.site_description == "A test"
+        assert restored.investigator == "Dr. Smith"
+
 
 class TestSplitByLength:
     def test_line_shorter_than_max_returns_self(self, short_flight_line):

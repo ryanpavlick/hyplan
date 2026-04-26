@@ -37,7 +37,7 @@ def _direct_segment_record(
 ) -> dict:
     """Create a direct great-circle segment between two pattern waypoints.
 
-    Used for densely-spaced pattern waypoints (spiral, rosette, etc.) where
+    Used for densely-spaced pattern waypoints (spiral, polygon, etc.) where
     a Dubins path would distort the intended geometry.
     """
     from shapely.geometry import LineString as _LineString
@@ -123,20 +123,21 @@ def process_flight_phase(
     segment_name: str,
     override_segment_type: str | None = None,
 ) -> List[dict]:
-    """
-    Process a flight phase using the detailed phase_info.
+    """Process a flight phase using the detailed ``phase_info``.
 
-    For each sub-phase in phase_info["phases"], this function determines the segment type
-    based on the altitude change:
-      - If ascending, the phase is labeled "takeoff" when segment_name is "Departure",
-        otherwise "climb".
-      - If descending, the phase is labeled "approach" when segment_name is "Arrival",
-        otherwise "descent".
-      - If no altitude change, the phase is labeled "transit".
+    For each sub-phase in ``phase_info["phases"]``, this function determines
+    the segment type based on the altitude change:
 
-    If ``override_segment_type`` is provided (e.g. "pattern" or "sampling" from a
-    flight-pattern waypoint), it replaces the default "transit" label for level
-    segments while climb/descent labels are preserved.
+    - If ascending, the phase is labeled ``"takeoff"`` when ``segment_name``
+      is ``"Departure"``, otherwise ``"climb"``.
+    - If descending, the phase is labeled ``"approach"`` when ``segment_name``
+      is ``"Arrival"``, otherwise ``"descent"``.
+    - If no altitude change, the phase is labeled ``"transit"``.
+
+    If ``override_segment_type`` is provided (e.g. ``"pattern"`` or
+    ``"sampling"`` from a flight-pattern waypoint), it replaces the default
+    ``"transit"`` label for level segments while climb/descent labels are
+    preserved.
 
     Returns a list of record dictionaries for inclusion in the flight plan.
     """

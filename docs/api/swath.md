@@ -10,6 +10,12 @@ flight lines.
 .. autofunction:: hyplan.swath.calculate_swath_widths
 ```
 
+## Coverage analysis
+
+```{eval-rst}
+.. autofunction:: hyplan.swath.analyze_swath_gaps_overlaps
+```
+
 ## Export
 
 ```{eval-rst}

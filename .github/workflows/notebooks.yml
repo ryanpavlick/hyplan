@@ -19,6 +19,7 @@ on:
       - "notebooks/tutorial.ipynb"
       - "notebooks/export_formats.ipynb"
       - "notebooks/aircraft_performance.ipynb"
+      - "notebooks/profiling_lidar_planning.ipynb"
       - ".github/workflows/notebooks.yml"
 
 jobs:
@@ -34,6 +35,8 @@ jobs:
           - export_formats.ipynb
           # Exercises the Aircraft base class and several subclasses.
           - aircraft_performance.ipynb
+          # Exercises the ProfilingLidar family (HSRL-2, HALO, CPL).
+          - profiling_lidar_planning.ipynb
 
     steps:
       - uses: actions/checkout@v4
@@ -45,8 +48,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -e .
-          pip install papermill ipykernel
+          # [mag] enables magnetic_declination() in export_formats.ipynb.
+          # openpyxl is required by pandas.read_excel() in the same notebook
+          # for the round-trip verification cells. Other canonical notebooks
+          # don't need any extras.
+          pip install -e .[mag]
+          pip install papermill ipykernel openpyxl
 
       - name: Execute ${{ matrix.notebook }}
         # --cwd notebooks/ keeps relative paths (e.g. ../notebooks/exampledata/...)

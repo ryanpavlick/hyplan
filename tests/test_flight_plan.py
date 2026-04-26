@@ -348,7 +348,7 @@ class TestPlannerRegression:
 
     def test_multi_line_racetrack(self, b200):
         """Racetrack pattern: all flight lines present with transitions."""
-        waypoints = racetrack(
+        pat = racetrack(
             center=(34.05, -118.25),
             heading=0.0,
             altitude=ureg.Quantity(20000, "feet"),
@@ -356,11 +356,9 @@ class TestPlannerRegression:
             n_legs=4,
             offset=ureg.Quantity(5000, "meter"),
         )
-        plan = compute_flight_plan(aircraft=b200, flight_sequence=waypoints)
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[pat])
         assert isinstance(plan, gpd.GeoDataFrame)
-        # Racetrack with 4 legs should produce multiple segments
         assert len(plan) >= 4
-        # Should have pattern-type segments
         seg_types = set(plan["segment_type"].values)
         assert "pattern" in seg_types or "flight_line" in seg_types
 

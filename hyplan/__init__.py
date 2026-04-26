@@ -62,6 +62,7 @@ from .units import ureg, convert_distance, convert_speed, convert_angle, convert
 
 # Flight geometry
 from .flight_line import FlightLine  # noqa: F401
+from .pattern import Pattern  # noqa: F401
 from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size  # noqa: F401
 
 # Aircraft
@@ -121,6 +122,14 @@ from .instruments import (  # noqa: F401
     LVIS_LENS_WIDE,
     LVIS_LENSES,
     LVIS,
+    AerosolWindProfiler,
+    flag_awp_stable_segments,
+    awp_profile_locations_for_flight_line,
+    awp_profile_locations_for_plan,
+    ProfilingLidar,
+    HSRL2,
+    HALO,
+    CPL,
     RadarExclusionConflict,
     check_lband_radar_exclusions,
     SidelookingRadar,
@@ -128,7 +137,6 @@ from .instruments import (  # noqa: F401
     UAVSAR_Pband,
     UAVSAR_Kaband,
 )
-
 # Waypoint and Dubins path planning
 from .waypoint import Waypoint  # noqa: F401
 from .dubins3d import DubinsPath3D  # noqa: F401
@@ -183,7 +191,7 @@ __all__ = [
     # Units
     "ureg", "convert_distance", "convert_speed", "convert_angle", "convert_time", "altitude_to_flight_level",
     # Flight geometry
-    "FlightLine", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
+    "FlightLine", "Pattern", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
     "Aircraft",
     "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",
@@ -202,12 +210,15 @@ __all__ = [
     "SENSOR_REGISTRY", "create_sensor",
     "FrameCamera", "MultiCameraRig",
     "LVISLens", "LVIS_LENS_NARROW", "LVIS_LENS_MEDIUM", "LVIS_LENS_WIDE", "LVIS_LENSES", "LVIS",
+    "AerosolWindProfiler", "ProfilingLidar", "HSRL2", "HALO", "CPL",
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",
     # Dubins
     "Waypoint", "DubinsPath3D",
     # Swath
     "generate_swath_polygon", "calculate_swath_widths", "analyze_swath_gaps_overlaps",
+    # AWP profiling
+    "flag_awp_stable_segments", "awp_profile_locations_for_flight_line", "awp_profile_locations_for_plan",
     # Flight patterns
     "racetrack", "rosette", "polygon", "sawtooth", "spiral", "flight_lines_to_waypoint_path",
     "coordinated_line",

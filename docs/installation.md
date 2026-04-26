@@ -51,6 +51,17 @@ git push origin v0.2.0
 pip install -e .  # rebuilds _version.py with the new tag
 ```
 
+## Library logging
+
+HyPlan uses Python's standard ``logging`` module under the ``hyplan``
+namespace. Library code attaches no handlers itself, so log messages are
+silent by default. Call {func}`hyplan.setup_logging` once from a notebook,
+script, or CLI to attach a stream handler:
+
+```{eval-rst}
+.. autofunction:: hyplan.setup_logging
+```
+
 ## Building the documentation
 
 ```bash

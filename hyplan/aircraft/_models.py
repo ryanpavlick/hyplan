@@ -70,7 +70,7 @@ class NASA_ER2(Aircraft):
     Speed profile from Moving Lines: TAS = 70 + alt_m * 0.0071 (m/s).
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC
+        `https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC <https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC>`_
     """
 
     def __init__(self):
@@ -117,7 +117,7 @@ class NASA_GIII(Aircraft):
     Operated by NASA Langley Research Center (LaRC).
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Gulfstream_III_-_LaRC
+        `https://airbornescience.nasa.gov/aircraft/Gulfstream_III_-_LaRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_III_-_LaRC>`_
     """
 
     def __init__(self):
@@ -163,7 +163,7 @@ class NASA_GIV(Aircraft):
     Twin turbofan operated by NASA Armstrong Flight Research Center (AFRC).
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC
+        `https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC>`_
     """
 
     def __init__(self):
@@ -212,7 +212,7 @@ class NASA_GV(Aircraft):
     Currently undergoing modifications expected to conclude ~August 2026.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Gulfstream_V_-_AFRC
+        `https://airbornescience.nasa.gov/aircraft/Gulfstream_V_-_AFRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_V_-_AFRC>`_
     """
 
     def __init__(self):
@@ -281,7 +281,7 @@ class NASA_C20A(Aircraft):
     UAVSAR missions. Operated by NASA AFRC.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC
+        `https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC>`_
     """
 
     def __init__(self):
@@ -328,7 +328,7 @@ class NASA_P3(Aircraft):
     capped at 155 m/s (~301 kt) above ~21,000 ft.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/P-3_Orion
+        `https://airbornescience.nasa.gov/aircraft/P-3_Orion <https://airbornescience.nasa.gov/aircraft/P-3_Orion>`_
     """
 
     def __init__(self):
@@ -376,7 +376,7 @@ class NASA_WB57(Aircraft):
     Operates up to 60,000 ft with 8,800 lbs useful payload.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC
+        `https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC <https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC>`_
     """
 
     def __init__(self):
@@ -484,7 +484,7 @@ class KingAirA90(Aircraft):
     """Beechcraft King Air A90 twin-turboprop aircraft.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90
+        `https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90 <https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90>`_
     """
 
     def __init__(self):
@@ -520,7 +520,7 @@ class KingAirB200(Aircraft):
     """Beechcraft King Air B200 twin-turboprop aircraft.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A200
+        `https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A200 <https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A200>`_
     """
 
     def __init__(self):
@@ -563,7 +563,7 @@ class C130(Aircraft):
     capped at 175 m/s (~340 kt) above ~19,685 ft.
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF
+        `https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF <https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF>`_
     """
 
     def __init__(self):
@@ -603,7 +603,7 @@ class BAe146(Aircraft):
     TAS = 130 + alt_m * 0.002 (m/s).
 
     See also:
-        https://faam.ac.uk/
+        `https://faam.ac.uk/ <https://faam.ac.uk/>`_
     """
 
     def __init__(self):
@@ -641,7 +641,7 @@ class Learjet(Aircraft):
     Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Learjet_25
+        `https://airbornescience.nasa.gov/aircraft/Learjet_25 <https://airbornescience.nasa.gov/aircraft/Learjet_25>`_
     """
 
     def __init__(self):
@@ -679,7 +679,7 @@ class TwinOtter(Aircraft):
     Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
 
     See also:
-        https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS
+        `https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS <https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS>`_
     """
 
     def __init__(self):

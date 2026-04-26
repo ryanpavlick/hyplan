@@ -5,8 +5,8 @@ on the WGS84 ellipsoid. All distance and bearing calculations use
 Vincenty's inverse and direct formulae via the ``pymap3d`` library.
 
 
-References
-----------
+Geometry references
+-------------------
 Vincenty, T. (1975). Direct and inverse solutions of geodesics on the
 ellipsoid with application of nested equations. *Survey Review*, 23(176),
 88-93. doi:10.1179/sre.1975.23.176.88

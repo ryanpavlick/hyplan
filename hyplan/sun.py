@@ -6,8 +6,8 @@ Solar position is computed via the Skyfield library using JPL's DE421
 planetary ephemeris, which is bundled with hyplan at
 ``hyplan/data/de421.bsp`` so calculations work fully offline.
 
-References
-----------
+Sun references
+--------------
 Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
 radiation applications. *Solar Energy*, 76(5), 577-589.
 doi:10.1016/j.solener.2003.12.003

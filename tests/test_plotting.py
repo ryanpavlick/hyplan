@@ -9,6 +9,15 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, Polygon
 
+# cartopy is an optional plotting dependency used by plot_airspace_map and
+# plot_oceanic_tracks. Gate the dependent classes rather than failing the
+# whole file in environments where it isn't installed.
+try:
+    import cartopy  # noqa: F401
+    HAS_CARTOPY = True
+except ImportError:  # pragma: no cover
+    HAS_CARTOPY = False
+
 from hyplan.plotting import (
     map_flight_lines,
     plot_flight_plan,
@@ -271,6 +280,7 @@ def _make_oceanic_track(ident="A", direction="east"):
 # Smoke tests: plot_airspace_map (cartopy)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skipif(not HAS_CARTOPY, reason="cartopy not installed")
 class TestPlotAirspaceMap:
     """Smoke tests for plot_airspace_map."""
 
@@ -422,6 +432,7 @@ class TestPlotVerticalProfile:
 # Smoke tests: plot_oceanic_tracks
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skipif(not HAS_CARTOPY, reason="cartopy not installed")
 class TestPlotOceanicTracks:
     """Smoke tests for plot_oceanic_tracks."""
 
