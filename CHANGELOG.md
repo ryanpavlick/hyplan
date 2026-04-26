@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.0 (unreleased)
+
+Backwards-compatible feature release. The flight-line optimizer now accepts heterogeneous visit-item input — `FlightLine`, `Pattern`, and bare `Waypoint` objects can all be mixed in a single call to `greedy_optimize`.
+
+### New features
+
+- **Heterogeneous visit-item optimizer** (`hyplan.flight_optimizer.greedy_optimize`): the `flight_lines` argument now accepts a mixed list of `FlightLine | Pattern | Waypoint` objects. The output `flight_sequence` is a list of the same heterogeneous kinds in scheduled order.
+  - **Atomic Patterns**: a `Pattern` in the input is treated as a single indivisible visit item. The optimizer may reorder a Pattern relative to other items but never splits it apart, and pattern traversal is direction-locked (entry → exit). Endurance and refueling feasibility evaluate the pattern as one chunk: if `transit_in + pattern_internal_time + transit_out` would exceed remaining endurance, the optimizer schedules a refuel **before** the pattern, never inside it. New `Pattern.entry_waypoint` / `Pattern.exit_waypoint` properties expose the structural endpoints.
+  - **Bare Waypoints**: a `Waypoint` in the input is treated as an atomic single-point visit item. Internal time equals `waypoint.delay` (loiter time) if set, else 0. Like Patterns, bare Waypoints are direction-locked, and a long `delay` that doesn't fit in remaining endurance forces a refuel **before** the waypoint, never inside the loiter. `compute_flight_plan` already emits the corresponding `"loiter"` segment.
+
+### Bug fixes
+
+- `hyplan.geometry`: recover from the `timezonefinder`/`numba` cache-corruption failure mode by retrying with `NUMBA_DISABLE_JIT=1` and re-importing the package, instead of failing with an opaque "no locator available" error.
+
 ## v1.1.0 — 2026-04-26
 
 Backwards-compatible feature release. New atmospheric profiling-lidar instrument family, AWP planning helpers, the Pattern abstraction, public campaign mutation API, and a top-to-bottom documentation polish pass. No v1.0.0 stable APIs change.

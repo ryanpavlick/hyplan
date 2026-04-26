@@ -162,16 +162,32 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
 
 
 def _item_endpoints(item) -> Tuple[Waypoint, Waypoint]:
-    """Return (entry, exit) Waypoints for a FlightLine or Pattern visit item."""
+    """Return (entry, exit) Waypoints for a visit item.
+
+    Visit items are FlightLine, Pattern, or bare Waypoint. A bare Waypoint
+    has identical entry and exit (a single point in space).
+    """
     if isinstance(item, Pattern):
         return item.entry_waypoint, item.exit_waypoint
+    if isinstance(item, Waypoint):
+        return item, item
     return item.waypoint1, item.waypoint2
 
 
 def _item_internal_time(aircraft: Aircraft, item, cruise_speed=None) -> float:
-    """Internal traversal time in hours for a FlightLine or Pattern visit item."""
+    """Internal traversal time in hours for a visit item.
+
+    For a bare Waypoint this is the loiter ``delay`` (or 0.0 if unset);
+    the optimizer uses this both for ordering cost and for endurance
+    feasibility, matching how ``compute_flight_plan`` accounts for the
+    waypoint's loiter segment.
+    """
     if isinstance(item, Pattern):
         return _pattern_internal_time(aircraft, item)
+    if isinstance(item, Waypoint):
+        if item.delay is None:
+            return 0.0
+        return item.delay.m_as(ureg.hour)  # type: ignore[no-any-return]
     return _flight_line_time(aircraft, item, cruise_speed=cruise_speed)
 
 
@@ -179,15 +195,24 @@ def _item_supports_reverse(item) -> bool:
     """Whether this visit item can be traversed exit -> entry as well as forward.
 
     FlightLines can be flown in either direction; Patterns are atomic and
-    direction-locked (entry -> exit only) in this release.
+    direction-locked (entry -> exit only) in this release. Bare Waypoints
+    have entry == exit, so reversal is structurally meaningless and they
+    behave like direction-locked Patterns in the graph.
     """
     return isinstance(item, FlightLine)
 
 
 def _item_base_key(item, fallback_index: int) -> str:
-    """Derive a stable graph-node base key for a FlightLine or Pattern."""
+    """Derive a stable graph-node base key for a visit item.
+
+    FlightLine -> ``site_name``; Pattern -> ``pattern_id`` or ``name``;
+    bare Waypoint -> ``name``. Falls back to a positional key if no
+    user-supplied identifier is available.
+    """
     if isinstance(item, Pattern):
         return item.pattern_id or item.name or f"pattern_{fallback_index}"
+    if isinstance(item, Waypoint):
+        return item.name or f"waypoint_{fallback_index}"
     return item.site_name or f"line_{fallback_index}"
 
 
@@ -199,22 +224,32 @@ def build_graph(
     """
     Build a directed graph connecting airports and visit-item endpoints.
 
-    Each input item is either a :class:`~hyplan.flight_line.FlightLine`
-    (a single bidirectional flight line) or a :class:`~hyplan.pattern.Pattern`
-    (an atomic, direction-locked composite visit item). Patterns are
-    represented as a single pair of endpoint nodes (entry/exit) with one
-    forward along-edge — there is no individual graph node for an internal
-    pattern leg, which is what enforces atomicity in ``greedy_optimize``.
+    Each input item is one of:
+
+    - :class:`~hyplan.flight_line.FlightLine` — a single bidirectional
+      flight line.
+    - :class:`~hyplan.pattern.Pattern` — an atomic, direction-locked
+      composite visit item.
+    - :class:`~hyplan.waypoint.Waypoint` — a single point in space, with
+      optional ``delay`` for in-place loiter time.
+
+    Patterns and bare Waypoints are represented as a single pair of
+    endpoint nodes (entry/exit) with one forward along-edge — there is no
+    individual graph node for an internal pattern leg, and a Waypoint's
+    two endpoint nodes share the same waypoint reference. This is what
+    enforces atomicity in ``greedy_optimize``.
 
     Nodes:
         - Airport nodes keyed by ICAO code
         - Visit-item endpoint nodes keyed by ``"{key}_start"`` and ``"{key}_end"``,
-          where ``key`` is derived from the item's ``site_name`` (FlightLine)
-          or ``pattern_id``/``name`` (Pattern).
+          where ``key`` is derived from the item's ``site_name`` (FlightLine),
+          ``pattern_id``/``name`` (Pattern), or ``name`` (Waypoint).
 
     Edges:
-        - flight_line: along each FlightLine (both directions); along each
-          Pattern (forward only — entry -> exit)
+        - flight_line: along each FlightLine (both directions)
+        - pattern: along each Pattern (forward only — entry -> exit)
+        - waypoint: along each bare Waypoint (forward only; weight equals
+          ``waypoint.delay`` in hours, or 0)
         - departure: airport -> visit-item endpoint
         - transit: between visit-item endpoints (via Dubins path)
         - return: visit-item endpoint -> airport
@@ -223,9 +258,10 @@ def build_graph(
 
     Args:
         aircraft: Aircraft to use for performance calculations.
-        flight_lines: List of ``FlightLine | Pattern`` objects to schedule.
-            (Parameter name retained for backward compatibility; the
-            optimizer now also accepts ``Pattern`` objects in this list.)
+        flight_lines: List of ``FlightLine | Pattern | Waypoint`` objects
+            to schedule. (Parameter name retained for backward
+            compatibility; the optimizer now also accepts ``Pattern`` and
+            bare ``Waypoint`` objects in this list.)
         airports: List of Airport objects (potential departure/return/refuel points).
 
     Returns:
@@ -295,6 +331,18 @@ def build_graph(
             # Forward along-edge only — Patterns are direction-locked.
             G.add_edge(start_node, end_node, weight=internal_time,
                        edgetype="pattern", pattern=item, direction="forward")
+        elif isinstance(item, Waypoint):
+            # Bare Waypoint: entry == exit (single point). Both endpoint
+            # nodes carry the same waypoint reference; the forward
+            # along-edge weight is the loiter delay (0 if unset).
+            G.add_node(start_node, nodetype="waypoint_endpoint",
+                       waypoint=entry_wp, waypoint_item=item, endpoint="start")
+            G.add_node(end_node, nodetype="waypoint_endpoint",
+                       waypoint=exit_wp, waypoint_item=item, endpoint="end")
+            internal_time = _item_internal_time(aircraft, item)
+            # Forward along-edge only — single-point items are direction-locked.
+            G.add_edge(start_node, end_node, weight=internal_time,
+                       edgetype="waypoint", waypoint_item=item, direction="forward")
         else:
             G.add_node(start_node, nodetype="flight_line_endpoint",
                        waypoint=entry_wp, flight_line=item, endpoint="start")
@@ -382,16 +430,17 @@ def _find_closest_unvisited_item(
     takeoff_landing_overhead=0.0,
 ) -> Tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    Find the closest unvisited visit item (FlightLine or Pattern) that is
-    feasible within constraints.
+    Find the closest unvisited visit item (FlightLine, Pattern, or bare
+    Waypoint) that is feasible within constraints.
 
     A visit item is feasible if the aircraft can transit to it, traverse it,
     and return to the closest airport, all within both endurance and daily
     time limits. For FlightLines, both endpoints are considered as candidate
-    entries; for Patterns, only the entry node (``_start``) is a candidate
-    because the pattern is direction-locked. The graph topology — Patterns
-    have a forward along-edge but no reverse along-edge — automatically
-    excludes pattern reverse traversal via the ``has_edge`` guard below.
+    entries; for Patterns and bare Waypoints, only the entry node
+    (``_start``) is a candidate because they are direction-locked. The
+    graph topology — Patterns and Waypoints have a forward along-edge but
+    no reverse along-edge — automatically excludes reverse traversal via
+    the ``has_edge`` guard below.
 
     Returns:
         (item_key, entry_node, time_to_entry) or (None, None, None) if none feasible.
@@ -568,10 +617,15 @@ def greedy_optimize(
 
     Args:
         aircraft: Aircraft performing the mission.
-        flight_lines: List of ``FlightLine | Pattern`` objects to cover.
-            Patterns are treated as **atomic** visit items: the optimizer
-            may reorder a Pattern relative to other items but never splits
-            it apart. Pattern traversal is direction-locked (entry -> exit).
+        flight_lines: List of ``FlightLine | Pattern | Waypoint`` objects
+            to cover. Patterns and bare Waypoints are treated as **atomic**
+            visit items: the optimizer may reorder a Pattern or Waypoint
+            relative to other items but never splits it apart. Pattern
+            traversal is direction-locked (entry -> exit). A bare Waypoint
+            has identical entry/exit (a single point); its internal time
+            equals ``waypoint.delay`` (loiter), or 0 if unset, and a
+            ``delay`` too large to fit in remaining endurance forces a
+            refuel **before** the waypoint, never inside the loiter.
         airports: List of Airport objects available for refueling.
         takeoff_airport: Departure airport.
         return_airport: Return airport (defaults to takeoff_airport).
@@ -586,10 +640,10 @@ def greedy_optimize(
 
     Returns:
         dict with:
-            - "flight_sequence": list of ``FlightLine | Pattern`` objects in
-              the order they were scheduled. FlightLines may be reversed
-              from their original orientation; Patterns appear unchanged
-              (direction-locked entry -> exit).
+            - "flight_sequence": list of ``FlightLine | Pattern | Waypoint``
+              objects in the order they were scheduled. FlightLines may be
+              reversed from their original orientation; Patterns and bare
+              Waypoints appear unchanged (direction-locked entry -> exit).
             - "route": list of node names traversed
             - "total_time": total mission time in hours (across all days)
             - "daily_times": list of flight time per day
@@ -672,9 +726,10 @@ def greedy_optimize(
                 route.append(exit_node)
 
                 # Record the visit item in the order/orientation flown.
-                # Patterns are direction-locked (always forward).
+                # Patterns and bare Waypoints are direction-locked (always forward);
+                # FlightLines may be reversed if the optimizer entered from `_end`.
                 item = key_to_item[item_key]
-                if isinstance(item, Pattern):
+                if isinstance(item, (Pattern, Waypoint)):
                     flight_sequence.append(item)
                 elif entry_node.endswith("_end"):  # type: ignore[union-attr]
                     flight_sequence.append(item.reverse())
