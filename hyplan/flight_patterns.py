@@ -734,12 +734,11 @@ def coordinated_line(
         secondary_name: Name prefix for secondary waypoints (default "ER2").
 
     Returns:
-        dict with keys:
-            "primary": list of 2 Waypoints [start, end] for the primary aircraft.
-            "secondary": list of 2 Waypoints [start, end] if single ratio,
-                or list of such pairs if multiple ratios.
-            "center": Waypoint at the coordination point.
-            "ground_speed_ratio": the ratio(s) used.
+        Dict with keys ``"primary"`` (list of 2 Waypoints [start, end] for
+        the primary aircraft), ``"secondary"`` (list of 2 Waypoints
+        [start, end] if a single ratio, or list of such pairs if multiple
+        ratios), ``"center"`` (Waypoint at the coordination point), and
+        ``"ground_speed_ratio"`` (the ratio(s) used).
     """
     center_lat, center_lon = center
     pri_len = _to_length_quantity(primary_leg_length, "primary_leg_length")

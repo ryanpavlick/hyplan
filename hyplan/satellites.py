@@ -5,8 +5,8 @@ using Skyfield's SGP4 implementation, and computes ground tracks, swath
 footprints, and spatial overlap with study areas. Supports 15+ satellite
 missions including PACE, Landsat-8/9, Sentinel-2A/B, and ICESat-2.
 
-References
-----------
+Satellite references
+--------------------
 Rhodes, B. (2019). Skyfield: High precision research-grade positions
 for planets and Earth satellites generator.
 https://rhodesmill.org/skyfield/

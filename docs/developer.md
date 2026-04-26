@@ -12,11 +12,10 @@ when it has clearly separable concerns (e.g. base class vs providers).
 | Package | Contents |
 |---------|----------|
 | `aircraft/` | `_base.py` (base class), `_models.py` (15 aircraft), `adsb/` (internal) |
-| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `frame_camera.py`, `radar.py` |
+| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `frame_camera.py`, `radar.py`, `awp.py`, `profilinglidar.py` |
 | `winds/` | `base.py`, `simple.py`, `gridded.py`, `factory.py`, `utils.py`, `providers/` |
 | `planning/` | `engine.py` (orchestrator), `segments.py` (record builders) |
 | `exports/` | `_common.py` (shared), one file per format (`excel.py`, `csv.py`, ...) |
-| `gui/` | `_state.py` (shared state), `waypoint_editor.py`, `flight_line_manager.py` |
 
 Single-file modules (`terrain.py`, `flight_line.py`, `dubins3d.py`, etc.)
 stay as single files until they outgrow their scope.

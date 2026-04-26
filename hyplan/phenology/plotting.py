@@ -62,7 +62,7 @@ def plot_seasonal_profile(
         If ``True``, draw a shaded +/-1 std-dev band.
     ylabel : str
         Y-axis label (e.g. ``"NDVI"``, ``"EVI"``, ``"LAI"``).
-    **kwargs
+    \\*\\*kwargs
         Passed to ``ax.plot()``.
 
     Returns

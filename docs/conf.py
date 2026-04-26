@@ -52,6 +52,9 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 napoleon_include_init_with_doc = True
 napoleon_include_private_with_doc = False
+# Render Attributes: sections as :ivar: directives so they don't collide
+# with autodoc's automatic :py:attribute: generation for dataclass fields.
+napoleon_use_ivar = True
 
 # Autodoc settings
 autodoc_default_options = {

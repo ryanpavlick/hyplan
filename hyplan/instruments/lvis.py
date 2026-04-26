@@ -64,11 +64,16 @@ class LVISLens:
         return np.tan(self.divergence_mrad / 1000.0) * alt_m * ureg.meter  # type: ignore[no-any-return]
 
 
-# Standard LVIS lens options
+#: LVIS narrow-divergence lens (0.531 mrad nominal).
 LVIS_LENS_NARROW = LVISLens("narrow", 0.531)
+
+#: LVIS medium-divergence lens (0.79 mrad nominal).
 LVIS_LENS_MEDIUM = LVISLens("medium", 0.79)
+
+#: LVIS wide-divergence lens (1.272 mrad nominal).
 LVIS_LENS_WIDE = LVISLens("wide", 1.272)
 
+#: Mapping of standard lens name to ``LVISLens`` instance.
 LVIS_LENSES = {
     "narrow": LVIS_LENS_NARROW,
     "medium": LVIS_LENS_MEDIUM,

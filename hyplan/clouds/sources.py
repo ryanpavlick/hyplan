@@ -81,9 +81,9 @@ _SATELLITE_COLLECTIONS = {
 def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     """Generate a binary cloud mask for a MODIS image.
 
-    The MOD09GA/MYD09GA state_1km band encodes cloud state in bits 0-1:
-      00 = clear, 01 = cloudy, 10 = mixed, 11 = not set.
-    Any non-zero value (bits 0-1 != 00) is treated as cloudy.
+    The MOD09GA/MYD09GA state_1km band encodes cloud state in bits 0-1
+    (00 = clear, 01 = cloudy, 10 = mixed, 11 = not set). Any non-zero
+    value is treated as cloudy.
 
     Args:
         image: An Earth Engine image with a ``state_1km`` QA band.

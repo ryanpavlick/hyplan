@@ -38,35 +38,33 @@ re-exported from the top-level `hyplan` namespace for convenience.
 .. autoclass:: hyplan.instruments.LVIS
    :members:
    :show-inheritance:
+
+.. autodata:: hyplan.instruments.LVIS_LENS_NARROW
+   :no-value:
+.. autodata:: hyplan.instruments.LVIS_LENS_MEDIUM
+   :no-value:
+.. autodata:: hyplan.instruments.LVIS_LENS_WIDE
+   :no-value:
 ```
+
+The three pre-configured lens instances are also exposed via the
+``LVIS_LENSES`` mapping (keys ``"narrow"``, ``"medium"``, ``"wide"``)
+for parameterising tests or campaigns by lens name.
 
 ## Profiling lidars
 
-Nadir-pointing single-beam atmospheric profilers (no cross-track swath).
-For a detailed walk-through, see {doc}`profiling_lidar`.
-
-```{eval-rst}
-.. autoclass:: hyplan.instruments.ProfilingLidar
-   :show-inheritance:
-
-.. autoclass:: hyplan.instruments.HSRL2
-   :show-inheritance:
-
-.. autoclass:: hyplan.instruments.HALO
-   :show-inheritance:
-
-.. autoclass:: hyplan.instruments.CPL
-   :show-inheritance:
-```
+Nadir-pointing single-beam atmospheric profilers (no cross-track swath):
+{class}`~hyplan.instruments.ProfilingLidar` base class plus three
+pre-configured instruments — {class}`~hyplan.instruments.HSRL2`,
+{class}`~hyplan.instruments.HALO`, and {class}`~hyplan.instruments.CPL`.
+Detailed signatures and references are documented on the dedicated
+{doc}`profiling_lidar` page.
 
 ## Doppler wind lidar
 
-Dual-line-of-sight profiler for vector wind retrieval. See {doc}`awp`
-for planning helpers.
-
-```{eval-rst}
-.. autoclass:: hyplan.instruments.AerosolWindProfiler
-```
+{class}`~hyplan.instruments.AerosolWindProfiler` is a dual-line-of-sight
+profiler for vector wind retrieval. Detailed signature and planning
+helpers are documented on the dedicated {doc}`awp` page.
 
 ## Radar
 
