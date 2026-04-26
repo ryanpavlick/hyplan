@@ -7,6 +7,16 @@ hold either :class:`~hyplan.flight_line.FlightLine` objects (line-based
 patterns) or :class:`~hyplan.waypoint.Waypoint` objects (continuous
 patterns).  ``compute_flight_plan`` accepts ``Pattern`` in its
 ``flight_sequence`` and expands it inline.
+
+Atomicity in the flight-line optimizer
+--------------------------------------
+A :class:`Pattern` is an **atomic visit item** in
+:func:`~hyplan.flight_optimizer.greedy_optimize`. The optimizer may reorder
+whole patterns relative to free-standing :class:`~hyplan.flight_line.FlightLine`
+items, but **may not split a pattern apart**: every element of a pattern is
+visited consecutively, in pattern definition order, before the optimizer
+moves on to any other item. Pattern traversal direction is fixed (entry → exit)
+in this release; reversal is not supported.
 """
 
 from __future__ import annotations
@@ -83,6 +93,66 @@ class Pattern:
         if self.is_line_based:
             return list(self.lines.values())
         return list(self.waypoints)
+
+    @property
+    def entry_waypoint(self) -> Waypoint:
+        """Waypoint where this pattern's traversal begins.
+
+        For line-based patterns, this is the start of the first leg
+        (``self.lines[first_line_id].waypoint1``). For waypoint-based
+        patterns, this is the first element of ``self.waypoints``.
+
+        Used by the flight-line optimizer to compute transit-in cost
+        when scheduling this pattern in a sortie.
+
+        Raises:
+            HyPlanValueError: If the pattern has no elements (empty
+                ``lines`` and empty ``waypoints``).
+        """
+        if self.is_line_based:
+            if not self.lines:
+                raise HyPlanValueError(
+                    f"Pattern '{self.pattern_id or self.name}' has no flight lines; "
+                    "entry_waypoint is undefined."
+                )
+            first_line = next(iter(self.lines.values()))
+            return first_line.waypoint1
+        if not self.waypoints:
+            raise HyPlanValueError(
+                f"Pattern '{self.pattern_id or self.name}' has no waypoints; "
+                "entry_waypoint is undefined."
+            )
+        return self.waypoints[0]
+
+    @property
+    def exit_waypoint(self) -> Waypoint:
+        """Waypoint where this pattern's traversal ends.
+
+        For line-based patterns, this is the end of the last leg
+        (``self.lines[last_line_id].waypoint2``). For waypoint-based
+        patterns, this is the last element of ``self.waypoints``.
+
+        Used by the flight-line optimizer to compute transit-out cost
+        when scheduling this pattern in a sortie.
+
+        Raises:
+            HyPlanValueError: If the pattern has no elements (empty
+                ``lines`` and empty ``waypoints``).
+        """
+        if self.is_line_based:
+            if not self.lines:
+                raise HyPlanValueError(
+                    f"Pattern '{self.pattern_id or self.name}' has no flight lines; "
+                    "exit_waypoint is undefined."
+                )
+            last_line = next(reversed(self.lines.values()))
+            return last_line.waypoint2
+        if not self.waypoints:
+            raise HyPlanValueError(
+                f"Pattern '{self.pattern_id or self.name}' has no waypoints; "
+                "exit_waypoint is undefined."
+            )
+        return self.waypoints[-1]
 
     def replace_line(self, line_id: str, line: FlightLine) -> None:
         """Replace a line in place, preserving its ID and pattern membership."""
