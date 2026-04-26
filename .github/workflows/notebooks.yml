@@ -48,7 +48,10 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -e .
+          # Install the [mag] extra so export_formats.ipynb can call
+          # magnetic_declination(); other canonical notebooks don't
+          # require any extras at present.
+          pip install -e .[mag]
           pip install papermill ipykernel
 
       - name: Execute ${{ matrix.notebook }}
