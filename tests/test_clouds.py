@@ -3,11 +3,20 @@
 import pytest
 import numpy as np
 import pandas as pd
-import xarray as xr
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from unittest.mock import patch, MagicMock
+
+# xarray is part of the [clouds] extra; the spatial-plotting tests below
+# require it but the rest of this file does not. Gate the dependent class
+# rather than failing collection in a base install.
+try:
+    import xarray as xr
+    HAS_XARRAY = True
+except ImportError:  # pragma: no cover
+    xr = None  # type: ignore[assignment]
+    HAS_XARRAY = False
 
 from hyplan.clouds import (
     create_date_ranges,
@@ -535,6 +544,7 @@ class TestFetchCloudForecast:
 # Cloud fraction spatial plotting
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skipif(not HAS_XARRAY, reason="xarray not installed (install with [clouds] extra)")
 class TestPlotCloudFractionSpatial:
     """Tests for plot_cloud_fraction_spatial."""
 
