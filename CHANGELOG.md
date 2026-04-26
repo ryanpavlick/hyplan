@@ -25,6 +25,10 @@ Backwards-compatible feature release. New atmospheric profiling-lidar instrument
 ### Community
 
 - New `CODE_OF_CONDUCT.md` and `CONTRIBUTORS.md`.
+- New `SECURITY.md` documenting the vulnerability reporting process (GitHub Private Vulnerability Reporting + email fallback) and supported-versions policy.
+- New `.github/ISSUE_TEMPLATE/` directory with structured **bug report** and **feature request** YAML forms, plus a `config.yml` routing usage questions to docs and Discussions.
+- New `.github/PULL_REQUEST_TEMPLATE.md` with summary, test-plan checklist, CHANGELOG checkbox, and backward-compatibility prompt. GitHub community-profile health is now 100%.
+- `LICENSE.md` reformatted to embed the canonical Apache 2.0 license text verbatim so GitHub's licensee tool detects it as Apache-2.0 (was previously reported as "Other / NOASSERTION" because the file was a brief summary). The legal license is unchanged — has been Apache 2.0 since v1.0.0.
 
 ### Bug fixes
 
