@@ -160,6 +160,88 @@ class TestWaypointToDict:
         assert d["altitude_msl"].magnitude == 5000.0
         assert d["name"] == "test"
 
+    def test_includes_all_optional_fields(self):
+        """to_dict must surface speed, delay, and segment_type, not just the first 5 fields."""
+        wp = Waypoint(
+            34.0, -118.0, 90.0,
+            altitude_msl=ureg.Quantity(5000, "foot"),
+            name="rendezvous",
+            speed=ureg.Quantity(180, "knot"),
+            delay=ureg.Quantity(5, "minute"),
+            segment_type="hold",
+        )
+        d = wp.to_dict()
+        assert set(d.keys()) == {
+            "latitude", "longitude", "heading",
+            "altitude_msl", "name",
+            "speed", "delay", "segment_type",
+        }
+        assert d["speed"].m_as(ureg.knot) == pytest.approx(180.0)
+        assert d["delay"].m_as(ureg.minute) == pytest.approx(5.0)
+        assert d["segment_type"] == "hold"
+
+    def test_optional_fields_default_to_none(self):
+        wp = Waypoint(34.0, -118.0, 90.0)
+        d = wp.to_dict()
+        assert d["altitude_msl"] is None
+        assert d["speed"] is None
+        assert d["delay"] is None
+        assert d["segment_type"] is None
+        assert d["name"] is not None  # auto-generated coord-based name
+
+
+class TestWaypointFromDict:
+    def test_round_trip_identity(self):
+        """Waypoint -> to_dict -> from_dict produces an equivalent Waypoint."""
+        original = Waypoint(
+            34.0, -118.0, 90.0,
+            altitude_msl=ureg.Quantity(5000, "foot"),
+            name="origin",
+            speed=ureg.Quantity(180, "knot"),
+            delay=ureg.Quantity(5, "minute"),
+            segment_type="hold",
+        )
+        restored = Waypoint.from_dict(original.to_dict())
+        assert restored.latitude == original.latitude
+        assert restored.longitude == original.longitude
+        assert restored.heading == original.heading
+        assert restored.altitude_msl.m_as(ureg.foot) == pytest.approx(
+            original.altitude_msl.m_as(ureg.foot)
+        )
+        assert restored.name == original.name
+        assert restored.speed.m_as(ureg.knot) == pytest.approx(
+            original.speed.m_as(ureg.knot)
+        )
+        assert restored.delay.m_as(ureg.minute) == pytest.approx(
+            original.delay.m_as(ureg.minute)
+        )
+        assert restored.segment_type == original.segment_type
+
+    def test_minimal_dict(self):
+        """A dict with only the three required fields builds a default Waypoint."""
+        wp = Waypoint.from_dict({"latitude": 0.0, "longitude": 0.0, "heading": 0.0})
+        assert wp.latitude == 0.0
+        assert wp.altitude_msl is None
+        assert wp.speed is None
+        assert wp.delay is None
+        assert wp.segment_type is None
+
+    def test_missing_required_key_raises(self):
+        with pytest.raises(KeyError):
+            Waypoint.from_dict({"longitude": 0.0, "heading": 0.0})
+
+    def test_round_trip_preserves_loiter_delay(self):
+        """A bare Waypoint with loiter delay survives a to_dict/from_dict cycle."""
+        wp = Waypoint(
+            34.4, -119.8, 0.0,
+            altitude_msl=ureg.Quantity(8_000, "foot"),
+            delay=ureg.Quantity(45, "second"),
+            name="LOITER_45S",
+        )
+        restored = Waypoint.from_dict(wp.to_dict())
+        assert restored.delay.m_as(ureg.second) == pytest.approx(45.0)
+        assert restored.name == "LOITER_45S"
+
 
 class TestIsWaypoint:
     def test_waypoint_instance(self):
