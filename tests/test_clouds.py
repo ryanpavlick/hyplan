@@ -18,12 +18,6 @@ except ImportError:  # pragma: no cover
     xr = None  # type: ignore[assignment]
     HAS_XARRAY = False
 
-try:
-    import seaborn  # noqa: F401
-    HAS_SEABORN = True
-except ImportError:  # pragma: no cover
-    HAS_SEABORN = False
-
 from hyplan.clouds import (
     create_date_ranges,
     simulate_visits,
@@ -600,7 +594,6 @@ class TestPlotCloudFractionSpatial:
             plot_cloud_fraction_spatial({})
 
 
-@pytest.mark.skipif(not HAS_SEABORN, reason="seaborn not installed (install with [clouds] extra)")
 class TestPlotYearlyCloudFractionHeatmapsWithVisits:
     """Tests for plot_yearly_cloud_fraction_heatmaps_with_visits."""
 

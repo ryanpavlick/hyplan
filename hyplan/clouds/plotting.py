@@ -11,7 +11,68 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from ..exceptions import HyPlanRuntimeError, HyPlanValueError
+from ..exceptions import HyPlanValueError
+
+
+def _heatmap_matrix(
+    df: pd.DataFrame,
+    *,
+    ax: "plt.Axes | None" = None,
+    cmap=None,
+    norm=None,
+    annot: bool = False,
+    fmt: str = "",
+    linewidths: float = 0.5,
+    linecolor: str = "gray",
+    square: bool = True,
+    cbar: bool = True,
+    cbar_label: "str | None" = None,
+) -> "plt.Axes":
+    """Render a 2-D ``pandas.DataFrame`` as a labelled heatmap on a matplotlib
+    ``Axes``.
+
+    Covers the subset of ``seaborn.heatmap`` features that HyPlan's cloud
+    plotting needs (categorical labels from index/columns, optional
+    annotations, cell-boundary gridlines, square cells, optional colorbar).
+    Uses only matplotlib.
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    mat = df.values
+    nrows, ncols = mat.shape
+
+    im = ax.imshow(
+        mat,
+        cmap=cmap,
+        norm=norm,
+        aspect="equal" if square else "auto",
+        interpolation="nearest",
+    )
+
+    ax.set_xticks(range(ncols))
+    ax.set_xticklabels(list(df.columns))
+    ax.set_yticks(range(nrows))
+    ax.set_yticklabels(list(df.index))
+
+    if linewidths > 0:
+        ax.set_xticks([x - 0.5 for x in range(1, ncols + 1)], minor=True)
+        ax.set_yticks([y - 0.5 for y in range(1, nrows + 1)], minor=True)
+        ax.grid(which="minor", color=linecolor, linewidth=linewidths)
+        ax.tick_params(which="minor", length=0)
+
+    if annot:
+        for i in range(nrows):
+            for j in range(ncols):
+                v = mat[i, j]
+                if pd.isna(v):
+                    continue
+                ax.text(j, i, format(v, fmt), ha="center", va="center", fontsize=8)
+
+    if cbar:
+        plt.colorbar(im, ax=ax, label=cbar_label)
+
+    return ax
 
 
 def plot_doy_cloud_fraction(
@@ -137,14 +198,6 @@ def plot_cloud_forecast(
             f"Input DataFrame must contain columns: {required_columns}"
         )
 
-    try:
-        import seaborn as sns
-    except ImportError:
-        raise HyPlanRuntimeError(
-            "seaborn is required for cloud forecast heatmaps. "
-            "Install it with: pip install hyplan[clouds]"
-        )
-
     pivot = forecast_df.pivot(
         index="polygon_id", columns="date", values="cloud_fraction"
     )
@@ -155,7 +208,7 @@ def plot_cloud_forecast(
 
     norm = mcolors.TwoSlopeNorm(vcenter=threshold, vmin=0.0, vmax=1.0)
 
-    sns.heatmap(
+    _heatmap_matrix(
         pivot,
         ax=ax,
         cmap=cmap,
@@ -165,7 +218,8 @@ def plot_cloud_forecast(
         linewidths=0.5,
         linecolor="gray",
         square=True,
-        cbar_kws={"label": "Cloud Fraction"},
+        cbar=True,
+        cbar_label="Cloud Fraction",
     )
 
     # Format x-tick labels as "Mon\nApr 17"
@@ -258,16 +312,9 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
                 if weekday >= 5:
                     status_data.loc[:, day] = 3
 
-        try:
-            import seaborn as sns
-        except ImportError:
-            raise HyPlanRuntimeError(
-                "seaborn is required for cloud heatmaps. "
-                "Install it with: pip install hyplan[clouds]"
-            )
         plt.figure(figsize=(16, 8))
-        sns.heatmap(status_data, cmap=cmap, norm=norm, cbar=False,
-                    linewidths=0.5, linecolor='gray', square=True)
+        _heatmap_matrix(status_data, cmap=cmap, norm=norm, cbar=False,
+                        linewidths=0.5, linecolor='gray', square=True)
         plt.scatter(stars_x, stars_y, color='red', marker='*', s=150, label='Visit Day')
         plt.title(f'Cloud Fraction Heatmap with Visits for Year {year}')
         plt.xlabel('Day of Year')
