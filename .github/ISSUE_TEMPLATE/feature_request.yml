@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a new capability for HyPlan
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Before opening this, please
+        check the existing issues and discussions to see if it's already
+        been raised.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: |
+        What scientific workflow or planning task would this enable that
+        is hard or impossible today? Concrete campaign examples are very
+        welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behaviour
+      description: |
+        What would the new feature look like? Function signatures,
+        notebook cells, or pseudocode are all fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        Existing functions, third-party libraries, or workarounds you've
+        already considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

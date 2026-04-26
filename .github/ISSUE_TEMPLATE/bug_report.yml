@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a defect in HyPlan
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the
+        sections below so the maintainers can reproduce and fix it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: When I call `compute_flight_plan()` with ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Smallest possible Python snippet that triggers the bug. Please use
+        synthetic data or a publicly-available DEM/airport/flight line
+        rather than internal campaign files.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: input
+    id: hyplan-version
+    attributes:
+      label: HyPlan version
+      placeholder: 'e.g. 1.1.0 (python -c "import hyplan; print(hyplan.__version__)")'
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.11.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback (if any)
+      render: shell
+  - type: textarea
+    id: extras
+    attributes:
+      label: Optional dependencies installed
+      description: |
+        e.g. `[mag]`, `[clouds]`, `[phenology]`, `[winds]`, `[adsb]`. List
+        the extras you `pip install`ed if relevant to the bug.

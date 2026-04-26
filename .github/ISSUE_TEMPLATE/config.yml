@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://ryanpavlick.github.io/hyplan/
+    about: Check the API reference and tutorials before filing an issue.
+  - name: Question / discussion
+    url: https://github.com/ryanpavlick/hyplan/discussions
+    about: For usage questions and open-ended discussion (rather than confirmed bugs or feature requests).
