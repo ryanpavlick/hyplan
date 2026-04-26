@@ -29,6 +29,11 @@ Backwards-compatible feature release. New atmospheric profiling-lidar instrument
 ### Bug fixes
 
 - Fixed CI lint step that was blocking `tests.yml` on Python 3.9 / 3.11 / 3.12 (7 ruff errors across 5 files).
+- `compute_overpass_overlap`: harden geometry-emptiness check to handle non-`None` non-Geometry sentinels (e.g. NaN) that GeoPandas can produce in `geometry=[None]` rows.
+
+### Dependencies
+
+- Dropped the `seaborn` dependency from the `[clouds]` extra. The two `sns.heatmap()` call sites in `hyplan.clouds.plotting` now use a small private matplotlib-only helper instead.
 
 ### Cleanup
 
