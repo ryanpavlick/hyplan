@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2.0 (unreleased)
+## v1.2.0 — 2026-04-26
 
 Backwards-compatible feature release. The flight-line optimizer now accepts heterogeneous visit-item input — `FlightLine`, `Pattern`, and bare `Waypoint` objects can all be mixed in a single call to `greedy_optimize`.
 
