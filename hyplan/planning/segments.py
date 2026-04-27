@@ -87,6 +87,74 @@ def _direct_segment_record(
     }
 
 
+_GRAVITY_MS2 = 9.80665
+
+
+def loiter_orbit_geometry(
+    waypoint: Waypoint,
+    aircraft: Aircraft,
+    n_points: int = 72,
+):
+    """Closed ground-track polygon for a Waypoint loiter (right-hand orbit).
+
+    Computes the cruise turn radius from the aircraft's bank-by-phase
+    cruise angle and cruise speed at the waypoint's altitude:
+
+        r = v² / (g · tan(φ_cruise))
+
+    The orbit center is placed perpendicular to the waypoint's heading
+    on the right side (FAA-standard right-hand hold), so the waypoint
+    sits on the orbit. The returned ring traces a single full revolution
+    sampled at ``n_points`` evenly spaced bearings.
+
+    Args:
+        waypoint: Loiter waypoint. ``altitude_msl`` and ``heading`` are
+            both required.
+        aircraft: Aircraft model (uses ``cruise_speed_at`` and
+            ``turn_model.bank_by_phase.cruise_deg``).
+        n_points: Sample resolution around the orbit (default 72 → 5° spacing).
+
+    Returns:
+        :class:`shapely.geometry.LineString` of (lon, lat) coordinates,
+        closed (first point == last point), in WGS84.
+    """
+    from shapely.geometry import LineString
+    from shapely.ops import transform
+    from ..geometry import get_utm_transforms
+
+    if waypoint.altitude_msl is None:
+        raise ValueError(
+            "loiter_orbit_geometry requires waypoint.altitude_msl to be set."
+        )
+
+    speed_mps = aircraft.cruise_speed_at(waypoint.altitude_msl).m_as("meter/second")
+    bank_rad = np.radians(aircraft.turn_model.bank_by_phase.cruise_deg)
+    radius_m = (speed_mps ** 2) / (_GRAVITY_MS2 * np.tan(bank_rad))
+
+    # Project the waypoint to UTM and offset perpendicular-right of the heading
+    # to find the orbit center.
+    from shapely.geometry import Point
+    wp_pt = Point(waypoint.longitude, waypoint.latitude)
+    to_utm, from_utm = get_utm_transforms([wp_pt])
+    wp_utm = transform(to_utm, wp_pt)
+    perp_az_rad = np.radians(waypoint.heading + 90.0)
+    cx = wp_utm.x + radius_m * np.sin(perp_az_rad)
+    cy = wp_utm.y + radius_m * np.cos(perp_az_rad)
+
+    # Closed orbit ring: first sample lies at the waypoint itself.
+    angles = np.linspace(0.0, 2.0 * np.pi, n_points, endpoint=False)
+    angles = np.concatenate([angles, angles[:1]])
+    start_angle = np.arctan2(wp_utm.y - cy, wp_utm.x - cx)
+    # Right-hand hold goes clockwise viewed from above → angle decreases.
+    sample_angles = start_angle - angles
+    xs = cx + radius_m * np.cos(sample_angles)
+    ys = cy + radius_m * np.sin(sample_angles)
+
+    pts_utm = [Point(x, y) for x, y in zip(xs, ys)]
+    pts_wgs = [transform(from_utm, p) for p in pts_utm]
+    return LineString([(p.x, p.y) for p in pts_wgs])
+
+
 def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> dict:
     """
     Create a flight line record dictionary for inclusion in a flight plan DataFrame.

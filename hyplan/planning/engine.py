@@ -214,10 +214,26 @@ def compute_flight_plan(
 
         # Insert loiter segment if the current waypoint has a delay.
         if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:  # type: ignore[union-attr]
-            from shapely.geometry import Point as _Point
             loiter_time = segment.delay.m_as(ureg.minute)  # type: ignore[union-attr]
+
+            # Render an actual hold-orbit ground track when altitude is known
+            # (so cruise speed and bank radius are derivable from the aircraft
+            # model). Distance is the real ground covered during the loiter,
+            # not the orbit circumference. With no altitude we fall back to a
+            # Point/zero distance for callers that pass minimal Waypoints.
+            if segment.altitude_msl is not None:  # type: ignore[union-attr]
+                from .segments import loiter_orbit_geometry
+                loiter_geom = loiter_orbit_geometry(segment, aircraft)  # type: ignore[arg-type]
+                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")  # type: ignore[union-attr]
+                distance_m = speed_mps * segment.delay.m_as(ureg.second)  # type: ignore[union-attr]
+                distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
+            else:
+                from shapely.geometry import Point as _Point
+                loiter_geom = _Point(segment.longitude, segment.latitude)  # type: ignore[union-attr]
+                distance_nm = 0.0
+
             records.append({
-                "geometry": _Point(segment.longitude, segment.latitude),  # type: ignore[union-attr]
+                "geometry": loiter_geom,
                 "start_lat": segment.latitude,  # type: ignore[union-attr]
                 "start_lon": segment.longitude,  # type: ignore[union-attr]
                 "end_lat": segment.latitude,  # type: ignore[union-attr]
@@ -226,7 +242,7 @@ def compute_flight_plan(
                 "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
                 "segment_type": "loiter",
                 "segment_name": segment.name,  # type: ignore[union-attr]
-                "distance": 0.0,
+                "distance": distance_nm,
                 "time_to_segment": loiter_time,
                 "start_heading": segment.heading,  # type: ignore[union-attr]
                 "end_heading": segment.heading  # type: ignore[union-attr]

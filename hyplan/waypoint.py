@@ -128,11 +128,18 @@ class Waypoint:
         )
 
     def to_dict(self) -> Dict:
-        """
-        Convert the waypoint to a dictionary representation.
+        """Convert the waypoint to a dictionary representation.
+
+        The returned dict round-trips through :meth:`Waypoint.from_dict`
+        and includes every field accepted by ``__init__``. Quantity-valued
+        fields (``altitude_msl``, ``speed``, ``delay``) are returned as
+        :class:`pint.Quantity` instances; for JSON-friendly output the
+        caller is responsible for serialization.
 
         Returns:
-            Dict: Dictionary with latitude, longitude, heading, altitude_msl, and name.
+            Dict: Dictionary with all eight Waypoint fields:
+                ``latitude``, ``longitude``, ``heading``, ``altitude_msl``,
+                ``name``, ``speed``, ``delay``, ``segment_type``.
         """
         return {
             "latitude": self.latitude,
@@ -140,7 +147,37 @@ class Waypoint:
             "heading": self.heading,
             "altitude_msl": self.altitude_msl,
             "name": self.name,
+            "speed": self.speed,
+            "delay": self.delay,
+            "segment_type": self.segment_type,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "Waypoint":
+        """Reconstruct a Waypoint from a :meth:`to_dict` dictionary.
+
+        Required keys are ``latitude``, ``longitude``, and ``heading``.
+        Optional keys (``altitude_msl``, ``name``, ``speed``, ``delay``,
+        ``segment_type``) default to ``None`` if absent. This is the
+        inverse of :meth:`to_dict` and round-trips losslessly when the
+        Quantity fields are preserved as ``pint.Quantity`` instances.
+
+        Args:
+            data: Mapping produced by :meth:`to_dict`, or a subset thereof.
+
+        Returns:
+            A new Waypoint instance.
+        """
+        return cls(
+            latitude=data["latitude"],
+            longitude=data["longitude"],
+            heading=data["heading"],
+            altitude_msl=data.get("altitude_msl"),
+            name=data.get("name"),
+            speed=data.get("speed"),
+            delay=data.get("delay"),
+            segment_type=data.get("segment_type"),
+        )
 
 
 def is_waypoint(obj) -> bool:

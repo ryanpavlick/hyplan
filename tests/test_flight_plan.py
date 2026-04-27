@@ -80,7 +80,7 @@ class TestComputeFlightPlan:
         assert len(plan) > 0
 
     def test_waypoint_loiter(self, b200):
-        """Waypoint with delay produces a loiter segment."""
+        """Waypoint with delay produces a loiter segment with a hold-orbit ground track."""
         wp1 = Waypoint(34.0, -118.0, 0.0,
                        altitude_msl=ureg.Quantity(20000, "feet"), name="WP1",
                        delay=ureg.Quantity(5, "minute"))
@@ -90,7 +90,14 @@ class TestComputeFlightPlan:
         loiter = plan[plan["segment_type"] == "loiter"]
         assert len(loiter) == 1
         assert loiter.iloc[0]["time_to_segment"] == pytest.approx(5.0)
-        assert loiter.iloc[0]["distance"] == 0.0
+        # Distance is now the actual ground covered during the loiter
+        # (cruise speed × delay), not zero. For the B200 at 20kft / 5min,
+        # this is an order-of-magnitude tens of nautical miles.
+        assert loiter.iloc[0]["distance"] > 0
+        # Geometry is the closed orbit ring (LineString), not a Point.
+        from shapely.geometry import LineString
+        assert isinstance(loiter.iloc[0]["geometry"], LineString)
+        assert loiter.iloc[0]["geometry"].coords[0] == loiter.iloc[0]["geometry"].coords[-1]
 
     def test_waypoint_speed_override(self, b200):
         """Per-waypoint speed override is used for the departing leg."""
@@ -124,6 +131,111 @@ class TestComputeFlightPlan:
         # The level leg from WP1 to WP2 should be labeled "pattern"
         pattern_segs = plan[plan["segment_type"] == "pattern"]
         assert len(pattern_segs) >= 1
+
+
+class TestLoiterOrbitGeometry:
+    """Direct tests for hyplan.planning.segments.loiter_orbit_geometry."""
+
+    @pytest.fixture
+    def b200(self):
+        return KingAirB200()
+
+    def test_returns_closed_linestring(self, b200):
+        from hyplan.planning.segments import loiter_orbit_geometry
+        wp = Waypoint(
+            34.0, -118.0, 0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            delay=ureg.Quantity(5, "minute"),
+        )
+        ring = loiter_orbit_geometry(wp, b200)
+        assert ring.coords[0] == ring.coords[-1]
+        # default n_points=72 → 73 coordinates after closing
+        assert len(ring.coords) == 73
+
+    def test_radius_matches_v_squared_over_g_tan_bank(self, b200):
+        """The orbit radius equals v² / (g · tan(bank_cruise))."""
+        from hyplan.planning.segments import loiter_orbit_geometry
+        from hyplan.geometry import get_utm_transforms
+        from shapely.geometry import Point
+        from shapely.ops import transform as shp_transform
+
+        altitude = ureg.Quantity(20000, "feet")
+        wp = Waypoint(34.0, -118.0, 0.0, altitude_msl=altitude)
+        ring = loiter_orbit_geometry(wp, b200)
+
+        v_mps = b200.cruise_speed_at(altitude).m_as("meter/second")
+        bank_rad = np.radians(b200.turn_model.bank_by_phase.cruise_deg)
+        expected_radius_m = (v_mps ** 2) / (9.80665 * np.tan(bank_rad))
+
+        # Diameter of the ring: max distance between any two ring points.
+        coords = np.array(list(ring.coords))
+        pts_wgs = [Point(lon, lat) for lon, lat in coords]
+        to_utm, _ = get_utm_transforms(pts_wgs)
+        pts_utm = np.array([(shp_transform(to_utm, p).x, shp_transform(to_utm, p).y) for p in pts_wgs])
+        # Pairwise distances; pick max as diameter.
+        dx = pts_utm[:, None, 0] - pts_utm[None, :, 0]
+        dy = pts_utm[:, None, 1] - pts_utm[None, :, 1]
+        diameter = np.sqrt(dx * dx + dy * dy).max()
+        assert diameter == pytest.approx(2 * expected_radius_m, rel=0.01)
+
+    def test_waypoint_lies_on_orbit(self, b200):
+        """The waypoint sits exactly on the orbit (UTM-distance ≈ 0 to first vertex)."""
+        from hyplan.planning.segments import loiter_orbit_geometry
+        from shapely.geometry import Point
+        wp = Waypoint(
+            34.0, -118.0, 0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+        )
+        ring = loiter_orbit_geometry(wp, b200)
+        first = ring.coords[0]
+        # First coordinate is within rounding of the waypoint location.
+        wp_pt = Point(wp.longitude, wp.latitude)
+        assert wp_pt.distance(Point(first)) < 1e-6
+
+    def test_higher_altitude_gives_larger_orbit(self, b200):
+        """Higher cruise speed (or larger v / smaller bank) → larger turn radius."""
+        from hyplan.planning.segments import loiter_orbit_geometry
+        from hyplan.geometry import get_utm_transforms
+        from shapely.geometry import Point
+        from shapely.ops import transform as shp_transform
+
+        def diameter_m(wp):
+            ring = loiter_orbit_geometry(wp, b200)
+            coords = np.array(list(ring.coords))
+            pts_wgs = [Point(lon, lat) for lon, lat in coords]
+            to_utm, _ = get_utm_transforms(pts_wgs)
+            pts_utm = np.array(
+                [(shp_transform(to_utm, p).x, shp_transform(to_utm, p).y) for p in pts_wgs]
+            )
+            dx = pts_utm[:, None, 0] - pts_utm[None, :, 0]
+            dy = pts_utm[:, None, 1] - pts_utm[None, :, 1]
+            return np.sqrt(dx * dx + dy * dy).max()
+
+        wp_low = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(5_000, "feet"))
+        wp_high = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(25_000, "feet"))
+        # Cruise speed grows with altitude → orbit radius grows.
+        assert diameter_m(wp_high) > diameter_m(wp_low)
+
+    def test_requires_altitude(self, b200):
+        from hyplan.planning.segments import loiter_orbit_geometry
+        wp = Waypoint(34.0, -118.0, 0.0)  # no altitude_msl
+        with pytest.raises(ValueError):
+            loiter_orbit_geometry(wp, b200)
+
+    def test_loiter_distance_matches_speed_times_delay(self, b200):
+        """The loiter row's distance equals cruise speed × delay (not orbit circumference)."""
+        wp1 = Waypoint(
+            34.0, -118.0, 0.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            delay=ureg.Quantity(5, "minute"),
+            name="WP1",
+        )
+        wp2 = Waypoint(34.1, -118.0, 0.0, altitude_msl=ureg.Quantity(20000, "feet"), name="WP2")
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[wp1, wp2])
+        loiter = plan[plan["segment_type"] == "loiter"].iloc[0]
+        v_mps = b200.cruise_speed_at(wp1.altitude_msl).m_as("meter/second")
+        expected_nm = ureg.Quantity(v_mps * 5 * 60, "meter").m_as(ureg.nautical_mile)
+        assert loiter["distance"] == pytest.approx(expected_nm, rel=0.001)
 
 
 class TestWindCorrectedTransit:
