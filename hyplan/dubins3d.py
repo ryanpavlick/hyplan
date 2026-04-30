@@ -1,27 +1,46 @@
 """
-3D Dubins path planning with pitch angle constraints and optional wind.
+2D and 3D Dubins path planning with optional wind.
 
-Originally based on comrob/Dubins3D.jl (Vana et al.,  2020),
-extended with pitch-constrained vertical planning and wind-aware
-trochoidal arcs (Moon et al., 2023).  Decomposes 3D paths into coupled horizontal and
-vertical 2D Dubins problems linked by a curvature budget:
+This module exports two public path classes:
 
-    1/rho_min² = 1/rho_h² + 1/rho_v²
+* :class:`DubinsPath2D` — pure horizontal Dubins path used by the
+  HyPlan flight planner via :meth:`hyplan.aircraft.Aircraft._hybrid_path`.
+  Couples a 2D Dubins (or trochoidal Dubins, when wind is supplied) for
+  the ground track with the aircraft's altitude-indexed
+  ``climb_profile`` / ``descent_profile`` integrated separately for the
+  vertical profile.  This is the operational path used by
+  :func:`hyplan.planning.compute_flight_plan`.
 
-A 1D search over rho_h finds the shortest feasible 3D path.  The
-vertical sub-problem enforces pitch-angle limits via a dedicated
-solver that only considers CSC (curve-straight-curve) manoeuvres and
-validates centre-angle excursions against the pitch bounds.
+* :class:`DubinsPath3D` — pitch-angle-constrained 3D Dubins solver
+  based on Vana et al. (2020).  Decomposes 3D paths into coupled
+  horizontal and vertical 2D Dubins problems linked by a curvature
+  budget ``1/ρ_min² = 1/ρ_h² + 1/ρ_v²``.  A 1D search over ``ρ_h``
+  finds the shortest feasible 3D path; the vertical sub-problem
+  enforces pitch-angle limits via a dedicated solver that only
+  considers CSC manoeuvres.  This solver is **not** consumed by the
+  HyPlan planner today (replaced by ``_hybrid_path``); it is kept for
+  reference and tested independently.
 
 When a wind vector is supplied, the horizontal sub-problem switches
 from circular arcs to **trochoidal** arcs (circles drifting with the
-wind).  The solver finds the time-optimal BSB (Bang-Straight-Bang)
-path in the air-relative frame using an iterative moving-target
-method, then samples the ground track with cumulative wind
-displacement to produce trochoids.  CCC paths (RLR/LRL) are
-disabled for wind cases to avoid degenerate multi-loop solutions.
+wind).  HyPlan's trochoidal solver considers three families:
+
+* **BSB** (LSL/RSR/LSR/RSL) via the Sachdev/Moon (2023) solver — the
+  bulk of operationally-encountered paths.
+* **Proper trochoidal CCC** (LRL/RLR) via 1-D Newton on the half-arc
+  angle of the middle arc — exact ground-frame goal landing.
+* **Air-frame Dubins CCC + iterative wind-drift correction** — used as
+  a fallback when Newton fails or its candidate has higher load
+  factor; gated on a 10 m end-position tolerance.
+
+CCC was historically disabled in trochoidal solvers (multi-loop
+solutions can pollute the search); HyPlan now enumerates the
+2π·k_4 wraps of the goal heading and rejects any candidate whose
+unwrapped per-arc time leaves [0, 2π) — see ``solve_ccc_trochoid`` in
+:mod:`hyplan._trochoid_solver`.
+
 Path length and timing are always expressed in the air frame (see
-:attr:`DubinsPath3D.length`).
+:attr:`DubinsPath2D.length`, :attr:`DubinsPath3D.length`).
 
 References
 ----------

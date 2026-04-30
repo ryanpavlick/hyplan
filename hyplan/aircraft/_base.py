@@ -613,6 +613,14 @@ class Aircraft:
 
         Returns ``(pitch_min, pitch_max)`` in degrees.  ``pitch_min`` is
         negative (descent), ``pitch_max`` is positive (climb).
+
+        .. note::
+            **Legacy.**  Used by :class:`hyplan.dubins3d.DubinsPath3D`
+            (the constant-pitch 3D Dubins solver) but not by the HyPlan
+            planner's :meth:`_hybrid_path`, which integrates
+            ``climb_profile`` / ``descent_profile`` against altitude
+            directly.  Changing pitch limits will not affect any path
+            built by :func:`hyplan.planning.compute_flight_plan`.
         """
         tas = speed if speed is not None else self.cruise_speed_at(self.service_ceiling)  # type: ignore[arg-type]
         tas_mps = tas.m_as(ureg.meter / ureg.second)
@@ -744,13 +752,16 @@ class Aircraft:
         end_altitude: Quantity,
         true_air_speed: Optional[Quantity] = None,
     ) -> tuple[Quantity, Quantity]:
-        """Estimate time and horizontal distance during a climb.
+        """Estimate time and horizontal distance during a continuous climb.
 
-        Dispatch strategy depends on the climb profile mode:
+        Integrates ``climb_profile`` against altitude (mode-dispatched):
 
         * ``"constant"`` — single ROC, simple division.
         * ``"two_point"`` — analytical log formula (linear ROC model).
         * ``"full"`` — numerical trapezoidal integration.
+
+        For staged climbs with intermediate level-off pauses (e.g., a
+        weight-driven hold during climb-out), see :meth:`step_climb`.
         """
         start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
         end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
@@ -1039,7 +1050,10 @@ class Aircraft:
     ) -> dict:
         """Calculate time from takeoff to the first waypoint.
 
-        Uses 3D Dubins path planning for the departure including climb.
+        Builds the path via :meth:`_hybrid_path` with ``phase="climb"``
+        — 2D Dubins horizontally, integrated ``climb_profile``
+        vertically — so the climb-out timing reflects the aircraft's
+        calibrated rate-vs-altitude curve, not a constant pitch.
         """
         _, departure_heading = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude,
@@ -1063,10 +1077,12 @@ class Aircraft:
     ) -> dict:
         """Calculate time from the last waypoint back to the airport.
 
-        Uses 3D Dubins path planning for the return including descent.
+        Builds the path via :meth:`_hybrid_path` with ``phase="descent"``
+        — 2D Dubins horizontally, integrated ``descent_profile``
+        vertically.
 
-        When :attr:`approach_profile` is set, the Dubins descent is
-        targeted at top-of-approach MSL (= ``airport.elevation +
+        When :attr:`approach_profile` is set, the descent is targeted at
+        top-of-approach MSL (= ``airport.elevation +
         approach_profile.top_of_approach_agl``) and a terminal
         ``"approach"`` segment is appended using
         :meth:`ApproachProfile.time_to_touchdown`.  When no profile is

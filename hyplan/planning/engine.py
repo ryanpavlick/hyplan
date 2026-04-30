@@ -2,7 +2,9 @@
 
 Assembles a sequence of flight lines and waypoints into a complete mission
 plan with takeoff, transit, data-collection, and landing phases.
-:func:`compute_flight_plan` connects segments using 3-D Dubins paths,
+:func:`compute_flight_plan` builds each inter-segment path via the
+aircraft's :meth:`Aircraft._hybrid_path` (2D Dubins horizontally +
+integrated ``climb_profile`` / ``descent_profile`` vertically),
 classifies each phase (takeoff, climb, transit, descent, approach,
 flight_line), and returns a :class:`~geopandas.GeoDataFrame` with timing,
 distance, altitude, and geometry for every segment.

@@ -313,9 +313,13 @@ def _resolve_wind_uv(
     wind_speed: Optional[Quantity],
     wind_direction: Optional[float],
 ) -> Optional[Tuple[float, float]]:
-    """Extract wind as ``(u_east, v_north)`` in m/s for :class:`DubinsPath3D`.
+    """Extract wind as ``(u_east, v_north)`` in m/s for trochoidal Dubins.
 
-    Returns ``None`` when no wind is available (still-air path).
+    Returns ``None`` when no wind is available (still-air path).  Used
+    by :func:`compute_flight_plan` to feed per-segment wind into
+    :meth:`Aircraft._hybrid_path` (which forwards it to
+    :class:`DubinsPath2D`'s trochoidal solver) and to the
+    flight-line crab-angle solver.
     """
     if wind_source is not None:
         u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]

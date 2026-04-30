@@ -116,6 +116,16 @@ def loiter_orbit_geometry(
     sits on the orbit. The returned ring traces a single full revolution
     sampled at ``n_points`` evenly spaced bearings.
 
+    **Used by** the spiral-up / spiral-down branches of
+    :meth:`Aircraft._hybrid_path`: when the integrated climb (or
+    descent) horizontal distance exceeds the leg length, the aircraft
+    can't reach cruise altitude along the leg and instead flies an
+    orbit at the start (or end) waypoint while gaining (or losing)
+    altitude.  In that case the caller passes ``phase="climb"`` (or
+    ``"descent"``) and ``waypoint.altitude_msl`` set to the midpoint
+    altitude of the climb (resp. descent).  Also available for
+    explicit loiter / hold modeling.
+
     Args:
         waypoint: Loiter waypoint. ``altitude_msl`` and ``heading`` are
             both required.
