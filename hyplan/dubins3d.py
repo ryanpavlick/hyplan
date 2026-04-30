@@ -235,6 +235,58 @@ def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray
 # Wind-aware 2D Dubins solver (trochoidal ground tracks)
 # ---------------------------------------------------------------------------
 
+def _try_ccc_with_drift(qi, qf, rhomin, airspeed, wind_u, wind_v,
+                        max_iter: int = 6, tol_s: float = 1e-3):
+    """Iteratively solve still-air Dubins against a wind-drift-corrected goal.
+
+    The aircraft moves at ``airspeed`` in the air frame and the air
+    parcel itself drifts at ``(wind_u, wind_v)`` in the ground frame.
+    Over a path of duration ``T`` the wind accumulates ``wind * T`` of
+    ground drift, so an air-frame path solved against
+    ``qf' = qf - wind * T`` lands at ``qf`` in the ground frame.
+
+    This routine returns ``(air_solver, T)`` only when the resulting
+    still-air optimum is **CCC** (RLR or LRL) — that's exactly the
+    regime the trochoidal BSB solver gets wrong, where the geometric
+    optimum is a 3-arc teardrop but BSB-only fits an LSR/RSL S-curve
+    of much greater length.  When the still-air optimum is BSB,
+    returns ``(None, math.inf)`` so the caller keeps the trochoidal
+    BSB result.
+
+    Args:
+        qi: Start pose ``[x, y, heading]`` in ground frame
+            (meters, radians).
+        qf: End pose, same convention.
+        rhomin: Minimum turn radius (meters).
+        airspeed: True airspeed (m/s).
+        wind_u: Eastward wind component (m/s).
+        wind_v: Northward wind component (m/s).
+        max_iter: Iteration cap (the fixed-point converges in ~3
+            iterations for ``vw / Va`` up to ~0.2).
+        tol_s: Convergence tolerance on ``T`` (seconds).
+    """
+    qf_corrected = qf.copy()
+    last_T = -math.inf
+    air_solver = None
+    T = 0.0
+    for _ in range(max_iter):
+        air_solver = _Dubins2D(qi, qf_corrected, rhomin)
+        air_length = float(air_solver.maneuver.length)
+        if not math.isfinite(air_length):
+            return None, math.inf
+        T = air_length / airspeed
+        if abs(T - last_T) < tol_s:
+            break
+        last_T = T
+        qf_corrected = qf.copy()
+        qf_corrected[0] = qf[0] - wind_u * T
+        qf_corrected[1] = qf[1] - wind_v * T
+
+    if air_solver is None or air_solver.maneuver.case not in ("RLR", "LRL"):
+        return None, math.inf
+    return air_solver, T
+
+
 class _TrochoidDubins2D:
     """Wind-aware 2D Dubins solver with trochoidal ground tracks.
 
@@ -247,6 +299,16 @@ class _TrochoidDubins2D:
        for t1/t2 analytically (RSR/LSL) or via Newton-Raphson (RSL/LSR).
     3. Sampling the ground track using trochoidal equations (Eqs 18-21).
 
+    For CCC (RLR/LRL) cases — needed when the start/end positions are
+    closer than ~4 turn radii — the trochoidal CCC math is unstable
+    (it produces multi-loop solutions).  The solver instead falls back
+    to a *wind-drift-corrected* air-frame CCC: it iteratively solves
+    the still-air Dubins problem against ``qf - wind * T`` so the air
+    track lands at ``qf`` in the ground frame after the wind drift
+    accumulates.  This covers tight racetrack patterns (line spacing
+    less than turn radius) which are the dominant case where BSB-only
+    solvers produce paths much longer than the geometric optimum.
+
     Args:
         qi: Start pose [x, y, heading] in ground frame (meters, radians).
         qf: End pose [x, y, heading] in ground frame (meters, radians).
@@ -254,7 +316,8 @@ class _TrochoidDubins2D:
         airspeed: True airspeed in m/s.
         wind_u: Eastward wind component in m/s.
         wind_v: Northward wind component in m/s.
-        disable_ccc: Unused (kept for interface compatibility).
+        disable_ccc: When ``True``, skip the air-frame CCC fallback
+            and always use the BSB trochoid (legacy behavior).
 
     Raises:
         HyPlanValueError: If wind speed >= airspeed (infeasible).
@@ -278,13 +341,83 @@ class _TrochoidDubins2D:
                 f"Wind speed ({wind_speed:.1f} m/s) exceeds or equals "
                 f"airspeed ({airspeed:.1f} m/s). Path is infeasible.")
 
-        from ._trochoid_solver import solve_trochoid
+        # Always solve the BSB trochoidal problem (existing behavior).
+        from ._trochoid_solver import solve_ccc_trochoid, solve_trochoid
         self._sol = solve_trochoid(qi, qf, rhomin, airspeed, wind_u, wind_v)
-        self._total_time = self._sol["total_time"]
+        bsb_total_time = self._sol["total_time"]
 
-        # maneuver: air-frame arc length in meters for 3D solver
-        air_len = self._total_time * airspeed
-        self._maneuver = _DubinsSegment(0, 0, 0, air_len, "TRO")
+        # CCC trochoid: solve the proper LRL/RLR trochoid path by
+        # 1-D Newton on the half-arc-angle of the middle arc (see
+        # _trochoid_solver.solve_ccc_trochoid).  When Newton converges,
+        # the path lands at the ground-frame goal exactly (sub-mm) and
+        # is ~2× faster than the iterative air-drift fallback.
+        #
+        # When Newton fails (extreme wind, near-degenerate geometry),
+        # fall back to the wind-drift-corrected air-frame Dubins CCC.
+        # That iteration converges linearly at rate ~vw/Va per iter, so
+        # in higher wind regimes it needs many iterations to reach the
+        # goal precisely — gate on the actual end-position error before
+        # accepting it.
+        ccc_tro_sol = None
+        ccc_air_solver = None
+        ccc_air_time = math.inf
+        if not disable_ccc:
+            ccc_tro_sol = solve_ccc_trochoid(
+                qi, qf, rhomin, airspeed, wind_u, wind_v,
+            )
+            ccc_air_solver, ccc_air_time = _try_ccc_with_drift(
+                qi, qf, rhomin, airspeed, wind_u, wind_v,
+            )
+
+        # Position-error gate on the air-drift candidate: sample the
+        # path at total_time and check the end position against qf.  If
+        # the iterative fixed-point hasn't converged tightly (most
+        # likely in vw / Va ≳ 0.3), reject the candidate rather than
+        # silently feed a wrong-end-position path to the planner.
+        ccc_air_valid = False
+        if ccc_air_solver is not None and math.isfinite(ccc_air_time):
+            air_end = ccc_air_solver.get_coordinates_at(
+                ccc_air_solver.maneuver.length,
+            )
+            end_x = air_end[0] + wind_u * ccc_air_time
+            end_y = air_end[1] + wind_v * ccc_air_time
+            pos_err = math.hypot(end_x - qf[0], end_y - qf[1])
+            # 10 m tolerance is generous on a ~50 km Dubins path.
+            ccc_air_valid = pos_err < 10.0
+
+        # Pick the time-optimal valid candidate.  Tiebreak (within 1 ms)
+        # prefers ccc_trochoid > ccc_air_drift > bsb so that low-wind
+        # cases — where the proper trochoid and air-drift converge to
+        # numerically equivalent paths — pick the rigorous solver.
+        _MODE_RANK = {"ccc_trochoid": 0, "ccc_air_drift": 1, "bsb": 2}
+        candidates = [(bsb_total_time, "bsb", None)]
+        if ccc_tro_sol is not None:
+            candidates.append(
+                (ccc_tro_sol["total_time"], "ccc_trochoid", ccc_tro_sol),
+            )
+        if ccc_air_valid:
+            candidates.append(
+                (ccc_air_time, "ccc_air_drift", ccc_air_solver),
+            )
+        candidates.sort(key=lambda c: (round(c[0], 3), _MODE_RANK[c[1]]))
+        best_time, best_mode, best_data = candidates[0]
+
+        self._mode = best_mode
+        self._total_time = best_time
+        air_len = best_time * airspeed
+
+        if best_mode == "bsb":
+            self._maneuver = _DubinsSegment(0, 0, 0, air_len, "TRO")
+        elif best_mode == "ccc_trochoid":
+            self._ccc_tro_sol = best_data
+            self._maneuver = _DubinsSegment(
+                0, 0, 0, air_len, best_data["family"],
+            )
+        else:  # ccc_air_drift
+            self._air_solver = best_data
+            self._maneuver = _DubinsSegment(
+                0, 0, 0, air_len, best_data.maneuver.case,
+            )
 
     @property
     def maneuver(self) -> _DubinsSegment:
@@ -311,10 +444,38 @@ class _TrochoidDubins2D:
     def get_coordinates_at(self, time_offset: float) -> np.ndarray:
         """Get ground-frame (x, y, heading) at a given time offset.
 
-        Uses trochoidal equations in wind frame (Eqs 18-21 of Sachdev
-        et al.), then rotates back to inertial frame. The returned
-        heading is the ground-track direction.
+        Dispatches by solver mode:
+
+        * ``bsb``: BSB trochoidal (Sachdev et al. Eqs 18-21).
+        * ``ccc_trochoid``: proper LRL/RLR trochoidal three-arc path.
+        * ``ccc_air_drift``: still-air Dubins CCC samples shifted by
+          accumulated wind drift (used as a fallback when the
+          trochoidal CCC root-find fails).
+
+        Returned heading is the ground-track direction in all modes.
         """
+        if self._mode == "ccc_trochoid":
+            from ._trochoid_solver import sample_ccc_trochoid
+            return sample_ccc_trochoid(
+                self._ccc_tro_sol, time_offset, self.airspeed,
+                self.wind_u, self.wind_v,
+            )
+
+        if self._mode == "ccc_air_drift":
+            air_distance = max(
+                0.0,
+                min(time_offset * self.airspeed, self._maneuver.length),
+            )
+            air_pos = self._air_solver.get_coordinates_at(air_distance)
+            gx = air_pos[0] + self.wind_u * time_offset
+            gy = air_pos[1] + self.wind_v * time_offset
+            air_hdg = float(air_pos[2])
+            ground_heading = math.atan2(
+                self.airspeed * math.sin(air_hdg) + self.wind_v,
+                self.airspeed * math.cos(air_hdg) + self.wind_u,
+            )
+            return np.array([gx, gy, ground_heading], dtype=np.float64)
+
         from ._trochoid_solver import sample_trochoid
         return sample_trochoid(
             self._sol, time_offset, self.airspeed,

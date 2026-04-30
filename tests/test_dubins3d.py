@@ -267,6 +267,88 @@ class TestTrochoidDubins2D:
         assert p0[0] == pytest.approx(qi[0], abs=1.0)
         assert p0[1] == pytest.approx(qi[1], abs=1.0)
 
+    def test_ccc_fallback_for_close_parallel_lines(self):
+        """When start/end positions are closer than ~4r with opposite
+        headings, the geometric optimum is CCC (RLR/LRL).  Verify that
+        the trochoid solver picks a CCC mode (proper trochoid root or
+        the air-frame-with-drift fallback) instead of the much longer
+        BSB-only result.
+
+        Geometry models an ER-2-style racetrack between adjacent
+        parallel flight lines: 5 nmi lateral spacing, opposite headings,
+        7.2 nmi turn radius, 425 kt TAS, 26 kt crosswind.  In this
+        regime the BSB-only result is ~2x the CCC length.
+        """
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])           # north-bound
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])    # south-bound
+        rhomin = 7.2 * nmi
+        airspeed = 218.6   # 425 kt
+        wind_u = 13.4      # 26 kt eastward
+
+        d_ccc = _TrochoidDubins2D(qi, qf, rhomin, airspeed, wind_u, 0.0)
+        d_bsb = _TrochoidDubins2D(
+            qi, qf, rhomin, airspeed, wind_u, 0.0, disable_ccc=True,
+        )
+
+        assert d_ccc._mode in ("ccc_trochoid", "ccc_air_drift")
+        assert d_ccc.maneuver.case in ("RLR", "LRL")
+        assert d_bsb._mode == "bsb"
+        # CCC must be substantially shorter than BSB-only.
+        assert d_ccc.total_time < 0.7 * d_bsb.total_time, (
+            f"CCC {d_ccc.total_time:.1f}s should be << "
+            f"BSB-only {d_bsb.total_time:.1f}s"
+        )
+
+    def test_ccc_lands_at_target(self):
+        """The CCC trochoid ground track must land at the requested
+        goal position to within sampling precision."""
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])
+        d = _TrochoidDubins2D(qi, qf, 7.2 * nmi, 218.6, 13.4, 0.0)
+        assert d._mode in ("ccc_trochoid", "ccc_air_drift")
+        end = d.get_coordinates_at(d.total_time)
+        # Position landing within 2 m (numerical noise from iterative solve).
+        assert end[0] == pytest.approx(qf[0], abs=2.0)
+        assert end[1] == pytest.approx(qf[1], abs=2.0)
+
+    def test_ccc_disabled_falls_back_to_bsb(self):
+        """`disable_ccc=True` must reproduce the legacy BSB-only behavior."""
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])
+        d = _TrochoidDubins2D(
+            qi, qf, 7.2 * nmi, 218.6, 13.4, 0.0, disable_ccc=True,
+        )
+        assert d._mode == "bsb"
+        assert d.maneuver.case == "TRO"
+
+    def test_ccc_trochoid_solver_converges_in_low_wind(self):
+        """The proper trochoidal CCC root-find should produce a valid
+        result in the low-wind regime, agreeing with the air-frame
+        Dubins-with-drift fallback to within ~0.1% on time (both methods
+        are correct in the limit vw / Va → 0; they differ only in
+        floating-point accumulation)."""
+        from hyplan._trochoid_solver import solve_ccc_trochoid
+        from hyplan.dubins3d import _try_ccc_with_drift
+
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])
+        rhomin = 7.2 * nmi
+        airspeed = 218.6
+        wind_u = 13.4
+
+        tro_sol = solve_ccc_trochoid(qi, qf, rhomin, airspeed, wind_u, 0.0)
+        assert tro_sol is not None
+        assert tro_sol["family"] in ("LRL", "RLR")
+
+        _, t_air = _try_ccc_with_drift(qi, qf, rhomin, airspeed, wind_u, 0.0)
+        # Both methods solve the same physical problem; they should
+        # agree to within numerical noise.
+        assert abs(tro_sol["total_time"] - t_air) / t_air < 1e-3
+
 
 class TestDubinsPath3DWind:
     """Verify DubinsPath3D with wind parameter."""
