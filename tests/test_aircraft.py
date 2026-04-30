@@ -412,6 +412,54 @@ class TestER2Performance:
         ac = NASA_ER2()
         assert 0 < ac.max_bank_angle < 90
 
+    # --- IWG1 calibration regression tests -----------------------------------
+
+    def test_climb_profile_includes_step(self):
+        """Calibrated climb_profile encodes the 19-21 kft step climb."""
+        ac = NASA_ER2()
+        rate_steady = ac.climb_profile.rate_at(15000 * ureg.feet).m_as(
+            ureg.feet / ureg.minute
+        )
+        rate_in_step = ac.climb_profile.rate_at(20000 * ureg.feet).m_as(
+            ureg.feet / ureg.minute
+        )
+        assert rate_in_step < 0.5 * rate_steady, (
+            f"step VS {rate_in_step:.0f} fpm should be <50% of "
+            f"steady VS {rate_steady:.0f} fpm"
+        )
+
+    def test_descent_profile_uses_two_regimes(self):
+        """Calibrated descent_profile shows steeper VS at high altitudes."""
+        ac = NASA_ER2()
+        rate_high = ac.descent_profile.rate_at(60000 * ureg.feet).m_as(
+            ureg.feet / ureg.minute
+        )
+        rate_low = ac.descent_profile.rate_at(10000 * ureg.feet).m_as(
+            ureg.feet / ureg.minute
+        )
+        assert rate_high > 2 * rate_low, (
+            f"high-altitude descent ({rate_high:.0f} fpm) should be much "
+            f"steeper than low-altitude descent ({rate_low:.0f} fpm)"
+        )
+
+    def test_approach_profile_present(self):
+        ac = NASA_ER2()
+        assert ac.approach_profile is not None
+        # ER-2 IWG1-derived glideslope (~2.6°) is shallower than 3° ILS.
+        assert 2.0 < ac.approach_profile.glideslope_deg < 3.5
+        assert ac.approach_profile.top_of_approach_agl.m_as(ureg.feet) == pytest.approx(3000)
+
+    def test_approach_time_to_touchdown_is_a_few_minutes(self):
+        ac = NASA_ER2()
+        t = ac.approach_profile.time_to_touchdown().m_as(ureg.minute)
+        assert 4.0 < t < 8.0
+
+    def test_iwg1_source_record_present(self):
+        ac = NASA_ER2()
+        kinds = [s.source_type for s in ac.sources]
+        assert "iwg1" in kinds
+        assert "brochure" in kinds
+
 
 # ---------------------------------------------------------------------------
 # GV (CAS/Mach schedule) specific tests

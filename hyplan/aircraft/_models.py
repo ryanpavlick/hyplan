@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from ._base import (
     Aircraft,
+    ApproachProfile,
     CasMachSchedule,
     TasSchedule,
     VerticalProfile,
@@ -67,7 +68,26 @@ class NASA_ER2(Aircraft):
     Operates at 70,000 ft, acquiring data above 95% of the Earth's
     atmosphere.  Based at NASA Armstrong Flight Research Center (AFRC).
 
-    Speed profile from Moving Lines: TAS = 70 + alt_m * 0.0071 (m/s).
+    Speed schedule (Moving Lines brochure): TAS = 70 + alt_m * 0.0071 (m/s).
+
+    Vertical-rate and approach behavior calibrated from 17 NASA AFRC IWG1
+    in-situ flight logs (2023-02 to 2025-08, ~64 000 cruise fixes above
+    60 kft).  See [notebooks/er2_calibration/iwg1_calibration.ipynb] for
+    the full derivation: per-altitude-bin |VS| medians, breakpoint
+    selection rules, and validation against per-sortie observed timing.
+
+    Vertical-rate highlights from the calibration:
+
+    * Step climb at 19-21 kft (fuel-burn-driven; the average operational
+      profile across the 17-sortie set shows VS dropping from ~4400 fpm
+      to ~540 fpm in the step band before resuming a steeper climb).
+    * Two-regime descent: peak idle-power |VS| ~3675 fpm at top-of-
+      descent, decaying to ~840 fpm at top-of-approach as the aircraft
+      configures for the terminal pattern.
+    * Empirical 2.6° glideslope on the terminal approach (shallower
+      than standard 3° ILS — ER-2's approach geometry as flown across
+      the IWG1 sortie set; sample-bounded, with only 2 sorties having
+      fixes ≤ 50 ft AGL for the touchdown estimate).
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC <https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC>`_
@@ -83,27 +103,67 @@ class NASA_ER2(Aircraft):
             tail_number="NASA 806",
             operator="NASA AFRC",
             service_ceiling=70000 * ureg.feet,
-            approach_speed=130 * ureg.knot,
+            approach_speed=130 * ureg.knot,  # legacy scalar; approach_profile is preferred
             climb_schedule=cruise,
             cruise_schedule=cruise,
             descent_schedule=cruise,
+            # Calibrated 6-point climb profile (was 2-point linear).
+            # Step climb at 19-21 kft is the load-out / fuel-burn level-off.
             climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 5000 * ureg.feet / ureg.minute),
-                (70000 * ureg.feet, 500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 5000 * ureg.feet / ureg.minute),  # SL anchor (brochure)
+                (17000 * ureg.feet, 4432 * ureg.feet / ureg.minute),  # steady-climb anchor
+                (19000 * ureg.feet, 1050 * ureg.feet / ureg.minute),  # step start (n=17 median)
+                (21000 * ureg.feet,  540 * ureg.feet / ureg.minute),  # step bottom (n=17 median)
+                (55000 * ureg.feet,  945 * ureg.feet / ureg.minute),  # above-step anchor
+                (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),  # operational ceiling
             ]),
+            # Calibrated 3-point descent profile (was 1-point constant).
+            # Covers cruise -> top-of-approach MSL only; the terminal
+            # descent from top-of-approach to touchdown is owned by
+            # approach_profile below.  Bottom anchor at 5240 ft MSL =
+            # representative airport elevation 2240 ft + 3000 ft AGL.
             descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
+                ( 5240 * ureg.feet,  844 * ureg.feet / ureg.minute),  # top-of-approach MSL
+                (45000 * ureg.feet, 2955 * ureg.feet / ureg.minute),  # steady steep regime
+                (66000 * ureg.feet, 3675 * ureg.feet / ureg.minute),  # top-of-descent
             ]),
+            # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
+            # 2.6° glideslope is the empirical median over 789 IWG1
+            # approach-phase fixes; touchdown 90 kt is the per-sortie
+            # weighted median TAS in the lowest 50 ft AGL band, but
+            # sample-bounded (n=2 sorties with that-low coverage).
+            approach_profile=ApproachProfile(
+                speed_schedule=TasSchedule(points=[
+                    (   0 * ureg.feet,  90 * ureg.knot),  # touchdown
+                    ( 200 * ureg.feet,  94 * ureg.knot),  # interpolated
+                    (1000 * ureg.feet, 110 * ureg.knot),  # interpolated
+                    (3000 * ureg.feet, 151 * ureg.knot),  # top-of-approach
+                ]),
+                top_of_approach_agl=3000 * ureg.feet,
+                glideslope_deg=2.61,
+            ),
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=5000 * ureg.nautical_mile,
             endurance=8 * ureg.hour,
             useful_payload=2900 * ureg.pound,
-            sources=[SourceRecord(
-                source_type="brochure",
-                reference="NASA Airborne Science, Moving Lines project",
-                confidence=0.6,
-            )],
+            sources=[
+                SourceRecord(
+                    source_type="brochure",
+                    reference="NASA Airborne Science, Moving Lines project",
+                    confidence=0.6,
+                ),
+                SourceRecord(
+                    source_type="iwg1",
+                    reference=(
+                        "NASA AFRC IWG1 in-situ flight logs, n=17 sorties "
+                        "2023-02 to 2025-08; calibrated climb step, "
+                        "two-regime descent, and approach_profile with "
+                        "2.6° empirical glideslope"
+                    ),
+                    confidence=0.8,
+                ),
+            ],
         )
 
 

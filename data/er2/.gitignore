@@ -1,0 +1,18 @@
+# Local NASA ER-2 IWG1 in-situ flight log cache.
+#
+# IWG1 (Inter-agency Working Group 1) is the NASA standard format for
+# airborne in-situ aircraft data: timestamp, position, multiple altitude
+# sources, true airspeed, measured winds, attitude, and atmospheric
+# state at ~5 s cadence over the full sortie.
+#
+# Files are MongoDB-ObjectId-named .txt CSVs sourced from NASA AFRC.
+# Distribution policy is collection-specific; we keep the raw logs local
+# and ship only calibrated constants (which are too far downstream from
+# the source data to count as a derived database) in code.
+#
+# This .gitignore keeps the directory tracked but excludes everything
+# inside it.
+
+*
+!.gitignore
+!README.md
