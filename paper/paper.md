@@ -63,7 +63,7 @@ HyPlan explicitly models the physical relationships between aircraft motion, sen
 
 - The `swath` module performs **terrain-aware swath modeling** by tracing rays from the sensor to the terrain surface using digital elevation models accessed via rasterio [@rasterio] and GDAL [@gdal2024], rather than assuming flat-Earth geometry (\autoref{fig:terrain}).
 - The `flight_plan` module incorporates **wind-aware trajectory modeling**, computing crab angles and ground speeds from airspeed and wind vectors (\autoref{fig:wind}).
-- The `dubins3d` module models **aircraft-constrained motion in three dimensions** [@vana2020dubins3d], with pitch constraints derived from each aircraft model's climb and descent performance. Under non-zero wind, the air-relative Dubins paths [@dubins1957curves] produce **trochoidal ground trajectories** [@sachdev2023trochoid] (\autoref{fig:wind}).
+- The flight planner models **aircraft-constrained motion** by combining a 2D Dubins solver [@dubins1957curves] for horizontal geometry with vertical profiles integrated against horizontal distance from each aircraft's calibrated climb and descent rates, so that top-of-climb and top-of-descent land at physically realistic positions for non-trivial vertical profiles. Under non-zero wind, the air-relative Dubins arcs become **trochoidal ground trajectories** [@sachdev2023trochoid] (\autoref{fig:wind}). A constant-pitch 3D Dubins solver [@vana2020dubins3d] is also provided as a reference for short, near-level transits.
 
 ![Flat-earth vs terrain-aware flight planning over Rincón de la Vieja National Park, Costa Rica (elevation 234--2,072 m). (a) A flat-earth planner assumes constant swath width and produces uniformly spaced lines. (b) Terrain-aware planning uses ray--terrain intersection to measure actual swath width at each line position, requiring additional lines where terrain narrows the swath. (c) Coverage gaps (red) show areas that would be missed by the flat-earth plan but are covered by the terrain-aware plan.\label{fig:terrain}](figures/fig1_terrain_comparison.png)
 
@@ -123,7 +123,7 @@ This architecture supports a range of applications, including:
 
 HyPlan is designed for pre-campaign planning and does not currently model real-time operational constraints such as dynamic weather avoidance, air traffic control restrictions, or in-flight replanning. These capabilities are typically addressed by operational tools such as Moving Lines during campaign execution.
 
-Aircraft performance parameters are drawn from published specifications and operator-provided values and have not yet been calibrated against real-world telemetry. Infrastructure for fitting performance models to ADS-B tracks is included in the library (`hyplan.aircraft.adsb`), but that calibration work is ongoing.
+Aircraft performance parameters for most platforms are drawn from published specifications and operator-provided values. The NASA ER-2 has been calibrated against 17 in-situ flight logs in the Inter-agency Working Group 1 (IWG1) format (~64,000 cruise-altitude fixes), yielding distinct climb / cruise / descent true-airspeed schedules, an 8-anchor climb profile that resolves the 19--21 kft step climb, a 6-anchor descent profile, and an empirical 2.51° terminal-approach glideslope. Equivalent calibration for the rest of the fleet is ongoing; infrastructure for IWG1 calibration and ADS-B-based fitting is included in the library.
 
 # Research Impact Statement
 
