@@ -199,6 +199,73 @@ class TestTurnModel:
         assert tm.max_bank_deg == 25.0
         assert tm.bank_by_phase.cruise_deg == 20.0
 
+    def test_default_max_load_factor(self):
+        """Default load-factor budget is 2.5 g (FAR 23 normal-category)."""
+        assert TurnModel().max_load_factor == pytest.approx(2.5)
+
+
+class TestLoadFactorBudget:
+    """Verify the curvature budget on Aircraft.max_bank_under_budget."""
+
+    def test_level_flight_caps_at_normal_category(self):
+        """In level flight, n=2.5 → bank_max = acos(1/2.5) ≈ 66.4°."""
+        ac = B200()
+        assert ac.max_bank_under_budget(0.0) == pytest.approx(66.4, abs=0.1)
+
+    def test_calibrated_aircraft_have_headroom(self):
+        """Every aircraft factory's calibrated banks fit well under
+        the load-factor budget at level flight."""
+        from hyplan.aircraft import (
+            NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
+            NASA_P3, NASA_WB57, KingAirB200, C130, BAe146, TwinOtter,
+        )
+        for cls in (NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
+                    NASA_P3, NASA_WB57, KingAirB200, C130, BAe146,
+                    TwinOtter):
+            ac = cls()
+            bp = ac.turn_model.bank_by_phase
+            cap = ac.max_bank_under_budget(0.0)
+            for label, deg in [
+                ("climb", bp.climb_deg), ("cruise", bp.cruise_deg),
+                ("descent", bp.descent_deg), ("approach", bp.approach_deg),
+            ]:
+                assert deg < cap, (
+                    f"{cls.__name__} {label}_deg={deg} exceeds "
+                    f"load-factor cap {cap:.1f}°"
+                )
+
+    def test_pitch_consumes_budget(self):
+        """A non-zero pitch reduces the available bank cap."""
+        ac = B200()
+        cap_level = ac.max_bank_under_budget(0.0)
+        cap_climbing = ac.max_bank_under_budget(15.0)
+        assert cap_climbing < cap_level
+
+    def test_unbounded_when_max_load_factor_is_zero(self):
+        """Setting max_load_factor <= 0 disables the budget (returns 90°)."""
+        ac = B200()
+        ac.turn_model.max_load_factor = 0.0
+        assert ac.max_bank_under_budget(0.0) == pytest.approx(90.0)
+
+    def test_aggressive_bank_is_clipped_when_set(self):
+        """A custom 70° cruise bank is clipped to ≤ 67° at n_max=2.5g."""
+        ac = B200()
+        ac.turn_model.bank_by_phase = PhaseBankAngles(
+            climb_deg=20, cruise_deg=70, descent_deg=20, approach_deg=15,
+        )
+        cap = ac.max_bank_under_budget(0.0)
+        assert cap < 70.0
+        # _hybrid_path consumers see the clipped value via _hybrid_path
+        # itself; here we just confirm the cap exists.
+        assert cap == pytest.approx(66.4, abs=0.5)
+
+    def test_higher_n_max_unlocks_higher_banks(self):
+        """Raising max_load_factor (e.g., for utility-category) opens the bank cap."""
+        ac = B200()
+        ac.turn_model.max_load_factor = 4.4  # FAR 23 utility
+        # acos(1/4.4) ≈ 76.9°
+        assert ac.max_bank_under_budget(0.0) == pytest.approx(76.9, abs=0.5)
+
 
 # ---------------------------------------------------------------------------
 # Aircraft instantiation

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import List, Literal, Optional, Tuple, Union
 
 import logging
+import math
 import warnings
 
 import numpy as np
@@ -372,10 +373,20 @@ class TurnModel:
     Args:
         bank_by_phase: Per-phase bank angle limits.
         max_bank_deg: Absolute maximum bank angle (degrees).
+        max_load_factor: Structural load-factor budget (g).  Used by
+            :meth:`Aircraft.max_bank_under_budget` to cap the bank
+            angle when the implicit pitch from the climb / descent
+            profile would otherwise push the aircraft past its design
+            envelope.  Default ``2.5`` covers normal-category
+            certification (FAR 23 § 23.337); transport-category bizjets
+            and survey aircraft typically operate well within this
+            limit.  Utility / acrobatic aircraft can push higher
+            (~3.8 / ~6.0); raise the value when modeling those.
     """
 
     bank_by_phase: PhaseBankAngles = field(default_factory=PhaseBankAngles)
     max_bank_deg: float = 30.0
+    max_load_factor: float = 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +626,76 @@ class Aircraft:
         pitch_max = float(np.degrees(np.arctan(climb_mps / tas_mps)))
         pitch_min = -float(np.degrees(np.arctan(descent_mps / tas_mps)))
         return pitch_min, pitch_max
+
+    def _implicit_pitch_for_phase(
+        self,
+        phase: str,
+        start_alt: Quantity,
+        cruise_altitude: Quantity,
+        end_alt: Quantity,
+    ) -> float:
+        """Estimate the implicit pitch (deg) for a phase used in
+        :meth:`_hybrid_path`.
+
+        Uses the rate-vs-altitude profile (climb / descent) at the
+        midpoint altitude of the phase, divided by the phase's TAS,
+        to get the steady-state pitch.  Returns 0° for cruise / approach
+        (level flight assumption).
+        """
+        if phase == "climb" and start_alt < cruise_altitude:
+            mid_alt = (start_alt + cruise_altitude) / 2.0
+            rate_q = self.climb_profile.rate_at(mid_alt)
+            tas_q = self.climb_speed_at(mid_alt)
+        elif phase == "descent" and end_alt < cruise_altitude:
+            mid_alt = (cruise_altitude + end_alt) / 2.0
+            rate_q = self.descent_profile.rate_at(mid_alt)
+            tas_q = self.descent_speed_at(mid_alt)
+        else:
+            return 0.0
+        rate_mps = rate_q.m_as(ureg.meter / ureg.second)
+        tas_mps = tas_q.m_as(ureg.meter / ureg.second)
+        if tas_mps <= 0.0:
+            return 0.0
+        return float(np.degrees(np.arctan2(abs(rate_mps), tas_mps)))
+
+    def max_bank_under_budget(self, pitch_deg: float = 0.0) -> float:
+        """Maximum bank angle (deg) consistent with the load-factor budget.
+
+        For a steady banked climb / descent at pitch angle ``pitch_deg``,
+        lift balance gives ``n = 1 / (cos(bank) · cos(pitch))``.  Solving
+        for the bank that drives ``n`` to ``turn_model.max_load_factor``:
+
+            cos(bank_max) = 1 / (n_max · cos(pitch))
+
+        Returns ``0.0`` when the implied pitch alone exceeds the
+        budget (i.e. the aircraft can't sustain level flight at that
+        pitch — physically unreachable, included as a defensive
+        guard).  Returns ``90.0`` when the budget is unbounded
+        (``n_max <= 0`` is treated as "no limit").
+
+        The default ``pitch_deg=0`` covers level cruise; callers in
+        the climb / descent paths supply the implicit pitch from the
+        rate-vs-altitude profile.
+
+        For the calibrated HyPlan aircraft library this returns large
+        values (60-67° depending on aircraft and pitch) — well above
+        every aircraft's calibrated ``bank_by_phase`` entry — so the
+        budget is effectively a defensive ceiling.  It only narrows
+        the chosen bank when callers force unusually aggressive
+        manoeuvres.
+        """
+        n_max = self.turn_model.max_load_factor
+        if n_max <= 0.0:
+            return 90.0
+        cos_pitch = math.cos(math.radians(pitch_deg))
+        if cos_pitch <= 0.0:
+            return 0.0
+        inv_cos_bank = 1.0 / (n_max * cos_pitch)
+        if inv_cos_bank >= 1.0:
+            # Pitch alone consumes the entire load budget; no lateral
+            # margin remains for banking.
+            return 0.0
+        return float(np.degrees(np.arccos(inv_cos_bank)))
 
     # ------------------------------------------------------------------
     # Climb
@@ -1018,7 +1099,21 @@ class Aircraft:
             else self.cruise_speed_at(cruise_altitude)
         )
 
-        bank_deg = self.turn_model.bank_by_phase.for_phase(phase)
+        # Bank for the horizontal Dubins arc.  Start from the
+        # phase-specific calibrated value, then clip against the
+        # load-factor budget given the implicit pitch from the
+        # rate-vs-altitude profile of this phase.  For the
+        # operating envelope of every calibrated aircraft in the
+        # current library, this clip is a no-op (calibrated banks
+        # consume <50% of the structural budget).  It binds only
+        # when callers force aggressive banks via custom
+        # ``bank_by_phase`` values, e.g. modelling a fighter or
+        # acrobatic aircraft outside the survey/transport regime.
+        bank_calibrated_deg = self.turn_model.bank_by_phase.for_phase(phase)
+        bank_max_deg = self.max_bank_under_budget(
+            self._implicit_pitch_for_phase(phase, start_alt, cruise_altitude, end_alt),
+        )
+        bank_deg = min(bank_calibrated_deg, bank_max_deg)
         h_path = DubinsPath2D(
             start_waypoint, end_waypoint,
             speed=cruise_tas, bank_angle=bank_deg, wind=wind,
