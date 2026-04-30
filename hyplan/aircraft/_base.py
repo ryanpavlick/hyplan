@@ -346,6 +346,24 @@ class PhaseBankAngles:
     descent_deg: float = 20.0
     approach_deg: float = 15.0
 
+    def for_phase(self, phase: str) -> float:
+        """Return the bank angle for ``phase``.
+
+        Args:
+            phase: One of ``"climb"``, ``"cruise"``, ``"descent"``,
+                ``"approach"``.
+
+        Raises:
+            HyPlanValueError: For any other ``phase`` string.
+        """
+        try:
+            return getattr(self, f"{phase}_deg")
+        except AttributeError:
+            raise HyPlanValueError(
+                f"Unknown phase {phase!r}; expected one of "
+                "'climb', 'cruise', 'descent', 'approach'."
+            )
+
 
 @dataclass
 class TurnModel:
@@ -833,7 +851,9 @@ class Aircraft:
             heading=departure_heading,
             altitude_msl=airport.elevation,
         )
-        return self.time_to_cruise(airport_waypoint, waypoint, wind=wind)
+        return self.time_to_cruise(
+            airport_waypoint, waypoint, wind=wind, phase="climb",
+        )
 
     def time_to_return(
         self,
@@ -866,7 +886,9 @@ class Aircraft:
                 heading=arrival_heading_deg,
                 altitude_msl=airport.elevation,
             )
-            return self.time_to_cruise(waypoint, airport_waypoint, wind=wind)
+            return self.time_to_cruise(
+                waypoint, airport_waypoint, wind=wind, phase="descent",
+            )
 
         # New: Dubins descent stops at the FAF (final approach fix); the
         # ApproachProfile owns the terminal segment from FAF to airport.
@@ -891,7 +913,7 @@ class Aircraft:
             altitude_msl=top_of_approach_msl,
         )
         cruise_descent = self.time_to_cruise(
-            waypoint, top_of_approach_waypoint, wind=wind
+            waypoint, top_of_approach_waypoint, wind=wind, phase="descent",
         )
         approach_time = self.approach_profile.time_to_touchdown().to(ureg.minute)
         approach_distance = approach_distance_nmi * ureg.nautical_mile
@@ -932,14 +954,27 @@ class Aircraft:
         cruise_altitude: Optional[Quantity] = None,
         true_air_speed: Optional[Quantity] = None,
         wind: Optional[Tuple[float, float]] = None,
+        phase: str = "cruise",
     ) -> dict:
         """Solve a hybrid horizontal-Dubins + integrated-vertical path.
 
-        The horizontal layout comes from a 2D Dubins solver (turn radius
-        from ``max_bank_angle`` and TAS).  The vertical profile comes
-        from integrating ``climb_profile`` / ``descent_profile`` against
-        altitude — :meth:`_climb` and :meth:`_descend` already return
-        ``(time, horizontal_distance)`` for that altitude range.
+        The horizontal layout comes from a 2D Dubins solver.  Turn
+        radius is set from ``turn_model.bank_by_phase.for_phase(phase)``
+        and the cruise TAS at ``cruise_altitude``; the vertical profile
+        comes from integrating ``climb_profile`` / ``descent_profile``
+        against altitude (:meth:`_climb` / :meth:`_descend` return
+        ``(time, horizontal_distance)`` for the requested altitude
+        range).
+
+        ``phase`` selects which entry of
+        :class:`PhaseBankAngles` drives the Dubins arc radius.  The
+        default ``"cruise"`` is the right choice for any path whose
+        horizontal turning happens at cruise altitude (inter-line
+        transits, single-segment cruise legs).  Callers solving paths
+        whose turn arcs happen during climb-out (takeoff phase) or
+        descent (return phase) should pass ``"climb"`` or ``"descent"``
+        respectively, so the radius reflects the gentler bank that
+        aircraft actually fly during those phases.
 
         ``cruise_altitude`` defaults to ``max(start.alt, end.alt)``.
         Climb covers ``start.alt → cruise_alt``; descent covers
@@ -983,9 +1018,10 @@ class Aircraft:
             else self.cruise_speed_at(cruise_altitude)
         )
 
+        bank_deg = self.turn_model.bank_by_phase.for_phase(phase)
         h_path = DubinsPath2D(
             start_waypoint, end_waypoint,
-            speed=cruise_tas, bank_angle=self.max_bank_angle, wind=wind,
+            speed=cruise_tas, bank_angle=bank_deg, wind=wind,
         )
         L_m = h_path.length.m_as(ureg.meter)
         L_nmi = L_m / 1852.0
@@ -1008,18 +1044,53 @@ class Aircraft:
             descent_time_min = 0.0
             descent_dist_nmi = 0.0
 
-        # Short-leg edge case: clamp horizontal extents but keep the full
-        # vertical times.  Aircraft "spirals up / down" within the leg.
-        total_v_dist = climb_dist_nmi + descent_dist_nmi
-        if total_v_dist > L_nmi and total_v_dist > 0:
-            scale = L_nmi / total_v_dist
+        # Short-leg edge cases.  When the climb (or descent) horizontal
+        # distance alone exceeds the 2D Dubins length, the aircraft is
+        # not transiting forward during that phase — it's spiraling up
+        # at departure (or down at arrival).  Use orbit geometry for the
+        # vertical phase and a full-length cruise for the transit.  When
+        # *both* climb and descent distances exceed the leg length (rare
+        # degenerate case), fall back to proportional scaling.
+        cruise_tas_kt = cruise_tas.m_as(ureg.knot)
+        eps_short = 1e-6
+        short_climb = (
+            climb_dist_nmi > L_nmi + eps_short
+            and descent_dist_nmi <= eps_short
+        )
+        short_descent = (
+            descent_dist_nmi > L_nmi + eps_short
+            and climb_dist_nmi <= eps_short
+        )
+        short_mixed = (
+            climb_dist_nmi + descent_dist_nmi > L_nmi + eps_short
+            and not short_climb
+            and not short_descent
+        )
+
+        if short_climb:
+            climb_dist_nmi = 0.0
+            cruise_dist_nmi = L_nmi
+            cruise_time_min = (
+                cruise_dist_nmi / cruise_tas_kt * 60.0
+                if cruise_tas_kt > 0
+                else 0.0
+            )
+        elif short_descent:
+            descent_dist_nmi = 0.0
+            cruise_dist_nmi = L_nmi
+            cruise_time_min = (
+                cruise_dist_nmi / cruise_tas_kt * 60.0
+                if cruise_tas_kt > 0
+                else 0.0
+            )
+        elif short_mixed:
+            scale = L_nmi / (climb_dist_nmi + descent_dist_nmi)
             climb_dist_nmi *= scale
             descent_dist_nmi *= scale
             cruise_dist_nmi = 0.0
             cruise_time_min = 0.0
         else:
             cruise_dist_nmi = max(0.0, L_nmi - climb_dist_nmi - descent_dist_nmi)
-            cruise_tas_kt = cruise_tas.m_as(ureg.knot)
             cruise_time_min = (
                 cruise_dist_nmi / cruise_tas_kt * 60.0
                 if cruise_tas_kt > 0
@@ -1036,21 +1107,56 @@ class Aircraft:
         eps = 1e-6
 
         if climb_time_min > eps or climb_dist_nmi > eps:
-            end_d_m = climb_dist_nmi * nmi_to_m
-            s_lat, s_lon, s_hdg = h_path.sample_at_distance(0.0)
-            e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
-            phases["climb"] = {
-                "start_altitude": start_alt,
-                "end_altitude": cruise_altitude,
-                "start_time": cum_time_min * ureg.minute,
-                "end_time": (cum_time_min + climb_time_min) * ureg.minute,
-                "distance": climb_dist_nmi * ureg.nautical_mile,
-                "geometry": h_path.sublinestring(0.0, end_d_m),
-                "start_lat": s_lat, "start_lon": s_lon,
-                "end_lat": e_lat, "end_lon": e_lon,
-                "start_heading": s_hdg, "end_heading": e_hdg,
-            }
-            cum_dist_m = end_d_m
+            if short_climb:
+                # Spiral-up at departure: orbit geometry over start
+                # waypoint.  Use the climb bank + climb-schedule TAS
+                # at the *midpoint* altitude — a single-orbit
+                # representation of what physically is a climbing
+                # helix.  Climb bank (typ. 11° for ER-2) is gentler
+                # than cruise bank (20°), giving a wider, more
+                # realistic ground track.
+                from ..planning.segments import loiter_orbit_geometry
+                mid_alt = (start_alt + cruise_altitude) / 2.0
+                orbit_wp = Waypoint(
+                    latitude=start_waypoint.latitude,
+                    longitude=start_waypoint.longitude,
+                    heading=start_waypoint.heading,
+                    altitude_msl=mid_alt,
+                )
+                orbit_geom = loiter_orbit_geometry(
+                    orbit_wp, self, phase="climb",
+                )
+                track_dist_nmi = climb_time_min / 60.0 * cruise_tas_kt
+                s_lat = e_lat = start_waypoint.latitude
+                s_lon = e_lon = start_waypoint.longitude
+                s_hdg = e_hdg = start_waypoint.heading
+                phases["climb"] = {
+                    "start_altitude": start_alt,
+                    "end_altitude": cruise_altitude,
+                    "start_time": cum_time_min * ureg.minute,
+                    "end_time": (cum_time_min + climb_time_min) * ureg.minute,
+                    "distance": track_dist_nmi * ureg.nautical_mile,
+                    "geometry": orbit_geom,
+                    "start_lat": s_lat, "start_lon": s_lon,
+                    "end_lat": e_lat, "end_lon": e_lon,
+                    "start_heading": s_hdg, "end_heading": e_hdg,
+                }
+            else:
+                end_d_m = climb_dist_nmi * nmi_to_m
+                s_lat, s_lon, s_hdg = h_path.sample_at_distance(0.0)
+                e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
+                phases["climb"] = {
+                    "start_altitude": start_alt,
+                    "end_altitude": cruise_altitude,
+                    "start_time": cum_time_min * ureg.minute,
+                    "end_time": (cum_time_min + climb_time_min) * ureg.minute,
+                    "distance": climb_dist_nmi * ureg.nautical_mile,
+                    "geometry": h_path.sublinestring(0.0, end_d_m),
+                    "start_lat": s_lat, "start_lon": s_lon,
+                    "end_lat": e_lat, "end_lon": e_lon,
+                    "start_heading": s_hdg, "end_heading": e_hdg,
+                }
+                cum_dist_m = end_d_m
             cum_time_min += climb_time_min
 
         if cruise_time_min > eps or cruise_dist_nmi > eps:
@@ -1072,20 +1178,51 @@ class Aircraft:
             cum_time_min += cruise_time_min
 
         if descent_time_min > eps or descent_dist_nmi > eps:
-            end_d_m = L_m
-            s_lat, s_lon, s_hdg = h_path.sample_at_distance(cum_dist_m)
-            e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
-            phases["descent"] = {
-                "start_altitude": cruise_altitude,
-                "end_altitude": end_alt,
-                "start_time": cum_time_min * ureg.minute,
-                "end_time": (cum_time_min + descent_time_min) * ureg.minute,
-                "distance": descent_dist_nmi * ureg.nautical_mile,
-                "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
-                "start_lat": s_lat, "start_lon": s_lon,
-                "end_lat": e_lat, "end_lon": e_lon,
-                "start_heading": s_hdg, "end_heading": e_hdg,
-            }
+            if short_descent:
+                # Spiral-down at arrival: mirror of spiral-up.  Use
+                # the descent bank + descent-schedule TAS at the
+                # midpoint altitude.
+                from ..planning.segments import loiter_orbit_geometry
+                mid_alt = (cruise_altitude + end_alt) / 2.0
+                orbit_wp = Waypoint(
+                    latitude=end_waypoint.latitude,
+                    longitude=end_waypoint.longitude,
+                    heading=end_waypoint.heading,
+                    altitude_msl=mid_alt,
+                )
+                orbit_geom = loiter_orbit_geometry(
+                    orbit_wp, self, phase="descent",
+                )
+                track_dist_nmi = descent_time_min / 60.0 * cruise_tas_kt
+                s_lat = e_lat = end_waypoint.latitude
+                s_lon = e_lon = end_waypoint.longitude
+                s_hdg = e_hdg = end_waypoint.heading
+                phases["descent"] = {
+                    "start_altitude": cruise_altitude,
+                    "end_altitude": end_alt,
+                    "start_time": cum_time_min * ureg.minute,
+                    "end_time": (cum_time_min + descent_time_min) * ureg.minute,
+                    "distance": track_dist_nmi * ureg.nautical_mile,
+                    "geometry": orbit_geom,
+                    "start_lat": s_lat, "start_lon": s_lon,
+                    "end_lat": e_lat, "end_lon": e_lon,
+                    "start_heading": s_hdg, "end_heading": e_hdg,
+                }
+            else:
+                end_d_m = L_m
+                s_lat, s_lon, s_hdg = h_path.sample_at_distance(cum_dist_m)
+                e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
+                phases["descent"] = {
+                    "start_altitude": cruise_altitude,
+                    "end_altitude": end_alt,
+                    "start_time": cum_time_min * ureg.minute,
+                    "end_time": (cum_time_min + descent_time_min) * ureg.minute,
+                    "distance": descent_dist_nmi * ureg.nautical_mile,
+                    "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
+                    "start_lat": s_lat, "start_lon": s_lon,
+                    "end_lat": e_lat, "end_lon": e_lon,
+                    "start_heading": s_hdg, "end_heading": e_hdg,
+                }
             cum_time_min += descent_time_min
 
         # Always emit at least one phase.  Pure cruise at equal altitudes
@@ -1118,6 +1255,7 @@ class Aircraft:
         end_waypoint: Waypoint,
         true_air_speed: Optional[Quantity] = None,
         wind: Optional[Tuple[float, float]] = None,
+        phase: str = "cruise",
     ) -> dict:
         """Calculate time to fly between two waypoints.
 
@@ -1131,9 +1269,13 @@ class Aircraft:
                 When provided, horizontal turning arcs become trochoids
                 and the 2D path length / timing account for wind drift.
                 Vertical integration is still-air.
+            phase: Which entry of
+                :class:`PhaseBankAngles` drives the horizontal Dubins
+                turn radius — see :meth:`_hybrid_path`.  Defaults to
+                ``"cruise"``.
         """
         return self._hybrid_path(
             start_waypoint, end_waypoint,
-            true_air_speed=true_air_speed, wind=wind,
+            true_air_speed=true_air_speed, wind=wind, phase=phase,
         )
 

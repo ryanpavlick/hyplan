@@ -90,17 +90,26 @@ def _direct_segment_record(
 _GRAVITY_MS2 = 9.80665
 
 
+_PHASE_SPEED_GETTER = {
+    "climb":   "climb_speed_at",
+    "cruise":  "cruise_speed_at",
+    "descent": "descent_speed_at",
+}
+
+
 def loiter_orbit_geometry(
     waypoint: Waypoint,
     aircraft: Aircraft,
     n_points: int = 72,
+    *,
+    phase: str = "cruise",
 ):
     """Closed ground-track polygon for a Waypoint loiter (right-hand orbit).
 
-    Computes the cruise turn radius from the aircraft's bank-by-phase
-    cruise angle and cruise speed at the waypoint's altitude:
+    Computes the turn radius from the aircraft's per-phase bank angle
+    and the corresponding TAS schedule at the waypoint's altitude:
 
-        r = v² / (g · tan(φ_cruise))
+        r = v² / (g · tan(φ_phase))
 
     The orbit center is placed perpendicular to the waypoint's heading
     on the right side (FAA-standard right-hand hold), so the waypoint
@@ -110,13 +119,25 @@ def loiter_orbit_geometry(
     Args:
         waypoint: Loiter waypoint. ``altitude_msl`` and ``heading`` are
             both required.
-        aircraft: Aircraft model (uses ``cruise_speed_at`` and
-            ``turn_model.bank_by_phase.cruise_deg``).
+        aircraft: Aircraft model.  Bank comes from
+            ``turn_model.bank_by_phase.for_phase(phase)``; TAS from the
+            phase-specific speed schedule (``climb_speed_at``,
+            ``cruise_speed_at``, ``descent_speed_at``).
         n_points: Sample resolution around the orbit (default 72 → 5° spacing).
+        phase: Which entry of :class:`PhaseBankAngles` (and the
+            matching speed schedule) drives the radius.  Use
+            ``"climb"`` for spiral-up holds at departure, ``"cruise"``
+            for in-survey loiters (default), ``"descent"`` for
+            spiral-down holds at arrival.
 
     Returns:
         :class:`shapely.geometry.LineString` of (lon, lat) coordinates,
         closed (first point == last point), in WGS84.
+
+    Raises:
+        ValueError: If ``waypoint.altitude_msl`` is missing or
+            ``phase`` isn't one of ``"climb"`` / ``"cruise"`` /
+            ``"descent"``.
     """
     from shapely.geometry import LineString
     from shapely.ops import transform
@@ -127,8 +148,19 @@ def loiter_orbit_geometry(
             "loiter_orbit_geometry requires waypoint.altitude_msl to be set."
         )
 
-    speed_mps = aircraft.cruise_speed_at(waypoint.altitude_msl).m_as("meter/second")
-    bank_rad = np.radians(aircraft.turn_model.bank_by_phase.cruise_deg)
+    speed_attr = _PHASE_SPEED_GETTER.get(phase)
+    if speed_attr is None:
+        raise ValueError(
+            f"Unknown loiter phase {phase!r}; "
+            "expected 'climb', 'cruise', or 'descent'."
+        )
+
+    speed_mps = (
+        getattr(aircraft, speed_attr)(waypoint.altitude_msl)
+        .m_as("meter/second")
+    )
+    bank_deg = aircraft.turn_model.bank_by_phase.for_phase(phase)
+    bank_rad = np.radians(bank_deg)
     radius_m = (speed_mps ** 2) / (_GRAVITY_MS2 * np.tan(bank_rad))
 
     # Project the waypoint to UTM and offset perpendicular-right of the heading
