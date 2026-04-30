@@ -504,3 +504,258 @@ class TestProvenance:
         ac = NASA_GV()
         assert len(ac.sources) >= 1
         assert ac.confidence.cruise == 0.50
+
+
+# ---------------------------------------------------------------------------
+# Approach profile integration on Aircraft
+# ---------------------------------------------------------------------------
+
+class TestAircraftApproachProfile:
+    def _ils_profile(self):
+        from hyplan.aircraft import ApproachProfile, TasSchedule
+        return ApproachProfile(
+            speed_schedule=TasSchedule(
+                points=[
+                    (0 * ureg.feet, 95 * ureg.knot),
+                    (200 * ureg.feet, 105 * ureg.knot),
+                    (1000 * ureg.feet, 120 * ureg.knot),
+                    (3000 * ureg.feet, 140 * ureg.knot),
+                ]
+            ),
+            top_of_approach_agl=3000 * ureg.feet,
+            glideslope_deg=3.0,
+        )
+
+    def test_default_aircraft_has_no_approach_profile(self):
+        ac = B200()
+        assert ac.approach_profile is None
+
+    def test_approach_speed_at_falls_back_to_scalar(self):
+        ac = B200()
+        scalar_kt = ac.approach_speed.m_as(ureg.knot)
+        # Without an approach_profile, every altitude returns the scalar.
+        assert ac.approach_speed_at(0 * ureg.feet).m_as(ureg.knot) == pytest.approx(scalar_kt)
+        assert ac.approach_speed_at(2000 * ureg.feet).m_as(ureg.knot) == pytest.approx(scalar_kt)
+
+    def test_approach_vertical_rate_at_returns_none_without_profile(self):
+        ac = B200()
+        assert ac.approach_vertical_rate_at(1000 * ureg.feet) is None
+
+    def test_aircraft_accepts_approach_profile(self):
+        from hyplan.aircraft._base import Aircraft
+        from hyplan.aircraft._models import KingAirB200
+        ap = self._ils_profile()
+        # Build a B200-like aircraft with the new field set.
+        base = KingAirB200()
+        ac = Aircraft(
+            aircraft_type=base.aircraft_type,
+            tail_number=base.tail_number,
+            operator=base.operator,
+            service_ceiling=base.service_ceiling,
+            approach_speed=base.approach_speed,
+            climb_schedule=base.climb_schedule,
+            cruise_schedule=base.cruise_schedule,
+            descent_schedule=base.descent_schedule,
+            climb_profile=base.climb_profile,
+            descent_profile=base.descent_profile,
+            turn_model=base.turn_model,
+            engine_type=base.engine_type,
+            approach_profile=ap,
+        )
+        assert ac.approach_profile is ap
+        # approach_speed_at delegates to the profile.
+        assert ac.approach_speed_at(0 * ureg.feet).m_as(ureg.knot) == pytest.approx(95.0)
+        assert ac.approach_speed_at(3000 * ureg.feet).m_as(ureg.knot) == pytest.approx(140.0)
+        # approach_vertical_rate_at returns a real value, not None.
+        vs = ac.approach_vertical_rate_at(1500 * ureg.feet)
+        assert vs is not None
+        assert vs.m_as(ureg.feet / ureg.minute) > 0
+        # With explicit groundspeed, VS scales linearly.
+        vs_slow = ac.approach_vertical_rate_at(1500 * ureg.feet, groundspeed=80 * ureg.knot)
+        vs_fast = ac.approach_vertical_rate_at(1500 * ureg.feet, groundspeed=160 * ureg.knot)
+        assert vs_fast.m_as(ureg.feet / ureg.minute) == pytest.approx(
+            2.0 * vs_slow.m_as(ureg.feet / ureg.minute), rel=1e-3
+        )
+
+    def test_aircraft_rejects_wrong_approach_profile_type(self):
+        from hyplan.aircraft._models import KingAirB200
+        from hyplan.exceptions import HyPlanTypeError
+        from hyplan.aircraft._base import Aircraft
+        base = KingAirB200()
+        with pytest.raises(HyPlanTypeError, match="approach_profile"):
+            Aircraft(
+                aircraft_type=base.aircraft_type,
+                tail_number=base.tail_number,
+                operator=base.operator,
+                service_ceiling=base.service_ceiling,
+                approach_speed=base.approach_speed,
+                climb_schedule=base.climb_schedule,
+                cruise_schedule=base.cruise_schedule,
+                descent_schedule=base.descent_schedule,
+                climb_profile=base.climb_profile,
+                descent_profile=base.descent_profile,
+                turn_model=base.turn_model,
+                engine_type=base.engine_type,
+                approach_profile="not a profile",  # type: ignore[arg-type]
+            )
+
+
+# ---------------------------------------------------------------------------
+# time_to_return integration with ApproachProfile
+# ---------------------------------------------------------------------------
+
+class TestTimeToReturnApproachIntegration:
+    def _build_b200_with_approach(self):
+        from hyplan.aircraft import ApproachProfile, TasSchedule
+        from hyplan.aircraft._base import Aircraft
+        from hyplan.aircraft._models import KingAirB200
+        ap = ApproachProfile(
+            speed_schedule=TasSchedule(
+                points=[
+                    (0 * ureg.feet, 90 * ureg.knot),
+                    (3000 * ureg.feet, 130 * ureg.knot),
+                ]
+            ),
+            top_of_approach_agl=3000 * ureg.feet,
+            glideslope_deg=3.0,
+        )
+        base = KingAirB200()
+        return Aircraft(
+            aircraft_type=base.aircraft_type,
+            tail_number=base.tail_number,
+            operator=base.operator,
+            service_ceiling=base.service_ceiling,
+            approach_speed=base.approach_speed,
+            climb_schedule=base.climb_schedule,
+            cruise_schedule=base.cruise_schedule,
+            descent_schedule=base.descent_schedule,
+            climb_profile=base.climb_profile,
+            descent_profile=base.descent_profile,
+            turn_model=base.turn_model,
+            engine_type=base.engine_type,
+            approach_profile=ap,
+        )
+
+    @pytest.fixture(scope="class")
+    def cruise_waypoint(self):
+        from hyplan.waypoint import Waypoint
+        return Waypoint(
+            latitude=35.0,
+            longitude=-118.5,
+            heading=270.0,
+            altitude_msl=20000 * ureg.feet,
+        )
+
+    @pytest.fixture(scope="class")
+    def airport(self):
+        from hyplan.airports import Airport, initialize_data
+        initialize_data(countries=["US"])
+        return Airport("KEDW")
+
+    def test_legacy_no_profile_unchanged(self, cruise_waypoint, airport):
+        ac = B200()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        assert "approach" not in info["phases"]
+        assert info["total_time"].magnitude > 0
+
+    def test_with_profile_appends_approach_phase(self, cruise_waypoint, airport):
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        assert "approach" in info["phases"]
+        approach = info["phases"]["approach"]
+        assert approach["distance"].magnitude > 0
+        assert approach["end_time"] > approach["start_time"]
+
+    def test_with_profile_total_time_strictly_larger_than_legacy(self, cruise_waypoint, airport):
+        legacy = B200()
+        with_profile = self._build_b200_with_approach()
+        legacy_info = legacy.time_to_return(cruise_waypoint, airport)
+        new_info = with_profile.time_to_return(cruise_waypoint, airport)
+        assert new_info["total_time"] > legacy_info["total_time"]
+
+    def test_approach_phase_altitudes_handoff_at_top_of_approach(self, cruise_waypoint, airport):
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        approach = info["phases"]["approach"]
+        expected_top_msl = (
+            airport.elevation + 3000 * ureg.feet
+        ).m_as(ureg.feet)
+        assert approach["start_altitude"].m_as(ureg.feet) == pytest.approx(
+            expected_top_msl, abs=1.0
+        )
+        assert approach["end_altitude"].m_as(ureg.feet) == pytest.approx(
+            airport.elevation.m_as(ureg.feet), abs=1.0
+        )
+
+    # --- FAF / approach-geometry regression tests ---------------------------
+
+    def test_approach_phase_geometry_ends_at_airport(self, cruise_waypoint, airport):
+        """Last coord of the approach geometry is the airport, not somewhere short of it."""
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        approach_geom = info["phases"]["approach"]["geometry"]
+        end_lon, end_lat = list(approach_geom.coords)[-1]
+        assert end_lat == pytest.approx(airport.latitude, abs=1e-6)
+        assert end_lon == pytest.approx(airport.longitude, abs=1e-6)
+
+    def test_approach_phase_geometry_starts_at_faf_offset(self, cruise_waypoint, airport):
+        """First coord of the approach geometry is the FAF, offset by approx_approach_distance_nmi from the airport."""
+        import pymap3d.vincenty
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        approach_geom = info["phases"]["approach"]["geometry"]
+        start_lon, start_lat = list(approach_geom.coords)[0]
+        distance_m, _ = pymap3d.vincenty.vdist(
+            airport.latitude, airport.longitude, start_lat, start_lon,
+        )
+        expected_distance_m = ac.approach_profile.approx_approach_distance_nmi * 1852.0
+        assert float(distance_m) == pytest.approx(expected_distance_m, rel=1e-2)
+
+    def test_approach_phase_bearing_matches_inbound_course(self, cruise_waypoint, airport):
+        """Bearing FAF→airport equals the inbound course waypoint→airport."""
+        import pymap3d.vincenty
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        approach_geom = info["phases"]["approach"]["geometry"]
+        start_lon, start_lat = list(approach_geom.coords)[0]
+        # Bearing FROM faf TO airport.
+        _, bearing_faf_to_airport = pymap3d.vincenty.vdist(
+            start_lat, start_lon, airport.latitude, airport.longitude,
+        )
+        # Expected: bearing waypoint → airport (the inbound course).
+        _, expected_inbound = pymap3d.vincenty.vdist(
+            cruise_waypoint.latitude, cruise_waypoint.longitude,
+            airport.latitude, airport.longitude,
+        )
+        # Compare modulo 360 with a 1° tolerance.
+        delta = abs((float(bearing_faf_to_airport) - float(expected_inbound) + 180.0) % 360.0 - 180.0)
+        assert delta < 1.0, (
+            f"FAF→airport bearing {bearing_faf_to_airport:.2f}° doesn't match "
+            f"inbound course {expected_inbound:.2f}° (delta {delta:.2f}°) — "
+            f"likely a sign-flip in the FAF offset"
+        )
+
+    def test_dubins_descent_ends_at_faf_not_airport(self, cruise_waypoint, airport):
+        """The Dubins descent path ends at the FAF, not overhead the airport.
+
+        Verifies that the time-normalization fix lands the descent at the FAF
+        cleanly: the cruise_descent dubins_path's end coord should equal the
+        first coord of the approach geometry (the FAF), and should be
+        meaningfully offset from the airport.
+        """
+        import pymap3d.vincenty
+        ac = self._build_b200_with_approach()
+        info = ac.time_to_return(cruise_waypoint, airport)
+        dubins_geom = info["dubins_path"].geometry
+        dubins_end_lon, dubins_end_lat = list(dubins_geom.coords)[-1]
+        approach_geom = info["phases"]["approach"]["geometry"]
+        faf_lon, faf_lat = list(approach_geom.coords)[0]
+        # Dubins endpoint should match FAF (within 1e-4 deg ≈ 11 m).
+        assert dubins_end_lat == pytest.approx(faf_lat, abs=1e-4)
+        assert dubins_end_lon == pytest.approx(faf_lon, abs=1e-4)
+        # And the FAF must be meaningfully separated from the airport.
+        distance_m, _ = pymap3d.vincenty.vdist(
+            airport.latitude, airport.longitude, dubins_end_lat, dubins_end_lon,
+        )
+        expected_m = ac.approach_profile.approx_approach_distance_nmi * 1852.0
+        assert float(distance_m) == pytest.approx(expected_m, rel=1e-2)

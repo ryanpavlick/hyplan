@@ -8,6 +8,7 @@ to work.
 
 from ._base import (  # noqa: F401
     Aircraft,
+    ApproachProfile,
     CasMachSchedule,
     TasSchedule,
     SpeedSchedule,
@@ -38,8 +39,10 @@ from ._models import (  # noqa: F401
 
 __all__ = [
     "Aircraft",
+    "ApproachProfile",
     "CasMachSchedule",
     "TasSchedule",
+    "SpeedSchedule",
     "VerticalProfile",
     "TurnModel",
     "PhaseBankAngles",

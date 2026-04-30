@@ -223,15 +223,31 @@ def process_flight_phase(
         dt = (details["end_time"] - details["start_time"]).m_as(ureg.minute)
         phase_times.append(dt)
 
-    total_time = sum(phase_times)
-    can_split = total_time > 0
+    # Phases with explicit "geometry" entries (e.g., the terminal approach
+    # segment from Aircraft.time_to_return) use that geometry verbatim and
+    # don't share the Dubins path.  The Dubins-slicing math has to normalize
+    # against the *non-explicit* phase total only — otherwise the Dubins-
+    # backed phases get truncated and the descent ends short of its real
+    # endpoint.
+    dubins_total_time = sum(
+        dt for dt, (phase, details) in zip(phase_times, phase_items)
+        if details.get("geometry") is None
+    )
+    can_split = dubins_total_time > 0
 
     cumulative_frac = 0.0
     for i, (phase, details) in enumerate(phase_items):
         # Determine the segment type based on altitude information.
         # Use a 1-foot tolerance for floating-point noise from the Dubins solver.
         alt_diff_ft = (details["end_altitude"] - details["start_altitude"]).m_as(ureg.foot)
-        if alt_diff_ft > 1.0:
+        if phase == "approach":
+            # Phase-name key wins: an explicit "approach" phase from
+            # Aircraft.time_to_return is always the terminal arrival
+            # segment regardless of the outer segment_name (which is
+            # "Return" in the standard engine.py call path, not
+            # "Arrival").
+            seg_type = "approach"
+        elif alt_diff_ft > 1.0:
             seg_type = "takeoff" if segment_name == "Departure" else "climb"
         elif alt_diff_ft < -1.0:
             seg_type = "approach" if segment_name == "Arrival" else "descent"
@@ -246,11 +262,17 @@ def process_flight_phase(
         else:
             phase_distance_nm = None
 
-        # Split geometry along the path by cumulative time fraction
-        if can_split and phase_times[i] > 0:
+        # If the caller attached an explicit geometry (e.g., the
+        # terminal approach segment from Aircraft.time_to_return), use
+        # it verbatim — no Dubins-slicing for this phase.  Otherwise
+        # split the Dubins path proportionally by phase time within the
+        # Dubins-only total.
+        if details.get("geometry") is not None:
+            phase_geom = details["geometry"]
+        elif can_split and phase_times[i] > 0:
             from shapely.geometry import LineString as _LineString
             frac_start = cumulative_frac
-            frac_end = min(1.0, cumulative_frac + phase_times[i] / total_time)
+            frac_end = min(1.0, cumulative_frac + phase_times[i] / dubins_total_time)
 
             start_dist = frac_start * total_geom_length
             end_dist = frac_end * total_geom_length

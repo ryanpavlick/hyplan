@@ -7,7 +7,7 @@ import geopandas as gpd
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
 from hyplan.flight_line import FlightLine
-from hyplan.aircraft import KingAirB200
+from hyplan.aircraft import KingAirB200, NASA_ER2
 from hyplan.airports import Airport, initialize_data
 from hyplan.exceptions import HyPlanValueError
 from hyplan.flight_plan import (
@@ -520,3 +520,98 @@ class TestPlannerRegression:
         assert abs(fl_row["crosswind_kts"]) > 0.1
         # Groundspeed should be positive and reasonable
         assert fl_row["groundspeed_kts"] > 50
+
+
+class TestComputeFlightPlanApproachIntegration:
+    """End-to-end compute_flight_plan tests covering the ApproachProfile path
+    (Fix 1+2 from the planner-integration PR).
+
+    Two variants:
+      * NASA_ER2 has approach_profile -> last segment is "approach", ends at airport
+      * KingAirB200 has no approach_profile -> legacy single-leg-to-runway path
+    """
+
+    @pytest.fixture
+    def airport(self):
+        return Airport("KSBA")
+
+    @pytest.fixture
+    def er2_flight_line(self):
+        # ER-2 cruise altitude of 60 kft.
+        return FlightLine.start_length_azimuth(
+            lat1=34.5, lon1=-118.0,
+            length=ureg.Quantity(80, "kilometer"),
+            az=90.0,
+            altitude_msl=ureg.Quantity(60000, "feet"),
+            site_name="ER2 Test Line",
+        )
+
+    def test_er2_last_segment_is_approach_ending_at_airport(self, er2_flight_line, airport):
+        ac = NASA_ER2()
+        plan = compute_flight_plan(
+            aircraft=ac, flight_sequence=[er2_flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        last = plan.iloc[-1]
+        assert last["segment_type"] == "approach"
+        # The approach geometry endpoint is the airport (within float epsilon).
+        assert last["end_lat"] == pytest.approx(airport.latitude, abs=1e-4)
+        assert last["end_lon"] == pytest.approx(airport.longitude, abs=1e-4)
+        assert last["end_altitude"] == pytest.approx(airport.elevation_ft, abs=1.0)
+
+    def test_er2_return_rows_sum_to_time_to_return(self, er2_flight_line, airport):
+        """Sum of Return-segment times equals time_to_return().total_time."""
+        ac = NASA_ER2()
+        plan = compute_flight_plan(
+            aircraft=ac, flight_sequence=[er2_flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        return_rows = plan[plan["segment_name"] == "Return"]
+        assert len(return_rows) > 0
+        expected_return_min = ac.time_to_return(
+            er2_flight_line.waypoint2, airport,
+        )["total_time"].m_as(ureg.minute)
+        # Tolerance loose enough to absorb Dubins3D run-to-run numerical noise
+        # between the engine's time_to_return call and ours; 1% would still
+        # catch a missing-approach-phase regression (which moves totals 5-10%).
+        assert return_rows["time_to_segment"].sum() == pytest.approx(
+            expected_return_min, rel=1e-2,
+        )
+
+    def test_er2_approach_row_time_matches_time_to_touchdown(self, er2_flight_line, airport):
+        """The terminal approach row's time equals approach_profile.time_to_touchdown()."""
+        ac = NASA_ER2()
+        plan = compute_flight_plan(
+            aircraft=ac, flight_sequence=[er2_flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        last = plan.iloc[-1]
+        assert last["segment_type"] == "approach"
+        expected_touchdown_min = ac.approach_profile.time_to_touchdown().m_as(ureg.minute)
+        assert last["time_to_segment"] == pytest.approx(expected_touchdown_min, rel=1e-3)
+
+    def test_b200_legacy_no_approach_segment(self, b200, flight_line, airport):
+        """Aircraft without approach_profile: no segment of type 'approach' on Return."""
+        plan = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        return_rows = plan[plan["segment_name"] == "Return"]
+        assert len(return_rows) > 0
+        assert "approach" not in set(return_rows["segment_type"])
+        # Last Return row's geometry still ends at the airport (legacy path).
+        last_return = return_rows.iloc[-1]
+        assert last_return["end_lat"] == pytest.approx(airport.latitude, abs=1e-3)
+        assert last_return["end_lon"] == pytest.approx(airport.longitude, abs=1e-3)
+
+    def test_b200_legacy_return_rows_sum_to_time_to_return(self, b200, flight_line, airport):
+        """Legacy path: Return-segment time totals match time_to_return total_time."""
+        plan = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        return_rows = plan[plan["segment_name"] == "Return"]
+        expected = b200.time_to_return(
+            flight_line.waypoint2, airport,
+        )["total_time"].m_as(ureg.minute)
+        assert return_rows["time_to_segment"].sum() == pytest.approx(expected, rel=1e-2)

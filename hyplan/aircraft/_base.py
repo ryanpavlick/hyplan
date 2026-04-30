@@ -51,7 +51,11 @@ class SourceRecord:
 
     Args:
         source_type: One of ``"poh"``, ``"afm"``, ``"brochure"``,
-            ``"adsb"``, ``"mission_log"``, ``"expert"``, ``"derived"``.
+            ``"adsb"``, ``"iwg1"``, ``"mission_log"``, ``"expert"``,
+            ``"derived"``.  ``"iwg1"`` denotes calibration from NASA's
+            Inter-agency Working Group 1 in-situ flight log format
+            (per-sortie .txt CSVs of measured TAS, wind, attitude,
+            etc.; see ``hyplan.aircraft.iwg1.load_iwg1``).
         reference: Free-text citation.
         notes: Additional context.
         confidence: 0.0 (no confidence) to 1.0 (fully validated).
@@ -212,6 +216,124 @@ class VerticalProfile:
 
 
 # ---------------------------------------------------------------------------
+# Approach profile
+# ---------------------------------------------------------------------------
+
+# 1 nautical mile = 6076.115485564 feet (exact, from international foot defn).
+_FEET_PER_NMI = 6076.115485564
+
+
+@dataclass
+class ApproachProfile:
+    """Generic terminal-arrival template (not a published-procedure model).
+
+    Models the standardized terminal descent below ``top_of_approach_agl``:
+    a TAS schedule keyed by altitude AGL, plus a constant glideslope.
+    Horizontal distance to the runway is derived from those two; it is
+    not stored, so the geometry stays self-consistent.
+
+    All altitudes are AGL.  Convert to MSL at consumer sites by adding
+    :py:attr:`hyplan.airports.Airport.elevation`.
+
+    Args:
+        speed_schedule: Piecewise-linear TAS-vs-AGL-altitude schedule.
+            Lowest breakpoint should be 0 ft (touchdown).  Highest
+            breakpoint must equal ``top_of_approach_agl``.
+        top_of_approach_agl: Altitude AGL at which the cruise descent
+            hands off to the terminal regime.
+        glideslope_deg: Constant glideslope (degrees).  Default 3.0
+            matches a standard ILS; calibrated values are typed in
+            directly per aircraft.
+    """
+
+    speed_schedule: TasSchedule
+    top_of_approach_agl: Quantity
+    glideslope_deg: float = 3.0
+
+    def __post_init__(self) -> None:
+        top_ft = self.top_of_approach_agl.m_as(ureg.feet)
+        if top_ft <= 0:
+            raise HyPlanValueError(
+                "ApproachProfile.top_of_approach_agl must be strictly positive."
+            )
+        max_schedule_ft = float(self.speed_schedule._alts_ft.max())
+        if abs(max_schedule_ft - top_ft) > 1.0:
+            raise HyPlanValueError(
+                f"ApproachProfile speed_schedule's highest breakpoint ({max_schedule_ft:.0f} ft) "
+                f"must equal top_of_approach_agl ({top_ft:.0f} ft)."
+            )
+        if not (0.0 < self.glideslope_deg < 90.0):
+            raise HyPlanValueError(
+                f"ApproachProfile.glideslope_deg must be in (0, 90); got {self.glideslope_deg}."
+            )
+
+    @property
+    def touchdown_speed(self) -> Quantity:
+        """TAS at altitude 0 ft AGL — the touchdown / threshold speed."""
+        return self.speed_schedule.tas_at(0 * ureg.feet)
+
+    @property
+    def approx_approach_distance_nmi(self) -> float:
+        """Horizontal distance from top_of_approach to threshold (nmi).
+
+        Derived geometrically as ``h / tan(glideslope)``.  Approximate
+        because real terminal procedures include level segments,
+        intercept arcs, and procedure turns — this models a clean
+        constant-glideslope final.
+        """
+        h_ft = self.top_of_approach_agl.m_as(ureg.feet)
+        return (h_ft / np.tan(np.radians(self.glideslope_deg))) / _FEET_PER_NMI
+
+    def tas_at(self, altitude_agl: Quantity) -> Quantity:
+        """Scheduled TAS at *altitude_agl*."""
+        return self.speed_schedule.tas_at(altitude_agl)
+
+    def approx_vertical_rate_at(
+        self,
+        altitude_agl: Quantity,
+        groundspeed: Optional[Quantity] = None,
+    ) -> Quantity:
+        """Approximate vertical rate on a constant-glideslope path.
+
+        Uses ``VS = groundspeed × tan(glideslope)`` when ``groundspeed``
+        is provided; otherwise falls back to ``VS = TAS × tan(glideslope)``
+        (still-air approximation).  The fallback overestimates VS in a
+        headwind and underestimates in a tailwind.
+        """
+        speed = groundspeed if groundspeed is not None else self.tas_at(altitude_agl)
+        speed_fpm = speed.m_as(ureg.feet / ureg.minute)
+        vs_fpm = speed_fpm * np.tan(np.radians(self.glideslope_deg))
+        return vs_fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
+
+    def time_to_touchdown(self, groundspeed: Optional[Quantity] = None) -> Quantity:
+        """Integrate 1/VS from top_of_approach down to 0 ft AGL.
+
+        Uses the same TAS-vs-groundspeed convention as
+        :meth:`approx_vertical_rate_at`.  When ``groundspeed`` is None,
+        scheduled TAS is used at every altitude (still-air approximation).
+        """
+        # Integration grid: union of speed_schedule breakpoints, in ascending altitude.
+        alts_ft = np.asarray(self.speed_schedule._alts_ft, dtype=float)
+        # Integrand: 1 / VS(altitude), in minutes per foot.
+        if groundspeed is None:
+            speeds_fpm = np.asarray(self.speed_schedule._tas_kt, dtype=float) * (
+                _FEET_PER_NMI / 60.0
+            )
+        else:
+            gs_fpm = groundspeed.m_as(ureg.feet / ureg.minute)
+            speeds_fpm = np.full_like(alts_ft, gs_fpm)
+        vs_fpm = speeds_fpm * np.tan(np.radians(self.glideslope_deg))
+        if np.any(vs_fpm <= 0):
+            raise HyPlanValueError(
+                "ApproachProfile.time_to_touchdown requires positive vertical rates "
+                "at every breakpoint."
+            )
+        # trapezoidal integration of 1/VS over altitude (ft) → minutes.
+        minutes = float(np.trapezoid(1.0 / vs_fpm, alts_ft))
+        return minutes * ureg.minute  # type: ignore[no-any-return]
+
+
+# ---------------------------------------------------------------------------
 # Turn model
 # ---------------------------------------------------------------------------
 
@@ -258,7 +380,13 @@ class Aircraft:
         cruise_schedule: Speed schedule for cruise phase.
         descent_schedule: Speed schedule for descent phase.
         climb_profile: Rate-of-climb vs altitude.
-        descent_profile: Rate-of-descent vs altitude.
+        descent_profile: Rate-of-descent vs altitude.  When
+            ``approach_profile`` is set, this profile is intended to
+            cover the cruise-altitude → top-of-approach (MSL) regime
+            only; the terminal descent below top-of-approach is owned
+            by ``approach_profile``.  When ``approach_profile`` is
+            ``None``, ``descent_profile`` continues to cover the full
+            cruise-to-touchdown range as before (legacy behavior).
         turn_model: Turn performance / bank angles.
         engine_type: Propulsion category — ``"jet"``, ``"turboprop"``,
             or ``"piston"``.
@@ -267,6 +395,12 @@ class Aircraft:
         range: Maximum flight range (optional, metadata only).
         endurance: Maximum flight duration (optional, metadata only).
         useful_payload: Payload capacity (optional, metadata only).
+        approach_profile: Optional terminal-arrival template covering
+            top-of-approach → touchdown.  When set, the planner can
+            estimate terminal-segment timing geometrically from the
+            speed schedule and glideslope.  When ``None``, the legacy
+            scalar ``approach_speed`` and ``descent_profile`` are used
+            for arrival behavior.
     """
 
     def __init__(
@@ -288,6 +422,7 @@ class Aircraft:
         range: Optional[Quantity] = None,
         endurance: Optional[Quantity] = None,
         useful_payload: Optional[Quantity] = None,
+        approach_profile: Optional[ApproachProfile] = None,
     ):
         if not isinstance(aircraft_type, str):
             raise HyPlanTypeError("Aircraft type must be a string.")
@@ -319,6 +454,12 @@ class Aircraft:
         self.useful_payload = (
             useful_payload.to(ureg.pound) if useful_payload is not None else None
         )
+
+        if approach_profile is not None and not isinstance(approach_profile, ApproachProfile):
+            raise HyPlanTypeError(
+                f"approach_profile must be ApproachProfile or None, got {type(approach_profile).__name__}."
+            )
+        self.approach_profile = approach_profile
 
         self._validate_schedule_compatibility()
 
@@ -395,6 +536,39 @@ class Aircraft:
     def descent_speed_at(self, altitude: Quantity) -> Quantity:
         """True airspeed during descent at *altitude*."""
         return self.descent_schedule.tas_at(altitude)
+
+    def approach_speed_at(self, altitude_agl: Quantity) -> Quantity:
+        """True airspeed at *altitude_agl* during the terminal approach.
+
+        When :attr:`approach_profile` is set, this returns the schedule
+        value at *altitude_agl*.  When it isn't, this returns the legacy
+        scalar :attr:`approach_speed` for any altitude (the existing
+        single-speed approximation).
+        """
+        if self.approach_profile is None:
+            return self.approach_speed
+        return self.approach_profile.tas_at(altitude_agl)
+
+    def approach_vertical_rate_at(
+        self,
+        altitude_agl: Quantity,
+        groundspeed: Optional[Quantity] = None,
+    ) -> Optional[Quantity]:
+        """Approximate vertical rate on the terminal approach.
+
+        When :attr:`approach_profile` is set, returns the geometric
+        rate from :meth:`ApproachProfile.approx_vertical_rate_at`
+        (using the optional *groundspeed* override or scheduled TAS in
+        still air).  Returns ``None`` when no approach profile is
+        configured — callers should fall back to legacy descent
+        behavior in that case rather than synthesizing from
+        :attr:`descent_profile`, which keeps the regime split crisp.
+        """
+        if self.approach_profile is None:
+            return None
+        return self.approach_profile.approx_vertical_rate_at(
+            altitude_agl, groundspeed=groundspeed
+        )
 
     def pitch_limits(self, speed: Optional[Quantity] = None) -> tuple:
         """Derive pitch-angle limits from climb/descent rates and TAS.
@@ -661,18 +835,85 @@ class Aircraft:
         """Calculate time from the last waypoint back to the airport.
 
         Uses 3D Dubins path planning for the return including descent.
+
+        When :attr:`approach_profile` is set, the Dubins descent is
+        targeted at top-of-approach MSL (= ``airport.elevation +
+        approach_profile.top_of_approach_agl``) and a terminal
+        ``"approach"`` segment is appended using
+        :meth:`ApproachProfile.time_to_touchdown`.  When no profile is
+        set, the legacy single-leg-to-runway behavior is preserved.
         """
         _, arrival_heading = pymap3d.vincenty.vdist(
             waypoint.latitude, waypoint.longitude,
             airport.latitude, airport.longitude,
         )
-        airport_waypoint = Waypoint(
-            latitude=airport.latitude,
-            longitude=airport.longitude,
-            heading=(arrival_heading + 180.0) % 360.0,
-            altitude_msl=airport.elevation,
+        arrival_heading_deg = (arrival_heading + 180.0) % 360.0
+
+        if self.approach_profile is None:
+            # Legacy: Dubins descent all the way to runway elevation.
+            airport_waypoint = Waypoint(
+                latitude=airport.latitude,
+                longitude=airport.longitude,
+                heading=arrival_heading_deg,
+                altitude_msl=airport.elevation,
+            )
+            return self.time_to_cruise(waypoint, airport_waypoint, wind=wind)
+
+        # New: Dubins descent stops at the FAF (final approach fix); the
+        # ApproachProfile owns the terminal segment from FAF to airport.
+        # The FAF is positioned upwind of the runway by the geometric
+        # approach distance — without this offset the Dubins endpoint
+        # would sit directly above the airport, leaving no horizontal
+        # room for a non-degenerate approach geometry.
+        approach_distance_nmi = self.approach_profile.approx_approach_distance_nmi
+        approach_distance_m = approach_distance_nmi * 1852.0
+        faf_lat, faf_lon = pymap3d.vincenty.vreckon(
+            airport.latitude, airport.longitude,
+            approach_distance_m, arrival_heading_deg,
         )
-        return self.time_to_cruise(waypoint, airport_waypoint, wind=wind)
+        faf_lat = float(faf_lat)
+        faf_lon = ((float(faf_lon) + 180.0) % 360.0) - 180.0  # wrap to [-180, 180)
+
+        top_of_approach_msl = airport.elevation + self.approach_profile.top_of_approach_agl
+        top_of_approach_waypoint = Waypoint(
+            latitude=faf_lat,
+            longitude=faf_lon,
+            heading=arrival_heading_deg,
+            altitude_msl=top_of_approach_msl,
+        )
+        cruise_descent = self.time_to_cruise(
+            waypoint, top_of_approach_waypoint, wind=wind
+        )
+        approach_time = self.approach_profile.time_to_touchdown().to(ureg.minute)
+        approach_distance = approach_distance_nmi * ureg.nautical_mile
+
+        # Real terminal geometry: 2-point line from FAF to airport,
+        # used by process_flight_phase verbatim (no Dubins-slicing).
+        from shapely.geometry import LineString
+        approach_geom = LineString([(faf_lon, faf_lat), (airport.longitude, airport.latitude)])
+
+        total_time = (cruise_descent["total_time"] + approach_time).to(ureg.minute)
+        phases = dict(cruise_descent["phases"])
+        phases["approach"] = {
+            "start_altitude": top_of_approach_msl.to(ureg.feet),
+            "end_altitude": airport.elevation.to(ureg.feet),
+            "start_time": cruise_descent["total_time"].to(ureg.minute),
+            "end_time": total_time,
+            "distance": approach_distance,
+            "geometry": approach_geom,
+            "start_lat": faf_lat,
+            "start_lon": faf_lon,
+            "end_lat": airport.latitude,
+            "end_lon": airport.longitude,
+            "start_heading": arrival_heading_deg,
+            "end_heading": arrival_heading_deg,
+        }
+
+        return {
+            "total_time": total_time,
+            "phases": phases,
+            "dubins_path": cruise_descent["dubins_path"],
+        }
 
     def time_to_cruise(
         self,
