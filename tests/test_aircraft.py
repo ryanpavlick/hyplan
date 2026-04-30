@@ -272,9 +272,14 @@ class TestAircraftPerformance:
         )
 
     def test_climb_speed_at_aliased_factory_matches_cruise(self):
-        """When climb_schedule is aliased to cruise_schedule, they agree."""
-        ac = NASA_ER2()  # NASA_ER2 currently aliases climb = cruise schedule
-        alt = 30000 * ureg.feet
+        """When climb_schedule is aliased to cruise_schedule, they agree.
+
+        Most factories alias climb_schedule = cruise_schedule (notably B200);
+        NASA_ER2 was de-aliased in Item 4 of the calibration redesign and is
+        no longer a representative of this case.
+        """
+        ac = B200()  # KingAirB200 keeps climb_schedule aliased to cruise_schedule
+        alt = 20000 * ureg.feet
         assert ac.climb_speed_at(alt).m_as(ureg.knot) == pytest.approx(
             ac.cruise_speed_at(alt).m_as(ureg.knot), rel=1e-9,
         )
@@ -457,7 +462,11 @@ class TestHybridPath:
             (phases["climb"]["end_time"] - phases["climb"]["start_time"])
             .m_as(ureg.minute)
         )
-        assert climb_min > 50, "spiral-up should take the full climb integration time"
+        # Spiral-up should take the full climb integration time, far longer
+        # than the leg-length-limited time of horizontal_dist / cruise_TAS.
+        # NASA_ER2 to FL600 integrates to ~30 min; the 30 nmi leg at cruise
+        # TAS would be ~5 min, so anything well above that validates spiral-up.
+        assert climb_min > 20, "spiral-up should take the full climb integration time"
 
     def test_pure_cruise(self):
         """Equal altitudes: no climb / descent, only cruise."""
@@ -566,9 +575,9 @@ class TestER2Performance:
         )
         # Phase time should equal _climb's integrated time within numerical noise.
         assert climb_phase_min == pytest.approx(direct_climb_min, rel=1e-3)
-        # And should be much longer than 16 min (which is what the legacy
-        # constant-pitch Dubins path produced for a comparable leg).
-        assert climb_phase_min > 30, (
+        # And should be substantially longer than ~16 min (which is what the
+        # legacy constant-pitch Dubins path produced for a comparable leg).
+        assert climb_phase_min > 25, (
             f"climb phase time {climb_phase_min:.1f} min should reflect the "
             f"integrated climb_profile (with the step), not the legacy "
             f"constant-pitch underestimate"
@@ -621,6 +630,44 @@ class TestER2Performance:
         kinds = [s.source_type for s in ac.sources]
         assert "iwg1" in kinds
         assert "brochure" in kinds
+
+    # --- Item 2: bank_by_phase metadata -----------------------------------
+
+    def test_bank_by_phase_calibrated(self):
+        """NASA_ER2.turn_model carries the IWG1-calibrated per-phase medians."""
+        ac = NASA_ER2()
+        bp = ac.turn_model.bank_by_phase
+        assert bp.climb_deg == pytest.approx(11.0)
+        assert bp.cruise_deg == pytest.approx(20.0)
+        assert bp.descent_deg == pytest.approx(16.0)
+        assert bp.approach_deg == pytest.approx(9.0)
+        # Brochure max-bank envelope unchanged (p90 < 30° in every band).
+        assert ac.turn_model.max_bank_deg == pytest.approx(30.0)
+
+    # --- Item 4: distinct climb / cruise / descent TAS schedules -----------
+
+    def test_schedules_are_not_aliased(self):
+        """climb / cruise / descent schedules differ — no aliasing on ER-2."""
+        ac = NASA_ER2()
+        assert ac.climb_schedule.points != ac.cruise_schedule.points
+        assert ac.descent_schedule.points != ac.cruise_schedule.points
+        assert ac.climb_schedule.points != ac.descent_schedule.points
+
+    def test_descent_speed_below_cruise_speed_at_mid_altitude(self):
+        """At mid-cruise altitude, descent TAS sits below cruise TAS."""
+        ac = NASA_ER2()
+        alt = 50000 * ureg.feet
+        assert ac.descent_speed_at(alt).m_as(ureg.knot) < (
+            ac.cruise_speed_at(alt).m_as(ureg.knot)
+        )
+
+    def test_climb_speed_below_cruise_speed_at_mid_altitude(self):
+        """At mid-cruise altitude, climb TAS sits below cruise TAS."""
+        ac = NASA_ER2()
+        alt = 50000 * ureg.feet
+        assert ac.climb_speed_at(alt).m_as(ureg.knot) < (
+            ac.cruise_speed_at(alt).m_as(ureg.knot)
+        )
 
 
 # ---------------------------------------------------------------------------

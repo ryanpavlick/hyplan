@@ -80,7 +80,8 @@ class NASA_ER2(Aircraft):
 
     * Step climb at 19-21 kft (fuel-burn-driven; the average operational
       profile across the 17-sortie set shows VS dropping from ~4400 fpm
-      to ~540 fpm in the step band before resuming a steeper climb).
+      to ~540 fpm in the step band, recovering immediately at 23 kft to
+      ~4800 fpm, then declining through the cruise band).
     * Two-regime descent: peak idle-power |VS| ~3675 fpm at top-of-
       descent, decaying to ~840 fpm at top-of-approach as the aircraft
       configures for the terminal pattern.
@@ -94,9 +95,32 @@ class NASA_ER2(Aircraft):
     """
 
     def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 136 * ureg.knot),
-            (70000 * ureg.feet, 431 * ureg.knot),
+        # Distinct climb / cruise / descent TAS schedules from IWG1 per-altitude-bin
+        # medians (n=17 sorties, 2-kft bins, all bins with n >= 30 fixes).
+        # Pre-Item-4 these were aliased to a single brochure 2-point linear curve;
+        # the IWG1 data shows climb / descent are within ~5 kt of each other at
+        # any given altitude (both reflect pitched flight) but cruise sits ~10-20
+        # kt higher in the 40-60 kft band.
+        climb_schedule = TasSchedule(points=[
+            (    0 * ureg.feet, 120 * ureg.knot),  # extrapolated; 3 kft = 134 kt
+            (20000 * ureg.feet, 224 * ureg.knot),  # IWG1 19 kft median
+            (40000 * ureg.feet, 308 * ureg.knot),  # IWG1 41 kft median
+            (60000 * ureg.feet, 397 * ureg.knot),  # IWG1 61 kft median
+            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
+        ])
+        cruise_schedule = TasSchedule(points=[
+            (    0 * ureg.feet, 130 * ureg.knot),  # brochure-equivalent low-alt
+            (50000 * ureg.feet, 374 * ureg.knot),  # IWG1 51 kft median
+            (60000 * ureg.feet, 388 * ureg.knot),  # IWG1 59 kft median
+            (65000 * ureg.feet, 401 * ureg.knot),  # IWG1 65 kft median (n=51383)
+            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
+        ])
+        descent_schedule = TasSchedule(points=[
+            (    0 * ureg.feet,  90 * ureg.knot),  # IWG1 1 kft median (touchdown)
+            (20000 * ureg.feet, 221 * ureg.knot),  # IWG1 19 kft median
+            (40000 * ureg.feet, 318 * ureg.knot),  # IWG1 41 kft median
+            (60000 * ureg.feet, 399 * ureg.knot),  # IWG1 59 kft median
+            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
         ])
         super().__init__(
             aircraft_type="ER-2",
@@ -104,28 +128,44 @@ class NASA_ER2(Aircraft):
             operator="NASA AFRC",
             service_ceiling=70000 * ureg.feet,
             approach_speed=130 * ureg.knot,  # legacy scalar; approach_profile is preferred
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=cruise,
-            # Calibrated 6-point climb profile (was 2-point linear).
+            climb_schedule=climb_schedule,
+            cruise_schedule=cruise_schedule,
+            descent_schedule=descent_schedule,
+            # Calibrated 8-point climb profile (was 2-point linear).
             # Step climb at 19-21 kft is the load-out / fuel-burn level-off.
+            # The post-step recovery anchor at 23 kft (4778 fpm) is critical
+            # — the actual aircraft recovers to its peak climb rate
+            # immediately after the step.  Without it, linear interpolation
+            # 21 kft → 55 kft would imply a constant ~700 fpm climb
+            # through the entire 21-55 kft band, off by 4× from reality.
             climb_profile=VerticalProfile(points=[
                 (    0 * ureg.feet, 5000 * ureg.feet / ureg.minute),  # SL anchor (brochure)
                 (17000 * ureg.feet, 4432 * ureg.feet / ureg.minute),  # steady-climb anchor
                 (19000 * ureg.feet, 1050 * ureg.feet / ureg.minute),  # step start (n=17 median)
                 (21000 * ureg.feet,  540 * ureg.feet / ureg.minute),  # step bottom (n=17 median)
-                (55000 * ureg.feet,  945 * ureg.feet / ureg.minute),  # above-step anchor
+                (23000 * ureg.feet, 4778 * ureg.feet / ureg.minute),  # post-step recovery
+                (35000 * ureg.feet, 2693 * ureg.feet / ureg.minute),  # mid-climb anchor
+                (49000 * ureg.feet, 1290 * ureg.feet / ureg.minute),  # upper-mid anchor
                 (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),  # operational ceiling
             ]),
-            # Calibrated 3-point descent profile (was 1-point constant).
-            # Covers cruise -> top-of-approach MSL only; the terminal
-            # descent from top-of-approach to touchdown is owned by
-            # approach_profile below.  Bottom anchor at 5240 ft MSL =
-            # representative airport elevation 2240 ft + 3000 ft AGL.
+            # Calibrated 6-point descent profile (was 3-point).
+            # Same lesson as the climb_profile recalibration: 3 anchors
+            # spanning 5 kft to 66 kft hide the structure.  IWG1 per-bin
+            # medians show distinct regimes — slow approach-prep below
+            # 13 kft (~1000-1700 fpm), steady high-altitude descent at
+            # 25-55 kft (~3000-3500 fpm), and a peak around 41 kft.
+            # Without intermediate anchors the linear interp from
+            # 5242 ft (low) to 41000 ft (peak) implies a constant
+            # ~2000 fpm across the entire 5-41 kft range, ~30% too slow.
+            # Covers cruise -> top-of-approach MSL only; approach_profile
+            # owns the terminal segment from there to touchdown.
             descent_profile=VerticalProfile(points=[
-                ( 5242 * ureg.feet,  844 * ureg.feet / ureg.minute),  # top-of-approach MSL
-                (45000 * ureg.feet, 2955 * ureg.feet / ureg.minute),  # steady steep regime
-                (66000 * ureg.feet, 3675 * ureg.feet / ureg.minute),  # top-of-descent
+                ( 5242 * ureg.feet, 1024 * ureg.feet / ureg.minute),  # top-of-approach MSL (slowing for approach)
+                (13000 * ureg.feet, 1728 * ureg.feet / ureg.minute),  # mid-low transition
+                (25000 * ureg.feet, 3008 * ureg.feet / ureg.minute),  # steady high regime (start)
+                (41000 * ureg.feet, 3456 * ureg.feet / ureg.minute),  # peak |VS|
+                (55000 * ureg.feet, 3264 * ureg.feet / ureg.minute),  # still high
+                (66000 * ureg.feet, 3500 * ureg.feet / ureg.minute),  # top-of-descent
             ]),
             # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
             # 2.5° glideslope is the empirical median over 846 IWG1
@@ -144,7 +184,22 @@ class NASA_ER2(Aircraft):
                 top_of_approach_agl=3000 * ureg.feet,
                 glideslope_deg=2.51,
             ),
-            turn_model=TurnModel(max_bank_deg=30.0),
+            # max_bank_deg=30 is the brochure / envelope ceiling — well-
+            # supported by IWG1 (p90 < 30° in every altitude band).
+            # bank_by_phase carries the calibrated *typical-operations*
+            # medians from the IWG1 sortie set (n=12 686 turn fixes).
+            # These are metadata today: compute_flight_plan's Dubins solver
+            # consumes max_bank_angle (the scalar envelope), and
+            # loiter_orbit_geometry consumes bank_by_phase.cruise_deg.
+            turn_model=TurnModel(
+                max_bank_deg=30.0,
+                bank_by_phase=PhaseBankAngles(
+                    climb_deg=11.0,     # 10-30 kft band p50 (climb regime)
+                    cruise_deg=20.0,    # 50-70 kft band p50 (n=9782 fixes)
+                    descent_deg=16.0,   # 30-50 kft band p50 (descent transit)
+                    approach_deg=9.0,   # 0-10 kft band p50 (terminal area)
+                ),
+            ),
             engine_type="jet",
             range=5000 * ureg.nautical_mile,
             endurance=8 * ureg.hour,
