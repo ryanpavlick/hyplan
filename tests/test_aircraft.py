@@ -404,6 +404,60 @@ class TestAircraftPerformance:
         assert isinstance(ac.max_bank_angle, float)
         assert 0 < ac.max_bank_angle < 90
 
+    def test_climb_gradient_at(self):
+        """Climb gradient = climb_rate / TAS, dimensionless."""
+        ac = B200()
+        alt = 5000 * ureg.feet
+        rate_mps = ac.climb_profile.rate_at(alt).m_as("meter/second")
+        tas_mps = ac.climb_speed_at(alt).m_as("meter/second")
+        expected = rate_mps / tas_mps
+        assert ac.climb_gradient_at(alt) == pytest.approx(expected, rel=1e-9)
+        # Sanity: gradient is small for survey aircraft (< 0.2 ≈ 11°)
+        assert 0 < ac.climb_gradient_at(alt) < 0.3
+
+    def test_descent_gradient_at(self):
+        ac = B200()
+        alt = 5000 * ureg.feet
+        rate_mps = abs(ac.descent_profile.rate_at(alt).m_as("meter/second"))
+        tas_mps = ac.descent_speed_at(alt).m_as("meter/second")
+        expected = rate_mps / tas_mps
+        assert ac.descent_gradient_at(alt) == pytest.approx(expected, rel=1e-9)
+        # Always positive (magnitude)
+        assert ac.descent_gradient_at(alt) > 0
+
+    def test_climb_gradient_decreases_with_altitude(self):
+        """Climb gradient typically falls off at altitude (engine power decreases)."""
+        ac = B200()
+        g_low = ac.climb_gradient_at(5000 * ureg.feet)
+        g_high = ac.climb_gradient_at(20000 * ureg.feet)
+        assert g_low > g_high
+
+    def test_service_ceiling_warning(self):
+        """Requesting a cruise altitude above service ceiling warns."""
+        from hyplan.waypoint import Waypoint
+
+        ac = B200()
+        ceiling_ft = ac.service_ceiling.m_as(ureg.foot)
+        above_ft = ceiling_ft + 5000
+        wp1 = Waypoint(34.0, -118.0, 90.0, altitude_msl=above_ft * ureg.foot)
+        wp2 = Waypoint(34.5, -117.5, 90.0, altitude_msl=above_ft * ureg.foot)
+        with pytest.warns(UserWarning, match="service ceiling"):
+            ac.time_to_cruise(wp1, wp2)
+
+    def test_service_ceiling_no_warning_below(self):
+        """No warning when both endpoints are below ceiling."""
+        from hyplan.waypoint import Waypoint
+        import warnings as _warnings
+
+        ac = B200()
+        ceiling_ft = ac.service_ceiling.m_as(ureg.foot)
+        below_ft = ceiling_ft - 5000
+        wp1 = Waypoint(34.0, -118.0, 90.0, altitude_msl=below_ft * ureg.foot)
+        wp2 = Waypoint(34.5, -117.5, 90.0, altitude_msl=below_ft * ureg.foot)
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error")
+            ac.time_to_cruise(wp1, wp2)
+
     def test_endurance_exists_and_reasonable(self):
         ac = B200()
         endurance_hrs = ac.endurance.m_as("hour")
@@ -467,6 +521,148 @@ class TestClimbAndDescend:
         t1, _ = ac._climb(ureg.Quantity(0, "feet"), ureg.Quantity(10000, "feet"))
         t2, _ = ac._climb(ureg.Quantity(0, "feet"), ureg.Quantity(20000, "feet"))
         assert t2.magnitude > t1.magnitude
+
+
+class TestStepClimb:
+    """Verify Aircraft.step_climb (staged climb-out with pauses)."""
+
+    def test_no_pauses_matches_climb(self):
+        """Empty pauses list reduces to a plain _climb integration."""
+        ac = NASA_ER2()
+        t_step, d_step = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(60000, "feet"),
+            pauses=[],
+        )
+        t_plain, d_plain = ac._climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(60000, "feet"),
+        )
+        assert t_step.m_as(ureg.minute) == pytest.approx(
+            t_plain.m_as(ureg.minute), rel=1e-9,
+        )
+        assert d_step.m_as(ureg.nautical_mile) == pytest.approx(
+            d_plain.m_as(ureg.nautical_mile), rel=1e-9,
+        )
+
+    def test_hold_adds_only_to_time(self):
+        """A hold at an intermediate altitude adds its duration to
+        total time but no forward distance.
+
+        Distance is *not* exactly equal to a single _climb integration
+        over the same range — _climb uses TAS at the average altitude
+        of its band, so splitting into two integrations gives a
+        slightly different forward-distance estimate (arguably more
+        accurate, since each band gets its own TAS).
+        """
+        ac = NASA_ER2()
+        hold_min = 25.0
+        pauses_with_hold = [(35600 * ureg.foot, hold_min * ureg.minute)]
+        pauses_zero_hold = [(35600 * ureg.foot, 0 * ureg.minute)]
+        t_with, d_with = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(60000, "feet"),
+            pauses=pauses_with_hold,
+        )
+        t_zero, d_zero = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(60000, "feet"),
+            pauses=pauses_zero_hold,
+        )
+        # Distance is identical between zero-hold and 25-min-hold:
+        # the hold contributes zero forward progress.
+        assert d_with.m_as(ureg.nautical_mile) == pytest.approx(
+            d_zero.m_as(ureg.nautical_mile), rel=1e-9,
+        )
+        # Total time grows by exactly the hold duration.
+        assert (t_with - t_zero).m_as(ureg.minute) == pytest.approx(
+            hold_min, abs=1e-6,
+        )
+
+    def test_pauses_outside_range_ignored(self):
+        """Pauses below start or above end have no effect."""
+        ac = B200()
+        t_in_range, _ = ac.step_climb(
+            ureg.Quantity(5000, "feet"),
+            ureg.Quantity(20000, "feet"),
+            pauses=[(15000 * ureg.foot, 5 * ureg.minute)],
+        )
+        t_out_below, _ = ac.step_climb(
+            ureg.Quantity(5000, "feet"),
+            ureg.Quantity(20000, "feet"),
+            pauses=[(2000 * ureg.foot, 5 * ureg.minute)],
+        )
+        t_out_above, _ = ac.step_climb(
+            ureg.Quantity(5000, "feet"),
+            ureg.Quantity(20000, "feet"),
+            pauses=[(25000 * ureg.foot, 5 * ureg.minute)],
+        )
+        t_no_pauses, _ = ac.step_climb(
+            ureg.Quantity(5000, "feet"),
+            ureg.Quantity(20000, "feet"),
+            pauses=[],
+        )
+        # In-range pause adds 5 min; out-of-range pauses don't.
+        assert (t_in_range - t_no_pauses).m_as(ureg.minute) == pytest.approx(
+            5.0, abs=1e-6,
+        )
+        assert t_out_below.m_as(ureg.minute) == pytest.approx(
+            t_no_pauses.m_as(ureg.minute), rel=1e-9,
+        )
+        assert t_out_above.m_as(ureg.minute) == pytest.approx(
+            t_no_pauses.m_as(ureg.minute), rel=1e-9,
+        )
+
+    def test_pauses_applied_in_altitude_order(self):
+        """Pauses passed out of altitude order produce the same result
+        as pauses passed in order."""
+        ac = NASA_ER2()
+        in_order = [
+            (24000 * ureg.foot, 1 * ureg.minute),
+            (35600 * ureg.foot, 25 * ureg.minute),
+            (61100 * ureg.foot, 2 * ureg.minute),
+        ]
+        out_of_order = [
+            (61100 * ureg.foot, 2 * ureg.minute),
+            (24000 * ureg.foot, 1 * ureg.minute),
+            (35600 * ureg.foot, 25 * ureg.minute),
+        ]
+        t1, d1 = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(65000, "feet"),
+            pauses=in_order,
+        )
+        t2, d2 = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(65000, "feet"),
+            pauses=out_of_order,
+        )
+        assert t1.m_as(ureg.minute) == pytest.approx(
+            t2.m_as(ureg.minute), rel=1e-9,
+        )
+        assert d1.m_as(ureg.nautical_mile) == pytest.approx(
+            d2.m_as(ureg.nautical_mile), rel=1e-9,
+        )
+
+    def test_step_climb_strictly_longer_than_climb_with_holds(self):
+        """For any non-empty pauses-with-positive-hold, step_climb
+        time exceeds the no-pause _climb time."""
+        ac = NASA_ER2()
+        t_no_hold, _ = ac._climb(
+            ureg.Quantity(0, "feet"), ureg.Quantity(60000, "feet"),
+        )
+        t_with_holds, _ = ac.step_climb(
+            ureg.Quantity(0, "feet"),
+            ureg.Quantity(60000, "feet"),
+            pauses=[
+                (24000 * ureg.foot, 1 * ureg.minute),
+                (35600 * ureg.foot, 5 * ureg.minute),
+            ],
+        )
+        # Total hold = 6 min; rest of the climb is at the same rate.
+        assert (
+            t_with_holds.m_as(ureg.minute) - t_no_hold.m_as(ureg.minute) > 5.5
+        )
 
 
 # ---------------------------------------------------------------------------

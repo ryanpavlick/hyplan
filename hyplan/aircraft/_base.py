@@ -627,6 +627,43 @@ class Aircraft:
         pitch_min = -float(np.degrees(np.arctan(descent_mps / tas_mps)))
         return pitch_min, pitch_max
 
+    def climb_gradient_at(self, altitude: Quantity) -> float:
+        """Climb gradient at *altitude* — dimensionless rise/run.
+
+        Computed from the integrated climb performance: the climb rate
+        from :attr:`climb_profile` divided by the climb-schedule TAS.
+        Useful for terrain-aware planning ("can the aircraft clear
+        a 10,000 ft ridge in 50 nmi?") since obstacle clearance is
+        naturally expressed as a horizontal-vs-vertical ratio.
+
+        Returns 0.0 if TAS is zero (defensive — physically unreachable).
+        """
+        rate_mps = self.climb_profile.rate_at(altitude).m_as(
+            ureg.meter / ureg.second,
+        )
+        tas_mps = self.climb_speed_at(altitude).m_as(
+            ureg.meter / ureg.second,
+        )
+        if tas_mps <= 0.0:
+            return 0.0
+        return float(rate_mps / tas_mps)
+
+    def descent_gradient_at(self, altitude: Quantity) -> float:
+        """Descent gradient at *altitude* — dimensionless drop/run, positive.
+
+        Mirror of :meth:`climb_gradient_at` for descent, returning a
+        positive value (the magnitude of the descent slope).
+        """
+        rate_mps = self.descent_profile.rate_at(altitude).m_as(
+            ureg.meter / ureg.second,
+        )
+        tas_mps = self.descent_speed_at(altitude).m_as(
+            ureg.meter / ureg.second,
+        )
+        if tas_mps <= 0.0:
+            return 0.0
+        return float(abs(rate_mps) / tas_mps)
+
     def _implicit_pitch_for_phase(
         self,
         phase: str,
@@ -846,6 +883,88 @@ class Aircraft:
             altitudes = h_eq - (h_eq - h0) * np.exp(-alpha * times)
 
         return times, altitudes
+
+    def step_climb(
+        self,
+        start_altitude: Quantity,
+        end_altitude: Quantity,
+        pauses: List[Tuple[Quantity, Quantity]],
+    ) -> Tuple[Quantity, Quantity]:
+        """Total time and forward distance for a staged climb with pauses.
+
+        Real high-altitude aircraft step-climb out of weight-limited
+        ceiling: they climb to an intermediate altitude, level off
+        briefly to burn fuel and reduce gross weight, then continue
+        climbing.  For a NASA ER-2 sortie this typically looks like a
+        25-minute hold at FL611 climbing slowly under reduced weight,
+        before final climb to the FL650 cruise altitude.
+
+        Each entry in ``pauses`` is ``(level_off_altitude, hold_duration)``.
+        At each pause altitude, the aircraft holds (level orbit) for
+        ``hold_duration`` adding only to total time — zero forward
+        distance, since the aircraft is presumed to be orbiting at one
+        location during the hold.  Climb segments between pauses use
+        the aircraft's calibrated :attr:`climb_profile` via
+        :meth:`_climb`.
+
+        Pauses are applied in altitude order; pauses outside the
+        ``[start_altitude, end_altitude]`` range are silently skipped.
+
+        Args:
+            start_altitude: Starting altitude (e.g., airport elevation).
+            end_altitude: Final altitude (e.g., cruise altitude).
+            pauses: List of ``(altitude, hold_duration)`` tuples.  Pass
+                an empty list to recover the no-pause behavior of
+                :meth:`_climb`.
+
+        Returns:
+            Tuple of ``(total_time, total_forward_distance)`` as
+            :class:`pint.Quantity`.
+
+        Example:
+            ER-2 NM17 B planned climb-out: 25-min hold at FL611
+            climbing to FL650.
+
+            >>> ac = NASA_ER2()
+            >>> t, d = ac.step_climb(
+            ...     start_altitude=6_187 * ureg.foot,
+            ...     end_altitude=65_000 * ureg.foot,
+            ...     pauses=[(35_600 * ureg.foot, 25 * ureg.minute)],
+            ... )
+        """
+        ft = ureg.foot
+        nmi = ureg.nautical_mile
+        minute = ureg.minute
+
+        if pauses:
+            pauses_sorted = sorted(
+                pauses, key=lambda p: p[0].m_as(ft),
+            )
+        else:
+            pauses_sorted = []
+
+        total_time = 0.0 * minute
+        total_dist = 0.0 * nmi
+        prev_alt = start_altitude
+
+        for level_alt, hold_dur in pauses_sorted:
+            if (
+                level_alt.m_as(ft) <= prev_alt.m_as(ft)
+                or level_alt.m_as(ft) > end_altitude.m_as(ft)
+            ):
+                continue
+            t, d = self._climb(prev_alt, level_alt)
+            total_time = total_time + t.to(minute)
+            total_dist = total_dist + d.to(nmi)
+            total_time = total_time + hold_dur.to(minute)
+            prev_alt = level_alt
+
+        if prev_alt.m_as(ft) < end_altitude.m_as(ft):
+            t, d = self._climb(prev_alt, end_altitude)
+            total_time = total_time + t.to(minute)
+            total_dist = total_dist + d.to(nmi)
+
+        return total_time, total_dist
 
     # ------------------------------------------------------------------
     # Descent
@@ -1092,6 +1211,26 @@ class Aircraft:
             # Default: the higher of the two endpoints.
             cruise_altitude = start_alt if start_alt >= end_alt else end_alt
         cruise_altitude = cruise_altitude.to(ureg.feet)
+
+        # Service-ceiling check.  Aircraft can sometimes operate
+        # transiently above their certified ceiling (e.g., research
+        # missions push to "absolute" ceiling); we warn rather than
+        # raise so that planning continues, but the user sees that
+        # the aircraft model isn't calibrated up there and the
+        # extrapolated speed / climb-rate values are best-effort.
+        if (
+            self.service_ceiling is not None
+            and cruise_altitude > self.service_ceiling
+        ):
+            warnings.warn(
+                f"{self.aircraft_type}: requested cruise altitude "
+                f"{cruise_altitude.m_as(ureg.feet):.0f} ft exceeds "
+                f"service ceiling "
+                f"{self.service_ceiling.m_as(ureg.feet):.0f} ft.  "
+                "Speed and climb / descent profiles are extrapolated "
+                "outside their calibrated range.",
+                stacklevel=3,
+            )
 
         cruise_tas = (
             true_air_speed

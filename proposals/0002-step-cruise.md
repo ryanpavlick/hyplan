@@ -1,65 +1,156 @@
-# Proposal 0002 — Step-cruise representation in `FlightLine`
+# Proposal 0002 — Step-climb (climb-out staging) representation
 
 ## Status
 
-Open.  Parked from the planner-fidelity / hybrid-path PR.
+Open.  Original framing was about cross-survey altitude drift; revised
+to focus on the operationally relevant phenomenon: climb-out staging
+during the takeoff phase.
+
+## Terminology
+
+In aviation, **step climb** is a series of short pauses or slow-climb
+segments during the climb-out where the aircraft levels off to burn
+fuel and reduce gross weight before continuing to climb.  The driving
+physics is the **weight-limited ceiling**: a heavily-loaded aircraft
+can't reach its target cruise altitude directly, so the climb is
+staged.
+
+This is distinct from:
+
+* **Cross-survey altitude drift** — a survey aircraft's cruise
+  altitude rising slowly across a multi-hour grid as fuel burns off.
+  Driven by similar physics but manifests during cruise, not climb.
+  Currently single-altitude `FlightLine` doesn't capture this; for
+  most sorties the per-segment timing residual from this is small
+  (≤2% on the NM17 B replay).
+
+* **In-flight altitude changes between survey lines** — usually
+  driven by sensor or scientific objective, not weight.
+
+This proposal addresses **step climb** specifically.
 
 ## Context
 
-Real high-altitude survey aircraft (ER-2, U-2, WB-57, Global Hawk) step-cruise across a multi-hour mission as fuel burns off and the weight-limited ceiling rises.  A typical ER-2 sortie sees cruise altitude transition through 50 → 55 → 60 → 61 kft over the course of the survey grid, even though the ground track is stepping line-by-line through a single rectangular polygon.
+For a typical NASA ER-2 sortie planned card, the climb-out from
+KCOS to FL650 is staged through several intermediate altitudes:
 
-HyPlan's [`FlightLine`](../hyplan/flight_line.py) is a single-altitude representation: both `waypoint1` and `waypoint2` carry the same `altitude_msl`.  When `compute_flight_plan` realizes a real sortie that step-cruised, it can only place the aircraft at the line's nominal altitude.  Per-line timing and TAS will diverge from observation; bottom-line mission duration is approximately self-canceling (lower TAS at lower altitude offsets less climb-rate cost reaching the assumed altitude), so range / fuel planning remains usable, but per-segment operational fidelity drops.
+| event | altitude | duration | mechanism |
+|---|---:|---:|---|
+| BRK/E | FL240 | ~0 min | level off briefly |
+| `.level off` | FL260 | ~0 min | level off briefly |
+| PUB/R253012 | FL260 | — | transit |
+| PUB/R206014 | FL356 | — | transit |
+| `.delay` orbit at PUB | FL356 → FL611 | **25 min** | hold (slow climb in orbit) |
+| `.level off` | FL650 | ~0 min | top of climb |
+| TBE/E245028 | FL650 | — | first survey waypoint |
 
-The [n=5 ADS-B archive replay](../notebooks/er2_calibration/) earlier surfaced this as the largest residual: total duration matched within 3% but on-station segment time was off by 200%+ — the model assumed all lines were flown at FL600 cruise TAS while the aircraft was actually at FL500 with lower TAS at the start of the survey.
+The 25-minute orbit at PUB is the dominant term.  During those
+25 minutes the aircraft makes zero forward progress while gaining
+~25,000 ft.  HyPlan's continuous-climb model integrates the same
+altitude band against `climb_profile` and returns a forward distance
+that the aircraft *did not* travel.  The +11.5 min residual on the
+NM17 B planned-vs-flown comparison (KCOS → first /L) is partially
+attributable to this spatial mismatch.
 
-## Empirical evidence (from IWG1 sortie replay, post-Item-1)
+## Empirical evidence
 
-Pending the IWG1 sortie-replay notebook (Item 3 of the planner-redesign plan).  Expected pattern:
+From the [IWG1 sortie-replay notebook](../notebooks/er2_calibration/sortie_replay.ipynb)
+(post-Item-1 hybrid planner) and the
+[planned-vs-flown notebook](../notebooks/er2_calibration/planned_vs_flown.ipynb):
 
-* Climb / approach phases: residuals close once the hybrid 2D-Dubins + integrated-vertical planner lands.
-* On-station phase: per-line altitude diverges; per-line time diverges by ~10-20% on ER-2 sorties; total mission duration close (self-cancellation).
+* Climb / cruise / descent phases: residuals close once the hybrid
+  2D-Dubins + integrated-vertical planner lands.
+* Survey-grid phase: per-line cruise residuals are <1% with the
+  proper trochoidal CCC + IWG1-trace wind.
+* **Pre-survey (KCOS → first /L):** +11.5 min residual on NM17 B,
+  largely attributable to the unmodeled climb staging.
 
-That divergence is the gap this proposal addresses.
+That pre-survey residual is the gap this proposal addresses.
 
 ## Design options
 
-### Option A — Multi-altitude `FlightLine`
+### Option A — `Aircraft.step_climb()` helper *(implemented)*
 
-Add an optional `altitude_schedule: TasSchedule`-shaped field carrying altitude as a function of along-line distance.  Single-altitude usage stays the same; mission designers who want a step-cruise line opt in.
+A simple method on `Aircraft` that takes a starting altitude, ending
+altitude, and a list of `(level_off_altitude, hold_duration)` pauses,
+returning total time and forward distance.  Each pause is interpreted
+as a level orbit at the staging altitude — adds time, no distance.
+Climb segments between pauses use the calibrated `climb_profile`.
 
-**Pros:** explicit per-line; designer controls intent.
+```python
+t, d = aircraft.step_climb(
+    start_altitude=6_187 * ureg.foot,    # KCOS
+    end_altitude=65_000 * ureg.foot,     # FL650
+    pauses=[(35_600 * ureg.foot, 25 * ureg.minute)],
+)
+```
 
-**Cons:** not what mission designers actually do — they don't pre-plan step altitudes; they let the aircraft drift up as fuel burns.  Adds API surface that won't see much organic adoption.
+**Pros:** smallest possible API addition.  Standalone helper —
+mission designers compute their own staged climb time/distance and
+feed it into custom planning code.  Already shipping.
 
-### Option B — Altitude-by-elapsed-time policy on `Aircraft`
+**Cons:** not integrated with `compute_flight_plan` — the planner
+doesn't know about `step_climb`-derived staging, so the takeoff-phase
+geometry is unchanged.  Useful for analysis / fuel budgeting but
+doesn't close the +11.5 min residual on its own.
 
-Add an optional `cruise_altitude_schedule: VerticalProfile`-shaped field on `Aircraft`, indexed by elapsed mission time, that the planner consults for what cruise altitude to use at each segment.  The schedule is calibrated from sortie data (e.g., IWG1) so it captures the empirical step pattern.
+### Option B — Climb plan as `compute_flight_plan` parameter
 
-**Pros:** matches operational reality (drift-up by fuel burn / aircraft state); zero burden on mission designer.
+Pass a `climb_pauses` (or richer `ClimbPlan`) parameter to
+`compute_flight_plan`.  The takeoff-phase computation in
+`Aircraft._hybrid_path` consults it and rebuilds the climb portion
+as a sequence of climb-segment-then-orbit blocks at the specified
+staging waypoints.
 
-**Cons:** elapsed-time semantics are ambiguous (which "mission start" — wheels-up?  first-line entry?).  Needs careful definition.  Couples `Aircraft` to mission-elapsed-time which is unusual.
+**Pros:** fully integrated planning.  Closes the residual.  Mission
+designers can supply pauses derived from a Green Card or from a
+generic per-aircraft "typical climb plan."
 
-### Option C — Calibrated `cruise_altitude_offset` per `FlightLine`
+**Cons:** structural change to the planner.  Needs a clean API for
+specifying staging waypoints (lat/lon? altitude only?) and the
+geometry of each orbit.
 
-Accept that step-cruise is a sortie-planner concern, not an aircraft-model concern.  Tooling helps: a function that takes a list of `FlightLine`s + an `Aircraft` and produces a stepped variant with calibrated altitude offsets.  Mission designers can call it before passing the lines to `compute_flight_plan`.
+### Option C — Slow-climb-segment model
 
-**Pros:** decouples mission-planning concern from aircraft model.  Can be added without touching `FlightLine` or `Aircraft`.  Designer keeps explicit control.
+Refine `step_climb` to take `(level_off_alt, exit_alt, duration)`
+3-tuples instead of `(altitude, duration)` 2-tuples.  When `exit_alt
+> level_off_alt`, the aircraft climbs from `level_off_alt` to
+`exit_alt` during the duration — modeling the .delay's actual
+behavior (slow climb in orbit, not a level hold).
 
-**Cons:** still requires a "what's the right step pattern" answer, which depends on aircraft + nominal mission length + fuel state.
+**Pros:** more faithful to reality for ER-2-style `.delay` orbits.
+
+**Cons:** redundant with `climb_profile.rate_at()` if the duration
+matches the integrated rate over that band — caller has to compute
+this consistency themselves.  Adds API complexity.
 
 ### Option D — Document and accept
 
-The total-duration self-cancellation makes step-cruise a fidelity issue for visualization and per-segment timing, not for the headline mission-planning numbers.  Document in `FlightLine`'s docstring (already done in [hyplan/flight_line.py](../hyplan/flight_line.py)) and on `Aircraft.cruise_speed_at` that the single-altitude representation is intentional.  Don't add structure.
-
-**Pros:** zero code change; honest about the model's limits.
-
-**Cons:** users wanting per-segment fidelity have to reach for external tooling.
+The +11.5 min pre-survey residual is documented and the user
+interprets HyPlan's continuous-climb model as a known approximation.
+No code changes.
 
 ## Recommendation
 
-Defer the structural decision until after the **IWG1 sortie-replay notebook lands** and quantifies the divergence with the post-Item-1 hybrid planner.  If the per-segment residuals at typical mission-design altitudes are <10%, Option D is sufficient.  If the divergence is meaningful for science-mission planning, Option C is the smallest behavioral addition that addresses it.
+Option A is shipped.  Whether to do Option B depends on whether the
++11.5 min residual is a planning-fidelity blocker or an analytical
+nuisance.  For mission-design / fuel-budget calculations,
+`Aircraft.step_climb()` is sufficient — designers can call it
+directly to compute staged climb times.  For closing the residual in
+`compute_flight_plan` output, Option B is the smallest behavioral
+addition, but its complexity isn't justified until the residual is
+shown to bind real planning decisions.
 
 ## Out of scope
 
-* Real-time fuel-burn modeling.  HyPlan's `Aircraft` is fuel-agnostic; introducing fuel-state-dependent altitude requires a much larger structural change (BADA-style mass-dependent performance), out of scope here.
-* Wind-corrected step-cruise altitude.  Optimal altitude depends on wind aloft; that's a routing-optimization layer above HyPlan's current scope.
+* **Real-time fuel-burn modeling.**  HyPlan's `Aircraft` is
+  fuel-agnostic; introducing fuel-state-dependent climb performance
+  requires a much larger structural change (BADA-style mass-dependent
+  performance), out of scope here.
+* **Wind-corrected step-climb altitude.**  Optimal altitude depends on
+  wind aloft; that's a routing-optimization layer above HyPlan's
+  current scope.
+* **Cross-survey altitude drift.**  Documented as a separate
+  phenomenon above; for current survey-aircraft replays the
+  per-segment residual is small (≤2%) and not addressed by this
+  proposal.
