@@ -71,11 +71,21 @@ def compute_flight_plan(
         end_offset: Post-extension of each flight line (nautical miles).
         wind_speed: Optional constant wind speed as a ``pint.Quantity``
             (e.g. ``30 * ureg.knot``). When supplied together with
-            ``wind_direction``, every segment time is adjusted by the
-            headwind/tailwind component along its heading:
-            ``time = distance / (TAS − wind · cos(wind_from − heading))``.
-            Crosswind effects on ground speed are ignored. Defaults to no
-            wind, preserving the pre-v1.1 behavior exactly.
+            ``wind_direction``, the wind is decomposed into a
+            ``(u_east, v_north)`` vector and applied two ways:
+
+            1. Horizontal Dubins arcs in the takeoff, inter-line
+               transit, descent, and return phases use trochoidal
+               geometry (see
+               :class:`~hyplan.dubins3d._TrochoidDubins2D`), so turn
+               arcs are wind-drift-corrected and segment timing
+               reflects the actual ground track.
+            2. Each flight line is solved with a wind-corrected
+               heading (crab angle) and the resulting ground speed
+               from full kinematics, so both headwind/tailwind *and*
+               crosswind components affect segment time.
+
+            Defaults to no wind (still-air geometry and timing).
         wind_direction: Direction the wind is blowing *from*, in degrees
             true (meteorological convention: 0° = wind from north, 90° =
             from east). Required when ``wind_speed`` is set. Ignored when
