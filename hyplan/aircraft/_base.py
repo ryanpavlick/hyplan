@@ -33,7 +33,7 @@ from pint import Quantity
 
 from ..airports import Airport
 from ..atmosphere import cas_to_tas, mach_to_tas
-from ..dubins3d import DubinsPath3D
+from ..dubins3d import DubinsPath2D
 from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..units import ureg
 from ..waypoint import Waypoint
@@ -529,6 +529,15 @@ class Aircraft:
         """True airspeed at *altitude* using the cruise speed schedule."""
         return self.cruise_schedule.tas_at(altitude)
 
+    def climb_speed_at(self, altitude: Quantity) -> Quantity:
+        """True airspeed during climb at *altitude*.
+
+        Mirrors :meth:`descent_speed_at` for the climb schedule.  Most
+        aircraft factories alias ``climb_schedule`` to ``cruise_schedule``,
+        in which case this returns the same value as :meth:`cruise_speed_at`.
+        """
+        return self.climb_schedule.tas_at(altitude)
+
     def rate_of_climb(self, altitude: Quantity) -> Quantity:
         """Rate of climb at *altitude* from the climb profile."""
         return self.climb_profile.rate_at(altitude)
@@ -612,7 +621,7 @@ class Aircraft:
 
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
-            true_air_speed = self.cruise_speed_at(avg_alt)
+            true_air_speed = self.climb_speed_at(avg_alt)
         true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
 
         if end_altitude > self.service_ceiling:
@@ -915,6 +924,194 @@ class Aircraft:
             "dubins_path": cruise_descent["dubins_path"],
         }
 
+    def _hybrid_path(
+        self,
+        start_waypoint: Waypoint,
+        end_waypoint: Waypoint,
+        *,
+        cruise_altitude: Optional[Quantity] = None,
+        true_air_speed: Optional[Quantity] = None,
+        wind: Optional[Tuple[float, float]] = None,
+    ) -> dict:
+        """Solve a hybrid horizontal-Dubins + integrated-vertical path.
+
+        The horizontal layout comes from a 2D Dubins solver (turn radius
+        from ``max_bank_angle`` and TAS).  The vertical profile comes
+        from integrating ``climb_profile`` / ``descent_profile`` against
+        altitude — :meth:`_climb` and :meth:`_descend` already return
+        ``(time, horizontal_distance)`` for that altitude range.
+
+        ``cruise_altitude`` defaults to ``max(start.alt, end.alt)``.
+        Climb covers ``start.alt → cruise_alt``; descent covers
+        ``cruise_alt → end.alt``; cruise fills whatever horizontal
+        distance is left.  When the climb + descent horizontal distance
+        exceeds the 2D Dubins length (short-leg edge case), the
+        horizontal extents are scaled to fit and there's no cruise
+        segment — the aircraft "spirals up / down" within the leg
+        at full climb / descent times.
+
+        Returns a dict with:
+
+        * ``total_time``: ``Quantity`` (minutes).
+        * ``phases``: ``dict`` keyed by ``"climb"`` / ``"cruise"`` /
+          ``"descent"`` (only the present phases), each carrying
+          ``start_altitude``, ``end_altitude``, ``start_time``,
+          ``end_time``, ``distance``, ``geometry``,
+          ``start_lat / start_lon / end_lat / end_lon``,
+          ``start_heading / end_heading``.
+        * ``dubins_path``: the :class:`DubinsPath2D` instance (also
+          accessible via the ``horizontal_path`` key).
+        * ``horizontal_path``: alias of ``dubins_path``.
+
+        Wind handling: the 2D path uses trochoidal geometry when
+        ``wind`` is supplied.  Vertical integration (``_climb`` /
+        ``_descend``) is still-air-only — that's consistent with the
+        rest of the timing pipeline and good enough for HyPlan's
+        mission-planning use case.
+        """
+        start_alt = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
+        end_alt = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
+
+        if cruise_altitude is None:
+            # Default: the higher of the two endpoints.
+            cruise_altitude = start_alt if start_alt >= end_alt else end_alt
+        cruise_altitude = cruise_altitude.to(ureg.feet)
+
+        cruise_tas = (
+            true_air_speed
+            if true_air_speed is not None
+            else self.cruise_speed_at(cruise_altitude)
+        )
+
+        h_path = DubinsPath2D(
+            start_waypoint, end_waypoint,
+            speed=cruise_tas, bank_angle=self.max_bank_angle, wind=wind,
+        )
+        L_m = h_path.length.m_as(ureg.meter)
+        L_nmi = L_m / 1852.0
+
+        # Climb segment (start.alt -> cruise.alt).
+        if start_alt < cruise_altitude:
+            climb_t_q, climb_d_q = self._climb(start_alt, cruise_altitude)
+            climb_time_min = climb_t_q.m_as(ureg.minute)
+            climb_dist_nmi = climb_d_q.m_as(ureg.nautical_mile)
+        else:
+            climb_time_min = 0.0
+            climb_dist_nmi = 0.0
+
+        # Descent segment (cruise.alt -> end.alt).
+        if end_alt < cruise_altitude:
+            desc_t_q, desc_d_q = self._descend(cruise_altitude, end_alt)
+            descent_time_min = desc_t_q.m_as(ureg.minute)
+            descent_dist_nmi = desc_d_q.m_as(ureg.nautical_mile)
+        else:
+            descent_time_min = 0.0
+            descent_dist_nmi = 0.0
+
+        # Short-leg edge case: clamp horizontal extents but keep the full
+        # vertical times.  Aircraft "spirals up / down" within the leg.
+        total_v_dist = climb_dist_nmi + descent_dist_nmi
+        if total_v_dist > L_nmi and total_v_dist > 0:
+            scale = L_nmi / total_v_dist
+            climb_dist_nmi *= scale
+            descent_dist_nmi *= scale
+            cruise_dist_nmi = 0.0
+            cruise_time_min = 0.0
+        else:
+            cruise_dist_nmi = max(0.0, L_nmi - climb_dist_nmi - descent_dist_nmi)
+            cruise_tas_kt = cruise_tas.m_as(ureg.knot)
+            cruise_time_min = (
+                cruise_dist_nmi / cruise_tas_kt * 60.0
+                if cruise_tas_kt > 0
+                else 0.0
+            )
+
+        total_time_min = climb_time_min + cruise_time_min + descent_time_min
+
+        # Build phases dict with explicit per-phase geometry.
+        phases: dict = {}
+        cum_dist_m = 0.0
+        cum_time_min = 0.0
+        nmi_to_m = 1852.0
+        eps = 1e-6
+
+        if climb_time_min > eps or climb_dist_nmi > eps:
+            end_d_m = climb_dist_nmi * nmi_to_m
+            s_lat, s_lon, s_hdg = h_path.sample_at_distance(0.0)
+            e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
+            phases["climb"] = {
+                "start_altitude": start_alt,
+                "end_altitude": cruise_altitude,
+                "start_time": cum_time_min * ureg.minute,
+                "end_time": (cum_time_min + climb_time_min) * ureg.minute,
+                "distance": climb_dist_nmi * ureg.nautical_mile,
+                "geometry": h_path.sublinestring(0.0, end_d_m),
+                "start_lat": s_lat, "start_lon": s_lon,
+                "end_lat": e_lat, "end_lon": e_lon,
+                "start_heading": s_hdg, "end_heading": e_hdg,
+            }
+            cum_dist_m = end_d_m
+            cum_time_min += climb_time_min
+
+        if cruise_time_min > eps or cruise_dist_nmi > eps:
+            end_d_m = cum_dist_m + cruise_dist_nmi * nmi_to_m
+            s_lat, s_lon, s_hdg = h_path.sample_at_distance(cum_dist_m)
+            e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
+            phases["cruise"] = {
+                "start_altitude": cruise_altitude,
+                "end_altitude": cruise_altitude,
+                "start_time": cum_time_min * ureg.minute,
+                "end_time": (cum_time_min + cruise_time_min) * ureg.minute,
+                "distance": cruise_dist_nmi * ureg.nautical_mile,
+                "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
+                "start_lat": s_lat, "start_lon": s_lon,
+                "end_lat": e_lat, "end_lon": e_lon,
+                "start_heading": s_hdg, "end_heading": e_hdg,
+            }
+            cum_dist_m = end_d_m
+            cum_time_min += cruise_time_min
+
+        if descent_time_min > eps or descent_dist_nmi > eps:
+            end_d_m = L_m
+            s_lat, s_lon, s_hdg = h_path.sample_at_distance(cum_dist_m)
+            e_lat, e_lon, e_hdg = h_path.sample_at_distance(end_d_m)
+            phases["descent"] = {
+                "start_altitude": cruise_altitude,
+                "end_altitude": end_alt,
+                "start_time": cum_time_min * ureg.minute,
+                "end_time": (cum_time_min + descent_time_min) * ureg.minute,
+                "distance": descent_dist_nmi * ureg.nautical_mile,
+                "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
+                "start_lat": s_lat, "start_lon": s_lon,
+                "end_lat": e_lat, "end_lon": e_lon,
+                "start_heading": s_hdg, "end_heading": e_hdg,
+            }
+            cum_time_min += descent_time_min
+
+        # Always emit at least one phase.  Pure cruise at equal altitudes
+        # falls into the cruise branch above; if even that is empty
+        # (degenerate zero-length path), synthesize a trivial cruise.
+        if not phases:
+            s_lat, s_lon, s_hdg = h_path.sample_at_distance(0.0)
+            phases["cruise"] = {
+                "start_altitude": cruise_altitude,
+                "end_altitude": cruise_altitude,
+                "start_time": 0 * ureg.minute,
+                "end_time": 0 * ureg.minute,
+                "distance": 0 * ureg.nautical_mile,
+                "geometry": h_path.geometry,
+                "start_lat": s_lat, "start_lon": s_lon,
+                "end_lat": s_lat, "end_lon": s_lon,
+                "start_heading": s_hdg, "end_heading": s_hdg,
+            }
+
+        return {
+            "total_time": total_time_min * ureg.minute,
+            "phases": phases,
+            "dubins_path": h_path,
+            "horizontal_path": h_path,
+        }
+
     def time_to_cruise(
         self,
         start_waypoint: Waypoint,
@@ -924,121 +1121,19 @@ class Aircraft:
     ) -> dict:
         """Calculate time to fly between two waypoints.
 
-        Uses 3D Dubins path planning with pitch constraints derived from
-        climb/descent performance.  Returns a dict with ``total_time``,
-        ``phases``, and ``dubins_path``.
+        Hybrid 2D Dubins (horizontal layout) + integrated vertical
+        profile.  Returns a dict with ``total_time``, ``phases``, and
+        ``dubins_path`` (the 2D path; legacy key name kept for
+        backward compatibility — use ``horizontal_path`` in new code).
 
         Args:
             wind: Optional ``(u_east, v_north)`` wind vector in m/s.
                 When provided, horizontal turning arcs become trochoids
-                and the returned path length / timing account for wind.
+                and the 2D path length / timing account for wind drift.
+                Vertical integration is still-air.
         """
-        true_air_speed = true_air_speed or self.cruise_speed_at(
-            end_waypoint.altitude_msl  # type: ignore[arg-type]
+        return self._hybrid_path(
+            start_waypoint, end_waypoint,
+            true_air_speed=true_air_speed, wind=wind,
         )
 
-        start_altitude = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
-        end_altitude = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
-
-        pitch_min, pitch_max = self.pitch_limits(true_air_speed)
-
-        path = DubinsPath3D(
-            start=start_waypoint,
-            end=end_waypoint,
-            speed=true_air_speed,
-            bank_angle=self.max_bank_angle,
-            pitch_min=pitch_min,
-            pitch_max=pitch_max,
-            wind=wind,
-        )
-
-        distance = path.length.to(ureg.nautical_mile)
-        total_time = (distance / true_air_speed).to(ureg.minute)
-
-        phases = self._phases_from_3d_path(
-            path, true_air_speed, start_altitude, end_altitude, total_time,
-        )
-
-        return {
-            "total_time": total_time,
-            "phases": phases,
-            "dubins_path": path,
-        }
-
-    def _phases_from_3d_path(
-        self,
-        path3d,
-        true_air_speed: Quantity,
-        start_altitude: Quantity,
-        end_altitude: Quantity,
-        total_time: Quantity,
-    ) -> dict:
-        """Split a 3D Dubins path into climb/cruise/descent phases."""
-        pts = path3d.points  # (N, 5): lat, lon, alt_m, heading, pitch
-        alts_m = pts[:, 2]
-        n = len(alts_m)
-
-        if n < 2:
-            return {
-                "cruise": {
-                    "start_altitude": start_altitude,
-                    "end_altitude": end_altitude,
-                    "start_time": 0 * ureg.minute,
-                    "end_time": total_time,
-                    "distance": path3d.length.to(ureg.nautical_mile),
-                }
-            }
-
-        pitches = pts[:, 4]
-        seg_pitches = (pitches[:-1] + pitches[1:]) / 2.0
-        pitch_threshold_deg = 0.001
-        segment_types = np.where(
-            seg_pitches > pitch_threshold_deg,
-            1,
-            np.where(seg_pitches < -pitch_threshold_deg, -1, 0),
-        )
-
-        phases = {}
-        i = 0
-        phase_idx = 0
-
-        while i < len(segment_types):
-            seg_type = segment_types[i]
-            j = i
-            while j < len(segment_types) and segment_types[j] == seg_type:
-                j += 1
-
-            frac_start = i / (n - 1)
-            frac_end = j / (n - 1)
-            phase_time_start = total_time * frac_start
-            phase_time_end = total_time * frac_end
-            phase_distance = path3d.length.to(ureg.nautical_mile) * (
-                frac_end - frac_start
-            )
-
-            phase_start_alt = ureg.Quantity(float(alts_m[i]), "meter").to(ureg.feet)
-            phase_end_alt = ureg.Quantity(
-                float(alts_m[min(j, n - 1)]), "meter"
-            ).to(ureg.feet)
-
-            if seg_type == 1:
-                label = "cruise_climb"
-            elif seg_type == -1:
-                label = "cruise_descent"
-            else:
-                label = "cruise"
-
-            key = label if label not in phases else f"{label}_{phase_idx}"
-
-            phases[key] = {
-                "start_altitude": phase_start_alt,
-                "end_altitude": phase_end_alt,
-                "start_time": phase_time_start.to(ureg.minute),
-                "end_time": phase_time_end.to(ureg.minute),
-                "distance": phase_distance,
-            }
-
-            phase_idx += 1
-            i = j
-
-        return phases

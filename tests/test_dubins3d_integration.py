@@ -79,7 +79,16 @@ class TestTimeToCruise:
         has_descent = any("descent" in k for k in result["phases"])
         assert has_descent
 
-    def test_path_has_3d_geometry(self, b200):
+    def test_path_has_geometry(self, b200):
+        """The hybrid path returns a 2D DubinsPath2D in dubins_path.
+
+        (Previously this asserted geometry_3d, which the legacy 3D-only
+        implementation provided.  The hybrid planner uses 2D Dubins for
+        plan-view geometry and integrates altitude separately, so a
+        single 3D LineString isn't part of the output any more — per-
+        phase records carry their own (lon, lat) sublinestrings, and
+        altitudes come from the phase records.)
+        """
         start = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(15000, "feet"))
         end = Waypoint(34.2, -118.0, 0.0, altitude_msl=ureg.Quantity(20000, "feet"))
 
@@ -87,8 +96,10 @@ class TestTimeToCruise:
         path = result["dubins_path"]
 
         assert path.geometry is not None
-        assert path.geometry_3d is not None
-        assert len(path.geometry.coords) > 2
+        assert len(path.geometry.coords) >= 2
+        # Per-phase explicit geometry replaces the old shared 3D path.
+        for phase_record in result["phases"].values():
+            assert phase_record["geometry"] is not None
 
     def test_phases_cover_total_time(self, b200):
         start = Waypoint(34.0, -118.0, 45.0, altitude_msl=ureg.Quantity(10000, "feet"))

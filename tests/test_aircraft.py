@@ -263,6 +263,22 @@ class TestAircraftPerformance:
         speed = ac.cruise_speed_at(ac.service_ceiling)
         assert speed.magnitude > 0
 
+    def test_climb_speed_at_returns_climb_schedule_value(self):
+        """climb_speed_at delegates to climb_schedule.tas_at."""
+        ac = B200()
+        alt = 20000 * ureg.feet
+        assert ac.climb_speed_at(alt).m_as(ureg.knot) == pytest.approx(
+            ac.climb_schedule.tas_at(alt).m_as(ureg.knot), rel=1e-9,
+        )
+
+    def test_climb_speed_at_aliased_factory_matches_cruise(self):
+        """When climb_schedule is aliased to cruise_schedule, they agree."""
+        ac = NASA_ER2()  # NASA_ER2 currently aliases climb = cruise schedule
+        alt = 30000 * ureg.feet
+        assert ac.climb_speed_at(alt).m_as(ureg.knot) == pytest.approx(
+            ac.cruise_speed_at(alt).m_as(ureg.knot), rel=1e-9,
+        )
+
     def test_rate_of_climb_decreases(self):
         ac = B200()
         roc_low = ac.rate_of_climb(ureg.Quantity(0, "feet"))
@@ -382,6 +398,119 @@ class TestClimbAndDescend:
 
 
 # ---------------------------------------------------------------------------
+# Hybrid 2D-Dubins + integrated-vertical path
+# ---------------------------------------------------------------------------
+
+class TestHybridPath:
+    """Cover the four cases of Aircraft._hybrid_path (via time_to_cruise).
+
+    Long leg (cruise reachable), short leg (spiral-up scaling), pure
+    cruise, and pure descent.
+    """
+
+    def _wp(self, lat, lon, alt_ft, hdg=90.0):
+        from hyplan.waypoint import Waypoint
+        return Waypoint(lat, lon, hdg, altitude_msl=alt_ft * ureg.feet)
+
+    def test_long_leg_normal_cruise(self):
+        """Long climb-then-cruise leg: both phases present, totals balance."""
+        ac = B200()
+        # 200 nmi leg: well over the climb_distance the B200 needs to FL200.
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 5000), self._wp(36.0, -114.0, 20000),
+        )
+        phases = info["phases"]
+        assert "climb" in phases
+        assert "cruise" in phases
+        assert "descent" not in phases
+        # Phase times sum to total.
+        phase_total = sum(
+            (p["end_time"] - p["start_time"]).m_as(ureg.minute)
+            for p in phases.values()
+        )
+        assert phase_total == pytest.approx(
+            info["total_time"].m_as(ureg.minute), rel=1e-6,
+        )
+        # Climb phase ends at the requested cruise altitude.
+        assert phases["climb"]["end_altitude"].m_as(ureg.feet) == pytest.approx(20000)
+        # Cruise phase is at constant altitude (= cruise alt).
+        assert phases["cruise"]["start_altitude"].m_as(ureg.feet) == pytest.approx(20000)
+        assert phases["cruise"]["end_altitude"].m_as(ureg.feet) == pytest.approx(20000)
+
+    def test_short_leg_spiral_up_no_cruise(self):
+        """Short leg where climb_distance > L: aircraft 'spirals up' — no cruise."""
+        ac = NASA_ER2()
+        # ~30 nmi leg — far less than ER-2's ~270 nmi climb-to-FL600 distance.
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 0), self._wp(34.5, -117.5, 60000),
+        )
+        phases = info["phases"]
+        assert "climb" in phases
+        assert "cruise" not in phases  # leg too short for cruise
+        # Climb phase covers the full horizontal Dubins length.
+        h_length_nmi = info["dubins_path"].length.m_as(ureg.nautical_mile)
+        assert phases["climb"]["distance"].m_as(ureg.nautical_mile) == pytest.approx(
+            h_length_nmi, rel=1e-3,
+        )
+        # And takes the full integrated climb time (60+ min for ER-2 to FL600).
+        climb_min = (
+            (phases["climb"]["end_time"] - phases["climb"]["start_time"])
+            .m_as(ureg.minute)
+        )
+        assert climb_min > 50, "spiral-up should take the full climb integration time"
+
+    def test_pure_cruise(self):
+        """Equal altitudes: no climb / descent, only cruise."""
+        ac = B200()
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 20000), self._wp(34.5, -117.5, 20000),
+        )
+        phases = info["phases"]
+        assert set(phases) == {"cruise"}
+        # Cruise time = horizontal distance / TAS.
+        h_nmi = info["dubins_path"].length.m_as(ureg.nautical_mile)
+        tas_kt = ac.cruise_speed_at(20000 * ureg.feet).m_as(ureg.knot)
+        expected_min = h_nmi / tas_kt * 60.0
+        assert info["total_time"].m_as(ureg.minute) == pytest.approx(
+            expected_min, rel=1e-3,
+        )
+
+    def test_descent_then_endpoint(self):
+        """End altitude < start altitude: cruise + descent (or pure descent)."""
+        ac = B200()
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 20000), self._wp(34.5, -117.5, 5000),
+        )
+        phases = info["phases"]
+        assert "descent" in phases
+        # Descent phase ends at the requested end altitude.
+        assert phases["descent"]["end_altitude"].m_as(ureg.feet) == pytest.approx(5000)
+
+    def test_explicit_phase_geometry_present(self):
+        """Each phase carries its own LineString — no shared-Dubins slicing."""
+        ac = B200()
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 5000), self._wp(36.0, -114.0, 20000),
+        )
+        for phase_name, p in info["phases"].items():
+            assert p.get("geometry") is not None, f"{phase_name} missing geometry"
+            assert len(p["geometry"].coords) >= 2
+
+    def test_top_of_climb_geometry_along_2d_path(self):
+        """Climb-phase end coord matches sample_at_distance(climb_distance)."""
+        ac = B200()
+        info = ac.time_to_cruise(
+            self._wp(34.0, -118.0, 5000), self._wp(36.0, -114.0, 20000),
+        )
+        h_path = info["dubins_path"]
+        climb = info["phases"]["climb"]
+        climb_dist_m = climb["distance"].m_as(ureg.meter)
+        expected_lat, expected_lon, _ = h_path.sample_at_distance(climb_dist_m)
+        assert climb["end_lat"] == pytest.approx(expected_lat, abs=1e-6)
+        assert climb["end_lon"] == pytest.approx(expected_lon, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
 # ER-2 performance (high-altitude, TAS speed profile)
 # ---------------------------------------------------------------------------
 
@@ -411,6 +540,39 @@ class TestER2Performance:
     def test_max_bank_angle(self):
         ac = NASA_ER2()
         assert 0 < ac.max_bank_angle < 90
+
+    # --- Hybrid-path / climb-step planner regression tests ------------------
+
+    def test_climb_step_visible_in_planner(self):
+        """time_to_cruise's climb-phase time matches Aircraft._climb directly.
+
+        The hybrid planner integrates climb_profile through `_climb`, so the
+        climb step encoded in the calibrated ER-2 climb_profile (19-21 kft
+        plateau) propagates into mission timing — previously the planner
+        used a constant-pitch Dubins path that ignored the step entirely.
+        """
+        from hyplan.waypoint import Waypoint
+        ac = NASA_ER2()
+        start = Waypoint(34.0, -118.0, 90.0, altitude_msl=0 * ureg.feet)
+        # Make the leg long enough that climb fits horizontally (no spiral-up).
+        end = Waypoint(35.0, -114.0, 90.0, altitude_msl=60000 * ureg.feet)
+        info = ac.time_to_cruise(start, end)
+        climb_phase = info["phases"]["climb"]
+        climb_phase_min = (
+            (climb_phase["end_time"] - climb_phase["start_time"]).m_as(ureg.minute)
+        )
+        direct_climb_min = ac._climb(0 * ureg.feet, 60000 * ureg.feet)[0].m_as(
+            ureg.minute
+        )
+        # Phase time should equal _climb's integrated time within numerical noise.
+        assert climb_phase_min == pytest.approx(direct_climb_min, rel=1e-3)
+        # And should be much longer than 16 min (which is what the legacy
+        # constant-pitch Dubins path produced for a comparable leg).
+        assert climb_phase_min > 30, (
+            f"climb phase time {climb_phase_min:.1f} min should reflect the "
+            f"integrated climb_profile (with the step), not the legacy "
+            f"constant-pitch underestimate"
+        )
 
     # --- IWG1 calibration regression tests -----------------------------------
 

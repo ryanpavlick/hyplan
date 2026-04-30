@@ -879,3 +879,214 @@ class DubinsPath3D:
             "end_heading": self.end.heading,
             "distance": self.length.m_as(ureg.nautical_mile),
         }
+
+
+# ---------------------------------------------------------------------------
+# 2D horizontal Dubins path (plan-view only)
+# ---------------------------------------------------------------------------
+
+class DubinsPath2D:
+    """Horizontal-only Dubins path between two waypoints.
+
+    Pure plan-view geometry — bank-angle-constrained turns and straight
+    segments. The vertical profile (altitude vs along-track distance) is
+    intentionally not modeled here. This is the geometry consumed by the
+    hybrid mission planner: solve the horizontal layout once, integrate
+    altitude vs. distance separately from ``Aircraft.climb_profile`` /
+    ``Aircraft.descent_profile``.
+
+    In still air, uses the standard CSC/CCC Dubins solver. With wind,
+    uses the trochoidal solver (Sachdev et al., 2023) — turning arcs
+    drift with the wind, producing distorted but optimal ground tracks.
+
+    Args:
+        start: Starting waypoint (lat / lon / heading required;
+            altitude is ignored).
+        end: Ending waypoint (same).
+        speed: True airspeed used to size the turn radius given
+            ``bank_angle``. Float (m/s) or pint Quantity with speed
+            units.
+        bank_angle: Maximum bank angle in degrees.
+        wind: Optional ``(u_east, v_north)`` wind vector in m/s. When
+            provided, the horizontal path uses trochoidal geometry.
+        n_samples: Number of sampled points along the path. Defaults
+            to 50.
+
+    The reported :attr:`length` is the **air-frame** path length
+    (``time = length / TAS`` is the time spent traversing it). In
+    still air this equals the ground-track length; with wind, ground
+    distance is via the sampled :attr:`geometry`.
+    """
+
+    def __init__(
+        self,
+        start: Waypoint,
+        end: Waypoint,
+        speed: Union[Quantity, float],
+        bank_angle: float,
+        *,
+        wind: Optional[Tuple[float, float]] = None,
+        n_samples: int = 50,
+    ):
+        if not is_waypoint(start) or not is_waypoint(end):
+            raise HyPlanTypeError("start and end must be Waypoint objects")
+
+        self.start = start
+        self.end = end
+
+        if isinstance(speed, (int, float)):
+            self._speed_mps = float(speed)
+        elif hasattr(speed, "units") and speed.check("[speed]"):
+            self._speed_mps = speed.m_as(ureg.meter / ureg.second)
+        else:
+            raise HyPlanTypeError(
+                "speed must be float (m/s) or pint Quantity with speed units"
+            )
+
+        self._bank_angle_deg = float(bank_angle)
+        self._wind = wind
+
+        g = 9.8
+        bank_rad = math.radians(self._bank_angle_deg)
+        if math.tan(bank_rad) <= 0:
+            raise HyPlanValueError(
+                f"bank_angle must be in (0, 90) degrees; got {bank_angle}"
+            )
+        self._rhomin = (self._speed_mps ** 2) / (g * math.tan(bank_rad))
+
+        # UTM transforms (cached for sample_at_distance).
+        to_utm, from_utm = get_utm_transforms([start.geometry, end.geometry])
+        self._from_utm = from_utm
+        start_utm = transform(to_utm, start.geometry)
+        end_utm = transform(to_utm, end.geometry)
+
+        # Math-frame headings (CCW from +x, i.e. east).
+        heading1 = -math.radians(start.heading - 90.0)
+        heading2 = -math.radians(end.heading - 90.0)
+
+        qi = np.array([start_utm.x, start_utm.y, heading1])
+        qf = np.array([end_utm.x, end_utm.y, heading2])
+
+        if wind is None:
+            self._solver = _Dubins2D(qi, qf, self._rhomin)
+            self._length_m = float(self._solver.maneuver.length)
+            self._duration_s = (
+                self._length_m / self._speed_mps if self._speed_mps > 0 else 0.0
+            )
+        else:
+            self._solver = _TrochoidDubins2D(
+                qi, qf, self._rhomin, self._speed_mps, wind[0], wind[1],
+            )
+            self._length_m = float(self._solver.maneuver.length)  # air-frame
+            self._duration_s = float(self._solver.total_time)
+
+        # Sample the path geometry.
+        self._n_samples = max(int(n_samples), 2)
+        self._points = self._sample_points(self._n_samples)
+        lons = self._points[:, 1]
+        lats = self._points[:, 0]
+        self._geometry = LineString(np.column_stack([lons, lats]))
+
+    # -- private helpers ------------------------------------------------------
+
+    def _sample_points(self, n: int) -> np.ndarray:
+        """Return (n, 3) array of (lat, lon, heading_deg) along the path."""
+        if self._length_m <= 0:
+            single = np.array([[
+                self.start.latitude, self.start.longitude, self.start.heading,
+            ]])
+            return single
+        if self._wind is None:
+            offsets = np.linspace(0.0, self._length_m, n)
+            samples = [self._solver.get_coordinates_at(float(d)) for d in offsets]
+        else:
+            times = np.linspace(0.0, self._duration_s, n)
+            samples = [self._solver.get_coordinates_at(float(t)) for t in times]
+        utm = np.array([(s[0], s[1]) for s in samples])
+        headings_math = np.array([s[2] for s in samples])
+        lons, lats = self._from_utm(utm[:, 0], utm[:, 1])
+        headings_geo = (90.0 - np.degrees(headings_math)) % 360.0
+        return np.column_stack([lats, lons, headings_geo])
+
+    # -- public surface -------------------------------------------------------
+
+    @property
+    def length(self) -> Quantity:
+        """Air-frame path length (``time = length / TAS``)."""
+        return self._length_m * ureg.meter  # type: ignore[no-any-return]
+
+    @property
+    def geometry(self) -> LineString:
+        """2D ``(lon, lat)`` LineString of the path."""
+        return self._geometry
+
+    @property
+    def points(self) -> np.ndarray:
+        """Sampled path points as a ``(n, 3)`` array of ``(lat, lon, heading_deg)``."""
+        return self._points
+
+    @property
+    def min_turn_radius(self) -> Quantity:
+        """Minimum 2D turn radius (m) — derived from speed and bank angle."""
+        return self._rhomin * ureg.meter  # type: ignore[no-any-return]
+
+    def sample_at_distance(self, distance: Union[Quantity, float]) -> Tuple[float, float, float]:
+        """Return ``(lat, lon, heading_deg)`` at the given air-frame distance.
+
+        Distance is clamped to ``[0, length]`` to keep the call safe at
+        endpoints and at floating-point round-off boundaries.
+        """
+        if isinstance(distance, Quantity):
+            d_m = distance.m_as(ureg.meter)
+        else:
+            d_m = float(distance)
+        d_m = max(0.0, min(d_m, self._length_m))
+        if self._length_m <= 0:
+            return (self.start.latitude, self.start.longitude, self.start.heading)
+        if self._wind is None:
+            sample = self._solver.get_coordinates_at(d_m)
+        else:
+            t = d_m / self._speed_mps if self._speed_mps > 0 else 0.0
+            sample = self._solver.get_coordinates_at(t)
+        x, y, heading_math = sample
+        lon, lat = self._from_utm(float(x), float(y))
+        heading_geo = (90.0 - math.degrees(float(heading_math))) % 360.0
+        return float(lat), float(lon), float(heading_geo)
+
+    def sublinestring(
+        self,
+        distance_start: Union[Quantity, float],
+        distance_end: Union[Quantity, float],
+        *,
+        n_samples: int = 20,
+    ) -> LineString:
+        """Return a multi-point ``(lon, lat)`` LineString covering the path
+        between two air-frame distance offsets along it.
+
+        Used by the hybrid mission planner to assign explicit per-phase
+        geometry: each phase (climb / cruise / descent) gets a
+        sub-LineString that follows the actual Dubins curve through its
+        distance range, instead of a proportional time-based slice of a
+        shared 3D path.
+        """
+        if isinstance(distance_start, Quantity):
+            ds_m = distance_start.m_as(ureg.meter)
+        else:
+            ds_m = float(distance_start)
+        if isinstance(distance_end, Quantity):
+            de_m = distance_end.m_as(ureg.meter)
+        else:
+            de_m = float(distance_end)
+        ds_m = max(0.0, min(ds_m, self._length_m))
+        de_m = max(0.0, min(de_m, self._length_m))
+        if de_m <= ds_m + 1e-6:
+            # Degenerate slice — return a 2-point line at the start of the slice.
+            lat, lon, _ = self.sample_at_distance(ds_m)
+            return LineString([(lon, lat), (lon, lat)])
+        n = max(int(n_samples), 2)
+        distances = np.linspace(ds_m, de_m, n)
+        coords = []
+        for d in distances:
+            lat, lon, _ = self.sample_at_distance(float(d))
+            coords.append((lon, lat))
+        return LineString(coords)

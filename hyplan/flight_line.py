@@ -119,7 +119,23 @@ class FlightLine:
 
     @property
     def altitude_msl(self) -> Quantity:
-        """Flight altitude MSL (from waypoint1)."""
+        """Flight altitude MSL (from waypoint1).
+
+        ``FlightLine`` is a single-altitude representation: both endpoints
+        carry the same MSL altitude.  Aircraft that step-cruise across a
+        survey grid (e.g., the ER-2 transitioning ~50 → 55 → 60 → 61 kft
+        as fuel burns off over a multi-hour mission) cannot be modeled
+        exactly with a single-altitude line — per-line timing and TAS
+        will diverge from real sortie traces.  Bottom-line mission
+        duration is approximately self-canceling (lower TAS at lower
+        altitudes adds time that is offset by less climb-rate cost
+        reaching the assumed cruise altitude), so total range / fuel
+        planning remains usable; per-segment fidelity does not.
+
+        See ``proposals/0002-step-cruise.md`` for the structural
+        options under consideration (multi-altitude FlightLine,
+        altitude-by-elapsed-time policy on Aircraft, etc.).
+        """
         return self._waypoint1.altitude_msl  # type: ignore[return-value]
 
     @altitude_msl.setter
