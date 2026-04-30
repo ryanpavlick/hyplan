@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hyplan.aircraft import load_iwg1
+from hyplan.aircraft import load_iwg1, trim_ground_taxi
 from hyplan.exceptions import HyPlanValueError
 
 
@@ -217,6 +217,125 @@ class TestErrorHandling:
 # ---------------------------------------------------------------------------
 # Real-data smoke test (skipped when the cache is empty)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# trim_ground_taxi
+# ---------------------------------------------------------------------------
+
+
+class TestTrimGroundTaxi:
+    def _build_synthetic_sortie(self, tmp_path):
+        """Synthetic sortie: 3 taxi fixes, takeoff roll, climb to 30 kft,
+        cruise, descent, landing rollout, 3 taxi fixes — 50 fixes total."""
+        rows = []
+        ts = pd.Timestamp("2024-01-01T00:00:00")
+        # 3 standing/taxi fixes at ground level, low GS.
+        for i in range(3):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * i)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000, "Ground Speed": 5},  # 5 m/s ≈ 9.7 kt taxi
+            ))
+        # Takeoff roll: GS rising 0 → ~80 m/s, altitude near ground.
+        for i in range(5):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 3))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000 + 50 * i, "Ground Speed": 30 + 12 * i},
+            ))
+        # Climb to 30 kft.
+        for i in range(15):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 8))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 2000 + 2000 * i, "Ground Speed": 100},
+            ))
+        # Cruise.
+        for i in range(15):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 23))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 30000, "Ground Speed": 100},
+            ))
+        # Descent.
+        for i in range(15):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 38))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 30000 - 2000 * i, "Ground Speed": 80},
+            ))
+        # Landing rollout: high GS (all > 30 kt threshold), ground level.
+        for i in range(5):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 53))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000, "Ground Speed": 60 - 5 * i},
+            ))
+        # 3 standing/taxi fixes.
+        for i in range(3):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 58))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000, "Ground Speed": 3},
+            ))
+        return _write_iwg1_csv(tmp_path, rows)
+
+    def test_trims_pre_and_post_taxi(self, tmp_path):
+        p = self._build_synthetic_sortie(tmp_path)
+        df = load_iwg1(p)
+        n_before = len(df)
+        trimmed = trim_ground_taxi(df)
+        # The 3+3 leading/trailing taxi fixes should be gone.
+        assert len(trimmed) == n_before - 6
+        # First fix should be in the takeoff roll (GS > 30 kt).
+        assert trimmed["groundspeed"].iloc[0] > 30
+        # Last fix should be in the landing rollout (GS > 30 kt).
+        assert trimmed["groundspeed"].iloc[-1] > 30
+
+    def test_keeps_takeoff_rollout_via_groundspeed(self, tmp_path):
+        # Takeoff roll has GS > 30 kt but altitude near ground reference.
+        p = self._build_synthetic_sortie(tmp_path)
+        df = load_iwg1(p)
+        trimmed = trim_ground_taxi(df)
+        # Verify there are fixes within 200 ft of ground (the rolls).
+        ground_ref = trimmed["altitude"].min()
+        near_ground = (trimmed["altitude"] - ground_ref) < 200
+        assert near_ground.any(), "rollout fixes should be retained"
+
+    def test_keeps_low_altitude_approach(self, tmp_path):
+        # Synthesize a long approach below the AGL threshold but with
+        # reasonable groundspeed.  Should be retained.
+        rows = []
+        ts = pd.Timestamp("2024-01-01T00:00:00")
+        # 3 taxi fixes (excluded).
+        for i in range(3):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * i)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000, "Ground Speed": 4},
+            ))
+        # Approach 100 ft AGL but GS 40 m/s ≈ 78 kt — should be kept.
+        for i in range(8):
+            rows.append(_row(
+                (ts + pd.Timedelta(seconds=5 * (i + 3))).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1100, "Ground Speed": 40},
+            ))
+        p = _write_iwg1_csv(tmp_path, rows)
+        df = load_iwg1(p)
+        trimmed = trim_ground_taxi(df)
+        assert len(trimmed) == 8
+
+    def test_empty_in_empty_out(self):
+        empty = pd.DataFrame(columns=["altitude", "groundspeed"])
+        out = trim_ground_taxi(empty)
+        assert len(out) == 0
+
+    def test_no_airborne_fixes_returns_empty(self, tmp_path):
+        # All 5 fixes are slow + ground level — the trace is pure taxi.
+        rows = [
+            _row(
+                (pd.Timestamp("2024-01-01T00:00:00") + pd.Timedelta(seconds=5 * i)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                **{"Pressure Altitude": 1000, "Ground Speed": 5},
+            )
+            for i in range(5)
+        ]
+        p = _write_iwg1_csv(tmp_path, rows)
+        df = load_iwg1(p)
+        trimmed = trim_ground_taxi(df)
+        assert len(trimmed) == 0
 
 
 @pytest.mark.skipif(

@@ -19,7 +19,7 @@ from ._base import (  # noqa: F401
     SourceRecord,
 )
 
-from .iwg1 import load_iwg1  # noqa: F401
+from .iwg1 import load_iwg1, trim_ground_taxi  # noqa: F401
 
 from ._models import (  # noqa: F401
     NASA_ER2,
@@ -66,4 +66,5 @@ __all__ = [
     "Learjet",
     "TwinOtter",
     "load_iwg1",
+    "trim_ground_taxi",
 ]

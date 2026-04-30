@@ -135,3 +135,47 @@ def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
         out["vertical_rate"] = np.nan
 
     return out
+
+
+def trim_ground_taxi(
+    df: pd.DataFrame,
+    *,
+    groundspeed_threshold_kt: float = 25.0,
+) -> pd.DataFrame:
+    """Trim pre-takeoff / post-landing taxi from a sortie DataFrame.
+
+    Defines the **airborne window** as the contiguous range from the
+    first to the last fix where ``groundspeed > groundspeed_threshold_kt``.
+    Anything slower is treated as taxi or standing (including the
+    aircraft parked at an elevated ramp, where altitude alone would be
+    misleading — many airports have the ramp tens of feet above the
+    runway threshold).
+
+    Default 25 kt cleanly separates ER-2 taxi (typically ≤ 15 kt
+    observed) from takeoff and landing rollouts (≥ 30 kt) while still
+    capturing the very slow end of rollout and any unusual taxi
+    excursions.
+
+    Args:
+        df: Output of :func:`load_iwg1`.
+        groundspeed_threshold_kt: Ground speed above which a fix is
+            considered airborne.
+
+    Returns:
+        Sliced DataFrame from first-airborne to last-airborne fix
+        (inclusive). The index is reset.
+
+    If the trace contains no airborne fixes (e.g., a ground-test
+    record or a missing ``groundspeed`` column), the returned DataFrame
+    is empty.
+    """
+    if df.empty or "groundspeed" not in df.columns:
+        return df.iloc[0:0].reset_index(drop=True)
+
+    gs = df["groundspeed"]
+    airborne = gs > groundspeed_threshold_kt
+    if not airborne.any():
+        return df.iloc[0:0].reset_index(drop=True)
+    first = int(airborne.values.argmax())
+    last = int(len(airborne) - 1 - airborne.values[::-1].argmax())
+    return df.iloc[first : last + 1].reset_index(drop=True)

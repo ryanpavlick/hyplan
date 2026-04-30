@@ -84,10 +84,10 @@ class NASA_ER2(Aircraft):
     * Two-regime descent: peak idle-power |VS| ~3675 fpm at top-of-
       descent, decaying to ~840 fpm at top-of-approach as the aircraft
       configures for the terminal pattern.
-    * Empirical 2.6° glideslope on the terminal approach (shallower
+    * Empirical 2.5° glideslope on the terminal approach (shallower
       than standard 3° ILS — ER-2's approach geometry as flown across
-      the IWG1 sortie set; sample-bounded, with only 2 sorties having
-      fixes ≤ 50 ft AGL for the touchdown estimate).
+      the IWG1 sortie set; touchdown estimate uses 6 sorties with
+      fixes ≤ 50 ft AGL after ground-taxi trim).
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC <https://airbornescience.nasa.gov/aircraft/ER-2_-_AFRC>`_
@@ -123,24 +123,26 @@ class NASA_ER2(Aircraft):
             # approach_profile below.  Bottom anchor at 5240 ft MSL =
             # representative airport elevation 2240 ft + 3000 ft AGL.
             descent_profile=VerticalProfile(points=[
-                ( 5240 * ureg.feet,  844 * ureg.feet / ureg.minute),  # top-of-approach MSL
+                ( 5242 * ureg.feet,  844 * ureg.feet / ureg.minute),  # top-of-approach MSL
                 (45000 * ureg.feet, 2955 * ureg.feet / ureg.minute),  # steady steep regime
                 (66000 * ureg.feet, 3675 * ureg.feet / ureg.minute),  # top-of-descent
             ]),
             # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
-            # 2.6° glideslope is the empirical median over 789 IWG1
-            # approach-phase fixes; touchdown 90 kt is the per-sortie
-            # weighted median TAS in the lowest 50 ft AGL band, but
-            # sample-bounded (n=2 sorties with that-low coverage).
+            # 2.5° glideslope is the empirical median over 846 IWG1
+            # approach-phase fixes; touchdown 65 kt is the per-sortie
+            # median TAS in the lowest 50 ft AGL band, n=6 sorties
+            # contributing.  Plausible for ER-2's flare regime — the
+            # airframe has no conventional flaps, so it decelerates
+            # close to stall in ground effect before touchdown.
             approach_profile=ApproachProfile(
                 speed_schedule=TasSchedule(points=[
-                    (   0 * ureg.feet,  90 * ureg.knot),  # touchdown
-                    ( 200 * ureg.feet,  94 * ureg.knot),  # interpolated
-                    (1000 * ureg.feet, 110 * ureg.knot),  # interpolated
+                    (   0 * ureg.feet,  65 * ureg.knot),  # touchdown
+                    ( 200 * ureg.feet,  71 * ureg.knot),  # interpolated
+                    (1000 * ureg.feet,  94 * ureg.knot),  # interpolated
                     (3000 * ureg.feet, 151 * ureg.knot),  # top-of-approach
                 ]),
                 top_of_approach_agl=3000 * ureg.feet,
-                glideslope_deg=2.61,
+                glideslope_deg=2.51,
             ),
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
