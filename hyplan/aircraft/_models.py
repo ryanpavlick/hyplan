@@ -68,9 +68,8 @@ class NASA_ER2(Aircraft):
     Operates at 70,000 ft, acquiring data above 95% of the Earth's
     atmosphere.  Based at NASA Armstrong Flight Research Center (AFRC).
 
-    Speed schedule (Moving Lines brochure): TAS = 70 + alt_m * 0.0071 (m/s).
-
-    Vertical-rate and approach behavior calibrated from 17 NASA AFRC IWG1
+    Speed schedules, vertical-rate profile, and approach behavior calibrated
+    from 17 NASA AFRC IWG1
     in-situ flight logs (2023-02 to 2025-08, ~64 000 cruise fixes above
     60 kft).  See [notebooks/er2_calibration/iwg1_calibration.ipynb] for
     the full derivation: per-altitude-bin |VS| medians, breakpoint
@@ -187,10 +186,9 @@ class NASA_ER2(Aircraft):
             # max_bank_deg=30 is the brochure / envelope ceiling — well-
             # supported by IWG1 (p90 < 30° in every altitude band).
             # bank_by_phase carries the calibrated *typical-operations*
-            # medians from the IWG1 sortie set (n=12 686 turn fixes).
-            # These are metadata today: compute_flight_plan's Dubins solver
-            # consumes max_bank_angle (the scalar envelope), and
-            # loiter_orbit_geometry consumes bank_by_phase.cruise_deg.
+            # medians from the IWG1 sortie set (n=12 686 turn fixes) and
+            # is consumed by Aircraft._hybrid_path (per-phase turn radius)
+            # and loiter_orbit_geometry (phase-aware orbit radius).
             turn_model=TurnModel(
                 max_bank_deg=30.0,
                 bank_by_phase=PhaseBankAngles(
@@ -207,7 +205,7 @@ class NASA_ER2(Aircraft):
             sources=[
                 SourceRecord(
                     source_type="brochure",
-                    reference="NASA Airborne Science, Moving Lines project",
+                    reference="NASA Airborne Science fact sheet, ER-2 at AFRC",
                     confidence=0.6,
                 ),
                 SourceRecord(
@@ -216,7 +214,7 @@ class NASA_ER2(Aircraft):
                         "NASA AFRC IWG1 in-situ flight logs, n=17 sorties "
                         "2023-02 to 2025-08; calibrated climb step, "
                         "two-regime descent, and approach_profile with "
-                        "2.6° empirical glideslope"
+                        "2.51° empirical glideslope"
                     ),
                     confidence=0.8,
                 ),
@@ -441,9 +439,6 @@ class NASA_P3(Aircraft):
     and large payloads up to 18,000 lbs. Operated by NASA Wallops Flight
     Facility (WFF).
 
-    Speed profile from Moving Lines: TAS = 110 + alt_m * 0.007 (m/s),
-    capped at 155 m/s (~301 kt) above ~21,000 ft.
-
     See also:
         `https://airbornescience.nasa.gov/aircraft/P-3_Orion <https://airbornescience.nasa.gov/aircraft/P-3_Orion>`_
     """
@@ -480,7 +475,7 @@ class NASA_P3(Aircraft):
             ),
             sources=[SourceRecord(
                 source_type="brochure",
-                reference="NASA Airborne Science fact sheet; Moving Lines TAS formula",
+                reference="NASA Airborne Science fact sheet, P-3 Orion at WFF",
                 confidence=0.5,
             )],
         )
@@ -676,9 +671,6 @@ class KingAirB200(Aircraft):
 class C130(Aircraft):
     """C-130H Hercules four-engine turboprop transport / research aircraft.
 
-    Speed profile from Moving Lines: TAS = 130 + alt_m * 0.0075 (m/s),
-    capped at 175 m/s (~340 kt) above ~19,685 ft.
-
     See also:
         `https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF <https://airbornescience.nasa.gov/aircraft/C-130H_-_WFF>`_
     """
@@ -716,8 +708,7 @@ class C130(Aircraft):
 class BAe146(Aircraft):
     """BAe-146-301 atmospheric research aircraft (G-LUXE).
 
-    Operated by the UK FAAM. Speed profile from Moving Lines:
-    TAS = 130 + alt_m * 0.002 (m/s).
+    Operated by the UK FAAM.
 
     See also:
         `https://faam.ac.uk/ <https://faam.ac.uk/>`_
@@ -755,8 +746,6 @@ class BAe146(Aircraft):
 class Learjet(Aircraft):
     """Learjet high-altitude research aircraft.
 
-    Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
-
     See also:
         `https://airbornescience.nasa.gov/aircraft/Learjet_25 <https://airbornescience.nasa.gov/aircraft/Learjet_25>`_
     """
@@ -792,8 +781,6 @@ class Learjet(Aircraft):
 
 class TwinOtter(Aircraft):
     """DHC-6 Twin Otter STOL twin-turboprop utility aircraft.
-
-    Speed profile from Moving Lines (https://github.com/samuelleblanc/fp).
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS <https://airbornescience.nasa.gov/aircraft/Twin_Otter_-_CIRPAS_-_NPS>`_

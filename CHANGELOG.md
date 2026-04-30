@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.3.0 — 2026-04-30
+
+This release recalibrates the flight planner against real-world telemetry. Public APIs are unchanged, but **mission timing and ground-track geometry shift** for any aircraft with a non-trivial vertical profile or under non-zero wind.
+
+### Why this release
+
+Pre-v1.3 the planner used `DubinsPath3D`, a constant-pitch 3D Dubins solver whose pitch came from each aircraft's sea-level rate of climb. That collapsed every climb into a single linear ramp regardless of the actual rate-of-climb curve. For the ER-2 — with its 19–21 kft step-climb plateau and 23 kft post-step recovery — top-of-climb fell tens of nautical miles closer to departure than reality, skewing on-station entry and total mission time. The hybrid path fixes this by decoupling horizontal geometry (Dubins) from the vertical profile (integrated point-by-point against the calibrated rate curve).
+
+### Hybrid 2D + integrated-vertical planner
+
+`Aircraft._hybrid_path` replaces the 3D Dubins solver behind `time_to_takeoff` / `time_to_cruise` / `time_to_return`. Horizontal geometry is solved by 2D Dubins with turn radius from the per-phase bank; vertical profile is integrated against horizontal distance from `climb_profile` / `descent_profile`. Top-of-climb and top-of-descent now land at physically realistic positions. Short legs that cannot reach the requested cruise altitude get a spiral-up (or spiral-down) orbit at the phase-appropriate bank and midpoint altitude, rather than a collapsed cruise. `bank_by_phase` is consumed end-to-end by both `_hybrid_path` and `loiter_orbit_geometry`.
+
+### Trochoidal wind support
+
+`_TrochoidDubins2D` dispatches between BSB, the proper Sachdev/Moon (2023) trochoidal CCC solver (1-D Newton on the middle-arc half-angle, with k₄ wrap enumeration), and an iterative air-drift fallback by total time. Wind-bent racetrack turns now find their true time-optimal solution. `DubinsPath2D` is promoted to a public class.
+
+### NASA ER-2 calibration
+
+`NASA_ER2()` is calibrated against 17 NASA AFRC IWG1 in-situ sorties (~64 000 cruise fixes): distinct climb / cruise / descent TAS schedules (was a single brochure curve); 8-anchor `climb_profile` resolving the 19–21 kft step climb and 23 kft recovery (was 2-point linear); 6-anchor `descent_profile` (was 3-point); `ApproachProfile` with empirical 2.51° glideslope; calibrated `bank_by_phase` (climb 11°, cruise 20°, descent 16°, approach 9°). Modeled-vs-flown total duration: NM17 B +2.1 %, CO07v4 +7.9 %, CO06 +1.4 %; multi-sortie time-to-cruise residual ≤ 5 % across the n=17 set (vs. ~36 % pre-v1.3).
+
+New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_taxi`), `IWG1TraceWindField`, a planned-sortie parser (Green Card XLSX/PDF via `pdfplumber` + KML), and three calibration notebooks under `notebooks/er2_calibration/` (`iwg1_calibration`, `sortie_replay`, `planned_vs_flown`).
+
+### Other additions
+
+`Aircraft.climb_speed_at`, `step_climb` (climb-out pauses for fuel burn — distinct from cross-survey altitude drift, parked in `proposals/0002-step-cruise.md`), `climb_gradient_at` / `descent_gradient_at`, `max_bank_under_budget` (defensive ceiling from `TurnModel.max_load_factor`, default 2.5 g), and a service-ceiling warning when `_hybrid_path` is asked for a cruise altitude above the published ceiling.
+
+### Behavior changes & migration
+
+Mission timing and geometry from `compute_flight_plan` differ from v1.2.0 (typically ±5–15 % on total time; on-station entry shifts by tens of nmi for the ER-2). Tests or scripts pinning exact times or top-of-climb coordinates need their expected values regenerated; the updated `tests/` in this release demonstrate the pattern.
+
+### Deprecation
+
+`Aircraft.pitch_limits()` is legacy — only `DubinsPath3D` consumes it, which the planner no longer uses. Slated for removal.
+
+
 ## v1.2.0 — 2026-04-26
 
 Backwards-compatible feature release. The flight-line optimizer now accepts heterogeneous visit-item input — `FlightLine`, `Pattern`, and bare `Waypoint` objects can all be mixed in a single call to `greedy_optimize`.

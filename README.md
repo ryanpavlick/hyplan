@@ -30,9 +30,9 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
 - **Terrain-aware analysis** — Download DEM data and compute where the sensor field of view intersects the ground
 - **Cloud cover analysis** — Estimate clear-sky probability from ERA5 reanalysis via Open-Meteo (no auth) or MODIS imagery via Google Earth Engine
-- **Wind correction** — Per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
+- **Wind correction** — Trochoidal Dubins arcs (Sachdev/Moon, 2023) bend ground tracks under wind; per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
 - **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
-- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles
+- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; the NASA ER-2 is calibrated against 17 IWG1 in-situ flight logs (step climb, two-regime descent, empirical 2.51° approach glideslope)
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
@@ -225,13 +225,13 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | | **Aircraft** |
 | `aircraft` | Aircraft performance models (15 pre-configured research aircraft) |
 | `atmosphere` | ISA standard atmosphere model, airspeed conversions (CAS/TAS/Mach) |
-| `dubins3d` | 3D Dubins path planning with pitch constraints (Vana et al., ICRA 2020) |
+| `dubins3d` | 2D Dubins path planning [@dubins1957curves] with trochoidal wind support (Sachdev/Moon, 2023); used by the planner via `Aircraft._hybrid_path` (2D horizontal + integrated vertical profile). A constant-pitch 3D Dubins solver (Vana et al., ICRA 2020) is included as a reference for short, near-level transits. |
 | | **Environment** |
 | `sun` | Solar position and timing calculations |
 | `glint` | Solar glint angle prediction for water observations |
 | `terrain` | DEM data acquisition and ray-terrain intersection |
 | `clouds` | Cloud cover analysis and clear-sky probability from ERA5 (Open-Meteo) or MODIS (GEE) |
-| `winds` | Wind field models (MERRA-2, GFS, GEOS-FP, constant, still air) for per-segment flight plan correction |
+| `winds` | Wind field models (MERRA-2, GFS, GEOS-FP, IWG1 trace, constant, still air); supplied to `compute_flight_plan` to bend ground tracks via trochoidal Dubins arcs |
 | | **Logistics** |
 | `airports` | Airport database with search, filtering, and runway data |
 | `airspace` | Airspace data from OpenAIP with flight line conflict detection |
@@ -294,6 +294,9 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
+| [er2_calibration/iwg1_calibration.ipynb](notebooks/er2_calibration/iwg1_calibration.ipynb) | Walkthrough of the NASA ER-2 calibration from 17 IWG1 sorties: per-altitude-bin medians, breakpoint selection, bank-angle analysis |
+| [er2_calibration/sortie_replay.ipynb](notebooks/er2_calibration/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
+| [er2_calibration/planned_vs_flown.ipynb](notebooks/er2_calibration/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
 | [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
 
 ### Export & Integration
