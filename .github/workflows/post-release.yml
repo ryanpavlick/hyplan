@@ -1,12 +1,16 @@
-name: Update SECURITY.md on release
+name: Post-release housekeeping
 
-# Triggers on every released tag (vX.Y.Z) and rewrites the
-# "Supported versions" table in SECURITY.md to mark the new
-# minor (X.Y.x) as the only supported line.  Earlier 1.x minors
-# get a "use X.Y.x" pointer; <1.0 stays unsupported.
+# Triggers on every released tag (vX.Y.Z, no pre-release suffix)
+# and bumps two files on main:
 #
-# Pre-release tags (vX.Y.Z-something) are skipped.  If the table
-# already matches what would be written, no commit is made.
+#   * SECURITY.md "Supported versions" table — regenerated from the
+#     full set of release tags; new minor X.Y.x is the supported
+#     line, earlier 1.x minors get a "use X.Y.x" pointer.
+#   * CITATION.cff "version:" field — set to the bare X.Y.Z.
+#
+# A single commit covers both files.  No commit is made if neither
+# file changed (e.g. when release.yml already bumped CITATION.cff
+# before tagging).
 
 on:
   push:
@@ -17,7 +21,7 @@ permissions:
   contents: write
 
 jobs:
-  update-security:
+  post-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,16 +97,25 @@ jobs:
               print(f"SECURITY.md updated for {supported_label}.")
           PY
 
+      - name: Bump CITATION.cff version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION=${TAG#v}
+          # POSIX sed: match ^version: ... and replace.
+          sed -i "s/^version: .*/version: ${VERSION}/" CITATION.cff
+          echo "CITATION.cff version set to ${VERSION}."
+
       - name: Commit and push
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          if git diff --quiet -- SECURITY.md; then
-            echo "No changes to SECURITY.md; nothing to commit."
+          if git diff --quiet -- SECURITY.md CITATION.cff; then
+            echo "No post-release changes; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add SECURITY.md
-          git commit -m "SECURITY.md: bump supported version table for ${TAG}"
+          git add SECURITY.md CITATION.cff
+          git commit -m "post-release: bump SECURITY.md + CITATION.cff for ${TAG}"
           git push origin main
