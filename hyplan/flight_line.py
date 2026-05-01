@@ -129,9 +129,7 @@ class FlightLine:
 
         For staged climbs during the takeoff phase (e.g., a heavy ER-2
         levelling off briefly to burn fuel before continuing to climb)
-        use :meth:`hyplan.aircraft.Aircraft.step_climb`.  See
-        ``proposals/0002-step-cruise.md`` for the broader design
-        discussion.
+        use :meth:`hyplan.aircraft.Aircraft.step_climb`.
         """
         return self._waypoint1.altitude_msl  # type: ignore[return-value]
 

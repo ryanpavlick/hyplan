@@ -187,5 +187,8 @@ hyplan/_version.py
 # Claude Code plans
 plans/
 
+# Design proposals (kept local)
+proposals/
+
 # JOSS paper build artifacts (inara)
 paper/jats/

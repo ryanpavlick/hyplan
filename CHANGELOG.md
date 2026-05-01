@@ -24,7 +24,7 @@ New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_tax
 
 ### Other additions
 
-`Aircraft.climb_speed_at`, `step_climb` (climb-out pauses for fuel burn — distinct from cross-survey altitude drift, parked in `proposals/0002-step-cruise.md`), `climb_gradient_at` / `descent_gradient_at`, `max_bank_under_budget` (defensive ceiling from `TurnModel.max_load_factor`, default 2.5 g), and a service-ceiling warning when `_hybrid_path` is asked for a cruise altitude above the published ceiling.
+`Aircraft.climb_speed_at`, `step_climb` (climb-out pauses for fuel burn — distinct from cross-survey altitude drift), `climb_gradient_at` / `descent_gradient_at`, `max_bank_under_budget` (defensive ceiling from `TurnModel.max_load_factor`, default 2.5 g), and a service-ceiling warning when `_hybrid_path` is asked for a cruise altitude above the published ceiling.
 
 ### Behavior changes & migration
 
