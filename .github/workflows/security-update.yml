@@ -1,0 +1,108 @@
+name: Update SECURITY.md on release
+
+# Triggers on every released tag (vX.Y.Z) and rewrites the
+# "Supported versions" table in SECURITY.md to mark the new
+# minor (X.Y.x) as the only supported line.  Earlier 1.x minors
+# get a "use X.Y.x" pointer; <1.0 stays unsupported.
+#
+# Pre-release tags (vX.Y.Z-something) are skipped.  If the table
+# already matches what would be written, no commit is made.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  update-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0  # need tags + history for table generation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Regenerate SECURITY.md supported-versions table
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python <<'PY'
+          import os, re, subprocess
+
+          version = os.environ["TAG"].lstrip("v")
+          major, minor, _patch = version.split(".")
+          supported_minor = f"{major}.{minor}"
+          supported_label = f"{supported_minor}.x"
+
+          # Enumerate all release tags (X.Y.Z, with or without "v"
+          # prefix — early HyPlan releases were unprefixed).  Skip
+          # pre-release suffixes.
+          out = subprocess.check_output(["git", "tag"], text=True)
+          tag_re = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+          tags = [m.group(0).lstrip("v") for line in out.split()
+                  if (m := tag_re.match(line))]
+          minors = {f"{t.split('.')[0]}.{t.split('.')[1]}" for t in tags}
+          minors.add(supported_minor)
+          minors_sorted = sorted(
+              minors, key=lambda x: tuple(int(p) for p in x.split(".")), reverse=True
+          )
+          # Pre-1.0 minors collapse into the "< 1.0" catch-all row.
+          minors_sorted = [m for m in minors_sorted if int(m.split(".")[0]) >= 1]
+
+          rows = [
+              "| Version  | Supported          |",
+              "|----------|--------------------|",
+          ]
+          for m in minors_sorted:
+              label = f"{m}.x"
+              if m == supported_minor:
+                  rows.append(f"| {label:<8} | :white_check_mark: |")
+              elif m.startswith("1."):
+                  rows.append(f"| {label:<8} | :x: (use {supported_label})    |")
+              else:
+                  rows.append(f"| {label:<8} | :x:                |")
+          rows.append("| < 1.0    | :x:                |")
+          new_table = "\n".join(rows) + "\n"
+
+          with open("SECURITY.md") as f:
+              content = f.read()
+
+          # Match the existing table: header row + separator + 1+ data rows.
+          pattern = re.compile(
+              r"\| Version  \| Supported          \|\n"
+              r"\|----------\|--------------------\|\n"
+              r"(?:\|.*\|\n)+",
+              re.MULTILINE,
+          )
+          if not pattern.search(content):
+              raise SystemExit("Could not locate supported-versions table in SECURITY.md")
+
+          new_content = pattern.sub(new_table, content, count=1)
+          if new_content == content:
+              print("SECURITY.md already up to date.")
+          else:
+              with open("SECURITY.md", "w") as f:
+                  f.write(new_content)
+              print(f"SECURITY.md updated for {supported_label}.")
+          PY
+
+      - name: Commit and push
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- SECURITY.md; then
+            echo "No changes to SECURITY.md; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add SECURITY.md
+          git commit -m "SECURITY.md: bump supported version table for ${TAG}"
+          git push origin main
