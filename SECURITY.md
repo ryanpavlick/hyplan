@@ -7,8 +7,10 @@ Earlier major-version branches are not maintained.
 
 | Version  | Supported          |
 |----------|--------------------|
-| 1.1.x    | :white_check_mark: |
-| 1.0.x    | :x: (use 1.1.x)    |
+| 1.3.x    | :white_check_mark: |
+| 1.2.x    | :x: (use 1.3.x)    |
+| 1.1.x    | :x: (use 1.3.x)    |
+| 1.0.x    | :x: (use 1.3.x)    |
 | < 1.0    | :x:                |
 
 ## Reporting a vulnerability
