@@ -29,7 +29,6 @@ from typing import Optional
 from xml.etree import ElementTree as ET
 import re
 
-import openpyxl
 import pandas as pd
 
 _KML_NS = {"k": "http://www.opengis.net/kml/2.2"}
@@ -437,7 +436,19 @@ def parse_green_card_xlsx(path: Path | str) -> PlannedSortie:
         DataFrame of one row per Green Card event (numbered waypoint
         or sub-row).  See :func:`load_planned_sortie` for the column
         schema.
+
+    Raises:
+        ImportError: When ``openpyxl`` is not installed.  Install via
+            ``pip install hyplan[planned]``.
     """
+    try:
+        import openpyxl
+    except ImportError as exc:
+        raise ImportError(
+            "Green Card XLSX parsing requires openpyxl.  Install via "
+            "`pip install openpyxl` or `pip install hyplan[planned]`."
+        ) from exc
+
     wb = openpyxl.load_workbook(Path(path), data_only=True)
     ws = wb.active
     header = _read_header(ws)
