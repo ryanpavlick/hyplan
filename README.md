@@ -68,6 +68,7 @@ pip install -e .
 
 - **Google Earth Engine** (`earthengine-api`) — optional for `hyplan.clouds` (MODIS path); the Open-Meteo path requires no extra dependencies
 - **Wind fields** (`xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib`) — install with `pip install hyplan[winds]` for MERRA-2, GFS, and GEOS-FP wind data
+- **Planned-sortie ingest** (`openpyxl`, `pdfplumber`) — install with `pip install hyplan[planned]` to parse Green Card mission data cards (XLSX or PDF) and KML route files (used by the ER-2 calibration / planned-vs-flown workflow)
 
 ### API keys
 
@@ -256,6 +257,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 |----------|-------------|
 | [tutorial.ipynb](notebooks/tutorial.ipynb) | End-to-end workflow: sensor setup, flight box generation, solar checks, airport selection, optimization, flight planning, and map visualization |
 | [validation.ipynb](notebooks/validation.ipynb) | Validates HyPlan calculations against reference values (Vincenty, NOAA solar, analytical swath/GSD) |
+| [campaign_management.ipynb](notebooks/campaign_management.ipynb) | `Campaign` class for multi-flight, multi-day planning: study area, flight-line groups, save/reload across sessions |
 
 ### Flight Planning
 
@@ -268,6 +270,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
 | [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
+| [airspace_check.ipynb](notebooks/airspace_check.ipynb) | Detect conflicts between flight lines and FAA / OpenAIP airspace boundaries (restricted, prohibited, controlled) |
 
 ### Instruments & Sensors
 
@@ -277,6 +280,9 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [frame_camera_planning.ipynb](notebooks/frame_camera_planning.ipynb) | Frame camera FOV, footprints, GSD, and along-track sampling |
 | [lidar_lvis_planning.ipynb](notebooks/lidar_lvis_planning.ipynb) | LVIS lens options, swath geometry, contiguous coverage, and coverage rates |
 | [radar_sar_missions.ipynb](notebooks/radar_sar_missions.ipynb) | UAVSAR L/P/Ka-band swath geometry, resolution, and InSAR line spacing |
+| [profiling_lidar_planning.ipynb](notebooks/profiling_lidar_planning.ipynb) | NASA `ProfilingLidar` family (HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile |
+| [awp_planning.ipynb](notebooks/awp_planning.ipynb) | NASA Langley Aerosol Wind Profiler: dual-LOS geometry, stable-segment flagging, terrain-aware profile placement |
+| [stereo_oblique_planning.ipynb](notebooks/stereo_oblique_planning.ipynb) | Stereo photogrammetry and oblique-camera mission design: convergence angle, GSD variation across the frame |
 
 ### Environment & Conditions
 
@@ -287,7 +293,10 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [glint_arc_planning.ipynb](notebooks/glint_arc_planning.ipynb) | GlintArc geometry for specular reflection flight paths over water |
 | [terrain_aware_planning.ipynb](notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
 | [cloud_analysis.ipynb](notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
+| [cloud_analysis_gee.ipynb](notebooks/cloud_analysis_gee.ipynb) | Higher-resolution MODIS cloud analysis via Google Earth Engine (1 km), Terra vs Aqua morning/afternoon discrimination |
 | [winds.ipynb](notebooks/winds.ipynb) | Wind field models, flight plan wind correction, MERRA-2 reanalysis demo, direction/speed sensitivity |
+| [wind_effects.ipynb](notebooks/wind_effects.ipynb) | Quantitative wind effects on geometry: crab angle, swath rotation, trochoidal turn drift, along-track sampling |
+| [phenology_analysis.ipynb](notebooks/phenology_analysis.ipynb) | MODIS NDVI/EVI/LAI/FPAR + phenological transition dates for selecting optimal collection windows |
 
 ### Aircraft & Satellites
 
@@ -342,7 +351,7 @@ Please open an [issue](https://github.com/ryanpavlick/hyplan/issues) for bug rep
 
 ---
 
-<!-- ## Citation
+## Citation
 
 If you use HyPlan in your research, please cite it as:
 
@@ -351,9 +360,12 @@ If you use HyPlan in your research, please cite it as:
   author = {Pavlick, Ryan},
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
-  license = {Apache-2.0}
+  license = {Apache-2.0},
+  version = {1.3.0}
 }
-``` -->
+```
+
+Machine-readable citation metadata is also available in [`CITATION.cff`](CITATION.cff).
 
 ## License
 
