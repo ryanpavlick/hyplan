@@ -74,6 +74,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
 | [lidar_lvis_planning.ipynb](lidar_lvis_planning.ipynb) | Plan LVIS lidar missions: pulse rate, swath geometry, altitude constraints, and coverage optimization. | When planning lidar missions where pulse density and footprint size drive the design. |
+| [profiling_lidar_planning.ipynb](profiling_lidar_planning.ipynb) | Plan nadir-pointing single-beam profiling lidars (NASA HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile. | When planning vertical-column atmospheric profiling missions (aerosol/cloud backscatter, water-vapor or methane DIAL). |
 | [awp_planning.ipynb](awp_planning.ipynb) | Plan Aerosol Wind Profiler missions: dual-LOS geometry, profile spacing, stable-leg feasibility, and vector-profile placement along a flight plan. | When planning coherent Doppler wind-lidar missions where long straight legs and profile density matter more than swath width. |
 | [radar_sar_missions.ipynb](radar_sar_missions.ipynb) | Plan SAR radar missions: side-looking geometry, incidence angle, swath width, and look-direction constraints. | When planning SAR missions where look angle and offset geometry matter. |
 | [frame_camera_planning.ipynb](frame_camera_planning.ipynb) | Plan frame camera missions: GSD, footprint, forward/side overlap, and frame rate requirements. | When planning aerial photography or photogrammetry with frame cameras. |
@@ -102,6 +103,20 @@ Specialized notebooks for planning missions with different instrument types, eac
 |----------|-------------|-------------|
 | [campaign_management.ipynb](campaign_management.ipynb) | Organize multi-flight, multi-day campaigns: define study areas, group flight plans, and track campaign-level metadata. | When managing a campaign with multiple flights or study sites. |
 | [satellite_coordination.ipynb](satellite_coordination.ipynb) | Coordinate airborne flights with satellite overpasses: compute ground tracks, find coincidence windows, and plan coordinated observations. | When you need to time airborne flights to coincide with satellite overpasses. |
+
+---
+
+## Aircraft Calibration
+
+How HyPlan's aircraft performance models are derived from real-world telemetry. The NASA ER-2 is the first calibrated platform; these notebooks document the methodology and the planned-vs-flown validation.
+
+| Notebook | Description | When to Use |
+|----------|-------------|-------------|
+| [er2_calibration/iwg1_calibration.ipynb](er2_calibration/iwg1_calibration.ipynb) | Walkthrough of the n=17 IWG1 sortie calibration of `NASA_ER2()`: per-altitude-bin |VS| medians, breakpoint selection rules, and bank-angle analysis. | When you want to understand or reproduce the ER-2 calibration, or apply the same methodology to another aircraft. |
+| [er2_calibration/sortie_replay.ipynb](er2_calibration/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner and produce a modeled-vs-flown breakdown (total duration, time to cruise, on-station, descent + approach), with a multi-sortie scan over all cached sorties. | When you want to validate the calibrated model against historical sorties or estimate per-segment residuals for your own mission. |
+| [er2_calibration/planned_vs_flown.ipynb](er2_calibration/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1 trace) vs HyPlan-modeled timing for the NM17 B / CO07v4 / CO06 sortie pairs. | When you want to see how planning, execution, and modeling diverge on real campaign sorties. |
+
+These notebooks read local IWG1 traces and Green Card mission data cards from `data/er2/` (gitignored — bring your own).  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
 
 ---
 
@@ -143,6 +158,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | glint_analysis | No | None | None | No |
 | glint_arc_planning | No | None | None | No |
 | lidar_lvis_planning | No | None | None | No |
+| profiling_lidar_planning | No | None | None | No |
 | awp_planning | Optional (terrain demo) | None | None | No |
 | radar_sar_missions | No | None | None | No |
 | frame_camera_planning | No | None | None | No |
@@ -151,6 +167,9 @@ Specialized notebooks for planning missions with different instrument types, eac
 | airspace_check | Yes | None | None | No |
 | airport_selection | Yes | None | None | No |
 | campaign_management | No | None | None | Yes (`exampledata/`) |
+| er2_calibration/iwg1_calibration | No | None | None | Local `data/er2/` (gitignored) |
+| er2_calibration/sortie_replay | No | None | None | Local `data/er2/` (gitignored) |
+| er2_calibration/planned_vs_flown | No | None | `[planned]` | Local `data/er2/` (gitignored) |
 | satellite_coordination | Yes | None | None | No |
 | export_formats | Yes | None | None | No |
 | validation | No | None | None | No |
