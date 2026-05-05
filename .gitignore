@@ -198,3 +198,6 @@ data/
 
 # JOSS paper build artifacts (inara)
 paper/jats/
+
+# papermill batch-run artifacts
+notebooks/.execution_logs/
