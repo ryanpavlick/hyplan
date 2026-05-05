@@ -30,6 +30,7 @@ __all__ = [
     "NASA_GIII",
     "NASA_GIV",
     "NASA_GV",
+    "NCAR_GV",
     "NASA_C20A",
     "NASA_P3",
     "NASA_WB57",
@@ -564,6 +565,96 @@ class NASA_GV(Aircraft):
         )
 
 
+class NCAR_GV(Aircraft):
+    """NSF/NCAR HIAPER Gulfstream V research aircraft (N677F).
+
+    Operated by NSF NCAR Earth Observing Laboratory (EOL).  Same
+    airframe family as NASA_GV but a separate operational tail with
+    different mission profile and avionics.  HIAPER routinely cruises
+    FL410-FL510 on long-duration atmospheric campaigns (HIPPO,
+    SOCRATES, ORCAS, ATTREX) and carries a different flight-data
+    suite (high-rate 25-Hz NetCDF).
+
+    See also:
+        `https://www.eol.ucar.edu/observing_facilities/hiaper`
+    """
+
+    def __init__(self):
+        # CALIBRATION DEFERRED: NCAR EOL data archive is auth-walled
+        # (one-line ORDER request through email).  Until that data is
+        # fetched, HIAPER ships with the same calibrated values as
+        # NASA_GV (153 IWG1 sorties from NASA 95) — the airframes are
+        # operationally similar and the brochure performance is
+        # identical.  When per-tail HIAPER data is available, replace
+        # these with HIAPER-specific bin medians.  See
+        # ``project_hiaper_calibration.md`` memory entry for the
+        # fetch path.
+        super().__init__(
+            aircraft_type="Gulfstream V",
+            tail_number="N677F",
+            operator="NSF/NCAR EOL",
+            service_ceiling=51000 * ureg.feet,
+            approach_speed=126 * ureg.knot,
+            climb_schedule=CasMachSchedule(
+                cas=280 * ureg.knot, mach=0.74, crossover_ft=28000,
+            ),
+            cruise_schedule=CasMachSchedule(
+                cas=300 * ureg.knot, mach=0.80, crossover_ft=30000,
+            ),
+            descent_schedule=CasMachSchedule(
+                cas=290 * ureg.knot, mach=0.78, crossover_ft=30000,
+            ),
+            climb_profile=VerticalProfile(points=[
+                (    0 * ureg.feet, 2196 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 2521 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2284 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2266 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2003 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 1896 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 1804 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 1734 * ureg.feet / ureg.minute),
+                (51000 * ureg.feet,  500 * ureg.feet / ureg.minute),
+            ]),
+            descent_profile=VerticalProfile(points=[
+                (    0 * ureg.feet, 1703 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1806 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 1873 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2209 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2331 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2481 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2432 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2091 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 1824 * ureg.feet / ureg.minute),
+            ]),
+            turn_model=TurnModel(
+                bank_by_phase=PhaseBankAngles(
+                    climb_deg=20, cruise_deg=25, descent_deg=20, approach_deg=15,
+                ),
+                max_bank_deg=30.0,
+            ),
+            engine_type="jet",
+            range=6500 * ureg.nautical_mile,
+            endurance=14 * ureg.hour,
+            confidence=PerformanceConfidence(
+                # Inferred from NASA_GV; HIAPER-specific calibration deferred.
+                climb=0.7, cruise=0.7, descent=0.7, turns=0.7,
+            ),
+            sources=[
+                SourceRecord(
+                    source_type="inferred",
+                    reference="Mirrors NASA_GV calibration (101 IWG1 sorties); HIAPER (N677F) shares the G-V airframe and brochure performance",
+                    confidence=0.7,
+                ),
+                SourceRecord(
+                    source_type="brochure",
+                    reference="NSF/NCAR HIAPER Investigator Handbook; EUROCONTROL GLF5",
+                    confidence=0.5,
+                ),
+            ],
+            stall_speed_cas=104 * ureg.knot,
+        )
+
+
 class NASA_C20A(Aircraft):
     """NASA C-20A (Gulfstream III variant, NASA 502) research aircraft.
 
@@ -575,31 +666,91 @@ class NASA_C20A(Aircraft):
     """
 
     def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 292 * ureg.knot),
-            (45000 * ureg.feet, 460 * ureg.knot),
-        ])
+        # Inferred from NASA_GIII calibration (153 IWG1 sorties).
+        # The C-20A is a Gulfstream III military variant — same
+        # airframe, same engines (Spey Mk.511-8), same type
+        # certificate as the civilian G-III used by NASA LaRC.  No
+        # public C-20A IWG1/ICARTT data is available (NASA AFRC
+        # publishes UAVSAR remote-sensing products, not housekeeping
+        # nav), so the cruise / climb / descent / approach / bank
+        # values here mirror the calibrated NASA_GIII directly.
+        # When per-tail C-20A data becomes available it should
+        # replace this; differences from the LaRC G-III would mostly
+        # come from operational profile (UAVSAR survey grids vs
+        # transit) rather than aircraft physics.
         super().__init__(
             aircraft_type="C-20A",
             tail_number="NASA 502",
             operator="NASA AFRC",
             service_ceiling=45000 * ureg.feet,
-            approach_speed=140 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 49),
+            approach_speed=139 * ureg.knot,
+            climb_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 150 * ureg.knot),
+                (10000 * ureg.feet, 339 * ureg.knot),
+                (20000 * ureg.feet, 421 * ureg.knot),
+                (30000 * ureg.feet, 446 * ureg.knot),
+                (40000 * ureg.feet, 436 * ureg.knot),
+            ]),
+            cruise_schedule=TasSchedule(points=[
+                (25000 * ureg.feet, 406 * ureg.knot),
+                (30000 * ureg.feet, 472 * ureg.knot),
+                (35000 * ureg.feet, 449 * ureg.knot),
+                (40000 * ureg.feet, 455 * ureg.knot),
+            ]),
+            descent_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 180 * ureg.knot),
+                (10000 * ureg.feet, 329 * ureg.knot),
+                (20000 * ureg.feet, 410 * ureg.knot),
+                (30000 * ureg.feet, 453 * ureg.knot),
+                (40000 * ureg.feet, 463 * ureg.knot),
+            ]),
             climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 3500 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 2113 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 2616 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2253 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2135 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 1916 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 1926 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 1853 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 1688 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 1840 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet,  500 * ureg.feet / ureg.minute),
             ]),
             descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1778 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1907 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2155 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2492 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2425 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2365 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2481 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2088 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2007 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=3400 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=2500 * ureg.pound,
+            confidence=PerformanceConfidence(
+                # Inferred from G-III; not directly calibrated against
+                # C-20A data.  Confidence reflects airframe-equivalence
+                # assumption rather than measurement.
+                climb=0.7, cruise=0.7, descent=0.7, turns=0.7,
+            ),
+            sources=[
+                SourceRecord(
+                    source_type="inferred",
+                    reference="Mirrors NASA_GIII calibration (153 IWG1 sorties); C-20A is a G-III military variant",
+                    confidence=0.7,
+                ),
+                SourceRecord(
+                    source_type="brochure",
+                    reference="NASA Airborne Science fact sheet; EUROCONTROL GLF3",
+                    confidence=0.5,
+                ),
+            ],
+            stall_speed_cas=105 * ureg.knot,
         )
 
 
