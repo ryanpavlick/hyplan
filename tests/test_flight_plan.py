@@ -192,15 +192,23 @@ class TestLoiterOrbitGeometry:
         wp_pt = Point(wp.longitude, wp.latitude)
         assert wp_pt.distance(Point(first)) < 1e-6
 
-    def test_higher_altitude_gives_larger_orbit(self, b200):
+    def test_higher_altitude_gives_larger_orbit(self):
         """Higher cruise speed (or larger v / smaller bank) → larger turn radius."""
+        # Use NASA_GIII: its cruise schedule grows monotonically from
+        # SL through cruise altitude, so the orbit-grows-with-altitude
+        # invariant holds.  The B-200 cruise schedule is flat above
+        # FL200 (calibrated against ACT-America), so it would be a
+        # poor choice for testing the underlying geometry.
+        from hyplan.aircraft import NASA_GIII
         from hyplan.planning.segments import loiter_orbit_geometry
         from hyplan.geometry import get_utm_transforms
         from shapely.geometry import Point
         from shapely.ops import transform as shp_transform
 
+        ac = NASA_GIII()
+
         def diameter_m(wp):
-            ring = loiter_orbit_geometry(wp, b200)
+            ring = loiter_orbit_geometry(wp, ac)
             coords = np.array(list(ring.coords))
             pts_wgs = [Point(lon, lat) for lon, lat in coords]
             to_utm, _ = get_utm_transforms(pts_wgs)
@@ -212,7 +220,7 @@ class TestLoiterOrbitGeometry:
             return np.sqrt(dx * dx + dy * dy).max()
 
         wp_low = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(5_000, "feet"))
-        wp_high = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(25_000, "feet"))
+        wp_high = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(35_000, "feet"))
         # Cruise speed grows with altitude → orbit radius grows.
         assert diameter_m(wp_high) > diameter_m(wp_low)
 

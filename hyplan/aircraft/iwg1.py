@@ -113,6 +113,69 @@ def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
         else:
             out[dst] = np.nan
 
+    # NaN-out implausible GPS positions.  Some IWG1 deliveries contain
+    # isolated rogue rows with lat / lon noise spikes — sometimes
+    # values clearly outside Earth (lat=-214) and sometimes "valid"
+    # values that are nevertheless far from the rest of the trace
+    # (e.g., a single row jumping to the South Pacific in the middle
+    # of a US east-coast sortie).  These are typically 1-2 fixes per
+    # sortie out of ~18k and don't move bin-median calibrations, but
+    # they break ground-tracks plots and could distort haversine
+    # distance computations.  Two filters:
+    #
+    #   (a) absolute bounds: |lat| > 90 or |lon| > 180 are physically
+    #       impossible.
+    #   (b) isolated spikes: a row whose position differs by > 1
+    #       degree from both immediate neighbors.  At 1-Hz cadence
+    #       this corresponds to a >60 nmi jump in one second, which
+    #       no airframe can do.
+    #
+    # In both cases the lat / lon columns are NaN'd; the rest of the
+    # row's air-data (TAS / altitude / etc.) is preserved since it
+    # comes from independent sensors.
+    bad_pos = (out["latitude"].abs() > 90) | (out["longitude"].abs() > 180)
+    if len(out) >= 3:
+        lat = out["latitude"]
+        lon = out["longitude"]
+        JUMP_DEG = 1.0
+        lat_jump = (lat.diff().abs() > JUMP_DEG) & (lat.diff(-1).abs() > JUMP_DEG)
+        lon_jump = (lon.diff().abs() > JUMP_DEG) & (lon.diff(-1).abs() > JUMP_DEG)
+        bad_pos = bad_pos | lat_jump.fillna(False) | lon_jump.fillna(False)
+    if bad_pos.any():
+        out.loc[bad_pos, ["latitude", "longitude"]] = np.nan
+
+    # NaN-out implausible altitude and TAS values.  Some IWG1
+    # deliveries use sentinel values (e.g., Pressure Altitude=-34055,
+    # TAS=-1338.9) for "no data" rows; 2013-era N806NA ER-2 sorties
+    # also have short runs of alt=0 / TAS=4060 kt mid-cruise (1-3 fixes
+    # at a time).  Two filters per column:
+    #
+    #   (a) absolute bounds: alt < -2000 ft or > 100000 ft is
+    #       physically impossible for any HyPlan aircraft; TAS < 0 or
+    #       > 2000 kt is impossible.
+    #   (b) rolling-median outlier: an 11-row centered median is the
+    #       baseline; any row deviating by > 1000 ft (alt) or > 100
+    #       kt (TAS) from it is NaN'd.  Catches 1-3 row drop-out
+    #       runs that the simple "differs from both neighbors" test
+    #       misses.
+    bad_alt = (out["altitude"] < -2000) | (out["altitude"] > 100000)
+    if len(out) >= 11:
+        alt = out["altitude"]
+        alt_med = alt.rolling(11, center=True, min_periods=5).median()
+        bad_alt = bad_alt | ((alt - alt_med).abs() > 1000.0)
+    bad_alt = bad_alt.fillna(False)
+    if bad_alt.any():
+        out.loc[bad_alt, "altitude"] = np.nan
+
+    bad_tas = (out["tas_kt"] < 0) | (out["tas_kt"] > 2000)
+    if len(out) >= 11:
+        tas = out["tas_kt"]
+        tas_med = tas.rolling(11, center=True, min_periods=5).median()
+        bad_tas = bad_tas | ((tas - tas_med).abs() > 100.0)
+    bad_tas = bad_tas.fillna(False)
+    if bad_tas.any():
+        out.loc[bad_tas, "tas_kt"] = np.nan
+
     out = out.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 
     # Drop near-duplicate fixes (consecutive fixes within 100 ms) before
@@ -209,10 +272,27 @@ def split_iwg1_alltracks(
     text = re.sub(r"(?<!\n)IWG1,", "\nIWG1,", text)
     lines = text.splitlines(keepends=True)
 
-    header = lines[0]
-    if not header.endswith("\n"):
-        header = header + "\n"
-    data_lines = [ln for ln in lines[1:] if ln.strip()]
+    # Some deliveries omit the HEADER row entirely and start straight
+    # with IWG1 data rows.  Detect and inject the canonical IWG1 header
+    # so downstream load_iwg1 can read column names.
+    if lines[0].lstrip().startswith("HEADER,"):
+        header = lines[0]
+        if not header.endswith("\n"):
+            header = header + "\n"
+        data_start = 1
+    else:
+        header = (
+            "HEADER,TimeStamp,Latitude,Longitude,GPS MSL Altitude,"
+            "WGS84 Altitude,Pressure Altitude,Radar Altitude,Ground Speed,"
+            "True Airspeed,Indicated Airspeed,Mach Number,Vertical Velocity,"
+            "True Heading,Track,Drift,Pitch,Roll,Side Slip,Angle of Attack,"
+            "Ambient Temp,Dew Point,Total Air Temp,Static Press,"
+            "Dynamic Press,Cabin Press,Wind Speed,Wind Direction,"
+            "Vertical Wind Speed,Solar Zenith Angle,Sun Elevation Aircraft,"
+            "Sun Azimuth Ground,Sun Azimuth Aircraft\n"
+        )
+        data_start = 0
+    data_lines = [ln for ln in lines[data_start:] if ln.strip()]
     # Ensure each data line ends with a newline so the per-sortie
     # output files round-trip cleanly through pd.read_csv.
     data_lines = [ln if ln.endswith("\n") else ln + "\n" for ln in data_lines]

@@ -33,17 +33,19 @@ def code(src: str) -> None:
 
 
 md(r"""
-# G-III calibration from NASA IWG1 in-situ logs
+# King Air C-130H calibration from NASA IWG1 in-situ logs
 
-Mirrors the structure of the ER-2 calibration in
-`notebooks/er2_calibration/iwg1_calibration.ipynb`, adapted to the
-NASA 520 Gulfstream III data delivered in a single concatenated
-`n520NA_g3_alltracks.csv` (split into per-sortie files via
+Mirrors the G-III calibration in
+`notebooks/calibration/giii/iwg1_calibration.ipynb`, adapted to the
+NASA 436 C-130H (LaRC, ACT-America) Orion data delivered as a single concatenated
+`p3_alltracks.csv` (split into per-sortie files via
 `hyplan.aircraft.split_iwg1_alltracks`).
 
-The output of this notebook is a paste-ready `NASA_GIII()`
-constructor block (§10) calibrated against ~65 airborne sorties
-spanning ~9 months.
+The output of this notebook is a paste-ready `C130()`
+constructor block (§10).  The P-3 is a four-engine turboprop with
+a typical mission ceiling near FL250–FL280, so the altitude bins
+and SL anchor differ from the G-III but the methodology is the
+same.
 """)
 
 code(r"""
@@ -58,9 +60,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from hyplan import ureg
-from hyplan.aircraft import load_iwg1, trim_ground_taxi, NASA_GIII
+from hyplan.aircraft import load_iwg1, trim_ground_taxi, C130
 
-DATA_DIR = Path("../../../data/giii").resolve()
+DATA_DIR = Path("../../../data/c130").resolve()
+TAIL_GLOB = "n43[69]_*.txt"  # NASA WFF C-130H tails N436NA + N439NA
 
 # Phase-label thresholds.  Same defaults as the ER-2 notebook —
 # climb/descent gate at 300 fpm separates sustained vertical motion
@@ -70,8 +73,8 @@ DESCENT_FPM = -300.0
 
 # Sortie filters: real flights only.
 MIN_DUR_MIN     = 60.0   # below this is taxi / engine run
-MAX_DUR_MIN     = 600.0  # above this is multi-day data the splitter glued together
-MIN_PEAK_ALT_FT = 25000  # below this is local pattern / test flight, not cruise sortie
+MAX_DUR_MIN     = 600.0  # C-130 ACT-America sorties typically 4-6 hr
+MIN_PEAK_ALT_FT = 10000  # C-130H cruises FL200-FL280; FL100 is a real sortie
 """)
 
 
@@ -95,11 +98,17 @@ def label_phases(df, climb_fpm=CLIMB_FPM, descent_fpm=DESCENT_FPM, min_seconds=6
 
 sorties = {}
 skipped = []
-for p in sorted(DATA_DIR.glob("*_*.txt")):
+for p in sorted(DATA_DIR.glob(TAIL_GLOB)):
     raw = load_iwg1(p)
     a = trim_ground_taxi(raw)
     if a.empty:
         skipped.append((p.stem, "no airborne fixes"))
+        continue
+    # Drop sorties with no valid altitude — some P-3 deliveries
+    # have entire sorties of NaN Pressure Altitude.
+    a = a.dropna(subset=["altitude", "vertical_rate"]).reset_index(drop=True)
+    if a.empty:
+        skipped.append((p.stem, "no valid altitude"))
         continue
     dur_min = (a["timestamp"].iloc[-1] - a["timestamp"].iloc[0]).total_seconds() / 60.0
     peak = a["altitude"].max()
@@ -135,7 +144,7 @@ for name, a in sorties.items():
     ax.plot(t_min, a["altitude"] / 1000, lw=0.6, alpha=0.4, color="steelblue")
 ax.set_xlabel("minutes from takeoff")
 ax.set_ylabel("altitude (kft)")
-ax.set_title(f"NASA 520 G-III altitude profiles — {len(sorties)} sorties")
+ax.set_title(f"NASA 436 C-130H (LaRC, ACT-America) altitude profiles — {len(sorties)} sorties")
 ax.grid(alpha=0.3)
 ax.set_ylim(0, 50)
 plt.tight_layout()
@@ -163,12 +172,12 @@ for name, a in sorties.items():
             color="steelblue", transform=ccrs.PlateCarree())
 
 # Bound to the sortie footprint.
-all_lat = pd.concat([a["latitude"] for a in sorties.values()])
-all_lon = pd.concat([a["longitude"] for a in sorties.values()])
+all_lat = pd.concat([a["latitude"] for a in sorties.values()]).dropna()
+all_lon = pd.concat([a["longitude"] for a in sorties.values()]).dropna()
 pad = 2
 ax.set_extent([all_lon.min()-pad, all_lon.max()+pad,
                all_lat.min()-pad, all_lat.max()+pad])
-ax.set_title(f"NASA 520 G-III ground tracks — {len(sorties)} sorties")
+ax.set_title(f"NASA 436 C-130H (LaRC, ACT-America) ground tracks — {len(sorties)} sorties")
 plt.tight_layout()
 plt.show()
 """)
@@ -224,18 +233,14 @@ md(r"""
 
 VerticalProfile points pinned at:
 
-* SL through FL400: per 5-kft bin, the active-climb median from §4
-  (n>=30/bin).
-* FL450 (certified ceiling): a small residual rate (500 fpm) so the
-  integration terminates cleanly if a planner asks for the certified
-  ceiling.  This is *not* the regulatory service ceiling — FAR Part 25
-  defines that at 500 fpm AT MTOW, which active-climb medians can't
-  isolate without weight tagging — it's just a top-of-envelope
-  anchor.
+* SL up to the highest populated bin: per 5-kft bin, the active-climb
+  median from §4 (n>=30/bin).
+* FL300 (certified ceiling, brochure): residual rate so the integrator
+  terminates cleanly if a planner asks for ceiling.
 """)
 
 code(r"""
-CEILING_FT     = 45000           # G-III certified ceiling
+CEILING_FT     = 35000           # C-130H service ceiling (brochure)
 # Residual climb rate at the certified ceiling — the FL410 active-climb
 # bin shows ~1100 fpm and the FL400 cruise-altitude bin sees no
 # active-climb fixes (n=0), so we extrapolate to a small positive rate
@@ -347,25 +352,23 @@ def schedule_pts(bins, alts, n_min=200):
 
 
 # Climb: SL rotation -> ceiling, climb-phase medians.  Anchor SL at
-# rotation TAS (jet takeoff convention, ~150 kt) since the SL climb-
-# phase bin is contaminated by takeoff-roll fixes still accelerating.
-ROTATION_TAS_KT = 150
+# typical P-3 rotation TAS (~110 kt) since the SL climb-phase bin is
+# contaminated by takeoff-roll fixes still accelerating.
+ROTATION_TAS_KT = 110
 climb_pts = [(0, ROTATION_TAS_KT)] + schedule_pts(
-    climb_tas, [10000, 20000, 30000, 40000]
+    climb_tas, [5000, 10000, 15000, 20000, 25000, 28000]
 )
 
-# Cruise: anchor only on the typical cruise band (FL250 - FL400).
-# Below FL250 the cruise-phase bin is rarely actually cruise (mostly
-# brief level-offs during step climbs); the bin medians there don't
-# generalize to mission planning.
-cruise_pts = schedule_pts(cruise_tas, [25000, 30000, 35000, 40000])
+# Cruise: C-130H typical band FL200-FL280.  Below FL200 cruise-labeled
+# bins are mostly transient level-offs during step climbs.
+cruise_pts = schedule_pts(cruise_tas, [20000, 25000, 28000])
 
-# Descent: low-altitude anchor at observed approach TAS, then
-# descent-phase medians up to ceiling.
-descent_pts = schedule_pts(descent_tas, [10000, 20000, 30000, 40000])
-# Prepend an SL anchor from the §9 approach-TAS calculation later.
-# Until that runs, pin SL at 180 kt (typical descent through FL000).
-descent_pts = [(0, 180)] + descent_pts
+# Descent: low-altitude anchor at typical approach TAS, then
+# descent-phase medians up to the typical cruise ceiling.
+descent_pts = schedule_pts(descent_tas, [5000, 10000, 15000, 20000, 25000, 28000])
+# Prepend an SL anchor.  P-3 final approach is around 130 kt TAS;
+# stationary "descent through FL000" reference is the same.
+descent_pts = [(0, 130)] + descent_pts
 
 print()
 print("Climb schedule  (alt_ft, tas_kt):", climb_pts)
@@ -410,20 +413,22 @@ Empirical observations to feed the SourceRecord and the
 """)
 
 code(r"""
-# TOC = takeoff -> first FL400 fix
+# TOC = takeoff -> first FL250 fix (C-130H typical cruise band).
 toc = []
 for a in sorties.values():
-    above = a[a["altitude"] >= 40000]
+    above = a[a["altitude"] >= 25000]
     if not above.empty:
         toc.append((above["timestamp"].iloc[0] - a["timestamp"].iloc[0]).total_seconds() / 60.0)
 toc_s = pd.Series(toc)
 
-# Approach speed: TAS at the last fix above 200 ft AGL with VS < -300 fpm.
+# Approach speed: median TAS in the last 500 ft AGL with VS < -200 fpm.
+# Tighten the window from the G-III's ±1500 ft so we get final-approach
+# speed, not the wider pattern speed which inflates the median.
 approach_tas = []
 for a in sorties.values():
     floor = a["altitude"].min()
-    sub = a[(a["altitude"] - floor < 1500) & (a["altitude"] - floor > 200)
-            & (a["vertical_rate"] < -300)]
+    sub = a[(a["altitude"] - floor < 500) & (a["altitude"] - floor > 50)
+            & (a["vertical_rate"] < -200)]
     if not sub.empty:
         approach_tas.append(sub["tas_kt"].median())
 ap_s = pd.Series(approach_tas).dropna()
@@ -431,7 +436,7 @@ ap_s = pd.Series(approach_tas).dropna()
 # Service ceiling: p99 of per-sortie peak altitudes.
 peaks = pd.Series([a["altitude"].max() for a in sorties.values()])
 
-print(f"TOC (takeoff -> FL400):  n={len(toc_s)}, median {toc_s.median():.1f} min, IQR {toc_s.quantile(.25):.1f}-{toc_s.quantile(.75):.1f}, range {toc_s.min():.1f}-{toc_s.max():.1f}")
+print(f"TOC (takeoff -> FL250):  n={len(toc_s)}, median {toc_s.median():.1f} min, IQR {toc_s.quantile(.25):.1f}-{toc_s.quantile(.75):.1f}, range {toc_s.min():.1f}-{toc_s.max():.1f}")
 print(f"Approach TAS:            n={len(ap_s)}, median {ap_s.median():.0f} kt, IQR {ap_s.quantile(.25):.0f}-{ap_s.quantile(.75):.0f}")
 print(f"Per-sortie peak alt:     median {peaks.median():.0f} ft, p99 {peaks.quantile(0.99):.0f} ft, max {peaks.max():.0f} ft")
 """)
@@ -442,7 +447,7 @@ md(r"""
 
 Overlay the proposed VerticalProfile breakpoints on the per-bin
 medians + IQR shading.  No comparison line against the shipping
-`NASA_GIII()` — every commit makes the two trivially identical, and
+`C130()` — every commit makes the two trivially identical, and
 the IQR + medians alone tell the calibration story.
 """)
 
@@ -495,7 +500,7 @@ md(r"""
 """)
 
 code(r"""
-print("# Paste into hyplan/aircraft/_models.py NASA_GIII.__init__")
+print("# Paste into hyplan/aircraft/_models.py C130.__init__")
 print()
 print("climb_profile=VerticalProfile(points=[")
 for alt, vs in fixed:
@@ -522,7 +527,7 @@ for alt, tas in descent_pts:
     print(f"    ({alt:>5d} * ureg.feet, {tas:3d} * ureg.knot),  # descent-phase median")
 print("]),")
 print()
-print(f"# Approach speed: median TAS during last-1500-ft descent across {len(ap_s)} sorties.")
+print(f"# Approach speed: median TAS in last-500-ft AGL descent across {len(ap_s)} sorties.")
 print(f"approach_speed={int(round(ap_s.median()))} * ureg.knot,")
 print()
 print(f"# Service ceiling: p99 of per-sortie peak altitude across {len(sorties)} sorties.")
@@ -534,7 +539,7 @@ print(f"turn_model=TurnModel(max_bank_deg={int(round(all_banks.quantile(0.90)))}
 print()
 print(f'sources=[SourceRecord(')
 print(f'    source_type="iwg1",')
-print(f'    reference="NASA 520 IWG1 calibration, n={len(sorties)} sorties",')
+print(f'    reference="NASA 436 IWG1 calibration, n={len(sorties)} sorties",')
 print(f'    confidence=0.85,')
 print(f')],')
 """)
