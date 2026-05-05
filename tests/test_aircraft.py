@@ -377,21 +377,6 @@ class TestAircraftPerformance:
         assert roc.m_as("feet/minute") > ac.climb_profile.ceiling_rate.m_as("feet/minute")
         assert roc.m_as("feet/minute") < ac.climb_profile.sea_level_rate.m_as("feet/minute")
 
-    def test_pitch_limits(self):
-        ac = B200()
-        pmin, pmax = ac.pitch_limits()
-        assert pmin < 0  # descent
-        assert pmax > 0  # climb
-        assert abs(pmin) < 90
-        assert abs(pmax) < 90
-
-    def test_pitch_limits_with_speed(self):
-        ac = B200()
-        pmin1, pmax1 = ac.pitch_limits()
-        pmin2, pmax2 = ac.pitch_limits(speed=ureg.Quantity(100, "knot"))
-        # Slower speed -> steeper pitch possible
-        assert abs(pmax2) > abs(pmax1)
-
     def test_descent_speed_at(self):
         ac = B200()
         cruise = ac.cruise_speed_at(ureg.Quantity(10000, "feet"))
@@ -847,12 +832,6 @@ class TestER2Performance:
         low = ac.cruise_speed_at(ureg.Quantity(10000, "feet"))
         high = ac.cruise_speed_at(ureg.Quantity(60000, "feet"))
         assert high.magnitude > low.magnitude
-
-    def test_pitch_limits(self):
-        ac = NASA_ER2()
-        pmin, pmax = ac.pitch_limits()
-        assert pmin < 0
-        assert pmax > 0
 
     def test_max_bank_angle(self):
         ac = NASA_ER2()
@@ -1324,3 +1303,248 @@ class TestTimeToReturnApproachIntegration:
         )
         expected_m = ac.approach_profile.approx_approach_distance_nmi * 1852.0
         assert float(distance_m) == pytest.approx(expected_m, rel=1e-2)
+
+
+# ---------------------------------------------------------------------------
+# Wind in _climb() / _descend() (Item 2 — v1.4)
+# ---------------------------------------------------------------------------
+
+class TestClimbDescentWind:
+    """Verify wind_along_track plumbs into vertical-phase distance."""
+
+    def _wp(self, lat, lon, alt_ft, hdg=90.0):
+        from hyplan.waypoint import Waypoint
+        return Waypoint(lat, lon, hdg, altitude_msl=alt_ft * ureg.feet)
+
+    def test_climb_still_air_unchanged(self):
+        """wind_along_track=None must equal wind_along_track=0 m/s."""
+        ac = NASA_ER2()
+        t0, d0 = ac._climb(0 * ureg.feet, 60000 * ureg.feet)
+        t1, d1 = ac._climb(
+            0 * ureg.feet, 60000 * ureg.feet,
+            wind_along_track=0 * (ureg.meter / ureg.second),
+        )
+        assert t0 == t1
+        assert d0 == d1
+
+    def test_climb_headwind_shortens_distance(self):
+        """A 30 kt headwind must shorten the integrated climb distance."""
+        ac = NASA_ER2()
+        _, d_calm = ac._climb(0 * ureg.feet, 60000 * ureg.feet)
+        # Tailwind = -30 kt (headwind).
+        _, d_hw = ac._climb(
+            0 * ureg.feet, 60000 * ureg.feet,
+            wind_along_track=(-30) * ureg.knot,
+        )
+        delta_nmi = (d_calm - d_hw).m_as(ureg.nautical_mile)
+        assert delta_nmi > 0
+        # Headwind effect ≈ wind_kt × climb_time_hr.  ER-2 climbs to
+        # FL600 in roughly 25 minutes → ≈ 30 × 25/60 ≈ 12.5 nmi shift.
+        assert 8 < delta_nmi < 18
+
+    def test_climb_tailwind_extends_distance(self):
+        """A 30 kt tailwind must extend the integrated climb distance."""
+        ac = NASA_ER2()
+        _, d_calm = ac._climb(0 * ureg.feet, 60000 * ureg.feet)
+        _, d_tw = ac._climb(
+            0 * ureg.feet, 60000 * ureg.feet,
+            wind_along_track=30 * ureg.knot,
+        )
+        delta_nmi = (d_tw - d_calm).m_as(ureg.nautical_mile)
+        assert delta_nmi > 0
+        assert 8 < delta_nmi < 18
+
+    def test_descent_still_air_unchanged(self):
+        ac = NASA_ER2()
+        t0, d0 = ac._descend(60000 * ureg.feet, 5000 * ureg.feet)
+        t1, d1 = ac._descend(
+            60000 * ureg.feet, 5000 * ureg.feet,
+            wind_along_track=0 * (ureg.meter / ureg.second),
+        )
+        assert t0 == t1
+        assert d0 == d1
+
+    def test_descent_headwind_shortens_distance(self):
+        ac = NASA_ER2()
+        _, d_calm = ac._descend(60000 * ureg.feet, 5000 * ureg.feet)
+        _, d_hw = ac._descend(
+            60000 * ureg.feet, 5000 * ureg.feet,
+            wind_along_track=(-30) * ureg.knot,
+        )
+        assert (d_calm - d_hw).m_as(ureg.nautical_mile) > 0
+
+    def test_extreme_headwind_clipped_to_zero(self):
+        """A headwind larger than TAS must clip ground speed to 0, not go negative."""
+        ac = NASA_ER2()
+        # 800 kt is way over any TAS the ER-2 reaches; ground distance
+        # should be zero (no negative distances), and time still finite.
+        t, d = ac._climb(
+            0 * ureg.feet, 60000 * ureg.feet,
+            wind_along_track=(-800) * ureg.knot,
+        )
+        assert d.m_as(ureg.nautical_mile) == 0.0
+        assert t.m_as(ureg.minute) > 0
+
+
+class TestHybridPathWind:
+    """End-to-end: _hybrid_path projects wind onto great-circle bearing."""
+
+    def _wp(self, lat, lon, alt_ft, hdg=90.0):
+        from hyplan.waypoint import Waypoint
+        return Waypoint(lat, lon, hdg, altitude_msl=alt_ft * ureg.feet)
+
+    def test_eastbound_eastward_wind_is_tailwind(self):
+        """East-going leg + eastward wind ⇒ climb forward distance grows.
+
+        u_east > 0, v_north = 0, leg from (35, -120) to (35, -110)
+        (true bearing ≈ 90°): track unit (sin 90°, cos 90°) = (1, 0),
+        tailwind = u·1 + v·0 = u > 0.  So _climb sees a tailwind and
+        TOC moves further from departure.
+        """
+        ac = NASA_ER2()
+        start = self._wp(35.0, -120.0, 0)
+        end = self._wp(35.0, -110.0, 60000)
+        info_calm = ac.time_to_cruise(start, end, wind=None)
+        info_tw = ac.time_to_cruise(start, end, wind=(15.0, 0.0))  # 15 m/s east
+        # Climb phase forward distance grows under tailwind.
+        d_calm = info_calm["phases"]["climb"]["distance"].m_as(ureg.nautical_mile)
+        d_tw = info_tw["phases"]["climb"]["distance"].m_as(ureg.nautical_mile)
+        assert d_tw > d_calm
+
+    def test_eastbound_westward_wind_is_headwind(self):
+        """East-going leg + westward wind ⇒ climb forward distance shrinks."""
+        ac = NASA_ER2()
+        start = self._wp(35.0, -120.0, 0)
+        end = self._wp(35.0, -110.0, 60000)
+        info_calm = ac.time_to_cruise(start, end, wind=None)
+        info_hw = ac.time_to_cruise(start, end, wind=(-15.0, 0.0))
+        d_calm = info_calm["phases"]["climb"]["distance"].m_as(ureg.nautical_mile)
+        d_hw = info_hw["phases"]["climb"]["distance"].m_as(ureg.nautical_mile)
+        assert d_hw < d_calm
+
+
+# ---------------------------------------------------------------------------
+# ClimbPlan integration into compute_flight_plan (Item 3 — v1.4)
+# ---------------------------------------------------------------------------
+
+class TestClimbPlan:
+    """ClimbPlan plumbs through compute_flight_plan into time_to_takeoff."""
+
+    def _wp(self, lat, lon, alt_ft, hdg=0.0):
+        from hyplan.waypoint import Waypoint
+        return Waypoint(lat, lon, hdg, altitude_msl=alt_ft * ureg.feet)
+
+    def test_no_climb_plan_unchanged(self):
+        """climb_plan=None must produce identical _hybrid_path output."""
+        ac = NASA_ER2()
+        start = self._wp(34.7, -118.0, 0)
+        end = self._wp(36.5, -116.0, 60000)
+        info_a = ac._hybrid_path(start, end, phase="climb")
+        info_b = ac._hybrid_path(start, end, phase="climb", climb_plan=None)
+        # Single climb phase, no pauses.
+        assert set(info_a["phases"]) == {"climb", "cruise"}
+        assert set(info_b["phases"]) == {"climb", "cruise"}
+        # Total time matches bit-for-bit.
+        assert info_a["total_time"] == info_b["total_time"]
+
+    def test_round_trip_against_step_climb(self):
+        """compute_flight_plan with ClimbPlan(pauses=[(FL356, 25 min)])
+        should match Aircraft.step_climb's total time/forward distance
+        for the same pauses applied to the takeoff phase."""
+        from hyplan.aircraft import ClimbPlan
+        ac = NASA_ER2()
+        # Long enough leg that climb fits within the Dubins path.
+        start = self._wp(34.7, -118.0, 0)
+        end = self._wp(38.0, -114.0, 60000)
+        plan = ClimbPlan(pauses=[
+            (35600 * ureg.feet, 25 * ureg.minute),
+        ])
+        info = ac._hybrid_path(start, end, phase="climb", climb_plan=plan)
+
+        # Sub-phases present.
+        assert "climb_1" in info["phases"]
+        assert "climb_pause_1" in info["phases"]
+        assert "climb_2" in info["phases"]
+
+        # Total climb-phase time equals step_climb's reference time.
+        ref_t, ref_d = ac.step_climb(
+            0 * ureg.feet, 60000 * ureg.feet,
+            pauses=[(35600 * ureg.feet, 25 * ureg.minute)],
+        )
+        ref_t_min = ref_t.m_as(ureg.minute)
+        ref_d_nmi = ref_d.m_as(ureg.nautical_mile)
+
+        climb_total_min = sum(
+            (info["phases"][k]["end_time"]
+             - info["phases"][k]["start_time"]).m_as(ureg.minute)
+            for k in info["phases"]
+            if k.startswith("climb_") or k == "climb"
+        )
+        assert climb_total_min == pytest.approx(ref_t_min, rel=1e-6)
+
+        # Forward climb distance (climb_1 + climb_2; pause is zero).
+        climb_dist_nmi = sum(
+            info["phases"][k]["distance"].m_as(ureg.nautical_mile)
+            for k in info["phases"]
+            if k.startswith("climb_") and "pause" not in k
+        )
+        assert climb_dist_nmi == pytest.approx(ref_d_nmi, rel=5e-3)
+
+    def test_pauses_render_as_loiter(self):
+        """The pause sub-phase carries segment_type='loiter' and
+        process_flight_phase emits a 'loiter' dataframe row."""
+        from hyplan.aircraft import ClimbPlan, NASA_ER2
+        from hyplan.airports import Airport
+        from hyplan.flight_line import FlightLine
+        from hyplan.flight_plan import compute_flight_plan
+        ac = NASA_ER2()
+        line = FlightLine.center_length_azimuth(
+            lat=37.0, lon=-104.5, length=ureg.Quantity(100, "km"),
+            az=0.0, altitude_msl=ureg.Quantity(60000, "feet"),
+            site_name="L1",
+        )
+        kcos = Airport("KCOS")
+        plan = ClimbPlan(pauses=[
+            (35600 * ureg.feet, 25 * ureg.minute),
+        ])
+        df = compute_flight_plan(
+            ac, [line],
+            takeoff_airport=kcos, return_airport=kcos,
+            climb_plan=plan,
+        )
+        # Exactly one loiter row from the climb-staging pause.
+        loiter_rows = df[df["segment_type"] == "loiter"]
+        assert len(loiter_rows) == 1
+        # Hold duration matches.
+        assert loiter_rows.iloc[0]["time_to_segment"] == pytest.approx(25.0, abs=0.1)
+        # Pause altitude is the level-off altitude.
+        assert loiter_rows.iloc[0]["start_altitude"] == pytest.approx(35600.0, abs=1.0)
+        assert loiter_rows.iloc[0]["end_altitude"] == pytest.approx(35600.0, abs=1.0)
+
+    def test_climb_plan_increases_total_duration(self):
+        """compute_flight_plan total time grows by the hold duration
+        when ClimbPlan adds pauses."""
+        from hyplan.aircraft import ClimbPlan, NASA_ER2
+        from hyplan.airports import Airport
+        from hyplan.flight_line import FlightLine
+        from hyplan.flight_plan import compute_flight_plan
+        ac = NASA_ER2()
+        line = FlightLine.center_length_azimuth(
+            lat=37.0, lon=-104.5, length=ureg.Quantity(100, "km"),
+            az=0.0, altitude_msl=ureg.Quantity(60000, "feet"),
+            site_name="L1",
+        )
+        kcos = Airport("KCOS")
+        df_no = compute_flight_plan(
+            ac, [line], takeoff_airport=kcos, return_airport=kcos,
+        )
+        df_yes = compute_flight_plan(
+            ac, [line], takeoff_airport=kcos, return_airport=kcos,
+            climb_plan=ClimbPlan(pauses=[
+                (35600 * ureg.feet, 25 * ureg.minute),
+            ]),
+        )
+        delta_min = df_yes["time_to_segment"].sum() - df_no["time_to_segment"].sum()
+        # 25-minute hold dominates; climb-segment durations are very
+        # close to one another so net increase ≈ 25 min.
+        assert delta_min == pytest.approx(25.0, abs=2.0)

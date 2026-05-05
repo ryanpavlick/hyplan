@@ -282,7 +282,11 @@ def process_flight_phase(
         # Determine the segment type based on altitude information.
         # Use a 1-foot tolerance for floating-point noise from the Dubins solver.
         alt_diff_ft = (details["end_altitude"] - details["start_altitude"]).m_as(ureg.foot)
-        if phase == "approach":
+        if "segment_type" in details:
+            # Explicit override on the phase itself (e.g. ``"loiter"``
+            # set by climb-staging pauses in ``Aircraft._hybrid_path``).
+            seg_type = details["segment_type"]
+        elif phase == "approach":
             # Phase-name key wins: an explicit "approach" phase from
             # Aircraft.time_to_return is always the terminal arrival
             # segment regardless of the outer segment_name (which is

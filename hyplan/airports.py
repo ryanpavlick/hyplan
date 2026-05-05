@@ -152,7 +152,7 @@ class Airport:
             self._elevation = None
         else:
             self._elevation_ft = float(elevation_ft)
-            self._elevation = (self._elevation_ft * ureg.foot).to(ureg.meter)
+            self._elevation = (self._elevation_ft * ureg.foot).to(ureg.meter)  # type: ignore[attr-defined]
 
     def __repr__(self):
         return f"<Airport {self._icao} - {self._name}>"

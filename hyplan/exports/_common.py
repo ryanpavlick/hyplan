@@ -48,17 +48,17 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
 
     for i, row in plan.iterrows():
         alt_ft = _safe_float(row.get("start_altitude"), default=0.0, field="start_altitude")
-        alt_m = (alt_ft * ureg.foot).m_as(ureg.meter)
+        alt_m = (alt_ft * ureg.foot).m_as(ureg.meter)  # type: ignore[attr-defined]
         alt_kft = alt_ft / 1000.0
 
         dist_nm = row.get("distance", 0.0) or 0.0
-        dist_km = (dist_nm * ureg.nautical_mile).m_as(ureg.kilometer)
+        dist_km = (dist_nm * ureg.nautical_mile).m_as(ureg.kilometer)  # type: ignore[union-attr]
         leg_time = row.get("time_to_segment", 0.0) or 0.0
 
         # Derive speed from distance and time
         if leg_time > 0 and dist_nm > 0:
             speed_kt = dist_nm / (leg_time / 60.0)
-            speed_mps = (speed_kt * ureg.knot).m_as("m/s")
+            speed_mps = (speed_kt * ureg.knot).m_as("m/s")  # type: ignore[union-attr]
         else:
             speed_kt = 0.0
             speed_mps = 0.0

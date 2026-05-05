@@ -157,7 +157,7 @@ def mach_to_tas(mach: float, altitude: Quantity) -> Quantity:
     alt_m = altitude.m_as(ureg.meter)
     a = _speed_of_sound_ms(alt_m)
     tas_ms = mach * a
-    return (tas_ms * ureg.meter / ureg.second).to(ureg.knot)  # type: ignore[no-any-return]
+    return (tas_ms * ureg.meter / ureg.second).to(ureg.knot)  # type: ignore[attr-defined,no-any-return]
 
 
 def tas_to_mach(tas: Quantity, altitude: Quantity) -> float:

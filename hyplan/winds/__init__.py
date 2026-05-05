@@ -24,6 +24,12 @@ at any (lat, lon, altitude, time) point.  Implementations:
     credentials required.  Up to 16-day forecast horizon, updated
     4x daily.  Server-side subsetting keeps downloads small (~10 KB).
 
+``IWG1TraceWindField``
+    Measured winds sampled from a NASA IWG1 in-situ flight log
+    (the wind columns in a sortie trace).  Used in the
+    ``planned_vs_flown`` workflow to fly the modeled trajectory through
+    the same wind the real aircraft did.  No external API call.
+
 Usage::
 
     from hyplan.winds import ConstantWindField, wind_field_from_plan
@@ -46,7 +52,12 @@ Usage::
 from .base import WindField  # noqa: F401
 from .factory import wind_field_from_plan  # noqa: F401
 from .gridded import _GriddedWindField  # noqa: F401
-from .providers import GFSWindField, GMAOWindField, MERRA2WindField  # noqa: F401
+from .providers import (  # noqa: F401
+    GFSWindField,
+    GMAOWindField,
+    IWG1TraceWindField,
+    MERRA2WindField,
+)
 from .providers.gfs import _gfs_best_cycle, _gfs_filter_url  # noqa: F401
 from .providers.merra2 import _merra2_stream, _merra2_url  # noqa: F401
 from .simple import ConstantWindField, StillAirField  # noqa: F401
@@ -66,5 +77,6 @@ __all__ = [
     "MERRA2WindField",
     "GMAOWindField",
     "GFSWindField",
+    "IWG1TraceWindField",
     "wind_field_from_plan",
 ]

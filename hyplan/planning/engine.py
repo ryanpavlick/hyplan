@@ -34,6 +34,7 @@ from ..winds.utils import (
 from .segments import _direct_segment_record, process_flight_phase
 
 if TYPE_CHECKING:
+    from ..aircraft import ClimbPlan  # noqa: F401
     from ..winds import WindField
 
 __all__ = [
@@ -52,6 +53,7 @@ def compute_flight_plan(
     wind_direction: Optional[float] = None,
     wind_source: Optional["WindField"] = None,
     takeoff_time: Optional[datetime.datetime] = None,
+    climb_plan: Optional["ClimbPlan"] = None,
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -98,6 +100,14 @@ def compute_flight_plan(
         takeoff_time: UTC datetime of takeoff.  Required when
             ``wind_source`` is a gridded wind field (MERRA-2, GMAO) so
             that each segment can be queried at the correct time.
+        climb_plan: Optional :class:`~hyplan.aircraft.ClimbPlan` of
+            level-off pauses to insert during the takeoff phase.  Each
+            pause is rendered as a ``"loiter"`` segment in the output
+            dataframe (zero forward distance, hold duration only),
+            with the climb split into one row per inter-pause segment.
+            Used to model weight-limited climb staging — e.g. an ER-2
+            ``.delay`` orbit at FL356 before completing the climb to
+            FL650.
     """
     # Validate wind parameter combinations
     if wind_source is not None and wind_speed is not None:
@@ -126,27 +136,30 @@ def compute_flight_plan(
             return None
         return takeoff_time + datetime.timedelta(minutes=cumulative_minutes)
     # Expand Patterns into their underlying flight lines or waypoints.
-    expanded: list = []
+    # After expansion the sequence is FlightLine | Waypoint only — Pattern
+    # objects are unwrapped into their constituent elements.
+    expanded: List[Union[FlightLine, Waypoint]] = []
     for seg in flight_sequence:
         if isinstance(seg, Pattern):
             expanded.extend(seg.elements())
         else:
             expanded.append(seg)
-    flight_sequence = expanded
 
-    # Apply offsets to flight lines, if applicable.
-    flight_sequence = [
+    # Apply offsets to flight lines, if applicable.  Use a fresh
+    # variable name (not `flight_sequence`) so the post-expansion
+    # narrower type sticks.
+    flight_seq: List[Union[FlightLine, Waypoint]] = [
         seg.offset_along(ureg.Quantity(-start_offset, "nautical_mile"),
                            ureg.Quantity(end_offset, "nautical_mile"))
         if isinstance(seg, FlightLine) else seg
-        for seg in flight_sequence
+        for seg in expanded
     ]
 
     records = []
 
     # Process takeoff phase if a takeoff airport is provided.
     if takeoff_airport:
-        first_target = flight_sequence[0]
+        first_target = flight_seq[0]
         if isinstance(first_target, FlightLine):
             first_target = first_target.waypoint1
         mid_lat = (takeoff_airport.latitude + first_target.latitude) / 2
@@ -158,6 +171,7 @@ def compute_flight_plan(
         )
         takeoff_info = aircraft.time_to_takeoff(
             takeoff_airport, first_target, wind=takeoff_wind_uv,
+            climb_plan=climb_plan,
         )
         takeoff_records = process_flight_phase(
             takeoff_airport, first_target, takeoff_info, "Departure",
@@ -167,7 +181,7 @@ def compute_flight_plan(
         records.extend(takeoff_records)
 
     # Process connecting/cruise phases between flight segments.
-    for i, segment in enumerate(flight_sequence):
+    for i, segment in enumerate(flight_seq):
         # Process FlightLine segments separately.
         if isinstance(segment, FlightLine):
             track_geometry = segment.track()
@@ -262,8 +276,8 @@ def compute_flight_plan(
             cumulative_minutes += loiter_time
 
         # Process the connecting phase between the current and next segment.
-        if i + 1 < len(flight_sequence):
-            end = flight_sequence[i + 1]
+        if i + 1 < len(flight_seq):
+            end = flight_seq[i + 1]
             start_wp = segment.waypoint2 if isinstance(segment, FlightLine) else segment
             end_wp = end.waypoint1 if isinstance(end, FlightLine) else end
 
@@ -324,7 +338,7 @@ def compute_flight_plan(
 
     # Process the approach phase if a return airport is provided.
     if return_airport:
-        last_target = flight_sequence[-1]
+        last_target = flight_seq[-1]
         if isinstance(last_target, FlightLine):
             last_target = last_target.waypoint2
         mid_lat = (last_target.latitude + return_airport.latitude) / 2

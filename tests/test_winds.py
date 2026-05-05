@@ -850,3 +850,102 @@ class TestWindFieldFromPlanMockedProviders:
             # Higher flight altitude -> lower pressure_min_hpa
             # 40000 ft is about 188 hPa, so pressure_min should be < 100
             assert kwargs["pressure_min_hpa"] < 200
+
+
+# ---------------------------------------------------------------------------
+# IWG1TraceWindField
+# ---------------------------------------------------------------------------
+
+import pandas as pd  # noqa: E402
+
+from hyplan.winds import IWG1TraceWindField  # noqa: E402
+
+
+def _trace(rows):
+    """Build a minimal IWG1-shaped DataFrame from row tuples."""
+    return pd.DataFrame(
+        rows,
+        columns=["latitude", "longitude", "altitude",
+                 "wind_speed_kt", "wind_direction_deg"],
+    )
+
+
+class TestIWG1TraceWindField:
+    def test_nearest_fix_in_lat_lon(self):
+        """Sampling near a known fix returns that fix's wind."""
+        df = _trace([
+            (34.0, -118.0, 60000, 10, 0),
+            (35.0, -118.0, 60000, 30, 270),
+            (36.0, -118.0, 60000, 50, 90),
+        ])
+        wf = IWG1TraceWindField(df)
+        u, v = wf.wind_at(35.01, -118.0, ureg.Quantity(60000, "feet"))
+        # 30 kt from-west → blowing east → u positive, v ≈ 0.
+        assert u.m_as(ureg.knot) == pytest.approx(30.0, abs=0.01)
+        assert v.m_as(ureg.knot) == pytest.approx(0.0, abs=0.01)
+
+    def test_altitude_disambiguates_when_lat_lon_match(self):
+        """Two fixes at the same lat/lon but different altitudes — query
+        at the altitude of the second one returns the second's wind."""
+        df = _trace([
+            (35.0, -118.0,  5000, 10,   0),
+            (35.0, -118.0, 60000, 50, 270),
+        ])
+        wf = IWG1TraceWindField(df)
+        u_cruise, _ = wf.wind_at(35.0, -118.0, ureg.Quantity(60000, "feet"))
+        assert u_cruise.m_as(ureg.knot) == pytest.approx(50.0, abs=0.01)
+        u_surf, v_surf = wf.wind_at(35.0, -118.0, ureg.Quantity(5000, "feet"))
+        # 10 kt from-N → u ≈ 0, v negative.
+        assert u_surf.m_as(ureg.knot) == pytest.approx(0.0, abs=0.01)
+        assert v_surf.m_as(ureg.knot) == pytest.approx(-10.0, abs=0.01)
+
+    def test_drops_nan_rows(self):
+        """Rows with NaN in any required column are silently dropped."""
+        df = _trace([
+            (35.0, -118.0, 60000, 30, 270),
+            (35.5, -118.0, 60000, np.nan, 270),
+            (36.0, -118.0, np.nan, 30, 270),
+            (36.5, np.nan, 60000, 30, 270),
+        ])
+        wf = IWG1TraceWindField(df)
+        assert wf._n == 1
+
+    def test_all_nan_raises(self):
+        """A trace with no usable rows raises ValueError."""
+        df = _trace([
+            (35.0, -118.0, np.nan, 30, 270),
+            (36.0, -118.0, 60000, np.nan, 270),
+        ])
+        with pytest.raises(ValueError, match="zero valid fixes"):
+            IWG1TraceWindField(df)
+
+    def test_compute_flight_plan_round_trip(self):
+        """`compute_flight_plan` accepts the new class and produces a
+        non-empty plan."""
+        from hyplan.airports import Airport
+        from hyplan.aircraft import NASA_ER2
+        from hyplan.flight_line import FlightLine
+        from hyplan.flight_plan import compute_flight_plan
+
+        df = _trace([
+            (35.5, -117.9, 65000, 60, 270),
+            (35.6, -117.9, 65000, 60, 270),
+            (35.7, -117.9, 65000, 60, 270),
+        ])
+        wf = IWG1TraceWindField(df)
+
+        line = FlightLine.center_length_azimuth(
+            lat=35.6, lon=-117.9, length=ureg.Quantity(40, "km"),
+            az=0.0, altitude_msl=ureg.Quantity(65000, "feet"),
+            site_name="L1",
+        )
+        kedw = Airport("KEDW")
+
+        plan = compute_flight_plan(
+            NASA_ER2(), [line],
+            takeoff_airport=kedw, return_airport=kedw,
+            wind_source=wf,
+            takeoff_time=datetime.datetime(2025, 8, 12, 16, 0,
+                                            tzinfo=datetime.timezone.utc),
+        )
+        assert len(plan) > 0

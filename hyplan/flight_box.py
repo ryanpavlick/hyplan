@@ -287,7 +287,7 @@ def box_around_polygon(
 
     logger.info(
         f"Bounding box derived: Center=({lat0:.6f}, {lon0:.6f}), Azimuth={azimuth:.2f}°, "
-        f"Length={box_length.magnitude:.2f} m, Width={box_width.magnitude:.2f} m."
+        f"Length={box_length.magnitude:.2f} m, Width={box_width.magnitude:.2f} m."  # type: ignore[attr-defined]
     )
 
     # Call `box_around_center_line` to generate flight lines
@@ -415,11 +415,11 @@ def box_around_polygon_terrain(
 
     logger.info(
         f"Bounding box: center=({lat0:.6f}, {lon0:.6f}), az={azimuth:.2f}°, "
-        f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."
+        f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."  # type: ignore[attr-defined]
     )
 
-    box_length_m      = box_length.m_as("meter")
-    box_width_m       = box_width.m_as("meter")
+    box_length_m      = box_length.m_as("meter")  # type: ignore[attr-defined]
+    box_width_m       = box_width.m_as("meter")   # type: ignore[attr-defined]
     safe_altitude_m   = safe_altitude.m_as("meter")
     min_line_length_m = min_line_length.m_as("meter")
     mode3             = target_agl is not None

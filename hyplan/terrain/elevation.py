@@ -81,7 +81,7 @@ def terrain_elevation_along_track(flight_line, dem_file: str,
         Dict with keys ``"min"``, ``"mean"``, and ``"max"`` (all in meters MSL).
     """
     lats, lons, *_ = process_linestring(flight_line.track(precision=precision))
-    elevations = get_elevations(lats, lons, dem_file).astype(float)
+    elevations: np.ndarray = get_elevations(lats, lons, dem_file).astype(float)
     return {
         "min": float(np.nanmin(elevations)),
         "mean": float(np.nanmean(elevations)),
@@ -115,7 +115,7 @@ def terrain_aspect_azimuth(polygon, dem_file: str | None = None) -> float:
         dem_file = generate_demfile(lats_poly, lons_poly)
 
     dem = load_dem(dem_file)
-    elevations = dem.array.astype(float)
+    elevations: np.ndarray = dem.array.astype(float)
 
     # np.gradient returns (d/d_row, d/d_col).  In a north-up GeoTIFF rows
     # increase southward, so the north component is the *negative* row gradient.

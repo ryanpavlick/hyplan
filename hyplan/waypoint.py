@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Union, Dict
+from typing import Dict, Optional, Union
 
 import pymap3d
 from shapely.geometry import Point
@@ -53,11 +53,12 @@ class Waypoint:
         self.longitude = longitude
 
         if isinstance(heading, (int, float)):
-            self.heading = wrap_to_360(float(heading))
+            self.heading: float = float(wrap_to_360(float(heading)))
         else:
             raise HyPlanTypeError("Heading must be a float or an int")
 
         # Validate and process altitude (MSL)
+        self.altitude_msl: Optional[Quantity]
         if altitude_msl is None:
             self.altitude_msl = None
         elif isinstance(altitude_msl, (int, float)):
@@ -68,7 +69,7 @@ class Waypoint:
             raise HyPlanTypeError("altitude_msl must be None, a float (meters), or a pint Quantity with length units")
 
         if self.altitude_msl is not None:
-            alt_m = self.altitude_msl.magnitude
+            alt_m = self.altitude_msl.m_as(ureg.meter)  # type: ignore[union-attr]
             if alt_m < 0:
                 raise HyPlanValueError(f"Altitude must be non-negative, got {alt_m} m")
             if alt_m > 22000:

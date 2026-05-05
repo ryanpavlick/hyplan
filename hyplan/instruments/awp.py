@@ -310,7 +310,7 @@ class AerosolWindProfiler(Sensor):
         heading = _as_quantity(heading_change, "degree", "heading_change")
         altitude = _as_quantity(altitude_change, "meter", "altitude_change")
         roll = _as_quantity(roll_angle, "degree", "roll_angle")
-        return (
+        return bool(
             abs(heading.m_as("degree")) <= self.max_heading_change.m_as("degree")
             and abs(altitude.m_as("meter")) <= self.max_altitude_change.m_as("meter")
             and abs(roll.m_as("degree")) <= self.max_roll_angle.m_as("degree")
@@ -474,9 +474,9 @@ def _resolve_platform_headings(
 ) -> np.ndarray:
     """Resolve aircraft headings from track headings and crab metadata."""
     if heading_deg is not None:
-        return np.full_like(track_headings_deg, heading_deg % 360.0)
+        return np.full_like(track_headings_deg, heading_deg % 360.0)  # type: ignore[no-any-return]
     if crab_angle_deg is not None:
-        return (track_headings_deg + crab_angle_deg) % 360.0
+        return (track_headings_deg + crab_angle_deg) % 360.0  # type: ignore[no-any-return]
     return track_headings_deg
 
 
@@ -547,7 +547,7 @@ def _terrain_aware_profiles_for_geometry(
 
     platform_lats = np.asarray([pos["latitude"] for pos in interpolated], dtype=float)
     platform_lons = np.asarray([pos["longitude"] for pos in interpolated], dtype=float)
-    terrain_elevation_m = get_elevations(platform_lats, platform_lons, dem_file).astype(float)
+    terrain_elevation_m: np.ndarray = get_elevations(platform_lats, platform_lons, dem_file).astype(float)
 
     altitude_msl_m = altitude_msl.m_as("meter")
     altitude_agl_m = altitude_msl_m - terrain_elevation_m

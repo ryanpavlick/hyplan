@@ -139,7 +139,7 @@ from .instruments import (  # noqa: F401
 )
 # Waypoint and Dubins path planning
 from .waypoint import Waypoint  # noqa: F401
-from .dubins3d import DubinsPath2D, DubinsPath3D  # noqa: F401
+from .dubins3d import DubinsPath2D  # noqa: F401
 
 # Swath
 from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps  # noqa: F401
@@ -214,7 +214,7 @@ __all__ = [
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",
     # Dubins
-    "Waypoint", "DubinsPath2D", "DubinsPath3D",
+    "Waypoint", "DubinsPath2D",
     # Swath
     "generate_swath_polygon", "calculate_swath_widths", "analyze_swath_gaps_overlaps",
     # AWP profiling

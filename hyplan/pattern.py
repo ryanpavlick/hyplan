@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 from .flight_line import FlightLine
 from .waypoint import Waypoint
@@ -306,19 +306,20 @@ def _waypoint_from_dict(d: dict) -> Waypoint:
     )
 
 
-def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
+def _invoke_generator(generator: Any, kind: str, params: dict) -> "Pattern":
     """Re-invoke a generator from a stored params dict (meters/degrees only)."""
     center = (params["center_lat"], params["center_lon"])
     heading = params.get("heading", 0.0)
+    # type: ignore[no-any-return]
     if kind == "rosette":
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             heading=heading,
             altitude=params["altitude_msl_m"] * ureg.meter,
             radius=params["radius_m"] * ureg.meter,
             n_lines=params.get("n_lines", 3),
             angles=params.get("angles"),
-        )
+        ))
     if kind == "racetrack":
         offset = params.get("offset_m", 0)
         if isinstance(offset, list):
@@ -327,7 +328,7 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
             offset_q = offset * ureg.meter
         altitudes = params.get("altitudes_m")
         stack_altitudes = params.get("stack_altitudes_m")
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             heading=heading,
             altitude=params["altitude_msl_m"] * ureg.meter,
@@ -338,9 +339,9 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
             stack_altitudes=(
                 [a * ureg.meter for a in stack_altitudes] if stack_altitudes else None
             ),
-        )
+        ))
     if kind == "polygon":
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             heading=heading,
             altitude=params["altitude_msl_m"] * ureg.meter,
@@ -348,18 +349,18 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
             n_sides=int(params.get("n_sides", 4)),
             aspect_ratio=float(params.get("aspect_ratio", 1.0)),
             closed=bool(params.get("closed", True)),
-        )
+        ))
     if kind == "sawtooth":
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             heading=heading,
             altitude_min=params["altitude_min_m"] * ureg.meter,
             altitude_max=params["altitude_max_m"] * ureg.meter,
             leg_length=params["leg_length_m"] * ureg.meter,
             n_cycles=int(params.get("n_cycles", 1)),
-        )
+        ))
     if kind == "spiral":
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             heading=heading,
             altitude_start=params["altitude_start_m"] * ureg.meter,
@@ -368,7 +369,7 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
             n_turns=float(params.get("n_turns", 3.0)),
             direction=str(params.get("direction", "right")),
             points_per_turn=int(params.get("points_per_turn", 36)),
-        )
+        ))
     if kind == "glint_arc":
         import datetime as _dt
         obs_raw = params["observation_datetime"]
@@ -377,7 +378,7 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
         else:
             obs_dt = obs_raw
         cl_m = params.get("collection_length_m")
-        return generator(
+        return cast("Pattern", generator(
             center=center,
             observation_datetime=obs_dt,
             altitude=params["altitude_msl_m"] * ureg.meter,
@@ -386,7 +387,7 @@ def _invoke_generator(generator, kind: str, params: dict) -> "Pattern":
             bank_direction=str(params.get("bank_direction", "right")),
             collection_length=(cl_m * ureg.meter if cl_m is not None else None),
             densify_m=float(params.get("densify_m", 200.0)),
-        )
+        ))
     raise HyPlanValueError(f"Unknown pattern kind: {kind}")
 
 

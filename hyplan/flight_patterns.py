@@ -47,7 +47,7 @@ def _to_length_quantity(value, label="value"):
 
 
 def _length_m(value, label="value") -> float:
-    return _to_length_quantity(value, label).m_as(ureg.meter)
+    return float(_to_length_quantity(value, label).m_as(ureg.meter))
 
 
 def _lines_dict(lines: List[FlightLine]) -> dict:
@@ -624,7 +624,7 @@ def glint_arc(
         if i < n - 1:
             lon_next, lat_next = coords[i + 1]
             _, az = pymap3d.vincenty.vdist(float(lat), float(lon), float(lat_next), float(lon_next))
-            heading = wrap_to_360(float(az))
+            heading: float = float(wrap_to_360(float(az)))
         else:
             heading = waypoints[-1].heading if waypoints else 0.0
         waypoints.append(Waypoint(

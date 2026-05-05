@@ -623,4 +623,4 @@ def sample_ccc_trochoid(
         Va * math.cos(air_hdg) + wind_u,
     )
 
-    return np.array([gx, gy, ground_heading], dtype=np.float64)
+    return np.array([gx, gy, ground_heading], dtype=np.float64)  # type: ignore[no-any-return]

@@ -570,8 +570,8 @@ def rectangle_dimensions(
             azimuth = float(wrap_to_180(az2))
             length_m, width_m = float(length2), float(length1)
     else:
-        az1_diff = abs(wrap_to_180(float(az1) - azimuth))
-        az2_diff = abs(wrap_to_180(float(az2) - azimuth))
+        az1_diff = abs(float(wrap_to_180(float(az1) - azimuth)))
+        az2_diff = abs(float(wrap_to_180(float(az2) - azimuth)))
         if az1_diff <= az2_diff:
             length_m, width_m = float(length1), float(length2)
         else:

@@ -283,7 +283,7 @@ class ApproachProfile:
         constant-glideslope final.
         """
         h_ft = self.top_of_approach_agl.m_as(ureg.feet)
-        return (h_ft / np.tan(np.radians(self.glideslope_deg))) / _FEET_PER_NMI
+        return float((h_ft / np.tan(np.radians(self.glideslope_deg))) / _FEET_PER_NMI)
 
     def tas_at(self, altitude_agl: Quantity) -> Quantity:
         """Scheduled TAS at *altitude_agl*."""
@@ -335,6 +335,35 @@ class ApproachProfile:
 
 
 # ---------------------------------------------------------------------------
+# Climb plan
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ClimbPlan:
+    """Staged climb plan for the takeoff phase.
+
+    Real high-altitude aircraft step-climb out of the weight-limited
+    ceiling: they climb to an intermediate altitude, level off briefly
+    to burn fuel and reduce gross weight, then continue climbing.  A
+    NASA ER-2 sortie typically holds for ~25 minutes around FL356
+    before completing the climb to FL650.
+
+    Each entry in ``pauses`` is ``(level_off_altitude, hold_duration)``
+    — at the level-off altitude the aircraft holds (level orbit) for
+    ``hold_duration``, gaining time but no forward distance.  Pauses
+    are applied in altitude order; pauses outside the
+    ``[start_altitude, cruise_altitude]`` range during planning are
+    silently skipped.
+
+    Pass an instance to :func:`hyplan.planning.compute_flight_plan`
+    via the ``climb_plan`` keyword to make the takeoff-phase planner
+    use :meth:`Aircraft.step_climb` instead of plain :meth:`_climb`.
+    """
+
+    pauses: list = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Turn model
 # ---------------------------------------------------------------------------
 
@@ -358,7 +387,7 @@ class PhaseBankAngles:
             HyPlanValueError: For any other ``phase`` string.
         """
         try:
-            return getattr(self, f"{phase}_deg")
+            return float(getattr(self, f"{phase}_deg"))
         except AttributeError:
             raise HyPlanValueError(
                 f"Unknown phase {phase!r}; expected one of "
@@ -608,33 +637,6 @@ class Aircraft:
             altitude_agl, groundspeed=groundspeed
         )
 
-    def pitch_limits(self, speed: Optional[Quantity] = None) -> tuple:
-        """Derive pitch-angle limits from climb/descent rates and TAS.
-
-        Returns ``(pitch_min, pitch_max)`` in degrees.  ``pitch_min`` is
-        negative (descent), ``pitch_max`` is positive (climb).
-
-        .. note::
-            **Legacy.**  Used by :class:`hyplan.dubins3d.DubinsPath3D`
-            (the constant-pitch 3D Dubins solver) but not by the HyPlan
-            planner's :meth:`_hybrid_path`, which integrates
-            ``climb_profile`` / ``descent_profile`` against altitude
-            directly.  Changing pitch limits will not affect any path
-            built by :func:`hyplan.planning.compute_flight_plan`.
-        """
-        tas = speed if speed is not None else self.cruise_speed_at(self.service_ceiling)  # type: ignore[arg-type]
-        tas_mps = tas.m_as(ureg.meter / ureg.second)
-
-        climb_rate = self.climb_profile.sea_level_rate
-        descent_rate = self.descent_profile.sea_level_rate
-
-        climb_mps = climb_rate.m_as(ureg.meter / ureg.minute) / 60.0
-        descent_mps = descent_rate.m_as(ureg.meter / ureg.minute) / 60.0
-
-        pitch_max = float(np.degrees(np.arctan(climb_mps / tas_mps)))
-        pitch_min = -float(np.degrees(np.arctan(descent_mps / tas_mps)))
-        return pitch_min, pitch_max
-
     def climb_gradient_at(self, altitude: Quantity) -> float:
         """Climb gradient at *altitude* — dimensionless rise/run.
 
@@ -751,6 +753,7 @@ class Aircraft:
         start_altitude: Quantity,
         end_altitude: Quantity,
         true_air_speed: Optional[Quantity] = None,
+        wind_along_track: Optional[Quantity] = None,
     ) -> tuple[Quantity, Quantity]:
         """Estimate time and horizontal distance during a continuous climb.
 
@@ -759,6 +762,14 @@ class Aircraft:
         * ``"constant"`` — single ROC, simple division.
         * ``"two_point"`` — analytical log formula (linear ROC model).
         * ``"full"`` — numerical trapezoidal integration.
+
+        ``wind_along_track`` is the signed wind component projected onto
+        the ground track (positive = tailwind, negative = headwind).
+        When supplied, horizontal distance is integrated as
+        ``ground_speed × time`` where
+        ``ground_speed = TAS · cos(climb_angle) + tailwind_component``.
+        Default ``None`` is still-air behavior (backwards-compatible
+        with v1.3 and earlier).
 
         For staged climbs with intermediate level-off pauses (e.g., a
         weight-driven hold during climb-out), see :meth:`step_climb`.
@@ -819,6 +830,17 @@ class Aircraft:
         horizontal_speed = (true_air_speed * np.cos(climb_angle)).to(
             ureg.nautical_mile / ureg.hour
         )
+        if wind_along_track is not None:
+            # Add tailwind (signed) onto still-air horizontal speed to get
+            # ground speed; integrate ground distance over time_to_climb.
+            wind_kt = wind_along_track.m_as(ureg.knot)
+            ground_speed_kt = max(
+                0.0,
+                horizontal_speed.m_as(ureg.knot) + wind_kt,
+            )
+            horizontal_speed = ground_speed_kt * (
+                ureg.nautical_mile / ureg.hour
+            )
         horizontal_distance = (horizontal_speed * time_to_climb).to(
             ureg.nautical_mile
         )
@@ -986,11 +1008,18 @@ class Aircraft:
         start_altitude: Quantity,
         end_altitude: Quantity,
         true_air_speed: Optional[Quantity] = None,
+        wind_along_track: Optional[Quantity] = None,
     ) -> tuple[Quantity, Quantity]:
         """Estimate time and horizontal distance during descent.
 
         Uses the descent profile (altitude-indexed ROD).  Integration
         strategy matches the climb profile mode.
+
+        ``wind_along_track`` is the signed wind component projected onto
+        the ground track (positive = tailwind, negative = headwind).
+        When supplied, horizontal distance is integrated as
+        ``ground_speed × time``; default ``None`` is still-air
+        (backwards-compatible).
         """
         start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
         end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
@@ -1032,6 +1061,15 @@ class Aircraft:
         horizontal_speed = (true_air_speed * np.cos(descent_angle)).to(
             ureg.nautical_mile / ureg.hour
         )
+        if wind_along_track is not None:
+            wind_kt = wind_along_track.m_as(ureg.knot)
+            ground_speed_kt = max(
+                0.0,
+                horizontal_speed.m_as(ureg.knot) + wind_kt,
+            )
+            horizontal_speed = ground_speed_kt * (
+                ureg.nautical_mile / ureg.hour
+            )
         horizontal_distance = (horizontal_speed * time_to_descend).to(
             ureg.nautical_mile
         )
@@ -1047,6 +1085,7 @@ class Aircraft:
         airport: Airport,
         waypoint: Waypoint,
         wind: Optional[Tuple[float, float]] = None,
+        climb_plan: Optional["ClimbPlan"] = None,
     ) -> dict:
         """Calculate time from takeoff to the first waypoint.
 
@@ -1054,6 +1093,10 @@ class Aircraft:
         — 2D Dubins horizontally, integrated ``climb_profile``
         vertically — so the climb-out timing reflects the aircraft's
         calibrated rate-vs-altitude curve, not a constant pitch.
+
+        ``climb_plan`` (when supplied) inserts level-off pauses during
+        the climb via :meth:`step_climb`; each pause is rendered as a
+        ``"loiter"`` phase in the returned ``phases`` dict.
         """
         _, departure_heading = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude,
@@ -1066,7 +1109,9 @@ class Aircraft:
             altitude_msl=airport.elevation,
         )
         return self.time_to_cruise(
-            airport_waypoint, waypoint, wind=wind, phase="climb",
+            airport_waypoint, waypoint,
+            wind=wind, phase="climb",
+            climb_plan=climb_plan,
         )
 
     def time_to_return(
@@ -1171,6 +1216,7 @@ class Aircraft:
         true_air_speed: Optional[Quantity] = None,
         wind: Optional[Tuple[float, float]] = None,
         phase: str = "cruise",
+        climb_plan: Optional["ClimbPlan"] = None,
     ) -> dict:
         """Solve a hybrid horizontal-Dubins + integrated-vertical path.
 
@@ -1214,11 +1260,13 @@ class Aircraft:
           accessible via the ``horizontal_path`` key).
         * ``horizontal_path``: alias of ``dubins_path``.
 
-        Wind handling: the 2D path uses trochoidal geometry when
-        ``wind`` is supplied.  Vertical integration (``_climb`` /
-        ``_descend``) is still-air-only — that's consistent with the
-        rest of the timing pipeline and good enough for HyPlan's
-        mission-planning use case.
+        Wind handling: when ``wind`` is supplied, both the 2D path
+        (trochoidal geometry) and the vertical integration consume it.
+        The vertical phases project the ``(u, v)`` tuple onto the
+        great-circle bearing from start to end and pass the signed
+        along-track component to :meth:`_climb` / :meth:`_descend`,
+        so a headwind shrinks the climb's forward distance and a
+        tailwind extends it.
         """
         start_alt = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
         end_alt = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
@@ -1276,9 +1324,51 @@ class Aircraft:
         L_m = h_path.length.m_as(ureg.meter)
         L_nmi = L_m / 1852.0
 
-        # Climb segment (start.alt -> cruise.alt).
+        # Project wind onto the great-circle bearing from start to end
+        # so the vertical phases see a signed along-track component.
+        # A headwind (positive_along_track < 0) shrinks the climb's
+        # forward distance; a tailwind extends it.
+        wind_along_q: Optional[Quantity] = None
+        if wind is not None:
+            u_mps, v_mps = wind
+            _, az_fwd = pymap3d.vincenty.vdist(
+                start_waypoint.latitude, start_waypoint.longitude,
+                end_waypoint.latitude, end_waypoint.longitude,
+            )
+            az_rad = math.radians(float(az_fwd))
+            tailwind_mps = u_mps * math.sin(az_rad) + v_mps * math.cos(az_rad)
+            wind_along_q = tailwind_mps * (ureg.meter / ureg.second)
+
+        # Climb segment (start.alt -> cruise.alt).  When ``climb_plan``
+        # is supplied (and the leg actually climbs), use ``step_climb``
+        # so the level-off pauses contribute hold time without forward
+        # distance.  Each pause will be emitted as its own
+        # ``"loiter"``-tagged phase in the phases dict below.
+        climb_pauses_in_range: list = []
+        if (
+            climb_plan is not None
+            and phase == "climb"
+            and start_alt < cruise_altitude
+        ):
+            climb_pauses_in_range = sorted(
+                (
+                    (lvl.to(ureg.feet), dur.to(ureg.minute))
+                    for lvl, dur in climb_plan.pauses
+                    if lvl > start_alt and lvl < cruise_altitude
+                ),
+                key=lambda p: p[0].m_as(ureg.feet),
+            )
+
         if start_alt < cruise_altitude:
-            climb_t_q, climb_d_q = self._climb(start_alt, cruise_altitude)
+            if climb_pauses_in_range:
+                climb_t_q, climb_d_q = self.step_climb(
+                    start_alt, cruise_altitude, climb_pauses_in_range,
+                )
+            else:
+                climb_t_q, climb_d_q = self._climb(
+                    start_alt, cruise_altitude,
+                    wind_along_track=wind_along_q,
+                )
             climb_time_min = climb_t_q.m_as(ureg.minute)
             climb_dist_nmi = climb_d_q.m_as(ureg.nautical_mile)
         else:
@@ -1287,7 +1377,10 @@ class Aircraft:
 
         # Descent segment (cruise.alt -> end.alt).
         if end_alt < cruise_altitude:
-            desc_t_q, desc_d_q = self._descend(cruise_altitude, end_alt)
+            desc_t_q, desc_d_q = self._descend(
+                cruise_altitude, end_alt,
+                wind_along_track=wind_along_q,
+            )
             descent_time_min = desc_t_q.m_as(ureg.minute)
             descent_dist_nmi = desc_d_q.m_as(ureg.nautical_mile)
         else:
@@ -1391,6 +1484,88 @@ class Aircraft:
                     "end_lat": e_lat, "end_lon": e_lon,
                     "start_heading": s_hdg, "end_heading": e_hdg,
                 }
+            elif climb_pauses_in_range:
+                # Staged climb: emit one "climb_<i>" sub-phase per
+                # climb segment plus one "climb_pause_<i>" loiter-orbit
+                # phase per pause.  Forward distance accumulates only
+                # during climb segments; orbits hold ground position.
+                from ..planning.segments import loiter_orbit_geometry
+                cum_d_m_climb = 0.0
+                cum_t_min_climb = 0.0
+                prev_alt_q = start_alt
+                for i, (level_alt, hold_dur) in enumerate(climb_pauses_in_range, start=1):
+                    sub_t_q, sub_d_q = self._climb(
+                        prev_alt_q, level_alt,
+                        wind_along_track=wind_along_q,
+                    )
+                    sub_t_min = sub_t_q.m_as(ureg.minute)
+                    sub_d_nmi = sub_d_q.m_as(ureg.nautical_mile)
+                    s_d_m = cum_d_m_climb
+                    e_d_m = min(L_m, cum_d_m_climb + sub_d_nmi * nmi_to_m)
+                    s_lat, s_lon, s_hdg = h_path.sample_at_distance(s_d_m)
+                    e_lat, e_lon, e_hdg = h_path.sample_at_distance(e_d_m)
+                    phases[f"climb_{i}"] = {
+                        "start_altitude": prev_alt_q,
+                        "end_altitude": level_alt,
+                        "start_time": (cum_time_min + cum_t_min_climb) * ureg.minute,
+                        "end_time": (cum_time_min + cum_t_min_climb + sub_t_min) * ureg.minute,
+                        "distance": sub_d_nmi * ureg.nautical_mile,
+                        "geometry": h_path.sublinestring(s_d_m, e_d_m),
+                        "start_lat": s_lat, "start_lon": s_lon,
+                        "end_lat": e_lat, "end_lon": e_lon,
+                        "start_heading": s_hdg, "end_heading": e_hdg,
+                    }
+                    cum_d_m_climb = e_d_m
+                    cum_t_min_climb += sub_t_min
+                    # Pause orbit at level_alt — hold time, zero forward.
+                    orbit_wp = Waypoint(
+                        latitude=e_lat, longitude=e_lon,
+                        heading=e_hdg, altitude_msl=level_alt,
+                    )
+                    orbit_geom = loiter_orbit_geometry(
+                        orbit_wp, self, phase="climb",
+                    )
+                    hold_min = hold_dur.m_as(ureg.minute)
+                    phases[f"climb_pause_{i}"] = {
+                        "start_altitude": level_alt,
+                        "end_altitude": level_alt,
+                        "start_time": (cum_time_min + cum_t_min_climb) * ureg.minute,
+                        "end_time": (cum_time_min + cum_t_min_climb + hold_min) * ureg.minute,
+                        "distance": 0.0 * ureg.nautical_mile,
+                        "geometry": orbit_geom,
+                        "segment_type": "loiter",
+                        "start_lat": e_lat, "start_lon": e_lon,
+                        "end_lat": e_lat, "end_lon": e_lon,
+                        "start_heading": e_hdg, "end_heading": e_hdg,
+                    }
+                    cum_t_min_climb += hold_min
+                    prev_alt_q = level_alt
+                # Final climb from last pause to cruise altitude.
+                if prev_alt_q < cruise_altitude:
+                    sub_t_q, sub_d_q = self._climb(
+                        prev_alt_q, cruise_altitude,
+                        wind_along_track=wind_along_q,
+                    )
+                    sub_t_min = sub_t_q.m_as(ureg.minute)
+                    sub_d_nmi = sub_d_q.m_as(ureg.nautical_mile)
+                    s_d_m = cum_d_m_climb
+                    e_d_m = min(L_m, cum_d_m_climb + sub_d_nmi * nmi_to_m)
+                    s_lat, s_lon, s_hdg = h_path.sample_at_distance(s_d_m)
+                    e_lat, e_lon, e_hdg = h_path.sample_at_distance(e_d_m)
+                    final_idx = len(climb_pauses_in_range) + 1
+                    phases[f"climb_{final_idx}"] = {
+                        "start_altitude": prev_alt_q,
+                        "end_altitude": cruise_altitude,
+                        "start_time": (cum_time_min + cum_t_min_climb) * ureg.minute,
+                        "end_time": (cum_time_min + cum_t_min_climb + sub_t_min) * ureg.minute,
+                        "distance": sub_d_nmi * ureg.nautical_mile,
+                        "geometry": h_path.sublinestring(s_d_m, e_d_m),
+                        "start_lat": s_lat, "start_lon": s_lon,
+                        "end_lat": e_lat, "end_lon": e_lon,
+                        "start_heading": s_hdg, "end_heading": e_hdg,
+                    }
+                    cum_d_m_climb = e_d_m
+                cum_dist_m = cum_d_m_climb
             else:
                 end_d_m = climb_dist_nmi * nmi_to_m
                 s_lat, s_lon, s_hdg = h_path.sample_at_distance(0.0)
@@ -1506,6 +1681,7 @@ class Aircraft:
         true_air_speed: Optional[Quantity] = None,
         wind: Optional[Tuple[float, float]] = None,
         phase: str = "cruise",
+        climb_plan: Optional["ClimbPlan"] = None,
     ) -> dict:
         """Calculate time to fly between two waypoints.
 
@@ -1516,16 +1692,22 @@ class Aircraft:
 
         Args:
             wind: Optional ``(u_east, v_north)`` wind vector in m/s.
-                When provided, horizontal turning arcs become trochoids
-                and the 2D path length / timing account for wind drift.
-                Vertical integration is still-air.
+                When provided, horizontal turning arcs become trochoids,
+                the 2D path length and timing account for wind drift,
+                and the vertical phases project the wind onto the
+                great-circle bearing for ground-speed-corrected
+                forward distance.
             phase: Which entry of
                 :class:`PhaseBankAngles` drives the horizontal Dubins
                 turn radius — see :meth:`_hybrid_path`.  Defaults to
                 ``"cruise"``.
+            climb_plan: Optional :class:`ClimbPlan` with level-off
+                pauses to insert during the climb.  Only takes effect
+                when ``phase == "climb"`` and the leg actually climbs.
         """
         return self._hybrid_path(
             start_waypoint, end_waypoint,
             true_air_speed=true_air_speed, wind=wind, phase=phase,
+            climb_plan=climb_plan,
         )
 

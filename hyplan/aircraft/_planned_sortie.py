@@ -465,7 +465,7 @@ def parse_green_card_xlsx(path: Path | str) -> PlannedSortie:
             break  # trailing blank rows
         if all(c is None for c in block[0]):
             break  # padding row at end
-        records.append(_parse_waypoint_block(tuple(block)))
+        records.append(_parse_waypoint_block((block[0], block[1], block[2])))
 
     df = pd.DataFrame.from_records(records)
     df.insert(0, "order", range(1, len(df) + 1))

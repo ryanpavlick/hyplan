@@ -474,6 +474,56 @@ class TestPlannerRegression:
         seg_types = set(plan["segment_type"].values)
         assert "pattern" in seg_types or "flight_line" in seg_types
 
+    def test_pattern_legs_use_cruise_bank(self, b200):
+        """Inter-line transits within a Pattern are level (cruise) flight,
+        so the Dubins arc must reflect ``bank_by_phase.cruise_deg``.
+
+        We verify this indirectly by comparing the inter-line transit
+        time produced by the planner against the time predicted by the
+        air-frame Dubins length under the cruise-deg bank: equal within
+        floating-point tolerance.  Any regression that swapped to
+        ``max_bank_deg`` would show up as a discrepancy because the two
+        bank values differ for every calibrated aircraft.
+        """
+        from hyplan.dubins3d import DubinsPath2D
+        from hyplan.units import ureg as _ureg
+        # Two parallel flight lines stacked on top of each other; the
+        # inter-line transit is a level cruise turn of ~U-shape geometry.
+        fl1 = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=_ureg.Quantity(50, "km"),
+            az=90.0,
+            altitude_msl=_ureg.Quantity(20000, "feet"),
+            site_name="A",
+        )
+        fl2 = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-117.5,  # downstream of fl1's end
+            length=_ureg.Quantity(50, "km"),
+            az=270.0,
+            altitude_msl=_ureg.Quantity(20000, "feet"),
+            site_name="B",
+        )
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[fl1, fl2])
+        # Locate the transit row between the two flight lines.
+        transit_rows = plan[plan["segment_type"] == "transit"]
+        assert len(transit_rows) >= 1
+        transit_t_min = transit_rows.iloc[0]["time_to_segment"]
+        # Reference: build the same transit at cruise_deg directly.
+        cruise_bank = b200.turn_model.bank_by_phase.for_phase("cruise")
+        cruise_tas = b200.cruise_speed_at(_ureg.Quantity(20000, "feet"))
+        ref_path = DubinsPath2D(
+            fl1.waypoint2, fl2.waypoint1,
+            speed=cruise_tas, bank_angle=cruise_bank,
+        )
+        ref_t_min = (
+            ref_path.length / cruise_tas
+        ).to(_ureg.minute).magnitude
+        # Tolerance accommodates small phase-split / pitch-implicit
+        # adjustments inside _hybrid_path; a regression that swapped
+        # to max_bank_deg would shift the transit time by tens of
+        # percent (B200: cruise_deg=25, max_bank_deg=30).
+        assert transit_t_min == pytest.approx(ref_t_min, rel=2e-2)
+
     def test_airport_departure_and_return(self, b200):
         """Takeoff and approach phases appear with correct ordering."""
         fl = FlightLine.start_length_azimuth(

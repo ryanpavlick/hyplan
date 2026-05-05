@@ -3,7 +3,7 @@ from typing import Union
 from pint import UnitRegistry, Quantity, set_application_registry
 from .exceptions import HyPlanValueError
 
-ureg = UnitRegistry()
+ureg: UnitRegistry = UnitRegistry()
 
 # Set application-wide registry
 set_application_registry(ureg)
@@ -48,7 +48,8 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
-    return (distance * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
+    q = distance * units[from_unit]
+    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
 
 def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     """
@@ -72,7 +73,8 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (speed * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
+    q = speed * units[from_unit]
+    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
 
 def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     """
@@ -95,7 +97,8 @@ def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (angle * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
+    q = angle * units[from_unit]
+    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
 
 def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     """
@@ -118,7 +121,8 @@ def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
-    return (time * units[from_unit]).m_as(units[to_unit])  # type: ignore[no-any-return]
+    q = time * units[from_unit]
+    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
 
 def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
     """
@@ -142,7 +146,8 @@ def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Un
         altitude_ft = altitude.m_as("feet")
     elif isinstance(altitude, (int, float)):
         # Assume numeric value is in meters
-        altitude_ft = (altitude * ureg.meter).m_as("feet")
+        q_alt = altitude * ureg.meter
+        altitude_ft = q_alt.m_as("feet")  # type: ignore[union-attr]
     else:
         raise HyPlanValueError("Altitude must be a pint length or a number (assumed meters).")
 

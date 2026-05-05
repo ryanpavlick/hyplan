@@ -77,7 +77,7 @@ class GMAOWindField(_GriddedWindField):
         """Convert GMAO 'days since 1-1-1' floats to datetime64[ns]."""
         # raw_time values are fractional days since 0001-01-01.
         # Subtract 1 because the epoch day itself is day 1, not day 0.
-        days = (raw_time - 1).astype("timedelta64[D]")
+        days: np.ndarray = (raw_time - 1).astype("timedelta64[D]")
         frac_ns = ((raw_time - 1 - np.floor(raw_time - 1)) * 86400e9).astype(
             "timedelta64[ns]"
         )

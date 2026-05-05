@@ -1,4 +1,4 @@
-"""Tests for 3D Dubins integration into the flight planning pipeline."""
+"""Tests for hybrid-Dubins integration into the flight planning pipeline."""
 
 import pytest
 
@@ -26,27 +26,6 @@ def giii():
 @pytest.fixture
 def palmdale():
     return Airport("KPMD")
-
-
-class TestPitchLimits:
-    def test_b200_pitch_limits(self, b200):
-        pitch_min, pitch_max = b200.pitch_limits()
-        assert pitch_min < 0
-        assert pitch_max > 0
-        assert -20 < pitch_min < 0
-        assert 0 < pitch_max < 20
-
-    def test_giii_pitch_limits(self, giii):
-        pitch_min, pitch_max = giii.pitch_limits()
-        assert pitch_min < 0
-        assert pitch_max > 0
-
-    def test_pitch_limits_with_speed_override(self, b200):
-        slow = b200.pitch_limits(ureg.Quantity(100, "knot"))
-        fast = b200.pitch_limits(ureg.Quantity(250, "knot"))
-        # Slower speed -> steeper pitch angles
-        assert slow[1] > fast[1]
-        assert slow[0] < fast[0]
 
 
 class TestTimeToCruise:
