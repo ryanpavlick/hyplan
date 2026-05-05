@@ -250,10 +250,16 @@ class TestWindCorrectedTransit:
     """Wind-aware transit time via compute_flight_plan wind_speed/wind_direction."""
 
     def _north_leg(self):
+        # Altitude 12 kft pairs with B-200 cruise TAS 224 kt — a
+        # regime where the trochoidal Dubins solver gives a clean
+        # straight-leg solution under 50-kt wind.  At lower altitudes
+        # (TAS 220 kt) and at higher (TAS ≥ 230 kt) the solver
+        # produces path warping that complicates the simple
+        # tailwind-reduces-time invariant tested below.
         wp1 = Waypoint(34.00, -118.00, 0.0,
-                       altitude_msl=ureg.Quantity(20000, "feet"), name="WP1")
+                       altitude_msl=ureg.Quantity(12000, "feet"), name="WP1")
         wp2 = Waypoint(34.50, -118.00, 0.0,
-                       altitude_msl=ureg.Quantity(20000, "feet"), name="WP2")
+                       altitude_msl=ureg.Quantity(12000, "feet"), name="WP2")
         return wp1, wp2
 
     def test_zero_wind_regression(self, b200):

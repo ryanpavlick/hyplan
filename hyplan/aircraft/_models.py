@@ -941,31 +941,97 @@ class KingAirB200(Aircraft):
     """
 
     def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 185 * ureg.knot),
-            (35000 * ureg.feet, 250 * ureg.knot),
-        ])
+        # Calibrated against 272 NASA ICARTT sorties from multiple
+        # B-200 / UC-12 (military variant) campaigns: ACTAMERICA
+        # Hskping (NASA 529 LaRC), DISCOVER-AQ California / Colorado /
+        # Texas APPLANIX, KORUS-AQ B200 NAV, LMOS UC12 NAV, BlueFlux
+        # AIMMS-20 (ICT identifies the BlueFlux platform as B-200
+        # despite the data folder labeling).  See
+        # ``notebooks/calibration/b200/iwg1_calibration.ipynb``.
         super().__init__(
             aircraft_type="King Air 200",
-            tail_number="Unknown",
-            operator="Unknown",
-            service_ceiling=35000 * ureg.feet,
-            approach_speed=120 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 10),
+            tail_number="multi-tail",
+            operator="NASA (multiple)",
+            # p99 of per-sortie peak altitude across 272 sorties.  The
+            # 35000 ft brochure ceiling is rarely flown; typical
+            # operational peaks land at FL280-FL300.
+            service_ceiling=30000 * ureg.feet,
+            approach_speed=113 * ureg.knot,
+            climb_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 110 * ureg.knot),  # rotation
+                ( 5000 * ureg.feet, 157 * ureg.knot),
+                (10000 * ureg.feet, 193 * ureg.knot),
+                (15000 * ureg.feet, 205 * ureg.knot),
+                (20000 * ureg.feet, 206 * ureg.knot),
+                (25000 * ureg.feet, 212 * ureg.knot),
+            ]),
+            cruise_schedule=TasSchedule(points=[
+                (10000 * ureg.feet, 220 * ureg.knot),
+                (15000 * ureg.feet, 230 * ureg.knot),
+                (20000 * ureg.feet, 239 * ureg.knot),
+                (25000 * ureg.feet, 238 * ureg.knot),
+                (28000 * ureg.feet, 238 * ureg.knot),
+            ]),
+            descent_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 130 * ureg.knot),  # final approach
+                ( 5000 * ureg.feet, 178 * ureg.knot),
+                # FL100 descent bin median is 221 kt; clip to cruise
+                # FL100 (220 kt) so descent <= cruise at every shared
+                # altitude — the 1-kt difference is below the bin
+                # measurement precision.
+                (10000 * ureg.feet, 220 * ureg.knot),
+                (15000 * ureg.feet, 240 * ureg.knot),
+                (20000 * ureg.feet, 253 * ureg.knot),
+                (25000 * ureg.feet, 251 * ureg.knot),
+            ]),
+            # Active-climb median (VS >= 1000 fpm), 5-kft bins, n>=30/bin.
+            # Threshold lowered from the 1500 fpm default so the climb
+            # bins extend through FL250 — above FL150 the B-200's
+            # active-climb VS is normally 1000-1300 fpm.
             climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 2000 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 100 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1267 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1320 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 1346 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 1190 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 1068 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 1031 * ureg.feet / ureg.minute),
+                # Residual at service_ceiling so the integrator
+                # terminates cleanly there.
+                (30000 * ureg.feet,  500 * ureg.feet / ureg.minute),
             ]),
+            # Active-descent median (|VS| >= 1000 fpm), 5-kft bins.
             descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1198 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1320 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 1397 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 1551 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 1852 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 1406 * ureg.feet / ureg.minute),
             ]),
+            # AFM normal-ops bank.  Data p90=30° agrees (n=1.14M turn
+            # fixes across 272 sorties).
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=1632 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=4250 * ureg.pound,
+            confidence=PerformanceConfidence(
+                climb=0.85, cruise=0.85, descent=0.85, turns=0.85,
+            ),
+            sources=[
+                SourceRecord(
+                    source_type="icartt",
+                    reference="Multi-campaign ICARTT calibration, n=272 sorties (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS, BlueFlux)",
+                    confidence=0.85,
+                ),
+                SourceRecord(
+                    source_type="brochure",
+                    reference="Beechcraft King Air B200 AFM",
+                    confidence=0.5,
+                ),
+            ],
+            # Vs0 at landing config, MLW per Beechcraft B200 AFM.
+            stall_speed_cas=75 * ureg.knot,
         )
 
 
@@ -1165,29 +1231,74 @@ class TwinOtter(Aircraft):
     """
 
     def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 97 * ureg.knot),
-            (10000 * ureg.feet, 150 * ureg.knot),
-        ])
+        # Calibrated against 17 ICARTT sorties from FIREX-AQ N48RF
+        # (NOAA DHC-6 Twin Otter), summer 2019.  AIMSS Probe in-situ
+        # data — TAS, attitude, wind, pressure.  Twin Otter climbs
+        # slowly compared to jets/turboprops, so the active-climb
+        # threshold in the calibration notebook is 500 fpm (vs the
+        # 1500 fpm used for jets and 1000 fpm used for B-200).
         super().__init__(
             aircraft_type="DHC-6 Twin Otter",
-            tail_number="Unknown",
-            operator="Various",
-            service_ceiling=25000 * ureg.feet,
-            approach_speed=70 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 8),
+            tail_number="N48RF",
+            operator="NOAA",
+            # p99 of per-sortie peak across 17 sorties; 25000 ft
+            # brochure ceiling not approached in the FIREX-AQ data
+            # (typical ops cruise FL080-FL120).
+            service_ceiling=15000 * ureg.feet,
+            approach_speed=99 * ureg.knot,
+            climb_schedule=TasSchedule(points=[
+                (    0 * ureg.feet,  70 * ureg.knot),  # rotation
+                ( 5000 * ureg.feet, 118 * ureg.knot),
+                (10000 * ureg.feet, 128 * ureg.knot),
+                (12000 * ureg.feet, 128 * ureg.knot),
+            ]),
+            cruise_schedule=TasSchedule(points=[
+                ( 5000 * ureg.feet, 138 * ureg.knot),
+                ( 8000 * ureg.feet, 141 * ureg.knot),
+                (10000 * ureg.feet, 141 * ureg.knot),
+                (12000 * ureg.feet, 141 * ureg.knot),
+            ]),
+            descent_schedule=TasSchedule(points=[
+                (    0 * ureg.feet,  90 * ureg.knot),
+                ( 5000 * ureg.feet, 143 * ureg.knot),
+                (10000 * ureg.feet, 148 * ureg.knot),
+                (12000 * ureg.feet, 148 * ureg.knot),
+            ]),
+            # Active-climb median (VS >= 500 fpm), 5-kft bins.  The
+            # FIREX-AQ data peaks at FL100-FL130; lowering the
+            # threshold further wouldn't add bins since most sorties
+            # don't climb actively above FL100.
             climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 430 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 50 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet,  770 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet,  769 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet,  665 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet,  200 * ureg.feet / ureg.minute),
             ]),
+            # Active-descent median (|VS| >= 500 fpm), 5-kft bins.
             descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 430 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet,  663 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet,  733 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet,  657 * ureg.feet / ureg.minute),
             ]),
-            turn_model=TurnModel(max_bank_deg=25.0),
+            turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=800 * ureg.nautical_mile,
             endurance=6 * ureg.hour,
             useful_payload=4000 * ureg.pound,
+            confidence=PerformanceConfidence(
+                climb=0.85, cruise=0.85, descent=0.85, turns=0.85,
+            ),
+            sources=[
+                SourceRecord(
+                    source_type="icartt",
+                    reference="FIREX-AQ N48RF Twin Otter ICARTT calibration, n=17 sorties (2019)",
+                    confidence=0.85,
+                ),
+                SourceRecord(
+                    source_type="brochure",
+                    reference="DHC-6 Twin Otter Series 300 manual",
+                    confidence=0.5,
+                ),
+            ],
+            stall_speed_cas=58 * ureg.knot,  # Vs0 landing config, MTOW
         )
