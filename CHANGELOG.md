@@ -1,5 +1,60 @@
 # Changelog
 
+## v1.4.0 — 2026-05-05
+
+This release expands the data-fit aircraft fleet from one platform (the NASA ER-2) to **eight** (ER-2, G-III, G-V, WB-57, C-130H, P-3, King Air B-200, Twin Otter), introduces the `ClimbOutPolicy` abstraction so per-aircraft pre-cruise level-offs are explicit rather than absorbed into `climb_profile`, and removes the legacy `DubinsPath3D` solver that the v1.3 hybrid path superseded. Public APIs are unchanged for callers; **mission timing for any aircraft other than the ER-2 will shift** because seven previously-brochure platforms now carry calibrated climb / descent / cruise schedules.
+
+### Why this release
+
+Pre-v1.4 only the ER-2 had a calibrated performance model; the rest of the fleet ran on manufacturer brochures. With the v1.3 hybrid planner consuming the calibrated curves directly, the gap between ER-2 and the rest of the fleet became the dominant source of mission-timing error for non-ER-2 platforms. v1.4 closes that gap by data-fitting seven additional aircraft from public NASA ASP archive IWG1 logs and per-campaign ICARTT deliveries, and by making the ER-2's pre-cruise step climb / hold structure expressible through a first-class `ClimbOutPolicy` rather than smuggled into `climb_profile`.
+
+### Aircraft calibration: seven new platforms
+
+`NASA_GIII`, `NASA_GV`, `NASA_WB57`, `C130`, `NASA_P3`, `KingAirB200`, and `TwinOtter` now ship with per-altitude-bin medians for `climb_profile` / `descent_profile`, independent climb / cruise / descent `TasSchedule`s, data-derived `approach_speed`, and operational-p99 `service_ceiling`. `turn_model.max_bank_deg` is `max(AFM normal-ops 30°, data p90)` so the planner uses a bank the aircraft is actually flown at, not the typical-mix median. `confidence=0.85` for data-fit calibrations; brochure / sibling-airframe-inferred values keep `confidence=0.7`.
+
+Sources by class:
+
+* **NASA ASP archive IWG1** — G-III (153 sorties), G-V (101), WB-57 (100), C-130H (87), P-3 (252).
+* **NASA ICARTT (multi-campaign)** — King Air B-200 (250 sorties across ACTAMERICA, DISCOVER-AQ California / Colorado / Texas, KORUS-AQ, LMOS).
+* **NOAA ICARTT (FIREX-AQ)** — N48RF Twin Otter.
+
+Each platform has a per-aircraft `notebooks/calibration/<aircraft>/calibration.ipynb` notebook (renamed from `iwg1_calibration.ipynb` since two of them ingest ICARTT, not IWG1) and a paste-ready constructor block emitting calibrated constants + `SourceRecord`. See [`docs/calibration.md`](docs/calibration.md) for the methodology overview, the operational-vs-aircraft-intrinsic caveats, and the deferred-access plan for `NCAR_GV` (HIAPER), `NASA_C20A`, `BAe146`, and `KingAirA90`.
+
+### `ClimbOutPolicy` for explicit pre-cruise structure
+
+`Aircraft.typical_climb_out: ClimbOutPolicy` names what `climb_profile` is calibrated to absorb. The ER-2's 19–21 kft fuel-management hold and 23 kft post-step recovery are now encoded as a separate policy rather than deformed into the active-climb profile. `compute_flight_plan` accepts `climb_plan='auto'` to resolve to the aircraft's `typical_climb_out`. The ER-2 `climb_profile` is refit to active-climb-only medians at 5-kft bins, and the monotone-from-SL clamp is dropped (jets peak ROC near FL050–FL100, not at SL). Same posture applies to `descent_profile`: monotonicity is no longer enforced because real descent VS peaks near FL150–FL200 (CAS-limited) and declines in the upper levels (Mach-limited).
+
+### `ICARTT` loader + `IWG1TraceWindField` provider
+
+`hyplan.aircraft.icartt.load_icartt` reads NASA AMES FFI 1001 ICARTT (.ict) files into the canonical IWG1-style schema, with flexible `_COLUMN_PATTERNS` covering the per-campaign variable-name conventions (DISCOVER-AQ, KORUS-AQ, ACTAMERICA, LMOS, FIREX-AQ). `detect_platform()` reads `PLATFORM:` from the ICT free-text block. `hyplan.winds.providers.IWG1TraceWindField` is promoted from a notebook helper to a first-class wind provider so the planner can pull per-segment wind from a flight's own trace. New skeleton loaders at `hyplan/aircraft/eol_ncar.py` (NCAR HIAPER LRT name table) and `hyplan/aircraft/faam_netcdf.py` (FAAM Core variable map) are in place pending NCAR EOL ORDER and CEDA registration respectively.
+
+### Inferred classes + loader prep for FAAM / EOL
+
+`NCAR_GV` (HIAPER, N677F) is registered as a separate class mirroring `NASA_GV`'s calibrated values (confidence 0.7) so HIAPER-specific values can replace these without affecting `NASA_GV`. `NASA_C20A` (NASA 502, AFRC G-III variant) inherits from the calibrated `NASA_GIII` (same airframe, same type certificate; confidence 0.7).
+
+### Calibration notebook infrastructure
+
+`notebooks/calibration/_common.py` extracts the helpers every per-aircraft builder used to inline: `label_phases`, `apply_sortie_filters`, `per_bin`, `tas_per_bin`, `schedule_pts`, `evaluate_profile`, `summary_table`. Aircraft-specific knobs (active-VS threshold, target altitudes, rotation TAS, ER-2 hold bands) stay in the per-aircraft builder. `notebooks/calibration/_asp_fetch.py` provides a tail-keyed crawler for the NASA ASP archive. Every calibration notebook gains a §1 `summary_table` cell and a §9 operational-vs-aircraft-intrinsic markdown block so reviewers can tell which numbers describe airframe performance vs. mission-mix behavior.
+
+### Other additions
+
+`Aircraft.stall_speed_cas` + `min_safe_speed_at(altitude, margin=1.3)` for caller-side bounds checking, using compressible CAS-to-TAS conversion. `compute_flight_plan` accepts a `ClimbPlan` parameter (`'auto'` / explicit / `None`). Per-aircraft `bank_by_phase` is consumed end-to-end. `split_iwg1_alltracks` autodetects deliveries with missing `HEADER` rows. `load_iwg1` filters implausible GPS positions and isolated GPS spikes (rolling-median outlier detection), and `trim_ground_taxi` falls back to altitude-only airborne detection when groundspeed is missing from a delivery.
+
+### Behavior changes & migration
+
+Mission timing and ground-track geometry from `compute_flight_plan` shift for the seven newly-calibrated aircraft. Tests or scripts pinning exact times or top-of-climb coordinates for `NASA_GIII`, `NASA_GV`, `NASA_WB57`, `C130`, `NASA_P3`, `KingAirB200`, or `TwinOtter` need their expected values regenerated. `NASA_ER2` timing is also slightly affected by the active-climb refit + `ClimbOutPolicy` migration; ER-2 reference sorties stay within ±5 % of v1.3.
+
+`service_ceiling` and `approach_speed` on the data-fit classes are now operational p99 / median rather than airframe brochure ceiling / typical AFM approach. The B-200 ships `service_ceiling=30000 ft` (vs 35000 ft brochure); the Twin Otter ships `service_ceiling=15000 ft` (vs 25000 ft brochure). Each class explicitly comments which value is shipped and why.
+
+### Removed / deprecated
+
+`DubinsPath3D` and `Aircraft.pitch_limits()` are removed (the v1.3 hybrid planner already superseded both). `notebooks/calibration/<aircraft>/iwg1_calibration.ipynb` is renamed to `calibration.ipynb` for every aircraft.
+
+### Code quality
+
+121 unused `# type: ignore` comments stripped across 24 modules. Strict-mode mypy (`--warn-unused-ignores --warn-redundant-casts --warn-return-any --warn-unreachable`) is now clean. Three latent bugs surfaced + fixed: `_wind_factor` / `_wind_factor_from_uv` heading_deg annotation (was `float`, callers pass `None`); `convert_speed` returning `Any`; `mach_to_tas` intermediate Quantity annotation. `airports.py` lazy-loaded fields are now properly `Optional` with accesses routed through `require_airports()` / `require_runways()`.
+
+
 ## v1.3.0 — 2026-04-30
 
 This release recalibrates the flight planner against real-world telemetry. Public APIs are unchanged, but **mission timing and ground-track geometry shift** for any aircraft with a non-trivial vertical profile or under non-zero wind.

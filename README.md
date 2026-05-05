@@ -361,7 +361,7 @@ If you use HyPlan in your research, please cite it as:
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
   license = {Apache-2.0},
-  version = {1.3.0}
+  version = {1.4.0}
 }
 ```
 
