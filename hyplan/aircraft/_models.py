@@ -132,54 +132,63 @@ class NASA_ER2(Aircraft):
             climb_schedule=climb_schedule,
             cruise_schedule=cruise_schedule,
             descent_schedule=descent_schedule,
-            # Active-climb-only median fit (138 mission sorties, IWG1).
-            # Filter: climb-phase fixes with vertical_rate >= 1500 fpm
-            # AND outside ±2 kft bands around {FL240, FL260, FL356}
-            # (the known typical level-off / weight-band hold altitudes).
-            # Median per 5-kft bin; smoothed slightly at the FL15-25
-            # plateau to keep VS strictly monotonic above the SL peak.
-            #
-            # Replaces the earlier wall-clock-fit p75-mixed profile
-            # (`6016 fpm @ FL150` vs the brochure SL ROC of 5000 fpm
-            # was a tell that the values were absorbing level-off
-            # fixes rather than representing pure climb performance).
-            #
-            # The typical pre-cruise mission overhead these anchors
-            # used to absorb is now represented explicitly via
-            # `typical_climb_out.explicit_climb_plan` — see below.
+            # Active-climb median (VS >= 1500 fpm, ±2-kft bands around
+            # {FL240, FL260, FL356} excluded — known weight-management
+            # hold altitudes), 5-kft bins, n>=100/bin across 199 IWG1
+            # sorties.  Ships per-bin medians directly; non-monotone
+            # mid-altitude bumps reflect real hold-band-adjacent climb
+            # behaviour and are preserved.  The SL anchor is data-driven
+            # (3245 fpm) — the ER-2 is U-2-derived but isn't a U-2,
+            # and the active-climb data shows actual SL ROC well below
+            # the U-2 brochure 5000 fpm value.
             #
             # See `notebooks/calibration/er2/iwg1_calibration.ipynb` §5b
-            # for the active-only derivation.
+            # for the active-only derivation and §6b for the IQR fit
+            # validation.
             climb_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 5000 * ureg.feet / ureg.minute),  # SL anchor (brochure)
-                (15000 * ureg.feet, 3800 * ureg.feet / ureg.minute),  # active median (smoothed for monotonicity)
-                (25000 * ureg.feet, 3789 * ureg.feet / ureg.minute),  # active median (FL20-25 active band)
-                (35000 * ureg.feet, 2455 * ureg.feet / ureg.minute),  # active median
-                (45000 * ureg.feet, 1789 * ureg.feet / ureg.minute),  # active median
-                (55000 * ureg.feet, 1615 * ureg.feet / ureg.minute),  # active median
-                (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),  # operational ceiling (brochure)
+                (    0 * ureg.feet, 3245 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 4290 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 4083 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 3378 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 3841 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 3621 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 3212 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2453 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2072 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 1724 * ureg.feet / ureg.minute),
+                (50000 * ureg.feet, 1618 * ureg.feet / ureg.minute),
+                (55000 * ureg.feet, 1607 * ureg.feet / ureg.minute),
+                # Operational ceiling residual; FL600+ active-climb bins
+                # are too sparse (n<30) for a reliable empirical fit.
+                (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),
             ]),
-            # Median-based descent profile (replaces earlier peak-based
-            # 6-anchor calibration).  iwg1_calibration §9 showed the
-            # peak-based TOD anchor over-estimated descent rate at top
-            # by 4-7x against the observed median (mod 3500 fpm vs obs
-            # ~600 fpm at 60-66 kft, n=5793).  Three anchors from the
-            # median rule: bottom = median |VS| at top-of-approach band,
-            # mid = peak median |VS| in 25-45 kft band (the steep
-            # regime), top = median |VS| across cruise altitudes.
+            # Active-descent median (|VS| >= 1500 fpm), 5-kft bins
+            # across 199 sorties.  Replaces the earlier sparse 3-anchor
+            # construction whose bottom anchor (735 fpm) was driven by
+            # approach-speed fixes (low-VS gentle final descent), not
+            # active descent — predictions for any FL030-FL250 transit
+            # were systematically too slow by 800-1500 fpm.  The new
+            # bin-median profile sits inside every IQR for FL000-FL550
+            # where data is dense; FL600+ has sparser coverage and
+            # natural steepening in the data is preserved here.  See
+            # ``notebooks/calibration/er2/iwg1_calibration.ipynb`` §6b
+            # for the IQR + median visualization.
             descent_profile=VerticalProfile(points=[
-                ( 5260 * ureg.feet,  735 * ureg.feet / ureg.minute),  # top-of-approach MSL
-                (35000 * ureg.feet, 3022 * ureg.feet / ureg.minute),  # steep-regime peak
-                (66000 * ureg.feet, 1444 * ureg.feet / ureg.minute),  # top-of-descent
+                (    0 * ureg.feet, 1630 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1871 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2042 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2312 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2477 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2632 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2720 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2770 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2755 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 2783 * ureg.feet / ureg.minute),
+                (50000 * ureg.feet, 3051 * ureg.feet / ureg.minute),
+                (55000 * ureg.feet, 2928 * ureg.feet / ureg.minute),
+                (60000 * ureg.feet, 2194 * ureg.feet / ureg.minute),
+                (65000 * ureg.feet, 1849 * ureg.feet / ureg.minute),
             ]),
-            # Descent_profile retained from the 22-sortie calibration.
-            # The 136-sortie recalibration shifts these anchors (5240/878,
-            # 43000/2880, 66000/1290) to better match the fleet median,
-            # but regresses NM17 B's descent residual by +20 min — descent
-            # VS has high mission-specific variability (lateral leg
-            # length, ATC routing) that no single profile captures.  The
-            # 22-sortie subset happens to fit our planned-vs-flown
-            # validation pairs (NM17 B, CO07v4, CO06) better.
             # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
             # 2.5° glideslope is the empirical median over 846 IWG1
             # approach-phase fixes; touchdown 65 kt is the per-sortie

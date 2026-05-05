@@ -36,14 +36,13 @@ md(r"""
 # G-III calibration from NASA IWG1 in-situ logs
 
 Mirrors the structure of the ER-2 calibration in
-`notebooks/er2_calibration/iwg1_calibration.ipynb`, adapted to the
-NASA 520 Gulfstream III data delivered in a single concatenated
-`n520NA_g3_alltracks.csv` (split into per-sortie files via
-`hyplan.aircraft.split_iwg1_alltracks`).
+`notebooks/calibration/er2/iwg1_calibration.ipynb`, adapted to the
+NASA 520 Gulfstream III data, combining a local
+`n520NA_g3_alltracks.csv` delivery with the public NASA ASP
+archive (asp-archive.arc.nasa.gov/N520NA, FY2024-FY2026).
 
 The output of this notebook is a paste-ready `NASA_GIII()`
-constructor block (§10) calibrated against ~65 airborne sorties
-spanning ~9 months.
+constructor block (§10) calibrated against ~153 airborne sorties spanning 2024-FY2026.
 """)
 
 code(r"""
