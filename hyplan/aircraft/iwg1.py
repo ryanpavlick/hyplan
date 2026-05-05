@@ -19,7 +19,7 @@ becomes a more direct read.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -157,6 +157,98 @@ def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
         out["vertical_rate"] = np.nan
 
     return out
+
+
+def split_iwg1_alltracks(
+    src: Union[str, Path],
+    dest_dir: Union[str, Path],
+    *,
+    tail_label: str,
+    gap_threshold_hr: float = 6.0,
+) -> List[Path]:
+    """Split a concatenated multi-sortie IWG1 CSV into per-sortie files.
+
+    The IWG1 "all-tracks" delivery format is a single CSV with one
+    ``HEADER,...`` row followed by ``IWG1,timestamp,...`` data rows
+    spanning many sorties in chronological order.  This function
+    detects sortie boundaries by gaps in the timestamp sequence and
+    writes one file per sortie under ``dest_dir``, each prefixed with
+    the original HEADER row so the result is directly loadable by
+    :func:`load_iwg1`.
+
+    Args:
+        src: Path to the all-tracks CSV.
+        dest_dir: Output directory; created if missing.
+        tail_label: Filename prefix for per-sortie files
+            (``{tail_label}_{YYYY-MM-DD}.txt``).  The date suffix is the
+            takeoff date of the sortie in UTC.
+        gap_threshold_hr: Minimum inter-row time gap, in hours, that
+            counts as a sortie boundary.  Default 6 hr cleanly separates
+            ferry / repositioning legs flown the same day from genuine
+            next-day departures while ignoring brief log dropouts
+            within a single sortie.
+
+    Returns:
+        List of written paths, in chronological order.
+
+    Existing files in ``dest_dir`` with matching names are overwritten.
+    """
+    src = Path(src)
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    text = src.read_text()
+    if not text:
+        raise HyPlanValueError(f"IWG1 all-tracks file is empty: {src}")
+
+    # Some all-tracks deliveries contain records glued together without
+    # a separating newline ("...,XIWG1,2025-07-21T..."), so we can't
+    # rely on f.readlines() alone — restore line breaks before each
+    # data-record marker first.
+    import re
+    text = re.sub(r"(?<!\n)IWG1,", "\nIWG1,", text)
+    lines = text.splitlines(keepends=True)
+
+    header = lines[0]
+    if not header.endswith("\n"):
+        header = header + "\n"
+    data_lines = [ln for ln in lines[1:] if ln.strip()]
+    # Ensure each data line ends with a newline so the per-sortie
+    # output files round-trip cleanly through pd.read_csv.
+    data_lines = [ln if ln.endswith("\n") else ln + "\n" for ln in data_lines]
+    if not data_lines:
+        raise HyPlanValueError(
+            f"IWG1 all-tracks file has no data rows: {src}"
+        )
+
+    # Parse just the timestamp column (index 1, after the IWG1 literal)
+    # without dragging the full CSV through pandas — saves memory and
+    # lets us preserve original row formatting on write-out.
+    ts_strs = [ln.split(",", 2)[1] for ln in data_lines]
+    timestamps = pd.to_datetime(ts_strs, utc=True, errors="raise")
+    timestamps = timestamps.tz_localize(None)
+
+    # Sort lines + timestamps together so out-of-order rows fall into
+    # the correct sortie even if the source CSV isn't strictly sorted.
+    order = np.argsort(timestamps.values, kind="mergesort")
+    timestamps = timestamps[order]
+    data_lines = [data_lines[i] for i in order]
+
+    gap_threshold_s = gap_threshold_hr * 3600.0
+    gap_s = np.diff(timestamps.values).astype("timedelta64[s]").astype(float)
+    boundaries = np.where(gap_s >= gap_threshold_s)[0] + 1
+    starts = [0, *boundaries.tolist()]
+    ends = [*boundaries.tolist(), len(data_lines)]
+
+    written: List[Path] = []
+    for s, e in zip(starts, ends):
+        date = timestamps[s].strftime("%Y-%m-%d")
+        out_path = dest / f"{tail_label}_{date}.txt"
+        with out_path.open("w") as f:
+            f.write(header)
+            f.writelines(data_lines[s:e])
+        written.append(out_path)
+    return written
 
 
 def trim_ground_taxi(

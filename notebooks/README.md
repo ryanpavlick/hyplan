@@ -112,9 +112,9 @@ How HyPlan's aircraft performance models are derived from real-world telemetry. 
 
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
-| [er2_calibration/iwg1_calibration.ipynb](er2_calibration/iwg1_calibration.ipynb) | Walkthrough of the n=17 IWG1 sortie calibration of `NASA_ER2()`: per-altitude-bin |VS| medians, breakpoint selection rules, and bank-angle analysis. | When you want to understand or reproduce the ER-2 calibration, or apply the same methodology to another aircraft. |
-| [er2_calibration/sortie_replay.ipynb](er2_calibration/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner and produce a modeled-vs-flown breakdown (total duration, time to cruise, on-station, descent + approach), with a multi-sortie scan over all cached sorties. | When you want to validate the calibrated model against historical sorties or estimate per-segment residuals for your own mission. |
-| [er2_calibration/planned_vs_flown.ipynb](er2_calibration/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1 trace) vs HyPlan-modeled timing for the NM17 B / CO07v4 / CO06 sortie pairs. | When you want to see how planning, execution, and modeling diverge on real campaign sorties. |
+| [calibration/er2/iwg1_calibration.ipynb](calibration/er2/iwg1_calibration.ipynb) | Walkthrough of the n=17 IWG1 sortie calibration of `NASA_ER2()`: per-altitude-bin |VS| medians, breakpoint selection rules, and bank-angle analysis. | When you want to understand or reproduce the ER-2 calibration, or apply the same methodology to another aircraft. |
+| [calibration/er2/sortie_replay.ipynb](calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner and produce a modeled-vs-flown breakdown (total duration, time to cruise, on-station, descent + approach), with a multi-sortie scan over all cached sorties. | When you want to validate the calibrated model against historical sorties or estimate per-segment residuals for your own mission. |
+| [calibration/er2/planned_vs_flown.ipynb](calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1 trace) vs HyPlan-modeled timing for the NM17 B / CO07v4 / CO06 sortie pairs. | When you want to see how planning, execution, and modeling diverge on real campaign sorties. |
 
 These notebooks read local IWG1 traces and Green Card mission data cards from `data/er2/` (gitignored — bring your own).  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
 
@@ -167,9 +167,9 @@ These notebooks read local IWG1 traces and Green Card mission data cards from `d
 | airspace_check | Yes | None | None | No |
 | airport_selection | Yes | None | None | No |
 | campaign_management | No | None | None | Yes (`exampledata/`) |
-| er2_calibration/iwg1_calibration | No | None | None | Local `data/er2/` (gitignored) |
-| er2_calibration/sortie_replay | No | None | None | Local `data/er2/` (gitignored) |
-| er2_calibration/planned_vs_flown | No | None | `[planned]` | Local `data/er2/` (gitignored) |
+| calibration/er2/iwg1_calibration | No | None | None | Local `data/er2/` (gitignored) |
+| calibration/er2/sortie_replay | No | None | None | Local `data/er2/` (gitignored) |
+| calibration/er2/planned_vs_flown | No | None | `[planned]` | Local `data/er2/` (gitignored) |
 | satellite_coordination | Yes | None | None | No |
 | export_formats | Yes | None | None | No |
 | validation | No | None | None | No |

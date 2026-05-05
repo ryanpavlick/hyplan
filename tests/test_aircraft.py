@@ -285,6 +285,32 @@ class TestAircraftInstantiation:
         ac = NASA_GIII()
         assert ac.cruise_speed_at(20000 * ureg.feet).magnitude > 0
 
+    def test_giii_stall_speed_at_increases_with_altitude(self):
+        ac = NASA_GIII()
+        sl = ac.stall_speed_at(0 * ureg.feet)
+        fl400 = ac.stall_speed_at(40000 * ureg.feet)
+        # Vs in CAS is constant; in TAS it scales as 1/sqrt(density),
+        # so FL400 should be roughly twice SL.
+        assert sl.m_as("knot") == pytest.approx(105, abs=1)
+        assert fl400.m_as("knot") > 1.8 * sl.m_as("knot")
+
+    def test_giii_min_safe_speed_applies_margin(self):
+        ac = NASA_GIII()
+        alt = 30000 * ureg.feet
+        stall = ac.stall_speed_at(alt).m_as("knot")
+        floor_13 = ac.min_safe_speed_at(alt).m_as("knot")
+        floor_12 = ac.min_safe_speed_at(alt, margin=1.2).m_as("knot")
+        assert floor_13 == pytest.approx(1.3 * stall, rel=1e-9)
+        assert floor_12 == pytest.approx(1.2 * stall, rel=1e-9)
+        # Cruise schedule at FL300 should sit well above the 1.3 floor.
+        assert ac.cruise_speed_at(alt).m_as("knot") > floor_13
+
+    def test_stall_methods_raise_when_uncalibrated(self):
+        ac = NASA_GIV()  # not calibrated for stall_speed_cas
+        assert ac.stall_speed_cas is None
+        with pytest.raises(Exception):
+            ac.stall_speed_at(20000 * ureg.feet)
+
     def test_giv(self):
         ac = NASA_GIV()
         assert ac.cruise_speed_at(20000 * ureg.feet).magnitude > 0

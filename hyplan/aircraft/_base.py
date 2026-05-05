@@ -553,6 +553,7 @@ class Aircraft:
         descent_path_angle_max_deg: Optional[float] = None,
         climb_path_angle_max_deg: Optional[float] = None,
         typical_climb_out: Optional[ClimbOutPolicy] = None,
+        stall_speed_cas: Optional[Quantity] = None,
     ):
         if not isinstance(aircraft_type, str):
             raise HyPlanTypeError("Aircraft type must be a string.")
@@ -631,6 +632,20 @@ class Aircraft:
                 f"{type(typical_climb_out).__name__}."
             )
         self.typical_climb_out = typical_climb_out
+
+        # Published Vs (calibrated airspeed) at landing config, MLW.
+        # Single CAS value; TAS at altitude is derived via standard
+        # atmosphere via :meth:`stall_speed_at`.  Convention: cite Vs0
+        # (landing config); weight scales as sqrt(W/W_ref) and is not
+        # modeled here — callers wanting a tighter floor should pass a
+        # larger ``margin`` to :meth:`min_safe_speed_at`.
+        if stall_speed_cas is not None:
+            stall_speed_cas = stall_speed_cas.to(ureg.knot)
+            if stall_speed_cas.magnitude <= 0:
+                raise HyPlanValueError(
+                    "stall_speed_cas must be positive."
+                )
+        self.stall_speed_cas = stall_speed_cas
 
         self._validate_schedule_compatibility()
 
@@ -716,6 +731,55 @@ class Aircraft:
     def descent_speed_at(self, altitude: Quantity) -> Quantity:
         """True airspeed during descent at *altitude*."""
         return self.descent_schedule.tas_at(altitude)
+
+    def stall_speed_at(self, altitude: Quantity) -> Quantity:
+        """True airspeed at stall at *altitude*.
+
+        Stall is published as a single :attr:`stall_speed_cas` value
+        (calibrated airspeed at landing config, MLW).  TAS at altitude
+        is derived via standard atmosphere — Vs in CAS is approximately
+        invariant with altitude (stall is a fixed-AoA, fixed-q event)
+        but TAS scales as 1/sqrt(density), so TAS at FL400 is roughly
+        twice the SL value.
+
+        Raises:
+            HyPlanValueError: If :attr:`stall_speed_cas` is None for
+                this aircraft.
+        """
+        if self.stall_speed_cas is None:
+            raise HyPlanValueError(
+                f"{self.aircraft_type} has no calibrated stall_speed_cas; "
+                f"cannot compute TAS at stall."
+            )
+        from ..atmosphere import cas_to_tas
+        return cas_to_tas(self.stall_speed_cas, altitude).to(ureg.knot)
+
+    def min_safe_speed_at(
+        self,
+        altitude: Quantity,
+        *,
+        margin: float = 1.3,
+    ) -> Quantity:
+        """Minimum safe true airspeed at *altitude*, with margin above stall.
+
+        ``margin`` defaults to 1.3, mirroring the FAR Part 25 rule that
+        V_ref >= 1.3 * Vs0.  Pass a tighter margin (e.g., 1.2) for
+        attentive level orbits in benign conditions, or a looser one
+        (1.4-1.5) for night IFR / unstable atmospheres.
+
+        Returns ``margin * stall_speed_at(altitude)`` — useful for
+        science planners deciding whether a slow-survey speed at a
+        given altitude is acceptable.
+
+        Raises:
+            HyPlanValueError: If :attr:`stall_speed_cas` is None or
+                ``margin`` is non-positive.
+        """
+        if margin <= 0:
+            raise HyPlanValueError(
+                f"margin must be positive, got {margin}."
+            )
+        return margin * self.stall_speed_at(altitude)
 
     def approach_speed_at(self, altitude_agl: Quantity) -> Quantity:
         """True airspeed at *altitude_agl* during the terminal approach.

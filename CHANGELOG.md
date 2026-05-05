@@ -20,7 +20,7 @@ Pre-v1.3 the planner used `DubinsPath3D`, a constant-pitch 3D Dubins solver whos
 
 `NASA_ER2()` is calibrated against 17 NASA AFRC IWG1 in-situ sorties (~64 000 cruise fixes): distinct climb / cruise / descent TAS schedules (was a single brochure curve); 8-anchor `climb_profile` resolving the 19–21 kft step climb and 23 kft recovery (was 2-point linear); 6-anchor `descent_profile` (was 3-point); `ApproachProfile` with empirical 2.51° glideslope; calibrated `bank_by_phase` (climb 11°, cruise 20°, descent 16°, approach 9°). Modeled-vs-flown total duration: NM17 B +2.1 %, CO07v4 +7.9 %, CO06 +1.4 %; multi-sortie time-to-cruise residual ≤ 5 % across the n=17 set (vs. ~36 % pre-v1.3).
 
-New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_taxi`), `IWG1TraceWindField`, a planned-sortie parser (Green Card XLSX/PDF via `pdfplumber` + KML), and three calibration notebooks under `notebooks/er2_calibration/` (`iwg1_calibration`, `sortie_replay`, `planned_vs_flown`).
+New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_taxi`), `IWG1TraceWindField`, a planned-sortie parser (Green Card XLSX/PDF via `pdfplumber` + KML), and three calibration notebooks under `notebooks/calibration/er2/` (`iwg1_calibration`, `sortie_replay`, `planned_vs_flown`).
 
 ### Other additions
 

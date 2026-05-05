@@ -73,7 +73,7 @@ class NASA_ER2(Aircraft):
     Speed schedules, vertical-rate profile, and approach behavior calibrated
     from 17 NASA AFRC IWG1
     in-situ flight logs (2023-02 to 2025-08, ~64 000 cruise fixes above
-    60 kft).  See [notebooks/er2_calibration/iwg1_calibration.ipynb] for
+    60 kft).  See [notebooks/calibration/er2/iwg1_calibration.ipynb] for
     the full derivation: per-altitude-bin |VS| medians, breakpoint
     selection rules, and validation against per-sortie observed timing.
 
@@ -148,7 +148,7 @@ class NASA_ER2(Aircraft):
             # used to absorb is now represented explicitly via
             # `typical_climb_out.explicit_climb_plan` — see below.
             #
-            # See `notebooks/er2_calibration/iwg1_calibration.ipynb` §5b
+            # See `notebooks/calibration/er2/iwg1_calibration.ipynb` §5b
             # for the active-only derivation.
             climb_profile=VerticalProfile(points=[
                 (    0 * ureg.feet, 5000 * ureg.feet / ureg.minute),  # SL anchor (brochure)
@@ -261,7 +261,7 @@ class NASA_ER2(Aircraft):
                     "individual sorties range 0-25+ min.  Power users "
                     "wanting pure aircraft physics pass climb_plan=None "
                     "to bypass the typical-mission absorption.  See "
-                    "notebooks/er2_calibration/planned_vs_flown.ipynb §16."
+                    "notebooks/calibration/er2/planned_vs_flown.ipynb §16."
                 ),
                 explicit_climb_plan=ClimbPlan(pauses=[
                     # Median weight-band .delay duration across the
@@ -308,39 +308,111 @@ class NASA_GIII(Aircraft):
     """
 
     def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 292 * ureg.knot),
-            (45000 * ureg.feet, 459 * ureg.knot),
-        ])
+        # Calibrated against 58 IWG1 sorties from
+        # ``data/n520NA_g3_alltracks.csv`` (2025-07 through 2026-04).
+        # See ``notebooks/calibration/giii/iwg1_calibration.ipynb`` for
+        # the active-only fits and the empirical per-phase TAS / bank /
+        # approach derivations.  Climb / cruise / descent schedules are
+        # independent per-phase medians — at FL300 cruise TAS is
+        # +39 kt above climb, and descent is +26 kt above climb at
+        # FL400, so a shared schedule under-reads cruise and
+        # mis-models descent.
         super().__init__(
             aircraft_type="Gulfstream III",
             tail_number="NASA 520",
             operator="NASA LaRC",
-            service_ceiling=45000 * ureg.feet,
-            approach_speed=140 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 49),
+            # p99 of per-sortie peak altitude across 58 sorties; the
+            # 45000 ft AFM ceiling is rarely actually flown.
+            service_ceiling=42000 * ureg.feet,
+            approach_speed=139 * ureg.knot,
+            # Climb-phase TAS medians.  SL anchor at typical jet
+            # rotation TAS (150 kt) since the SL climb-phase bin is
+            # contaminated by takeoff-roll fixes still accelerating.
+            climb_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 150 * ureg.knot),
+                (10000 * ureg.feet, 332 * ureg.knot),
+                (20000 * ureg.feet, 417 * ureg.knot),
+                (30000 * ureg.feet, 442 * ureg.knot),
+                (40000 * ureg.feet, 438 * ureg.knot),
+            ]),
+            # Cruise-phase TAS medians at the typical cruise band.
+            # Below FL250 the cruise-labeled bins are mostly transient
+            # level-offs during step climbs, not real cruise.
+            cruise_schedule=TasSchedule(points=[
+                (25000 * ureg.feet, 416 * ureg.knot),
+                (30000 * ureg.feet, 481 * ureg.knot),
+                (35000 * ureg.feet, 476 * ureg.knot),
+                (40000 * ureg.feet, 455 * ureg.knot),
+            ]),
+            # Descent-phase TAS medians; SL anchor at observed approach
+            # TAS (180 kt through FL000 descending).
+            descent_schedule=TasSchedule(points=[
+                (    0 * ureg.feet, 180 * ureg.knot),
+                (10000 * ureg.feet, 328 * ureg.knot),
+                (20000 * ureg.feet, 412 * ureg.knot),
+                (30000 * ureg.feet, 449 * ureg.knot),
+                (40000 * ureg.feet, 464 * ureg.knot),
+            ]),
+            # Active-climb median (VS >= 1500 fpm), 5-kft bins, n>=30/bin.
+            # Peak ROC is near FL050 (real-world 250-KCAS-below-FL100
+            # constraint at SL); profile is non-monotone by design.
             climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 4000 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 2278 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 2795 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2465 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2270 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2181 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2269 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 1900 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 1677 * ureg.feet / ureg.minute),
+                # Residual rate at the certified ceiling so the integrator
+                # terminates cleanly — not the regulatory service ceiling.
+                (45000 * ureg.feet,  500 * ureg.feet / ureg.minute),
             ]),
+            # Active-descent median (|VS| >= 1500 fpm), 5-kft bins.
+            # Descent VS peaks near FL150 (where the aircraft descends
+            # near VMO in CAS) and declines in the upper levels under
+            # Mach-limited descent — non-monotone by design.
             descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1773 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1886 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2344 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2613 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2444 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2430 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2552 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2086 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 1718 * ureg.feet / ureg.minute),
             ]),
+            # p90 |Roll| during turn-state fixes (gate >5°, n=40,523):
+            # 30°, the operational ceiling the data shows the aircraft
+            # actually willing to use.  Median (20°) is dragged down by
+            # small in-cruise course corrections; p90 captures the
+            # bank used during real survey-line transitions.
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=3767 * ureg.nautical_mile,
             endurance=7.5 * ureg.hour,
             useful_payload=2610 * ureg.pound,
             confidence=PerformanceConfidence(
-                climb=0.5, cruise=0.5, descent=0.4, turns=0.5,
+                climb=0.85, cruise=0.85, descent=0.85, turns=0.8,
             ),
-            sources=[SourceRecord(
-                source_type="brochure",
-                reference="NASA Airborne Science fact sheet; EUROCONTROL GLF3",
-                confidence=0.5,
-            )],
+            sources=[
+                SourceRecord(
+                    source_type="iwg1",
+                    reference="NASA 520 IWG1 calibration, n=58 sorties (2025-07 to 2026-04)",
+                    confidence=0.85,
+                ),
+                SourceRecord(
+                    source_type="brochure",
+                    reference="NASA Airborne Science fact sheet; EUROCONTROL GLF3",
+                    confidence=0.5,
+                ),
+            ],
+            # Vs0 at landing config, MLW per Gulfstream III AFM.  IWG1
+            # data never sees stall (slowest cruise TAS is ~250 kt at
+            # FL040), so this is brochure-derived not measured.
+            stall_speed_cas=105 * ureg.knot,
         )
 
 

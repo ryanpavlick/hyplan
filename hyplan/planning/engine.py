@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "compute_flight_plan",
+    "flag_below_min_safe_speed",
 ]
 
 
@@ -385,3 +386,73 @@ def compute_flight_plan(
     df = pd.DataFrame(records)
     flight_plan_gdf = gpd.GeoDataFrame(df, geometry=df["geometry"], crs="EPSG:4326")
     return flight_plan_gdf
+
+
+def flag_below_min_safe_speed(
+    plan: gpd.GeoDataFrame,
+    aircraft: Aircraft,
+    *,
+    margin: float = 1.3,
+) -> gpd.GeoDataFrame:
+    """Return rows from *plan* whose effective TAS is below the stall margin.
+
+    For each row, the planned TAS is taken from the appropriate aircraft
+    schedule at the segment's altitude:
+
+    * ``flight_line`` and ``loiter`` -> :meth:`Aircraft.cruise_speed_at`
+    * ``climb`` (any segment marked as climb) -> :meth:`Aircraft.climb_speed_at`
+    * ``descent`` -> :meth:`Aircraft.descent_speed_at`
+    * any other segment is skipped (no TAS-vs-altitude check applicable).
+
+    The altitude used is the segment's ``end_altitude`` (or
+    ``start_altitude`` if ``end_altitude`` is missing).  The minimum
+    safe TAS is :meth:`Aircraft.min_safe_speed_at` with the supplied
+    *margin*.
+
+    Returns a slice of *plan* containing only the rows where planned
+    TAS < min_safe_speed, plus two added columns: ``planned_tas_kts``
+    and ``min_safe_tas_kts``.  Empty GeoDataFrame if everything is
+    fine.
+
+    Raises:
+        HyPlanValueError: If ``aircraft.stall_speed_cas`` is None.
+    """
+    if aircraft.stall_speed_cas is None:
+        raise HyPlanValueError(
+            f"{aircraft.aircraft_type} has no stall_speed_cas calibrated; "
+            f"cannot evaluate min-safe-speed margin."
+        )
+
+    schedule_for = {
+        "flight_line": aircraft.cruise_speed_at,
+        "loiter":      aircraft.cruise_speed_at,
+        "climb":       aircraft.climb_speed_at,
+        "descent":     aircraft.descent_speed_at,
+    }
+
+    rows = []
+    for idx, row in plan.iterrows():
+        seg_type = row.get("segment_type")
+        speed_at = schedule_for.get(seg_type)
+        if speed_at is None:
+            continue
+        alt_ft = row.get("end_altitude") or row.get("start_altitude")
+        if alt_ft is None:
+            continue
+        alt_q = ureg.Quantity(float(alt_ft), "feet")
+        planned_tas = speed_at(alt_q).to(ureg.knot).magnitude
+        min_safe = aircraft.min_safe_speed_at(alt_q, margin=margin).to(ureg.knot).magnitude
+        if planned_tas < min_safe:
+            rows.append((idx, planned_tas, min_safe))
+
+    if not rows:
+        empty = plan.iloc[0:0].copy()
+        empty["planned_tas_kts"] = []
+        empty["min_safe_tas_kts"] = []
+        return empty
+
+    indices = [r[0] for r in rows]
+    out = plan.loc[indices].copy()
+    out["planned_tas_kts"] = [r[1] for r in rows]
+    out["min_safe_tas_kts"] = [r[2] for r in rows]
+    return out

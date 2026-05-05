@@ -303,9 +303,9 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
-| [er2_calibration/iwg1_calibration.ipynb](notebooks/er2_calibration/iwg1_calibration.ipynb) | Walkthrough of the NASA ER-2 calibration from 17 IWG1 sorties: per-altitude-bin medians, breakpoint selection, bank-angle analysis |
-| [er2_calibration/sortie_replay.ipynb](notebooks/er2_calibration/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
-| [er2_calibration/planned_vs_flown.ipynb](notebooks/er2_calibration/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
+| [calibration/er2/iwg1_calibration.ipynb](notebooks/calibration/er2/iwg1_calibration.ipynb) | Walkthrough of the NASA ER-2 calibration from 17 IWG1 sorties: per-altitude-bin medians, breakpoint selection, bank-angle analysis |
+| [calibration/er2/sortie_replay.ipynb](notebooks/calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
+| [calibration/er2/planned_vs_flown.ipynb](notebooks/calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
 | [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
 
 ### Export & Integration

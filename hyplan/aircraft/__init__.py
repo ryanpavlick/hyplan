@@ -21,7 +21,7 @@ from ._base import (  # noqa: F401
     SourceRecord,
 )
 
-from .iwg1 import load_iwg1, trim_ground_taxi  # noqa: F401
+from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi  # noqa: F401
 from ._planned_sortie import (  # noqa: F401
     PlannedSortie,
     load_planned_sortie,
@@ -77,6 +77,7 @@ __all__ = [
     "Learjet",
     "TwinOtter",
     "load_iwg1",
+    "split_iwg1_alltracks",
     "trim_ground_taxi",
     "PlannedSortie",
     "load_planned_sortie",
