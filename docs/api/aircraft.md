@@ -1,7 +1,7 @@
 # Aircraft
 
 Aircraft performance models with speed profiles, climb/descent rates,
-turn radii, and endurance limits.  15 pre-configured research aircraft
+turn radii, and endurance limits.  12 pre-configured research aircraft
 are included; custom aircraft can be created by instantiating
 {py:class}`~hyplan.aircraft.Aircraft` directly.
 

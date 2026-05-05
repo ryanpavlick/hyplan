@@ -32,7 +32,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Cloud cover analysis** — Estimate clear-sky probability from ERA5 reanalysis via Open-Meteo (no auth) or MODIS imagery via Google Earth Engine
 - **Wind correction** — Trochoidal Dubins arcs (Sachdev/Moon, 2023) bend ground tracks under wind; per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
 - **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
-- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; several aircraft are calibrated from IWG1 or ICARTT in-situ flight-state data, including ER-2, G-III, G-V, WB-57, C-130, P-3, B-200, and Twin Otter
+- **Aircraft performance** — 12 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; several aircraft are calibrated from IWG1 or ICARTT in-situ flight-state data, including ER-2, G-III, G-V, WB-57, C-130, P-3, B-200, and Twin Otter
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
@@ -224,7 +224,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
 | `swath` | Sensor swath coverage with terrain integration |
 | | **Aircraft** |
-| `aircraft` | Aircraft performance models (15 pre-configured research aircraft) |
+| `aircraft` | Aircraft performance models (12 pre-configured research aircraft) |
 | `atmosphere` | ISA standard atmosphere model, airspeed conversions (CAS/TAS/Mach) |
 | `dubins3d` | 2D Dubins path planning [@dubins1957curves] with trochoidal wind support (Sachdev/Moon, 2023); used by the planner via `Aircraft._hybrid_path` (2D horizontal + integrated vertical profile). |
 | | **Environment** |
