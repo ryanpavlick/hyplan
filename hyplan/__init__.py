@@ -77,11 +77,8 @@ from .aircraft import (  # noqa: F401
     NASA_WB57,
     NASA_B777,
     KingAirB200,
-    Dash8,
     KingAirA90,
     C130,
-    BAe146,
-    Learjet,
     TwinOtter,
 )
 
@@ -196,8 +193,8 @@ __all__ = [
     "Aircraft",
     "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",
     "NASA_WB57", "NASA_B777",
-    "KingAirB200", "Dash8", "KingAirA90",
-    "C130", "BAe146", "Learjet", "TwinOtter",
+    "KingAirB200", "KingAirA90",
+    "C130", "TwinOtter",
     # Airports
     "Airport", "initialize_data",
     "find_nearest_airport", "find_nearest_airports", "airports_within_radius",

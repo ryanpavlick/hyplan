@@ -217,11 +217,10 @@ class TestLoadFactorBudget:
         the load-factor budget at level flight."""
         from hyplan.aircraft import (
             NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
-            NASA_P3, NASA_WB57, KingAirB200, C130, BAe146, TwinOtter,
+            NASA_P3, NASA_WB57, KingAirB200, C130, TwinOtter,
         )
         for cls in (NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
-                    NASA_P3, NASA_WB57, KingAirB200, C130, BAe146,
-                    TwinOtter):
+                    NASA_P3, NASA_WB57, KingAirB200, C130, TwinOtter):
             ac = cls()
             bp = ac.turn_model.bank_by_phase
             cap = ac.max_bank_under_budget(0.0)

@@ -35,12 +35,9 @@ __all__ = [
     "NASA_P3",
     "NASA_WB57",
     "NASA_B777",
-    "Dash8",
     "KingAirA90",
     "KingAirB200",
     "C130",
-    "BAe146",
-    "Learjet",
     "TwinOtter",
 ]
 
@@ -1013,40 +1010,8 @@ class NASA_B777(Aircraft):
 
 
 # ---------------------------------------------------------------------------
-# King Air and Dash 8 turboprops
+# King Air turboprops
 # ---------------------------------------------------------------------------
-
-class Dash8(Aircraft):
-    """DHC-8 Dash 8 twin-turboprop aircraft."""
-
-    def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 170 * ureg.knot),
-            (25000 * ureg.feet, 243 * ureg.knot),
-        ])
-        super().__init__(
-            aircraft_type="Dash 8",
-            tail_number="Unknown",
-            operator="Unknown",
-            service_ceiling=25000 * ureg.feet,
-            approach_speed=110 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 15),
-            climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 2000 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 100 * ureg.feet / ureg.minute),
-            ]),
-            descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
-            ]),
-            turn_model=TurnModel(max_bank_deg=30.0),
-            engine_type="turboprop",
-            range=950 * ureg.nautical_mile,
-            endurance=5 * ureg.hour,
-            useful_payload=15000 * ureg.pound,
-        )
-
 
 class KingAirA90(Aircraft):
     """Beechcraft King Air A90 twin-turboprop aircraft.
@@ -1291,80 +1256,6 @@ class C130(Aircraft):
             # Vs0 at landing config, MLW per C-130H AFM.
             # Brochure-derived; IWG1 data never sees stall.
             stall_speed_cas=100 * ureg.knot,
-        )
-
-
-class BAe146(Aircraft):
-    """BAe-146-301 atmospheric research aircraft (G-LUXE).
-
-    Operated by the UK FAAM.
-
-    See also:
-        `https://faam.ac.uk/ <https://faam.ac.uk/>`_
-    """
-
-    def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 253 * ureg.knot),
-            (28000 * ureg.feet, 286 * ureg.knot),
-        ])
-        super().__init__(
-            aircraft_type="BAe-146",
-            tail_number="Unknown",
-            operator="FAAM",
-            service_ceiling=28000 * ureg.feet,
-            approach_speed=120 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 29),
-            climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1000 * ureg.feet / ureg.minute),
-                (28000 * ureg.feet, 100 * ureg.feet / ureg.minute),
-            ]),
-            descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1000 * ureg.feet / ureg.minute),
-            ]),
-            turn_model=TurnModel(max_bank_deg=20.0),
-            engine_type="jet",
-            range=1800 * ureg.nautical_mile,
-            endurance=6 * ureg.hour,
-            useful_payload=10000 * ureg.pound,
-        )
-
-
-class Learjet(Aircraft):
-    """Learjet high-altitude research aircraft.
-
-    See also:
-        `https://airbornescience.nasa.gov/aircraft/Learjet_25 <https://airbornescience.nasa.gov/aircraft/Learjet_25>`_
-    """
-
-    def __init__(self):
-        cruise = TasSchedule(points=[
-            (0 * ureg.feet, 194 * ureg.knot),
-            (35000 * ureg.feet, 430 * ureg.knot),
-        ])
-        super().__init__(
-            aircraft_type="Learjet",
-            tail_number="Unknown",
-            operator="Various",
-            service_ceiling=35000 * ureg.feet,
-            approach_speed=130 * ureg.knot,
-            climb_schedule=cruise,
-            cruise_schedule=cruise,
-            descent_schedule=_descent_schedule_from_cruise(cruise, 39),
-            climb_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 4000 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 500 * ureg.feet / ureg.minute),
-            ]),
-            descent_profile=VerticalProfile(points=[
-                (0 * ureg.feet, 1500 * ureg.feet / ureg.minute),
-            ]),
-            turn_model=TurnModel(max_bank_deg=30.0),
-            engine_type="jet",
-            range=1500 * ureg.nautical_mile,
-            endurance=4 * ureg.hour,
-            useful_payload=3000 * ureg.pound,
         )
 
 

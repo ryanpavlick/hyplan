@@ -54,7 +54,6 @@ the shape directly.
 | `NCAR_GV` | Inferred | Mirrored from `NASA_GV` (same airframe class) | — | (deferred — see below) |
 | `NASA_C20A` | Inferred | Mirrored from `NASA_GIII` (same type certificate) | — | (deferred — see below) |
 | `KingAirA90` | Brochure | None public | — | (deferred) |
-| `BAe146` | Brochure | None public yet | — | (deferred — FAAM CEDA access required) |
 | Other classes | Brochure | Manufacturer specs | — | — |
 
 Sortie counts may shift as data deliveries refresh.  See each
@@ -117,8 +116,8 @@ the sortie set rather than aircraft-intrinsic performance:
 
 ## Deferred calibrations
 
-Four aircraft classes remain on inferred or brochure values
-because their public data sources are auth-walled:
+Three aircraft classes remain on inferred or brochure values
+because their public data sources are auth-walled or unavailable:
 
 * **`NCAR_GV`** (HIAPER, N677F) — sources at
   https://data.eol.ucar.edu/ (HIPPO / SOCRATES / ORCAS /
@@ -129,11 +128,6 @@ because their public data sources are auth-walled:
   inferred from `NASA_GIII` (same airframe + type certificate).
   No public ICARTT/IWG1 nav data; AFRC mission ops contact
   required for NASDAT housekeeping logs.
-* **`BAe146`** (FAAM G-LUXE) — sources at
-  https://data.ceda.ac.uk/badc/faam/ via CEDA registration.
-  Skeleton loader at
-  [hyplan/aircraft/faam_netcdf.py](../hyplan/aircraft/faam_netcdf.py)
-  with the FAAM Core Data Product variable map.
 * **`KingAirA90`** — no public IWG1-grade A-90 data; the only
   available files are ADS-B-grade tracks (`n94s_alltracks.csv`)
   with no TAS / Roll / IAS.  A wind-derivation fallback (GPS
@@ -141,8 +135,7 @@ because their public data sources are auth-walled:
 
 Order of effort if access becomes available: HIAPER (loader is
 closest to ready, ~50–100 sorties available across HIPPO /
-SOCRATES / ORCAS) → BAe146 (~250 sorties of high-quality data,
-fourth distinct loader) → C-20A (only meaningful if AFRC ops
+SOCRATES / ORCAS) → C-20A (only meaningful if AFRC ops
 shares data) → A-90 (wind-derivation last resort).
 
 ## Conventions
