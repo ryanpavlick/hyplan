@@ -701,12 +701,13 @@ class TestHybridPath:
         phases = info["phases"]
         assert "climb" in phases
         assert "cruise" in phases  # full leg cruised at altitude after orbit
-        # Climb takes the full integrated climb time (~30 min for ER-2 to FL600).
+        # Climb takes the full integrated climb time (~20 min for ER-2 to
+        # FL600 with active-only climb profile).
         climb_min = (
             (phases["climb"]["end_time"] - phases["climb"]["start_time"])
             .m_as(ureg.minute)
         )
-        assert climb_min > 20, "spiral-up should take the full climb integration time"
+        assert climb_min > 15, "spiral-up should take the full climb integration time"
         # Orbit closes back to the departure waypoint — both endpoints sit there.
         assert phases["climb"]["start_lat"] == pytest.approx(start.latitude)
         assert phases["climb"]["start_lon"] == pytest.approx(start.longitude)
@@ -864,41 +865,108 @@ class TestER2Performance:
         assert climb_phase_min == pytest.approx(direct_climb_min, rel=1e-3)
         # And should be substantially longer than ~16 min (which is what the
         # legacy constant-pitch Dubins path produced for a comparable leg).
-        assert climb_phase_min > 25, (
+        assert climb_phase_min > 18, (
             f"climb phase time {climb_phase_min:.1f} min should reflect the "
-            f"integrated climb_profile (with the step), not the legacy "
-            f"constant-pitch underestimate"
+            f"integrated climb_profile, not the legacy constant-pitch "
+            f"underestimate"
         )
 
     # --- IWG1 calibration regression tests -----------------------------------
 
-    def test_climb_profile_includes_step(self):
-        """Calibrated climb_profile encodes the 19-21 kft step climb."""
-        ac = NASA_ER2()
-        rate_steady = ac.climb_profile.rate_at(15000 * ureg.feet).m_as(
-            ureg.feet / ureg.minute
-        )
-        rate_in_step = ac.climb_profile.rate_at(20000 * ureg.feet).m_as(
-            ureg.feet / ureg.minute
-        )
-        assert rate_in_step < 0.5 * rate_steady, (
-            f"step VS {rate_in_step:.0f} fpm should be <50% of "
-            f"steady VS {rate_steady:.0f} fpm"
-        )
+    def test_climb_profile_decreases_monotonically_above_peak(self):
+        """p75-fit climb_profile decreases monotonically from peak to ceiling.
 
-    def test_descent_profile_uses_two_regimes(self):
-        """Calibrated descent_profile shows steeper VS at high altitudes."""
+        The earlier 8-point profile encoded a 19-21 kft "step" that
+        iwg1_calibration §9 showed was an artifact of level-off fixes
+        being labeled as climb-phase.  The p75 fit isolates active
+        climb and shows the expected smooth fall-off as drag and
+        thrust converge near service ceiling.
+        """
         ac = NASA_ER2()
-        rate_high = ac.descent_profile.rate_at(60000 * ureg.feet).m_as(
+        rates = [
+            ac.climb_profile.rate_at(alt * ureg.feet).m_as(ureg.feet / ureg.minute)
+            for alt in [15000, 25000, 35000, 45000, 55000, 65000]
+        ]
+        for prev, curr in zip(rates, rates[1:]):
+            assert curr < prev, (
+                f"climb VS should decrease monotonically above 15 kft; "
+                f"got sequence {[f'{r:.0f}' for r in rates]}"
+            )
+
+    def test_descent_profile_peaks_in_mid_altitude_band(self):
+        """Median-based descent_profile peaks in the 25-45 kft band.
+
+        IWG1 medians show a three-regime shape: shallow VS at top of
+        descent (cruise altitudes), steep peak in the middle, then
+        shallow again as the aircraft slows for approach.
+        """
+        ac = NASA_ER2()
+        rate_top = ac.descent_profile.rate_at(60000 * ureg.feet).m_as(
+            ureg.feet / ureg.minute
+        )
+        rate_mid = ac.descent_profile.rate_at(35000 * ureg.feet).m_as(
             ureg.feet / ureg.minute
         )
         rate_low = ac.descent_profile.rate_at(10000 * ureg.feet).m_as(
             ureg.feet / ureg.minute
         )
-        assert rate_high > 2 * rate_low, (
-            f"high-altitude descent ({rate_high:.0f} fpm) should be much "
-            f"steeper than low-altitude descent ({rate_low:.0f} fpm)"
+        assert rate_mid > rate_top, (
+            f"mid-altitude descent ({rate_mid:.0f} fpm) should exceed "
+            f"top-of-descent ({rate_top:.0f} fpm)"
         )
+        assert rate_mid > rate_low, (
+            f"mid-altitude descent ({rate_mid:.0f} fpm) should exceed "
+            f"low-altitude descent ({rate_low:.0f} fpm)"
+        )
+
+    def test_descent_path_angle_max_set(self):
+        """ER-2 has a calibrated max descent FPA (envelope from IWG1)."""
+        ac = NASA_ER2()
+        assert ac.descent_path_angle_max_deg is not None
+        assert 3.0 < ac.descent_path_angle_max_deg < 10.0
+
+    def test_descent_steepens_to_fit_short_leg(self):
+        """When the leg is shorter than preferred descent_dist but the
+        required FPA is within ``descent_path_angle_max_deg``, the
+        descent should scale to fit rather than spiral at end of leg.
+        """
+        from hyplan.waypoint import Waypoint
+        ac = NASA_ER2()
+        # Preferred descent FL650 -> SL covers ~184 nmi.  A 115 nmi leg
+        # would have triggered short_descent (spiral) under legacy
+        # behavior; the required FPA at 115 nmi is ~5.3°, under the
+        # 6° cap, so descent should fill the leg.
+        start = Waypoint(34.0, -118.0, 90.0, altitude_msl=65000 * ureg.feet)
+        end = Waypoint(34.0, -115.7, 90.0, altitude_msl=0 * ureg.feet)
+        info = ac._hybrid_path(start, end, phase="descent")
+        # Single descent phase, no cruise phase, no spiral marker.
+        assert "descent" in info["phases"]
+        descent = info["phases"]["descent"]
+        descent_dist_nmi = descent["distance"].m_as(ureg.nautical_mile)
+        # Descent should fill the leg (no truncation to 0, no full-leg
+        # cruise).  Leg length is ~115 nmi.
+        assert 100 < descent_dist_nmi < 130, (
+            f"descent should fit the short leg, got {descent_dist_nmi:.1f} nmi"
+        )
+
+    def test_descent_spirals_when_leg_too_short_for_max_fpa(self):
+        """If the required FPA exceeds ``descent_path_angle_max_deg``,
+        the descent falls back to the spiral-down regime."""
+        from hyplan.waypoint import Waypoint
+        ac = NASA_ER2()
+        # 50 nmi leg requires FPA ~12°, well above 6° cap → spiral.
+        start = Waypoint(34.0, -118.0, 90.0, altitude_msl=65000 * ureg.feet)
+        end = Waypoint(34.0, -116.95, 90.0, altitude_msl=0 * ureg.feet)
+        info = ac._hybrid_path(start, end, phase="descent")
+        # Spiral regime: cruise phase has the full leg distance,
+        # descent's distance is the spiral-track-length proxy.
+        assert "cruise" in info["phases"]
+        assert "descent" in info["phases"]
+        cruise_dist = info["phases"]["cruise"]["distance"].m_as(
+            ureg.nautical_mile
+        )
+        # Cruise should equal full leg (~50 nmi)
+        assert 40 < cruise_dist < 65
 
     def test_approach_profile_present(self):
         ac = NASA_ER2()
@@ -930,6 +998,87 @@ class TestER2Performance:
         assert bp.approach_deg == pytest.approx(9.0)
         # Brochure max-bank envelope unchanged (p90 < 30° in every band).
         assert ac.turn_model.max_bank_deg == pytest.approx(30.0)
+
+    def test_climb_plan_auto_sentinel_resolves_to_explicit_plan(self):
+        """compute_flight_plan(climb_plan="auto") reads the aircraft's
+        typical_climb_out.explicit_climb_plan and produces a plan
+        whose total time grows by the hold duration relative to
+        climb_plan=None.
+
+        After Phase 3a, NASA_ER2 ships with a 12-min FL356 hold; the
+        "auto" sentinel resolves to that ClimbPlan, which is distinct
+        from `climb_plan=None` (no holds — pure active-climb).
+        """
+        from hyplan.airports import Airport
+        from hyplan.flight_line import FlightLine
+        from hyplan.flight_plan import compute_flight_plan
+        ac = NASA_ER2()
+        # Long leg so the climb fits horizontally and the staged
+        # branch emits an explicit "loiter" row for the FL356 pause
+        # (rather than spiral-up at departure absorbing it).
+        line = FlightLine.center_length_azimuth(
+            lat=36.0, lon=-100.0, length=ureg.Quantity(120, "km"),
+            az=180.0, altitude_msl=ureg.Quantity(65000, "feet"),
+            site_name="L1",
+        )
+        kcos = Airport("KCOS")
+        plan_auto = compute_flight_plan(
+            ac, [line], takeoff_airport=kcos, return_airport=kcos,
+            climb_plan="auto",
+        )
+        plan_none = compute_flight_plan(
+            ac, [line], takeoff_airport=kcos, return_airport=kcos,
+            climb_plan=None,
+        )
+        # "auto" resolves to ER-2's 12-min FL356 hold; total time
+        # exceeds the no-hold version by ~12 min (single-pause delta,
+        # invariant across geometry — the spiral-up branch absorbs
+        # the time differently but the budget is the same).
+        delta_min = (
+            plan_auto["time_to_segment"].sum()
+            - plan_none["time_to_segment"].sum()
+        )
+        assert delta_min == pytest.approx(12.0, abs=1.0), (
+            f"auto-sentinel + 12-min FL356 hold should add ~12 min; "
+            f"got {delta_min:+.1f} min"
+        )
+        # Long enough leg that the climb fits horizontally and the
+        # staged branch fires — auto plan carries an explicit
+        # `loiter` row from the FL356 pause; none plan does not.
+        assert "loiter" in plan_auto["segment_type"].values
+        assert "loiter" not in plan_none["segment_type"].values
+        # Rejection of unknown sentinel strings.
+        from hyplan.exceptions import HyPlanValueError
+        with pytest.raises(HyPlanValueError, match="climb_plan"):
+            compute_flight_plan(
+                ac, [line], takeoff_airport=kcos, return_airport=kcos,
+                climb_plan="not-a-valid-sentinel",
+            )
+
+    def test_typical_climb_out_populated(self):
+        """NASA_ER2 carries a ClimbOutPolicy with an explicit_climb_plan.
+
+        Post-Phase-3: ``climb_profile`` is active-climb-only and the
+        typical pre-cruise overhead lives in
+        ``typical_climb_out.explicit_climb_plan``, which the planner
+        consumes by default via the ``"auto"`` sentinel.
+        """
+        from hyplan.aircraft import ClimbOutPolicy, ClimbPlan
+        ac = NASA_ER2()
+        p = ac.typical_climb_out
+        assert p is not None
+        assert isinstance(p, ClimbOutPolicy)
+        # Post-Phase-3: climb_profile is active-only and the explicit
+        # ClimbPlan carries the typical mission overhead.
+        assert p.absorbed_in_climb_profile is False
+        assert isinstance(p.explicit_climb_plan, ClimbPlan)
+        assert len(p.explicit_climb_plan.pauses) >= 1
+        # At least the FL356 .delay-orbit hold should be listed.
+        assert len(p.typical_holds) >= 1
+        # Total overhead should be a plausible double-digit minute count.
+        assert 5.0 <= p.typical_overhead_min <= 30.0
+        # Notes surface the calibration story.
+        assert "climb_profile" in p.notes
 
     # --- Item 4: distinct climb / cruise / descent TAS schedules -----------
 
@@ -1480,15 +1629,24 @@ class TestClimbPlan:
             for k in info["phases"]
             if k.startswith("climb_") or k == "climb"
         )
-        assert climb_total_min == pytest.approx(ref_t_min, rel=1e-6)
+        # Tolerance is generous because step_climb integrates the full
+        # [start, end] altitude range as a single _climb call (so its
+        # distance matches the no-ClimbPlan baseline), while the
+        # planner emits per-sub-segment phases via _climb on each
+        # piece — those time integrations differ by ~0.01 min from
+        # trapezoidal sampling.
+        assert climb_total_min == pytest.approx(ref_t_min, rel=1e-3)
 
         # Forward climb distance (climb_1 + climb_2; pause is zero).
+        # The planner's per-sub-segment _climb calls each use their
+        # own midpoint TAS, so the sum is larger than step_climb's
+        # single-call midpoint-TAS distance.  Tolerance reflects that.
         climb_dist_nmi = sum(
             info["phases"][k]["distance"].m_as(ureg.nautical_mile)
             for k in info["phases"]
             if k.startswith("climb_") and "pause" not in k
         )
-        assert climb_dist_nmi == pytest.approx(ref_d_nmi, rel=5e-3)
+        assert climb_dist_nmi == pytest.approx(ref_d_nmi, rel=0.15)
 
     def test_pauses_render_as_loiter(self):
         """The pause sub-phase carries segment_type='loiter' and
@@ -1535,8 +1693,12 @@ class TestClimbPlan:
             site_name="L1",
         )
         kcos = Airport("KCOS")
+        # Explicit climb_plan=None bypasses NASA_ER2's typical_climb_out
+        # default — without it, "auto" would inject the 12-min FL356
+        # hold and the delta would be 25 - 12 = 13 min instead of 25.
         df_no = compute_flight_plan(
             ac, [line], takeoff_airport=kcos, return_airport=kcos,
+            climb_plan=None,
         )
         df_yes = compute_flight_plan(
             ac, [line], takeoff_airport=kcos, return_airport=kcos,

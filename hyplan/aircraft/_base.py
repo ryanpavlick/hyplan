@@ -363,6 +363,59 @@ class ClimbPlan:
     pauses: list = field(default_factory=list)
 
 
+@dataclass
+class ClimbOutPolicy:
+    """Documents the typical pre-cruise climb-out behaviour an
+    :class:`Aircraft`'s ``climb_profile`` is calibrated to absorb.
+
+    Aircraft factories may set this to make the absorption posture
+    queryable rather than buried in comments or docstrings.
+
+    .. note::
+        ``Aircraft._hybrid_path`` does **not** consume this field
+        today (Phase 1).  It's metadata that names what the
+        wall-clock-fit ``climb_profile`` already encodes.  The Phase 3
+        ``compute_flight_plan(climb_plan="auto")`` sentinel will
+        eventually read ``explicit_climb_plan`` from here and disable
+        the implicit absorption.
+
+    Args:
+        absorbed_in_climb_profile: When ``True``, the aircraft's
+            ``climb_profile`` is tuned so that integrating ``_climb()``
+            over a typical mission band reproduces the wall-clock TOC,
+            *including* the holds listed in ``typical_holds``.  Calling
+            ``_climb()`` directly will therefore over-state pure
+            active-climb time by approximately ``typical_overhead_min``.
+            When ``False``, ``climb_profile`` represents active climb
+            only and the holds belong in an explicit ``ClimbPlan``.
+        typical_holds: Ordered ``(altitude, hold_duration)`` pairs
+            that the calibrated profile assumes a typical sortie
+            spends at level-offs / orbits.  Informational; not
+            consumed by the planner.
+        typical_overhead_min: Total wall-clock minutes of pre-cruise
+            level-offs / `.delay` orbits the ``climb_profile`` assumes.
+            Used by reviewers to sanity-check the calibration story;
+            not consumed by the planner.
+        notes: Free-text caveats — which calibration set, what
+            fraction of the cruise-altitude TOC residual is mission-
+            specific vs aircraft-intrinsic, when the absorption
+            posture breaks down.
+        explicit_climb_plan: Optional ready-to-use :class:`ClimbPlan`
+            that, when supplied as ``compute_flight_plan(
+            climb_plan=...)``, *replaces* the implicit absorption.
+            Callers using this **must** also set the aircraft's
+            ``climb_path_angle_max_deg`` (e.g. to 6.0) to disable the
+            spiral-up absorption — otherwise the holds are
+            double-counted with the climb_profile's bake-in.
+    """
+
+    absorbed_in_climb_profile: bool
+    typical_holds: List[Tuple[Quantity, Quantity]] = field(default_factory=list)
+    typical_overhead_min: float = 0.0
+    notes: str = ""
+    explicit_climb_plan: Optional[ClimbPlan] = None
+
+
 # ---------------------------------------------------------------------------
 # Turn model
 # ---------------------------------------------------------------------------
@@ -459,6 +512,22 @@ class Aircraft:
             speed schedule and glideslope.  When ``None``, the legacy
             scalar ``approach_speed`` and ``descent_profile`` are used
             for arrival behavior.
+        descent_path_angle_max_deg: Maximum sustainable flight path
+            angle during descent (degrees).  When set, ``_hybrid_path``
+            steepens the descent to fit available lateral distance
+            rather than spiralling at end of leg.
+        climb_path_angle_max_deg: Maximum sustainable flight path
+            angle during climb (degrees).  When set, ``_hybrid_path``
+            steepens the climb to fit available lateral distance
+            rather than spiralling at departure.  When ``None`` and
+            ``typical_climb_out.absorbed_in_climb_profile`` is True,
+            the spiral-up regime acts as the absorption mechanism for
+            mission-typical level-offs / `.delay` orbits.
+        typical_climb_out: Optional :class:`ClimbOutPolicy` documenting
+            the pre-cruise climb-out behaviour the calibrated
+            ``climb_profile`` is tuned to absorb.  Pure metadata in
+            v1.5 — names the absorption posture so it's queryable
+            rather than buried in comments.
     """
 
     def __init__(
@@ -481,6 +550,9 @@ class Aircraft:
         endurance: Optional[Quantity] = None,
         useful_payload: Optional[Quantity] = None,
         approach_profile: Optional[ApproachProfile] = None,
+        descent_path_angle_max_deg: Optional[float] = None,
+        climb_path_angle_max_deg: Optional[float] = None,
+        typical_climb_out: Optional[ClimbOutPolicy] = None,
     ):
         if not isinstance(aircraft_type, str):
             raise HyPlanTypeError("Aircraft type must be a string.")
@@ -518,6 +590,47 @@ class Aircraft:
                 f"approach_profile must be ApproachProfile or None, got {type(approach_profile).__name__}."
             )
         self.approach_profile = approach_profile
+
+        # Maximum sustainable flight path angle during descent (degrees).
+        # When set, _hybrid_path will steepen the descent (scaling
+        # descent_profile VS uniformly) to fit available lateral distance,
+        # rather than falling back to the spiral-down regime.  None
+        # preserves the legacy "spiral if descent doesn't fit" behavior.
+        if descent_path_angle_max_deg is not None and descent_path_angle_max_deg <= 0:
+            raise HyPlanValueError(
+                "descent_path_angle_max_deg must be positive."
+            )
+        self.descent_path_angle_max_deg = descent_path_angle_max_deg
+
+        # Maximum sustainable flight path angle during climb (degrees).
+        # When set, _hybrid_path will steepen the climb (scaling
+        # climb_profile VS uniformly) to fit available lateral
+        # distance, rather than falling back to the spiral-up regime.
+        # This means modeled climb time represents *pure active climb*;
+        # mission-specific holds (level-offs, .delay orbits) must be
+        # added explicitly via ClimbPlan pauses or Waypoint.delay.
+        # None preserves the legacy "spiral if climb doesn't fit"
+        # behavior.
+        if climb_path_angle_max_deg is not None and climb_path_angle_max_deg <= 0:
+            raise HyPlanValueError(
+                "climb_path_angle_max_deg must be positive."
+            )
+        self.climb_path_angle_max_deg = climb_path_angle_max_deg
+
+        # Typical pre-cruise climb-out policy.  Pure metadata in
+        # Phase 1 — names what `climb_profile` is calibrated to absorb
+        # so the absorption posture is queryable rather than buried in
+        # comments.  Phase 3 will teach `compute_flight_plan` to
+        # consume `explicit_climb_plan` from here when the caller
+        # passes ``climb_plan="auto"``.
+        if typical_climb_out is not None and not isinstance(
+            typical_climb_out, ClimbOutPolicy
+        ):
+            raise HyPlanTypeError(
+                f"typical_climb_out must be ClimbOutPolicy or None, got "
+                f"{type(typical_climb_out).__name__}."
+            )
+        self.typical_climb_out = typical_climb_out
 
         self._validate_schedule_compatibility()
 
@@ -922,6 +1035,7 @@ class Aircraft:
         start_altitude: Quantity,
         end_altitude: Quantity,
         pauses: List[Tuple[Quantity, Quantity]],
+        wind_along_track: Optional[Quantity] = None,
     ) -> Tuple[Quantity, Quantity]:
         """Total time and forward distance for a staged climb with pauses.
 
@@ -969,35 +1083,35 @@ class Aircraft:
         nmi = ureg.nautical_mile
         minute = ureg.minute
 
+        # Distance and active-climb time come from a single _climb call
+        # over the full [start, end] range so the result is consistent
+        # with `_hybrid_path`'s baseline (no-ClimbPlan) climb_dist.
+        # Summing per-sub-segment _climb calls would over-estimate
+        # distance (each sub-segment uses its own midpoint TAS, and the
+        # upper sub-segment's higher TAS inflates its forward distance),
+        # which would spuriously trigger `_hybrid_path`'s short_climb
+        # regime — turning the climb into a spiral-up plus a full-leg
+        # cruise on top.
+        active_t, total_dist = self._climb(
+            start_altitude, end_altitude,
+            wind_along_track=wind_along_track,
+        )
+        total_time = active_t.to(minute)
+
+        # Holds add time only; they hold ground position so contribute
+        # zero forward distance.  Pauses outside [start, end] are
+        # silently skipped (matches the docstring contract).
         if pauses:
-            pauses_sorted = sorted(
-                pauses, key=lambda p: p[0].m_as(ft),
-            )
-        else:
-            pauses_sorted = []
+            pauses_sorted = sorted(pauses, key=lambda p: p[0].m_as(ft))
+            for level_alt, hold_dur in pauses_sorted:
+                if (
+                    level_alt.m_as(ft) <= start_altitude.m_as(ft)
+                    or level_alt.m_as(ft) > end_altitude.m_as(ft)
+                ):
+                    continue
+                total_time = total_time + hold_dur.to(minute)
 
-        total_time = 0.0 * minute
-        total_dist = 0.0 * nmi
-        prev_alt = start_altitude
-
-        for level_alt, hold_dur in pauses_sorted:
-            if (
-                level_alt.m_as(ft) <= prev_alt.m_as(ft)
-                or level_alt.m_as(ft) > end_altitude.m_as(ft)
-            ):
-                continue
-            t, d = self._climb(prev_alt, level_alt)
-            total_time = total_time + t.to(minute)
-            total_dist = total_dist + d.to(nmi)
-            total_time = total_time + hold_dur.to(minute)
-            prev_alt = level_alt
-
-        if prev_alt.m_as(ft) < end_altitude.m_as(ft):
-            t, d = self._climb(prev_alt, end_altitude)
-            total_time = total_time + t.to(minute)
-            total_dist = total_dist + d.to(nmi)
-
-        return total_time, total_dist
+        return total_time, total_dist.to(nmi)
 
     # ------------------------------------------------------------------
     # Descent
@@ -1085,7 +1199,7 @@ class Aircraft:
         airport: Airport,
         waypoint: Waypoint,
         wind: Optional[Tuple[float, float]] = None,
-        climb_plan: Optional["ClimbPlan"] = None,
+        climb_plan: Union["ClimbPlan", str, None] = "auto",
     ) -> dict:
         """Calculate time from takeoff to the first waypoint.
 
@@ -1094,10 +1208,25 @@ class Aircraft:
         vertically — so the climb-out timing reflects the aircraft's
         calibrated rate-vs-altitude curve, not a constant pitch.
 
-        ``climb_plan`` (when supplied) inserts level-off pauses during
-        the climb via :meth:`step_climb`; each pause is rendered as a
-        ``"loiter"`` phase in the returned ``phases`` dict.
+        ``climb_plan`` controls the pre-cruise hold model:
+
+        * ``"auto"`` (default): use this aircraft's
+          ``typical_climb_out.explicit_climb_plan`` if defined,
+          otherwise no holds.
+        * :class:`ClimbPlan`: caller-supplied pauses, used as-is.
+        * ``None``: no holds; pure active-climb integration.
         """
+        if isinstance(climb_plan, str):
+            if climb_plan != "auto":
+                raise HyPlanValueError(
+                    f"climb_plan must be a ClimbPlan, None, or \"auto\"; "
+                    f"got {climb_plan!r}."
+                )
+            climb_plan = (
+                self.typical_climb_out.explicit_climb_plan
+                if self.typical_climb_out is not None
+                else None
+            )
         _, departure_heading = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude,
             waypoint.latitude, waypoint.longitude,
@@ -1363,6 +1492,7 @@ class Aircraft:
             if climb_pauses_in_range:
                 climb_t_q, climb_d_q = self.step_climb(
                     start_alt, cruise_altitude, climb_pauses_in_range,
+                    wind_along_track=wind_along_q,
                 )
             else:
                 climb_t_q, climb_d_q = self._climb(
@@ -1404,6 +1534,39 @@ class Aircraft:
             descent_dist_nmi > L_nmi + eps_short
             and climb_dist_nmi <= eps_short
         )
+
+        # Path-angle-constrained climb: when the preferred climb
+        # would overrun the lateral leg (short_climb regime) and the
+        # aircraft has a configured max FPA, steepen the climb to fit
+        # rather than spiraling at departure.  Modeled climb time
+        # represents *pure active climb*; mission-specific holds must
+        # be added explicitly (ClimbPlan / Waypoint.delay).
+        if short_climb and self.climb_path_angle_max_deg is not None:
+            dh_ft = (cruise_altitude - start_alt).m_as(ureg.foot)
+            L_ft = L_nmi * 6076.115485564
+            if L_ft > 0:
+                fpa_req_deg = math.degrees(math.atan(dh_ft / L_ft))
+                if fpa_req_deg <= self.climb_path_angle_max_deg:
+                    scale = L_nmi / climb_dist_nmi
+                    climb_time_min *= scale
+                    climb_dist_nmi = L_nmi
+                    short_climb = False  # fits as steepened climb
+
+        # Path-angle-constrained descent (mirror): when the preferred
+        # descent would overrun the lateral leg (short_descent regime)
+        # and the aircraft has a configured max FPA, steepen the
+        # descent to fit rather than spiraling at end of leg.
+        if short_descent and self.descent_path_angle_max_deg is not None:
+            dh_ft = (cruise_altitude - end_alt).m_as(ureg.foot)
+            L_ft = L_nmi * 6076.115485564
+            if L_ft > 0:
+                fpa_req_deg = math.degrees(math.atan(dh_ft / L_ft))
+                if fpa_req_deg <= self.descent_path_angle_max_deg:
+                    scale = L_nmi / descent_dist_nmi
+                    descent_time_min *= scale
+                    descent_dist_nmi = L_nmi
+                    short_descent = False  # fits as steepened descent
+
         short_mixed = (
             climb_dist_nmi + descent_dist_nmi > L_nmi + eps_short
             and not short_climb

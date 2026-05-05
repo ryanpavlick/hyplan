@@ -14,9 +14,9 @@ PDF Green Cards parse via `pdfplumber` (install with
 
 | Planned | KML | Green Card | IWG1 file | IWG1 start (Z) | Match confidence | Reason |
 | --- | --- | --- | --- | --- | --- | --- |
-| NM17 B | `data/er2/NM17 B KML.kml` | `data/er2/NM17 B ER2 Green Card1.xlsx` | `data/er2/69e4e6e92706ae3e20f884fd.txt` | 2026-04-19T21:50:07Z | high | only NM17 B sortie cached; date is the next ER-2 flight day after the planned product was issued |
-| CO07v4 | `data/er2/CO07v4 KML.kml` | `data/er2/CO07v4 ER2 Green Card1.pdf` | `data/er2/69e78230620db03dc45a5c05.txt` | 2026-04-21T19:52:47Z | high | sole CO07-series IWG1 cached in this window |
-| CO06 | `data/er2/CO06 KML.kml` | `data/er2/CO06 ER2 Green Card1.pdf` | `data/er2/69eb6b075886b06d1bd1a7c6.txt` | 2026-04-24T18:31:24Z | high | sole CO06-series IWG1 cached in this window |
+| NM17 B | `data/er2/NM17 B KML.kml` | `data/er2/NM17 B ER2 Green Card1.xlsx` | `data/er2/n806_2026-04-19.txt` | 2026-04-19T21:50:07Z | high | only NM17 B sortie cached; date is the next ER-2 flight day after the planned product was issued |
+| CO07v4 | `data/er2/CO07v4 KML.kml` | `data/er2/CO07v4 ER2 Green Card1.pdf` | `data/er2/n806_2026-04-21.txt` | 2026-04-21T19:52:47Z | high | sole CO07-series IWG1 cached in this window |
+| CO06 | `data/er2/CO06 KML.kml` | `data/er2/CO06 ER2 Green Card1.pdf` | `data/er2/n806_2026-04-24.txt` | 2026-04-24T18:31:24Z | high | sole CO06-series IWG1 cached in this window |
 
 ## Held out (no matching as-flown yet)
 
@@ -29,7 +29,7 @@ PDF Green Cards parse via `pdfplumber` (install with
 
 | File | Start (Z) | Note |
 | --- | --- | --- |
-| `data/er2/69ef74055886b06d1bf8e3b7 (1).txt` | 2026-04-27T17:47:47Z | no planned product paired |
+| `data/er2/n806_2026-04-27.txt` | 2026-04-27T17:47:47Z | no planned product paired |
 | `data/er2/69f22a875886b06d1b13c252.txt` | 2026-04-29T18:13:41Z | no planned product paired |
 
 ## Convention

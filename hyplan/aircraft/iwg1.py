@@ -115,22 +115,44 @@ def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
 
     out = out.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 
-    # Derive vertical_rate (fpm) from the altitude time-derivative —
-    # the IWG1 Vertical Velocity column is always empty in observed
-    # files. Use a centered finite difference smoothed by a 3-sample
-    # rolling median to suppress per-fix altitude jitter.
+    # Drop near-duplicate fixes (consecutive fixes within 100 ms) before
+    # computing vertical_rate.  Some IWG1 files contain duplicated
+    # records ~12 ms apart; np.gradient over those tiny dt values
+    # produces wildly spurious VS spikes (>10000 fpm) that sneak past
+    # the 3-sample rolling median and contaminate phase classification.
+    if len(out) >= 2:
+        dt_ms = out["timestamp"].diff().dt.total_seconds() * 1000.0
+        keep = (dt_ms.isna()) | (dt_ms >= 100.0)
+        out = out[keep].reset_index(drop=True)
+
+    # Derive vertical_rate (fpm) using a long-baseline finite
+    # difference: VS at fix i = (alt[t + 90s] - alt[t - 90s]) / 180s.
+    # The IWG1 Vertical Velocity column is always empty in observed
+    # files, so we have to derive it.  A 3-minute baseline averages
+    # out the autopilot ±100 ft tracking oscillations at cruise
+    # (period ~30-60 sec) that a per-fix gradient captures as
+    # transient ±500 fpm spikes — those misclassify sustained
+    # cruise as climb/descent.  A longer window (5 min) recovers
+    # more cruise time on sorties with genuine step-cruise drift
+    # but at the cost of smearing TOC/TOD transitions by 90 vs
+    # 150 sec — 3 min is the sweet spot.
     if len(out) >= 2:
         alt_ft = out["altitude"].to_numpy(dtype=float)
         t_s = (out["timestamp"] - out["timestamp"].iloc[0]).dt.total_seconds().to_numpy(dtype=float)
+        half = 90.0  # +/- 90 sec baseline -> 180-sec (3 min) window
+        lo_idx = np.searchsorted(t_s, t_s - half, side="left")
+        hi_idx = np.searchsorted(t_s, t_s + half, side="right") - 1
+        # Clip to valid range so vectorized indexing works.
+        lo_idx = np.clip(lo_idx, 0, len(t_s) - 1)
+        hi_idx = np.clip(hi_idx, 0, len(t_s) - 1)
+        dt = t_s[hi_idx] - t_s[lo_idx]
         with np.errstate(invalid="ignore", divide="ignore"):
-            d_alt = np.gradient(alt_ft, t_s)  # ft/s
-        vs_fpm = d_alt * 60.0
-        # Rolling median to suppress 1-fix altitude jitter (IWG1 pressure
-        # altitude reports to 2.5 ft resolution, which gives ~30 fpm noise
-        # at the 5 s cadence).
-        out["vertical_rate"] = (
-            pd.Series(vs_fpm).rolling(window=3, center=True, min_periods=1).median().to_numpy()
-        )
+            vs_fpm = np.where(
+                dt > 0,
+                (alt_ft[hi_idx] - alt_ft[lo_idx]) / dt * 60.0,
+                np.nan,
+            )
+        out["vertical_rate"] = vs_fpm
     else:
         out["vertical_rate"] = np.nan
 

@@ -53,7 +53,7 @@ def compute_flight_plan(
     wind_direction: Optional[float] = None,
     wind_source: Optional["WindField"] = None,
     takeoff_time: Optional[datetime.datetime] = None,
-    climb_plan: Optional["ClimbPlan"] = None,
+    climb_plan: Union["ClimbPlan", str, None] = "auto",
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -100,15 +100,37 @@ def compute_flight_plan(
         takeoff_time: UTC datetime of takeoff.  Required when
             ``wind_source`` is a gridded wind field (MERRA-2, GMAO) so
             that each segment can be queried at the correct time.
-        climb_plan: Optional :class:`~hyplan.aircraft.ClimbPlan` of
-            level-off pauses to insert during the takeoff phase.  Each
-            pause is rendered as a ``"loiter"`` segment in the output
-            dataframe (zero forward distance, hold duration only),
-            with the climb split into one row per inter-pause segment.
-            Used to model weight-limited climb staging — e.g. an ER-2
-            ``.delay`` orbit at FL356 before completing the climb to
-            FL650.
+        climb_plan: Climb-out hold plan for the takeoff phase.  Three forms:
+
+            * ``"auto"`` (default) — use the aircraft's
+              ``typical_climb_out.explicit_climb_plan`` if defined,
+              otherwise no holds.  Reproduces empirical-typical
+              wall-clock TOC for aircraft whose factory populates
+              the policy (e.g. NASA_ER2 ships with a ~12-min FL356
+              hold representing the median weight-band `.delay`
+              orbit observed across 138 IWG1 sorties).
+            * ``None`` — no holds; pure active-climb integration.
+              Caller is opting out of any typical-mission absorption.
+            * :class:`~hyplan.aircraft.ClimbPlan` — caller-supplied
+              pauses, used as-is.  Each pause renders as a
+              ``"loiter"`` segment in the output dataframe (zero
+              forward distance, hold duration only), with the climb
+              split into one row per inter-pause segment.
     """
+    # Resolve the "auto" sentinel by reading the aircraft's
+    # typical_climb_out policy.  No-op when the aircraft hasn't
+    # populated the policy.
+    if isinstance(climb_plan, str):
+        if climb_plan != "auto":
+            raise HyPlanValueError(
+                f"climb_plan must be a ClimbPlan, None, or \"auto\"; "
+                f"got {climb_plan!r}."
+            )
+        climb_plan = (
+            aircraft.typical_climb_out.explicit_climb_plan
+            if aircraft.typical_climb_out is not None
+            else None
+        )
     # Validate wind parameter combinations
     if wind_source is not None and wind_speed is not None:
         raise HyPlanValueError(

@@ -14,6 +14,8 @@ from ._base import (
     Aircraft,
     ApproachProfile,
     CasMachSchedule,
+    ClimbOutPolicy,
+    ClimbPlan,
     TasSchedule,
     VerticalProfile,
     TurnModel,
@@ -130,42 +132,54 @@ class NASA_ER2(Aircraft):
             climb_schedule=climb_schedule,
             cruise_schedule=cruise_schedule,
             descent_schedule=descent_schedule,
-            # Calibrated 8-point climb profile (was 2-point linear).
-            # Step climb at 19-21 kft is the load-out / fuel-burn level-off.
-            # The post-step recovery anchor at 23 kft (4778 fpm) is critical
-            # — the actual aircraft recovers to its peak climb rate
-            # immediately after the step.  Without it, linear interpolation
-            # 21 kft → 55 kft would imply a constant ~700 fpm climb
-            # through the entire 21-55 kft band, off by 4× from reality.
+            # Active-climb-only median fit (138 mission sorties, IWG1).
+            # Filter: climb-phase fixes with vertical_rate >= 1500 fpm
+            # AND outside ±2 kft bands around {FL240, FL260, FL356}
+            # (the known typical level-off / weight-band hold altitudes).
+            # Median per 5-kft bin; smoothed slightly at the FL15-25
+            # plateau to keep VS strictly monotonic above the SL peak.
+            #
+            # Replaces the earlier wall-clock-fit p75-mixed profile
+            # (`6016 fpm @ FL150` vs the brochure SL ROC of 5000 fpm
+            # was a tell that the values were absorbing level-off
+            # fixes rather than representing pure climb performance).
+            #
+            # The typical pre-cruise mission overhead these anchors
+            # used to absorb is now represented explicitly via
+            # `typical_climb_out.explicit_climb_plan` — see below.
+            #
+            # See `notebooks/er2_calibration/iwg1_calibration.ipynb` §5b
+            # for the active-only derivation.
             climb_profile=VerticalProfile(points=[
                 (    0 * ureg.feet, 5000 * ureg.feet / ureg.minute),  # SL anchor (brochure)
-                (17000 * ureg.feet, 4432 * ureg.feet / ureg.minute),  # steady-climb anchor
-                (19000 * ureg.feet, 1050 * ureg.feet / ureg.minute),  # step start (n=17 median)
-                (21000 * ureg.feet,  540 * ureg.feet / ureg.minute),  # step bottom (n=17 median)
-                (23000 * ureg.feet, 4778 * ureg.feet / ureg.minute),  # post-step recovery
-                (35000 * ureg.feet, 2693 * ureg.feet / ureg.minute),  # mid-climb anchor
-                (49000 * ureg.feet, 1290 * ureg.feet / ureg.minute),  # upper-mid anchor
-                (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),  # operational ceiling
+                (15000 * ureg.feet, 3800 * ureg.feet / ureg.minute),  # active median (smoothed for monotonicity)
+                (25000 * ureg.feet, 3789 * ureg.feet / ureg.minute),  # active median (FL20-25 active band)
+                (35000 * ureg.feet, 2455 * ureg.feet / ureg.minute),  # active median
+                (45000 * ureg.feet, 1789 * ureg.feet / ureg.minute),  # active median
+                (55000 * ureg.feet, 1615 * ureg.feet / ureg.minute),  # active median
+                (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),  # operational ceiling (brochure)
             ]),
-            # Calibrated 6-point descent profile (was 3-point).
-            # Same lesson as the climb_profile recalibration: 3 anchors
-            # spanning 5 kft to 66 kft hide the structure.  IWG1 per-bin
-            # medians show distinct regimes — slow approach-prep below
-            # 13 kft (~1000-1700 fpm), steady high-altitude descent at
-            # 25-55 kft (~3000-3500 fpm), and a peak around 41 kft.
-            # Without intermediate anchors the linear interp from
-            # 5242 ft (low) to 41000 ft (peak) implies a constant
-            # ~2000 fpm across the entire 5-41 kft range, ~30% too slow.
-            # Covers cruise -> top-of-approach MSL only; approach_profile
-            # owns the terminal segment from there to touchdown.
+            # Median-based descent profile (replaces earlier peak-based
+            # 6-anchor calibration).  iwg1_calibration §9 showed the
+            # peak-based TOD anchor over-estimated descent rate at top
+            # by 4-7x against the observed median (mod 3500 fpm vs obs
+            # ~600 fpm at 60-66 kft, n=5793).  Three anchors from the
+            # median rule: bottom = median |VS| at top-of-approach band,
+            # mid = peak median |VS| in 25-45 kft band (the steep
+            # regime), top = median |VS| across cruise altitudes.
             descent_profile=VerticalProfile(points=[
-                ( 5242 * ureg.feet, 1024 * ureg.feet / ureg.minute),  # top-of-approach MSL (slowing for approach)
-                (13000 * ureg.feet, 1728 * ureg.feet / ureg.minute),  # mid-low transition
-                (25000 * ureg.feet, 3008 * ureg.feet / ureg.minute),  # steady high regime (start)
-                (41000 * ureg.feet, 3456 * ureg.feet / ureg.minute),  # peak |VS|
-                (55000 * ureg.feet, 3264 * ureg.feet / ureg.minute),  # still high
-                (66000 * ureg.feet, 3500 * ureg.feet / ureg.minute),  # top-of-descent
+                ( 5260 * ureg.feet,  735 * ureg.feet / ureg.minute),  # top-of-approach MSL
+                (35000 * ureg.feet, 3022 * ureg.feet / ureg.minute),  # steep-regime peak
+                (66000 * ureg.feet, 1444 * ureg.feet / ureg.minute),  # top-of-descent
             ]),
+            # Descent_profile retained from the 22-sortie calibration.
+            # The 136-sortie recalibration shifts these anchors (5240/878,
+            # 43000/2880, 66000/1290) to better match the fleet median,
+            # but regresses NM17 B's descent residual by +20 min — descent
+            # VS has high mission-specific variability (lateral leg
+            # length, ATC routing) that no single profile captures.  The
+            # 22-sortie subset happens to fit our planned-vs-flown
+            # validation pairs (NM17 B, CO07v4, CO06) better.
             # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
             # 2.5° glideslope is the empirical median over 846 IWG1
             # approach-phase fixes; touchdown 65 kt is the per-sortie
@@ -202,6 +216,62 @@ class NASA_ER2(Aircraft):
             range=5000 * ureg.nautical_mile,
             endurance=8 * ureg.hour,
             useful_payload=2900 * ureg.pound,
+            # Calibrated max descent flight path angle.  IWG1 cross-fleet
+            # descent FPA distribution: median 2°, p90 7°, p99 10°.  6° is
+            # a conservative envelope that captures normal operations
+            # (covers p90 in every altitude band except 10-15 kft where
+            # p90 reaches 9°) and avoids the sustained steep descents
+            # only seen in approach-prep / abort / unusual profiles.
+            # When a leg is shorter than the preferred descent distance,
+            # _hybrid_path scales descent VS up to fit rather than
+            # spiraling at end of leg.
+            descent_path_angle_max_deg=6.0,
+            # climb_path_angle_max_deg=6.0 disables _hybrid_path's
+            # short_climb spiral-up absorption — the climb either
+            # fits in the leg (steepened to FPA <= 6°) or, on legs
+            # too short to fit, the planner falls back to the
+            # spiral-up regime regardless of this cap.  With the
+            # active-climb-only climb_profile (Phase 2), pure
+            # _climb() integration is now what the model represents,
+            # and the typical pre-cruise mission overhead is
+            # injected explicitly via the typical_climb_out below.
+            climb_path_angle_max_deg=6.0,
+            typical_climb_out=ClimbOutPolicy(
+                # Phase 3: climb_profile is active-only and the
+                # planner reads `explicit_climb_plan` via
+                # `compute_flight_plan(climb_plan="auto")` (the
+                # default).  This recovers empirical-typical
+                # wall-clock TOC honestly: the holds appear as
+                # explicit `loiter` segments in the plan dataframe,
+                # not absorbed into the climb_profile values.
+                absorbed_in_climb_profile=False,
+                typical_holds=[
+                    (24_000 * ureg.feet,  1 * ureg.minute),  # FL240 brief level-off
+                    (26_000 * ureg.feet,  1 * ureg.minute),  # FL260 brief level-off
+                    (35_600 * ureg.feet, 12 * ureg.minute),  # FL356 weight-band .delay (median)
+                ],
+                typical_overhead_min=14.0,
+                notes=(
+                    "climb_profile is active-climb-only (138-sortie IWG1 "
+                    "median per 5-kft bin, VS >= 1500 fpm filter, hold "
+                    "bands excluded). Pre-cruise mission overhead is "
+                    "injected via explicit_climb_plan when the caller "
+                    "uses climb_plan='auto' (the default).  The 12-min "
+                    "FL356 hold is the median of the 138-sortie cache; "
+                    "individual sorties range 0-25+ min.  Power users "
+                    "wanting pure aircraft physics pass climb_plan=None "
+                    "to bypass the typical-mission absorption.  See "
+                    "notebooks/er2_calibration/planned_vs_flown.ipynb §16."
+                ),
+                explicit_climb_plan=ClimbPlan(pauses=[
+                    # Median weight-band .delay duration across the
+                    # 138-sortie cache.  Single representative pause
+                    # at FL356 — brief FL240/FL260 level-offs are
+                    # too short to be worth modelling explicitly and
+                    # contribute <2 min combined.
+                    (35_600 * ureg.feet, 12 * ureg.minute),
+                ]),
+            ),
             sources=[
                 SourceRecord(
                     source_type="brochure",
@@ -211,10 +281,12 @@ class NASA_ER2(Aircraft):
                 SourceRecord(
                     source_type="iwg1",
                     reference=(
-                        "NASA AFRC IWG1 in-situ flight logs, n=17 sorties "
-                        "2023-02 to 2025-08; calibrated climb step, "
-                        "two-regime descent, and approach_profile with "
-                        "2.51° empirical glideslope"
+                        "NASA AFRC IWG1 in-situ flight logs, n=138 mission "
+                        "sorties 2023-03 to 2026-05 (NASA 806 + 809); "
+                        "calibrated climb (active-only median, VS >= 1500 fpm "
+                        "outside known hold bands), descent (median), "
+                        "approach_profile with empirical glideslope, and "
+                        "descent_path_angle_max_deg (p90 envelope)"
                     ),
                     confidence=0.8,
                 ),
