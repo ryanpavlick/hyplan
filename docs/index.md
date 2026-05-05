@@ -22,6 +22,7 @@ major version.  See {doc}`stability` for details.
 installation
 concepts
 architecture
+calibration
 stability
 tutorial
 ```

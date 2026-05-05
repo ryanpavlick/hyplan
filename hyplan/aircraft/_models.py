@@ -74,7 +74,7 @@ class NASA_ER2(Aircraft):
     Speed schedules, vertical-rate profile, and approach behavior calibrated
     from 17 NASA AFRC IWG1
     in-situ flight logs (2023-02 to 2025-08, ~64 000 cruise fixes above
-    60 kft).  See [notebooks/calibration/er2/iwg1_calibration.ipynb] for
+    60 kft).  See [notebooks/calibration/er2/calibration.ipynb] for
     the full derivation: per-altitude-bin |VS| medians, breakpoint
     selection rules, and validation against per-sortie observed timing.
 
@@ -143,7 +143,7 @@ class NASA_ER2(Aircraft):
             # and the active-climb data shows actual SL ROC well below
             # the U-2 brochure 5000 fpm value.
             #
-            # See `notebooks/calibration/er2/iwg1_calibration.ipynb` §5b
+            # See `notebooks/calibration/er2/calibration.ipynb` §5b
             # for the active-only derivation and §6b for the IQR fit
             # validation.
             climb_profile=VerticalProfile(points=[
@@ -172,7 +172,7 @@ class NASA_ER2(Aircraft):
             # bin-median profile sits inside every IQR for FL000-FL550
             # where data is dense; FL600+ has sparser coverage and
             # natural steepening in the data is preserved here.  See
-            # ``notebooks/calibration/er2/iwg1_calibration.ipynb`` §6b
+            # ``notebooks/calibration/er2/calibration.ipynb`` §6b
             # for the IQR + median visualization.
             descent_profile=VerticalProfile(points=[
                 (    0 * ureg.feet, 1630 * ureg.feet / ureg.minute),
@@ -322,7 +322,7 @@ class NASA_GIII(Aircraft):
         # the local "n520NA_g3_alltracks.csv" delivery (2025-07 through
         # 2026-04) with the public NASA ASP archive
         # (asp-archive.arc.nasa.gov/N520NA, FY2024-FY2026).  See
-        # ``notebooks/calibration/giii/iwg1_calibration.ipynb``.
+        # ``notebooks/calibration/giii/calibration.ipynb``.
         super().__init__(
             aircraft_type="Gulfstream III",
             tail_number="NASA 520",
@@ -475,7 +475,7 @@ class NASA_GV(Aircraft):
         # Vertical profiles, approach, bank, and stall calibrated against
         # 100 IWG1 sorties from NASA 95 (data/n95na_2019.csv,
         # n95na_2020_2022.csv, n95na_2023_2026.csv), 2019 through 2026.
-        # See ``notebooks/calibration/gv/iwg1_calibration.ipynb`` for the
+        # See ``notebooks/calibration/gv/calibration.ipynb`` for the
         # active-only fits.  CasMachSchedule speed parameters retained
         # — the data confirms M0.80 cruise above ~FL300, validating the
         # existing schedule shape.
@@ -777,7 +777,7 @@ class NASA_P3(Aircraft):
         # calibration notebook excludes 4 sorties peaking 35-55 kft
         # — those are tail-number reassignments where N426NA was
         # recorded for a different (jet-class) airframe; not P-3 data.
-        # See ``notebooks/calibration/p3/iwg1_calibration.ipynb``.
+        # See ``notebooks/calibration/p3/calibration.ipynb``.
         super().__init__(
             aircraft_type="P-3 Orion",
             tail_number="NASA 426",
@@ -871,7 +871,7 @@ class NASA_WB57(Aircraft):
         # Calibrated against 100 IWG1 sorties combined from NASA 926
         # (data/n926na_alltracks.csv) and NASA 927
         # (data/n927na_alltracks.csv), 2018-11 through 2024.  See
-        # ``notebooks/calibration/wb57/iwg1_calibration.ipynb`` for the
+        # ``notebooks/calibration/wb57/calibration.ipynb`` for the
         # active-only fits and per-phase TAS / bank derivations.
         super().__init__(
             aircraft_type="WB-57",
@@ -1092,13 +1092,11 @@ class KingAirB200(Aircraft):
     """
 
     def __init__(self):
-        # Calibrated against 272 NASA ICARTT sorties from multiple
+        # Calibrated against NASA ICARTT sorties from multiple
         # B-200 / UC-12 (military variant) campaigns: ACTAMERICA
         # Hskping (NASA 529 LaRC), DISCOVER-AQ California / Colorado /
-        # Texas APPLANIX, KORUS-AQ B200 NAV, LMOS UC12 NAV, BlueFlux
-        # AIMMS-20 (ICT identifies the BlueFlux platform as B-200
-        # despite the data folder labeling).  See
-        # ``notebooks/calibration/b200/iwg1_calibration.ipynb``.
+        # Texas APPLANIX, KORUS-AQ B200 NAV, LMOS UC12 NAV.  See
+        # ``notebooks/calibration/b200/calibration.ipynb``.
         super().__init__(
             aircraft_type="King Air 200",
             tail_number="multi-tail",
@@ -1107,17 +1105,17 @@ class KingAirB200(Aircraft):
             # 35000 ft brochure ceiling is rarely flown; typical
             # operational peaks land at FL280-FL300.
             service_ceiling=30000 * ureg.feet,
-            approach_speed=113 * ureg.knot,
+            approach_speed=112 * ureg.knot,
             climb_schedule=TasSchedule(points=[
                 (    0 * ureg.feet, 110 * ureg.knot),  # rotation
-                ( 5000 * ureg.feet, 157 * ureg.knot),
-                (10000 * ureg.feet, 193 * ureg.knot),
+                ( 5000 * ureg.feet, 185 * ureg.knot),
+                (10000 * ureg.feet, 195 * ureg.knot),
                 (15000 * ureg.feet, 205 * ureg.knot),
                 (20000 * ureg.feet, 206 * ureg.knot),
                 (25000 * ureg.feet, 212 * ureg.knot),
             ]),
             cruise_schedule=TasSchedule(points=[
-                (10000 * ureg.feet, 220 * ureg.knot),
+                (10000 * ureg.feet, 224 * ureg.knot),
                 (15000 * ureg.feet, 230 * ureg.knot),
                 (20000 * ureg.feet, 239 * ureg.knot),
                 (25000 * ureg.feet, 238 * ureg.knot),
@@ -1125,12 +1123,8 @@ class KingAirB200(Aircraft):
             ]),
             descent_schedule=TasSchedule(points=[
                 (    0 * ureg.feet, 130 * ureg.knot),  # final approach
-                ( 5000 * ureg.feet, 178 * ureg.knot),
-                # FL100 descent bin median is 221 kt; clip to cruise
-                # FL100 (220 kt) so descent <= cruise at every shared
-                # altitude — the 1-kt difference is below the bin
-                # measurement precision.
-                (10000 * ureg.feet, 220 * ureg.knot),
+                ( 5000 * ureg.feet, 207 * ureg.knot),
+                (10000 * ureg.feet, 224 * ureg.knot),
                 (15000 * ureg.feet, 240 * ureg.knot),
                 (20000 * ureg.feet, 253 * ureg.knot),
                 (25000 * ureg.feet, 251 * ureg.knot),
@@ -1140,9 +1134,9 @@ class KingAirB200(Aircraft):
             # bins extend through FL250 — above FL150 the B-200's
             # active-climb VS is normally 1000-1300 fpm.
             climb_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 1267 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 1320 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 1346 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1411 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1439 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 1347 * ureg.feet / ureg.minute),
                 (15000 * ureg.feet, 1190 * ureg.feet / ureg.minute),
                 (20000 * ureg.feet, 1068 * ureg.feet / ureg.minute),
                 (25000 * ureg.feet, 1031 * ureg.feet / ureg.minute),
@@ -1152,15 +1146,15 @@ class KingAirB200(Aircraft):
             ]),
             # Active-descent median (|VS| >= 1000 fpm), 5-kft bins.
             descent_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 1198 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 1320 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1212 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1310 * ureg.feet / ureg.minute),
                 (10000 * ureg.feet, 1397 * ureg.feet / ureg.minute),
                 (15000 * ureg.feet, 1551 * ureg.feet / ureg.minute),
                 (20000 * ureg.feet, 1852 * ureg.feet / ureg.minute),
                 (25000 * ureg.feet, 1406 * ureg.feet / ureg.minute),
             ]),
-            # AFM normal-ops bank.  Data p90=30° agrees (n=1.14M turn
-            # fixes across 272 sorties).
+            # AFM normal-ops bank.  Data p90=26° (n turn fixes across
+            # 250 sorties), so AFM 30° is the binding ceiling.
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=1632 * ureg.nautical_mile,
@@ -1172,7 +1166,7 @@ class KingAirB200(Aircraft):
             sources=[
                 SourceRecord(
                     source_type="icartt",
-                    reference="Multi-campaign ICARTT calibration, n=272 sorties (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS, BlueFlux)",
+                    reference="Multi-campaign ICARTT calibration (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS)",
                     confidence=0.85,
                 ),
                 SourceRecord(
@@ -1203,7 +1197,7 @@ class C130(Aircraft):
         # downloaded from the public NASA ASP archive at
         # https://asp-archive.arc.nasa.gov/ACTAMERICA/N436NA/ via
         # ``notebooks/calibration/c130/_fetch_act_america.py``.  See
-        # ``notebooks/calibration/c130/iwg1_calibration.ipynb`` for the
+        # ``notebooks/calibration/c130/calibration.ipynb`` for the
         # active-only fits and per-phase TAS / bank / approach
         # derivations.
         super().__init__(

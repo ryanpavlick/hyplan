@@ -32,7 +32,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Cloud cover analysis** — Estimate clear-sky probability from ERA5 reanalysis via Open-Meteo (no auth) or MODIS imagery via Google Earth Engine
 - **Wind correction** — Trochoidal Dubins arcs (Sachdev/Moon, 2023) bend ground tracks under wind; per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
 - **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
-- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; the NASA ER-2 is calibrated against 17 IWG1 in-situ flight logs (step climb, two-regime descent, empirical 2.51° approach glideslope)
+- **Aircraft performance** — 15 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; several aircraft are calibrated from IWG1 or ICARTT in-situ flight-state data, including ER-2, G-III, G-V, WB-57, C-130, P-3, B-200, and Twin Otter
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
@@ -226,7 +226,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | | **Aircraft** |
 | `aircraft` | Aircraft performance models (15 pre-configured research aircraft) |
 | `atmosphere` | ISA standard atmosphere model, airspeed conversions (CAS/TAS/Mach) |
-| `dubins3d` | 2D Dubins path planning [@dubins1957curves] with trochoidal wind support (Sachdev/Moon, 2023); used by the planner via `Aircraft._hybrid_path` (2D horizontal + integrated vertical profile). A constant-pitch 3D Dubins solver (Vana et al., ICRA 2020) is included as a reference for short, near-level transits. |
+| `dubins3d` | 2D Dubins path planning [@dubins1957curves] with trochoidal wind support (Sachdev/Moon, 2023); used by the planner via `Aircraft._hybrid_path` (2D horizontal + integrated vertical profile). |
 | | **Environment** |
 | `sun` | Solar position and timing calculations |
 | `glint` | Solar glint angle prediction for water observations |
@@ -303,7 +303,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
-| [calibration/er2/iwg1_calibration.ipynb](notebooks/calibration/er2/iwg1_calibration.ipynb) | Walkthrough of the NASA ER-2 calibration from 17 IWG1 sorties: per-altitude-bin medians, breakpoint selection, bank-angle analysis |
+| [calibration/](notebooks/calibration/) | Per-aircraft calibration notebooks (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200, Twin Otter): per-altitude-bin medians, breakpoint selection, bank-angle analysis. See [docs/calibration.md](docs/calibration.md) for the methodology overview. |
 | [calibration/er2/sortie_replay.ipynb](notebooks/calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
 | [calibration/er2/planned_vs_flown.ipynb](notebooks/calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
 | [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |

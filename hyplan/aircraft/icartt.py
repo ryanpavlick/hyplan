@@ -199,7 +199,7 @@ def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
             out[canonical] = np.nan
 
     # Sort.  Don't dedupe like load_iwg1 does — ICARTT files are
-    # often sub-second sampled (e.g., BlueFlux at 50 ms / 20 Hz),
+    # often sub-second sampled (e.g., 50 ms / 20 Hz),
     # which the IWG1 100 ms threshold would discard.
     out = out.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 

@@ -184,7 +184,8 @@ hyplan/_version.py
 
 .DS_Store
 
-# Claude Code plans
+# Claude Code
+.claude/
 plans/
 
 # Design proposals (kept local)

@@ -1,7 +1,7 @@
-"""One-shot builder for iwg1_calibration.ipynb.
+"""One-shot builder for calibration.ipynb.
 
 Run from this directory: ``python _build_notebook.py``.  Writes
-``iwg1_calibration.ipynb`` populated with cells, then papermill-execute
+``calibration.ipynb`` populated with cells, then papermill-execute
 it to fill in outputs.  Re-run after editing this script to regenerate
 the notebook from a single source of truth.
 """
@@ -36,16 +36,15 @@ md(r"""
 # WB-57 calibration from NASA IWG1 in-situ logs
 
 Mirrors the G-III calibration in
-`notebooks/calibration/giii/iwg1_calibration.ipynb`, adapted to the
-NASA 926/927 WB-57 Orion data delivered as a single concatenated
-`p3_alltracks.csv` (split into per-sortie files via
-`hyplan.aircraft.split_iwg1_alltracks`).
+`notebooks/calibration/giii/calibration.ipynb`, adapted to the
+NASA 926/927 WB-57 high-altitude research data delivered as
+concatenated `n92*_alltracks.csv` files (split into per-sortie
+files via `hyplan.aircraft.split_iwg1_alltracks`).
 
 The output of this notebook is a paste-ready `NASA_WB57()`
-constructor block (§10).  The P-3 is a four-engine turboprop with
-a typical mission ceiling near FL250–FL280, so the altitude bins
-and SL anchor differ from the G-III but the methodology is the
-same.
+constructor block (§11).  The WB-57 is a high-altitude reconnaissance
+twin-jet with typical cruise FL550-FL620, so the altitude bins
+extend higher than the G-III but the methodology is the same.
 """)
 
 code(r"""
@@ -53,6 +52,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +61,13 @@ import matplotlib.pyplot as plt
 
 from hyplan import ureg
 from hyplan.aircraft import load_iwg1, trim_ground_taxi, NASA_WB57
+
+# Shared helpers live one directory up (notebooks/calibration/_common.py).
+sys.path.insert(0, str(Path("..").resolve()))
+from _common import (
+    label_phases, apply_sortie_filters, per_bin, tas_per_bin,
+    schedule_pts, evaluate_profile, summary_table,
+)
 
 DATA_DIR = Path("../../../data/wb57").resolve()
 TAIL_GLOB = "n92[67]_*.txt"  # NASA 926 + 927
@@ -83,53 +90,21 @@ md(r"""
 """)
 
 code(r"""
-def label_phases(df, climb_fpm=CLIMB_FPM, descent_fpm=DESCENT_FPM, min_seconds=60.0):
-    # Tag each fix as climb / cruise / descent / unlabeled from the
-    # long-baseline vertical_rate.
-    out = df.copy()
-    vs = out["vertical_rate"].to_numpy()
-    phase = np.full(len(out), "unlabeled", dtype=object)
-    phase[vs >  climb_fpm]   = "climb"
-    phase[vs <  descent_fpm] = "descent"
-    phase[(vs >= descent_fpm) & (vs <= climb_fpm)] = "cruise"
-    out["phase"] = phase
-    return out
-
-
 sorties = {}
 skipped = []
 for p in sorted(DATA_DIR.glob(TAIL_GLOB)):
     raw = load_iwg1(p)
     a = trim_ground_taxi(raw)
-    if a.empty:
-        skipped.append((p.stem, "no airborne fixes"))
+    a, reason = apply_sortie_filters(
+        a, min_dur_min=MIN_DUR_MIN, max_dur_min=MAX_DUR_MIN,
+        min_peak_alt_ft=MIN_PEAK_ALT_FT,
+    )
+    if reason is not None:
+        skipped.append((p.stem, reason))
         continue
-    # Drop sorties with no valid altitude — some P-3 deliveries
-    # have entire sorties of NaN Pressure Altitude.
-    a = a.dropna(subset=["altitude", "vertical_rate"]).reset_index(drop=True)
-    if a.empty:
-        skipped.append((p.stem, "no valid altitude"))
-        continue
-    dur_min = (a["timestamp"].iloc[-1] - a["timestamp"].iloc[0]).total_seconds() / 60.0
-    peak = a["altitude"].max()
-    if dur_min < MIN_DUR_MIN:
-        skipped.append((p.stem, f"too short ({dur_min:.0f} min)"))
-        continue
-    if dur_min > MAX_DUR_MIN:
-        skipped.append((p.stem, f"too long ({dur_min:.0f} min) — likely glued multi-day"))
-        continue
-    if peak < MIN_PEAK_ALT_FT:
-        skipped.append((p.stem, f"low peak alt ({peak:.0f} ft)"))
-        continue
-    sorties[p.stem] = label_phases(a)
+    sorties[p.stem] = label_phases(a, climb_fpm=CLIMB_FPM, descent_fpm=DESCENT_FPM)
 
-print(f"loaded {len(sorties)} valid sorties")
-print(f"skipped {len(skipped)} files (filter reasons summarized below)")
-print()
-from collections import Counter
-reason_summary = Counter(reason.split(' (')[0] for _, reason in skipped)
-for reason, n in reason_summary.most_common():
-    print(f"  {n:3d}  {reason}")
+summary_table(sorties, skipped, source_label=str(DATA_DIR.name))
 """)
 
 
@@ -197,28 +172,10 @@ code(r"""
 ACTIVE_VS_THR_FPM = 1500.0
 BIN_FT = 5000
 
-
-def per_bin(phase: str, sign: int) -> pd.DataFrame:
-    rows = []
-    for a in sorties.values():
-        sub = a[a["phase"] == phase]
-        sub = sub[(sub["vertical_rate"] * sign) >= ACTIVE_VS_THR_FPM]
-        rows.append(sub[["altitude", "vertical_rate", "tas_kt", "mach"]])
-    df = pd.concat(rows)
-    df["alt_bin_ft"] = (df["altitude"] // BIN_FT * BIN_FT).astype(int)
-    g = df.groupby("alt_bin_ft").agg(
-        n=("vertical_rate", "count"),
-        vs_med=("vertical_rate", "median"),
-        vs_p25=("vertical_rate", lambda x: x.quantile(0.25)),
-        vs_p75=("vertical_rate", lambda x: x.quantile(0.75)),
-        tas_med=("tas_kt", "median"),
-        mach_med=("mach", "median"),
-    ).round(1).reset_index()
-    return g[g["n"] >= 30]   # drop sparse bins
-
-
-climb_bins   = per_bin("climb",    sign=+1)
-descent_bins = per_bin("descent",  sign=-1)
+climb_bins   = per_bin(sorties, "climb",   +1, ACTIVE_VS_THR_FPM, bin_ft=BIN_FT,
+                       extra_cols=("tas_kt", "mach"))
+descent_bins = per_bin(sorties, "descent", -1, ACTIVE_VS_THR_FPM, bin_ft=BIN_FT,
+                       extra_cols=("tas_kt", "mach"))
 
 print("Active CLIMB (VS >= 1500 fpm):")
 print(climb_bins.to_string(index=False))
@@ -309,24 +266,9 @@ during cruise and mis-models descent.
 """)
 
 code(r"""
-def tas_per_bin(phases) -> pd.DataFrame:
-    rows = []
-    for a in sorties.values():
-        sub = a[a["phase"].isin(phases)]
-        rows.append(sub[["altitude", "tas_kt", "mach"]])
-    df = pd.concat(rows).dropna(subset=["tas_kt"])
-    df["alt_bin_ft"] = (df["altitude"] // BIN_FT * BIN_FT).astype(int)
-    g = df.groupby("alt_bin_ft").agg(
-        n=("tas_kt", "count"),
-        tas_med=("tas_kt", "median"),
-        mach_med=("mach", "median"),
-    ).round(1).reset_index()
-    return g[g["n"] >= 50]
-
-
-climb_tas   = tas_per_bin(["climb"])
-cruise_tas  = tas_per_bin(["cruise"])
-descent_tas = tas_per_bin(["descent"])
+climb_tas   = tas_per_bin(sorties, ["climb"],   bin_ft=BIN_FT, n_min=50)
+cruise_tas  = tas_per_bin(sorties, ["cruise"],  bin_ft=BIN_FT, n_min=50)
+descent_tas = tas_per_bin(sorties, ["descent"], bin_ft=BIN_FT, n_min=50)
 
 print("Climb TAS:")
 print(climb_tas.to_string(index=False))
@@ -338,35 +280,21 @@ print("Descent TAS:")
 print(descent_tas.to_string(index=False))
 
 
-def schedule_pts(bins, alts, n_min=200):
-    # Pick the bin nearest each target altitude, dropping bins with
-    # sample size below n_min as too thin to trust.
-    out = []
-    bins = bins[bins["n"] >= n_min]
-    for target in alts:
-        if bins.empty:
-            continue
-        row = bins.iloc[(bins["alt_bin_ft"] - target).abs().argsort().iloc[0]]
-        out.append((target, round(float(row["tas_med"]))))
-    return out
-
-
 # Climb: SL rotation -> ceiling, climb-phase medians.  Anchor SL at
-# typical P-3 rotation TAS (~110 kt) since the SL climb-phase bin is
+# typical jet rotation TAS (~150 kt) since the SL climb-phase bin is
 # contaminated by takeoff-roll fixes still accelerating.
-# Rotation ~150 kt for a jet of this class.
 ROTATION_TAS_KT = 150
 climb_pts = [(0, ROTATION_TAS_KT)] + schedule_pts(
-    climb_tas, [10000, 20000, 30000, 40000, 50000, 60000]
+    climb_tas, [10000, 20000, 30000, 40000, 50000, 60000], n_min=200
 )
 
 # Cruise: WB-57 cruises high — typical band FL500-FL620.  Below
 # FL500 cruise-labeled bins are mostly transient level-offs.
-cruise_pts = schedule_pts(cruise_tas, [50000, 55000, 60000, 62000])
+cruise_pts = schedule_pts(cruise_tas, [50000, 55000, 60000, 62000], n_min=200)
 
 # Descent: low-altitude anchor + descent-phase medians up to
 # cruise ceiling.
-descent_pts = schedule_pts(descent_tas, [10000, 20000, 30000, 40000, 50000, 60000])
+descent_pts = schedule_pts(descent_tas, [10000, 20000, 30000, 40000, 50000, 60000], n_min=200)
 descent_pts = [(0, 140)] + descent_pts
 
 print()
@@ -405,7 +333,23 @@ print(f"|Roll| p75/p90: {all_banks.quantile(0.75):.1f}° / {all_banks.quantile(0
 
 
 md(r"""
-## 9. TOC, approach speed, service ceiling
+## 9. Operational vs aircraft-intrinsic framing
+
+The TOC, approach-speed, and per-sortie peak-altitude statistics
+that follow describe **operational** behavior across this sortie
+set: wall-clock time-to-FL500 includes pre-cruise level-offs, ATC
+routing, and weight-management step climbs; per-sortie peaks
+reflect actual mission profiles flown rather than the airframe
+service ceiling under MTOW; approach TAS is the median final-
+approach speed for the mission mix.  Aircraft-intrinsic
+performance (climb / descent / cruise schedules in §5–§7, bank in
+§8) is what the planner consumes; the §9b numbers are reviewer-
+facing context.
+""")
+
+
+md(r"""
+## 9b. TOC, approach speed, service ceiling
 
 Empirical observations to feed the SourceRecord and the
 `approach_speed` / `service_ceiling` parameters.
@@ -451,16 +395,7 @@ the IQR + medians alone tell the calibration story.
 """)
 
 code(r"""
-alt_grid = np.arange(0, 46000, 500)
-
-
-def evaluate_profile(points, alts):
-    # Linear interpolation through (alt, vs) breakpoints.
-    pts = sorted(points, key=lambda p: p[0])
-    pa = np.array([p[0] for p in pts])
-    pv = np.array([p[1] for p in pts])
-    return np.interp(alts, pa, pv)
-
+alt_grid = np.arange(0, 66000, 500)
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
@@ -558,7 +493,7 @@ nb = {
     "nbformat_minor": 5,
 }
 
-out = Path(__file__).parent / "iwg1_calibration.ipynb"
+out = Path(__file__).parent / "calibration.ipynb"
 with out.open("w") as f:
     json.dump(nb, f, indent=1)
 print(f"wrote {out} with {len(CELLS)} cells")

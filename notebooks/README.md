@@ -108,15 +108,24 @@ Specialized notebooks for planning missions with different instrument types, eac
 
 ## Aircraft Calibration
 
-How HyPlan's aircraft performance models are derived from real-world telemetry. The NASA ER-2 is the first calibrated platform; these notebooks document the methodology and the planned-vs-flown validation.
+How HyPlan's aircraft performance models are derived from real-world telemetry. Eight platforms are now data-calibrated from NASA AFRC IWG1 logs and NASA / NOAA ICARTT campaigns; the per-aircraft notebooks document the methodology, source data, and resulting paste-ready constructor blocks. See [docs/calibration.md](../docs/calibration.md) for the calibration concepts overview.
 
-| Notebook | Description | When to Use |
-|----------|-------------|-------------|
-| [calibration/er2/iwg1_calibration.ipynb](calibration/er2/iwg1_calibration.ipynb) | Walkthrough of the n=17 IWG1 sortie calibration of `NASA_ER2()`: per-altitude-bin |VS| medians, breakpoint selection rules, and bank-angle analysis. | When you want to understand or reproduce the ER-2 calibration, or apply the same methodology to another aircraft. |
-| [calibration/er2/sortie_replay.ipynb](calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner and produce a modeled-vs-flown breakdown (total duration, time to cruise, on-station, descent + approach), with a multi-sortie scan over all cached sorties. | When you want to validate the calibrated model against historical sorties or estimate per-segment residuals for your own mission. |
-| [calibration/er2/planned_vs_flown.ipynb](calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1 trace) vs HyPlan-modeled timing for the NM17 B / CO07v4 / CO06 sortie pairs. | When you want to see how planning, execution, and modeling diverge on real campaign sorties. |
+| Notebook | Aircraft | Source | When to Use |
+|----------|----------|--------|-------------|
+| [calibration/er2/calibration.ipynb](calibration/er2/calibration.ipynb) | NASA ER-2 (N806/N809) | NASA AFRC IWG1 (~17 sorties) | Reproduce the ER-2 calibration; methodology reference for the other aircraft. |
+| [calibration/giii/calibration.ipynb](calibration/giii/calibration.ipynb) | NASA G-III (N520) | NASA ASP archive IWG1 | Reproduce the G-III calibration. |
+| [calibration/gv/calibration.ipynb](calibration/gv/calibration.ipynb) | NASA G-V (N95) | NASA ASP archive IWG1 | Reproduce the G-V calibration. |
+| [calibration/wb57/calibration.ipynb](calibration/wb57/calibration.ipynb) | NASA WB-57 (N926/N927) | NASA ASP archive IWG1 | Reproduce the WB-57 calibration. |
+| [calibration/c130/calibration.ipynb](calibration/c130/calibration.ipynb) | NASA C-130H (N436/N439) | NASA ASP archive IWG1 (ACT-America) | Reproduce the C-130H calibration. |
+| [calibration/p3/calibration.ipynb](calibration/p3/calibration.ipynb) | NASA P-3 (N426) | NASA ASP archive IWG1 | Reproduce the P-3 calibration. |
+| [calibration/b200/calibration.ipynb](calibration/b200/calibration.ipynb) | NASA King Air B-200 / UC-12 | NASA ICARTT (multi-campaign: ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS) | Reproduce the B-200 calibration. |
+| [calibration/twin_otter/calibration.ipynb](calibration/twin_otter/calibration.ipynb) | NOAA Twin Otter (N48RF) | NASA / NOAA ICARTT (FIREX-AQ) | Reproduce the Twin Otter calibration. |
+| [calibration/er2/sortie_replay.ipynb](calibration/er2/sortie_replay.ipynb) | NASA ER-2 | IWG1 + planned trace | Validate the calibrated ER-2 model against historical sorties. |
+| [calibration/er2/planned_vs_flown.ipynb](calibration/er2/planned_vs_flown.ipynb) | NASA ER-2 | Green Card / KML / IWG1 | Compare planned vs flown vs modeled for NM17 B / CO07v4 / CO06. |
 
-These notebooks read local IWG1 traces and Green Card mission data cards from `data/er2/` (gitignored — bring your own).  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
+Each per-aircraft `_build_notebook.py` regenerates its `calibration.ipynb` from a single source of truth and shares helpers from `notebooks/calibration/_common.py` (`label_phases`, `per_bin`, `tas_per_bin`, `schedule_pts`, `evaluate_profile`, `summary_table`, `apply_sortie_filters`).
+
+These notebooks read locally-cached IWG1 / ICARTT files from `data/<aircraft>/` (gitignored — bring your own from the [NASA ASP archive](https://asp-archive.arc.nasa.gov/) or per-campaign data hubs).  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
 
 ---
 
@@ -167,7 +176,14 @@ These notebooks read local IWG1 traces and Green Card mission data cards from `d
 | airspace_check | Yes | None | None | No |
 | airport_selection | Yes | None | None | No |
 | campaign_management | No | None | None | Yes (`exampledata/`) |
-| calibration/er2/iwg1_calibration | No | None | None | Local `data/er2/` (gitignored) |
+| calibration/er2/calibration | No | None | None | Local `data/er2/` (gitignored) |
+| calibration/giii/calibration | No | None | None | Local `data/giii/` (gitignored) |
+| calibration/gv/calibration | No | None | None | Local `data/gv/` (gitignored) |
+| calibration/wb57/calibration | No | None | None | Local `data/wb57/` (gitignored) |
+| calibration/c130/calibration | No | None | None | Local `data/c130/` (gitignored) |
+| calibration/p3/calibration | No | None | None | Local `data/p3/` (gitignored) |
+| calibration/b200/calibration | No | None | None | Local `data/KingAirB200/` (gitignored) |
+| calibration/twin_otter/calibration | No | None | None | Local `data/TwinOtter/` (gitignored) |
 | calibration/er2/sortie_replay | No | None | None | Local `data/er2/` (gitignored) |
 | calibration/er2/planned_vs_flown | No | None | `[planned]` | Local `data/er2/` (gitignored) |
 | satellite_coordination | Yes | None | None | No |

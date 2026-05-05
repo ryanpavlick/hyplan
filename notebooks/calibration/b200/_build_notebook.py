@@ -13,14 +13,12 @@ md(r"""
 
 Calibrates `KingAirB200()` from public NASA ICARTT (.ict) airborne
 in-situ data across multiple field campaigns.  Source folders under
-`data/KingAirB200/` (and the mislabeled `data/KingAirA90/BlueFlux_A90_AIMMS20/`
-which the ICT metadata identifies as B-200 platform):
+`data/KingAirB200/`:
 
 * ACTAMERICA — NASA LaRC B-200 housekeeping data, 2016-2020 (~176 files)
 * DISCOVER-AQ California / Colorado / Texas — APPLANIX nav (~90 files)
 * KORUS-AQ — B-200 NAV (~28 files)
 * LMOS — UC-12 (B-200 military variant) NAV (~27 files)
-* BlueFlux — AIMMS-20 in-situ wind probe (~38 files)
 * ACTIVATE — METNAV; not used (only GPS altitude + heading, no TAS)
 
 Each campaign uses a different ICARTT column-name convention; the
@@ -34,6 +32,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -41,12 +40,18 @@ import matplotlib.pyplot as plt
 
 from hyplan import ureg
 from hyplan.aircraft import KingAirB200
-from hyplan.aircraft.icartt import load_icartt, detect_platform
+from hyplan.aircraft.icartt import load_icartt
 from hyplan.aircraft.iwg1 import trim_ground_taxi  # works on the canonical-schema DataFrame
 
+# Shared helpers live one directory up (notebooks/calibration/_common.py).
+sys.path.insert(0, str(Path("..").resolve()))
+from _common import (
+    label_phases, apply_sortie_filters, per_bin, tas_per_bin,
+    schedule_pts, evaluate_profile, summary_table,
+)
+
 # Campaign directories to ingest.  Each .ict file in these dirs
-# becomes one candidate sortie.  Folders mislabeled as A-90 are
-# included where their ICT metadata identifies them as B-200.
+# becomes one candidate sortie.
 CAMPAIGN_DIRS = [
     Path("../../../data/KingAirB200/ACTAMERICA_B200_Hskping").resolve(),
     Path("../../../data/KingAirB200/DISCOVERAQ_California_B200_APPLANIX").resolve(),
@@ -54,7 +59,6 @@ CAMPAIGN_DIRS = [
     Path("../../../data/KingAirB200/DISCOVERAQ_Texas_B200_APPLANIX").resolve(),
     Path("../../../data/KingAirB200/KORUSAQ_B200_NAV").resolve(),
     Path("../../../data/KingAirB200/LMOS_UC12_NAV").resolve(),
-    Path("../../../data/KingAirA90/BlueFlux_A90_AIMMS20").resolve(),  # ICT says B-200
 ]
 
 # Phase-label thresholds (same as other calibration notebooks).
@@ -73,17 +77,6 @@ MAX_PEAK_ALT_FT = 35000  # B-200 brochure ceiling
 
 md("""## 1. Load + phase-label every sortie""")
 code(r"""
-def label_phases(df, climb_fpm=CLIMB_FPM, descent_fpm=DESCENT_FPM):
-    out = df.copy()
-    vs = out["vertical_rate"].to_numpy()
-    phase = np.full(len(out), "unlabeled", dtype=object)
-    phase[vs >  climb_fpm]   = "climb"
-    phase[vs <  descent_fpm] = "descent"
-    phase[(vs >= descent_fpm) & (vs <= climb_fpm)] = "cruise"
-    out["phase"] = phase
-    return out
-
-
 sorties = {}
 skipped = []
 for cdir in CAMPAIGN_DIRS:
@@ -111,36 +104,16 @@ for cdir in CAMPAIGN_DIRS:
             first = int(airborne.values.argmax())
             last = int(len(airborne) - 1 - airborne.values[::-1].argmax())
             a = raw.iloc[first:last + 1].reset_index(drop=True)
-        if a.empty:
-            skipped.append((p.stem, "no airborne fixes"))
+        a, reason = apply_sortie_filters(
+            a, min_dur_min=MIN_DUR_MIN, max_dur_min=MAX_DUR_MIN,
+            min_peak_alt_ft=MIN_PEAK_ALT_FT, max_peak_alt_ft=MAX_PEAK_ALT_FT,
+        )
+        if reason is not None:
+            skipped.append((p.stem, reason))
             continue
-        a = a.dropna(subset=["altitude", "vertical_rate"]).reset_index(drop=True)
-        if a.empty:
-            skipped.append((p.stem, "no valid altitude"))
-            continue
-        dur_min = (a["timestamp"].iloc[-1] - a["timestamp"].iloc[0]).total_seconds() / 60.0
-        peak = a["altitude"].max()
-        if dur_min < MIN_DUR_MIN:
-            skipped.append((p.stem, f"too short ({dur_min:.0f} min)"))
-            continue
-        if dur_min > MAX_DUR_MIN:
-            skipped.append((p.stem, f"too long ({dur_min:.0f} min)"))
-            continue
-        if peak < MIN_PEAK_ALT_FT:
-            skipped.append((p.stem, f"low peak alt ({peak:.0f} ft)"))
-            continue
-        if peak > MAX_PEAK_ALT_FT:
-            skipped.append((p.stem, f"high peak alt ({peak:.0f} ft) — not a B-200"))
-            continue
-        sorties[p.stem] = label_phases(a)
+        sorties[p.stem] = label_phases(a, climb_fpm=CLIMB_FPM, descent_fpm=DESCENT_FPM)
 
-print(f"loaded {len(sorties)} valid sorties")
-print(f"skipped {len(skipped)} files (filter reasons summarized below)")
-print()
-from collections import Counter
-reasons = Counter(r.split(' (')[0] for _, r in skipped)
-for reason, n in reasons.most_common():
-    print(f"  {n:4d}  {reason}")
+summary_table(sorties, skipped, source_label="multi-campaign B-200 ICARTT")
 """)
 
 
@@ -164,31 +137,14 @@ code(r"""
 # B-200 climb rates drop below 1500 fpm above FL150; lowering
 # the active threshold to 1000 fpm extends climb-bin coverage
 # through FL200-FL280.  Same trade-off as the Twin Otter
-# (where the threshold is 800 fpm).
+# (where the threshold is 500 fpm).
 ACTIVE_VS_THR_FPM = 1000.0
 BIN_FT = 5000
 
-
-def per_bin(phase, sign):
-    rows = []
-    for a in sorties.values():
-        sub = a[a["phase"] == phase]
-        sub = sub[(sub["vertical_rate"] * sign) >= ACTIVE_VS_THR_FPM]
-        rows.append(sub[["altitude", "vertical_rate", "tas_kt", "roll_deg"]].copy())
-    df = pd.concat(rows).dropna(subset=["altitude"])
-    df["alt_bin_ft"] = (df["altitude"] // BIN_FT * BIN_FT).astype(int)
-    g = df.groupby("alt_bin_ft").agg(
-        n=("vertical_rate", "count"),
-        vs_med=("vertical_rate", "median"),
-        vs_p25=("vertical_rate", lambda x: x.quantile(0.25)),
-        vs_p75=("vertical_rate", lambda x: x.quantile(0.75)),
-        tas_med=("tas_kt", "median"),
-    ).round(1).reset_index()
-    return g[g["n"] >= 30]
-
-
-climb_bins = per_bin("climb", sign=+1)
-descent_bins = per_bin("descent", sign=-1)
+climb_bins   = per_bin(sorties, "climb",   +1, ACTIVE_VS_THR_FPM, bin_ft=BIN_FT,
+                       extra_cols=("tas_kt",))
+descent_bins = per_bin(sorties, "descent", -1, ACTIVE_VS_THR_FPM, bin_ft=BIN_FT,
+                       extra_cols=("tas_kt",))
 print("Active CLIMB:");   print(climb_bins.to_string(index=False))
 print()
 print("Active DESCENT:"); print(descent_bins.to_string(index=False))
@@ -220,43 +176,19 @@ for alt, vs in fixed_desc:
 
 md("""## 5. TAS schedules (per-phase 5-kft bin medians)""")
 code(r"""
-def tas_per_bin(phases):
-    rows = []
-    for a in sorties.values():
-        sub = a[a["phase"].isin(phases)]
-        rows.append(sub[["altitude", "tas_kt"]])
-    df = pd.concat(rows).dropna()
-    df["alt_bin_ft"] = (df["altitude"] // BIN_FT * BIN_FT).astype(int)
-    g = df.groupby("alt_bin_ft").agg(
-        n=("tas_kt", "count"),
-        tas_med=("tas_kt", "median"),
-    ).round(0).reset_index()
-    return g[g["n"] >= 200]
-
-
-climb_tas   = tas_per_bin(["climb"])
-cruise_tas  = tas_per_bin(["cruise"])
-descent_tas = tas_per_bin(["descent"])
+climb_tas   = tas_per_bin(sorties, ["climb"],   bin_ft=BIN_FT, n_min=200)
+cruise_tas  = tas_per_bin(sorties, ["cruise"],  bin_ft=BIN_FT, n_min=200)
+descent_tas = tas_per_bin(sorties, ["descent"], bin_ft=BIN_FT, n_min=200)
 print("Climb TAS:");   print(climb_tas.to_string(index=False))
 print()
 print("Cruise TAS:");  print(cruise_tas.to_string(index=False))
 print()
 print("Descent TAS:"); print(descent_tas.to_string(index=False))
 
-
-def schedule_pts(bins, alts):
-    if bins.empty: return []
-    out = []
-    for target in alts:
-        row = bins.iloc[(bins["alt_bin_ft"] - target).abs().argsort().iloc[0]]
-        out.append((target, round(float(row["tas_med"]))))
-    return out
-
-
 ROTATION_TAS_KT = 110
-climb_pts = [(0, ROTATION_TAS_KT)] + schedule_pts(climb_tas, [5000, 10000, 15000, 20000, 25000])
-cruise_pts = schedule_pts(cruise_tas, [10000, 15000, 20000, 25000, 28000])
-descent_pts = [(0, 130)] + schedule_pts(descent_tas, [5000, 10000, 15000, 20000, 25000])
+climb_pts = [(0, ROTATION_TAS_KT)] + schedule_pts(climb_tas, [5000, 10000, 15000, 20000, 25000], n_min=200)
+cruise_pts = schedule_pts(cruise_tas, [10000, 15000, 20000, 25000, 28000], n_min=200)
+descent_pts = [(0, 130)] + schedule_pts(descent_tas, [5000, 10000, 15000, 20000, 25000], n_min=200)
 print()
 print("Climb schedule:  ", climb_pts)
 print("Cruise schedule: ", cruise_pts)
@@ -268,12 +200,6 @@ md("""## 6. Validation: IQR + median + shipping""")
 code(r"""
 alt_grid = np.arange(0, 36000, 500)
 
-
-def evaluate(points, alts):
-    pts = sorted(points, key=lambda p: p[0])
-    return np.interp(alts, [p[0] for p in pts], [p[1] for p in pts])
-
-
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 ax = axes[0]
 ax.fill_betweenx(climb_bins["alt_bin_ft"]/1000,
@@ -281,7 +207,7 @@ ax.fill_betweenx(climb_bins["alt_bin_ft"]/1000,
                  alpha=0.25, color="steelblue", label="active-climb IQR")
 ax.plot(climb_bins["vs_med"], climb_bins["alt_bin_ft"]/1000,
         "o", color="steelblue", label="active-climb median")
-ax.plot(evaluate(fixed, alt_grid), alt_grid/1000, color="C1", lw=2, label="proposed")
+ax.plot(evaluate_profile(fixed, alt_grid), alt_grid/1000, color="C1", lw=2, label="proposed")
 ax.set_xlabel("VS (fpm)"); ax.set_ylabel("altitude (kft)")
 ax.set_title("Climb"); ax.legend(loc="upper right")
 ax.grid(alpha=0.3); ax.set_xlim(0, 5000)
@@ -293,12 +219,25 @@ ax.fill_betweenx(descent_bins["alt_bin_ft"]/1000,
                  alpha=0.25, color="firebrick", label="active-descent IQR")
 ax.plot((-descent_bins["vs_med"]).abs(), descent_bins["alt_bin_ft"]/1000,
         "o", color="firebrick", label="active-descent median")
-ax.plot(evaluate(fixed_desc, alt_grid), alt_grid/1000, color="C1", lw=2, label="proposed")
+ax.plot(evaluate_profile(fixed_desc, alt_grid), alt_grid/1000, color="C1", lw=2, label="proposed")
 ax.set_xlabel("|VS| (fpm)"); ax.set_ylabel("altitude (kft)")
 ax.set_title("Descent"); ax.legend(loc="upper right")
 ax.grid(alpha=0.3); ax.set_xlim(0, 5000)
 plt.tight_layout(); plt.show()
 """)
+
+
+md("""## 6b. Operational vs aircraft-intrinsic framing
+
+Approach TAS and per-sortie peak altitude that follow describe
+**operational** behavior across this multi-campaign sortie set:
+peaks reflect actual mission profiles flown (FL150–FL280
+boundary-layer sampling, FL280 transit) rather than the airframe
+35 kft brochure ceiling under MTOW; approach TAS is the median
+final-approach speed for the mission mix.  Aircraft-intrinsic
+performance (climb / descent / cruise schedules in §4–§5, bank in
+§7) is what the planner consumes; the §7 ceiling / approach
+numbers are reviewer-facing context.""")
 
 
 md("""## 7. Bank, approach, peak altitude""")
@@ -350,14 +289,26 @@ for alt, tas in descent_pts:
     print(f"    ({alt:>5d} * ureg.feet, {tas:3d} * ureg.knot),")
 print("]),")
 print()
+print(f"# Median final-approach TAS across {len(ap_s)} sorties.")
 print(f"approach_speed={int(round(ap_s.median()))} * ureg.knot,")
+print()
+print(f"# Operational p99 of per-sortie peak altitudes ({len(sorties)} sorties).")
+print(f"# Brochure service ceiling is 35 kft; this number reflects the")
+print(f"# mission mix flown, not the airframe ceiling under MTOW.")
 print(f"service_ceiling={int(round(peaks.quantile(0.99) / 1000) * 1000)} * ureg.feet,")
-print(f"# AFM normal-ops 30°; data p90={banks.quantile(.90):.0f}°.")
+print()
+print(f"# AFM normal-ops 30°; data p90={banks.quantile(.90):.0f}° agrees.")
 print(f"turn_model=TurnModel(max_bank_deg=30.0),")
+print()
+print(f'sources=[SourceRecord(')
+print(f'    source_type="icartt",')
+print(f'    reference="Multi-campaign B-200 ICARTT calibration, n={len(sorties)} sorties (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS)",')
+print(f'    confidence=0.85,')
+print(f')],')
 """)
 
 
 nb = {"cells": CELLS, "metadata": {"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}}, "nbformat": 4, "nbformat_minor": 5}
-out = Path(__file__).parent / "iwg1_calibration.ipynb"
+out = Path(__file__).parent / "calibration.ipynb"
 with out.open("w") as f: json.dump(nb, f, indent=1)
 print(f"wrote {out} with {len(CELLS)} cells")

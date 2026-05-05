@@ -15,7 +15,7 @@ authors:
 affiliations:
   - name: National Aeronautics and Space Administration, Washington, DC, USA
     index: 1
-date: 16 April 2026
+date: 5 May 2026
 bibliography: paper.bib
 ---
 
@@ -63,7 +63,7 @@ HyPlan explicitly models the physical relationships between aircraft motion, sen
 
 - The `swath` module performs **terrain-aware swath modeling** by tracing rays from the sensor to the terrain surface using digital elevation models accessed via rasterio [@rasterio] and GDAL [@gdal2024], rather than assuming flat-Earth geometry (\autoref{fig:terrain}).
 - The `flight_plan` module incorporates **wind-aware trajectory modeling**, computing crab angles and ground speeds from airspeed and wind vectors (\autoref{fig:wind}).
-- The flight planner models **aircraft-constrained motion** by combining a 2D Dubins solver [@dubins1957curves] for horizontal geometry with vertical profiles integrated against horizontal distance from each aircraft's calibrated climb and descent rates, so that top-of-climb and top-of-descent land at physically realistic positions for non-trivial vertical profiles. Under non-zero wind, the air-relative Dubins arcs become **trochoidal ground trajectories** [@sachdev2023trochoid] (\autoref{fig:wind}). A constant-pitch 3D Dubins solver [@vana2020dubins3d] is also provided as a reference for short, near-level transits.
+- The flight planner models **aircraft-constrained motion** by combining a 2D Dubins solver [@dubins1957curves] for horizontal geometry with vertical profiles integrated against horizontal distance from each aircraft's calibrated climb and descent rates, so that top-of-climb and top-of-descent land at physically realistic positions for non-trivial vertical profiles. Under non-zero wind, the air-relative Dubins arcs become **trochoidal ground trajectories** [@sachdev2023trochoid] (\autoref{fig:wind}).
 
 ![Flat-earth vs terrain-aware flight planning over Rincón de la Vieja National Park, Costa Rica (elevation 234--2,072 m). (a) A flat-earth planner assumes constant swath width and produces uniformly spaced lines. (b) Terrain-aware planning uses ray--terrain intersection to measure actual swath width at each line position, requiring additional lines where terrain narrows the swath. (c) Coverage gaps (red) show areas that would be missed by the flat-earth plan but are covered by the terrain-aware plan.\label{fig:terrain}](figures/fig1_terrain_comparison.png)
 
@@ -123,7 +123,7 @@ This architecture supports a range of applications, including:
 
 HyPlan is designed for pre-campaign planning and does not currently model real-time operational constraints such as dynamic weather avoidance, air traffic control restrictions, or in-flight replanning. These capabilities are typically addressed by operational tools such as Moving Lines during campaign execution.
 
-Aircraft performance parameters for most platforms are drawn from published specifications and operator-provided values. The NASA ER-2 has been calibrated against 17 in-situ flight logs in the Inter-agency Working Group 1 (IWG1) format (~64,000 cruise-altitude fixes), yielding distinct climb / cruise / descent true-airspeed schedules, an 8-anchor climb profile that resolves the 19--21 kft step climb, a 6-anchor descent profile, and an empirical 2.51° terminal-approach glideslope. Equivalent calibration for the rest of the fleet is ongoing; infrastructure for IWG1 calibration and ADS-B-based fitting is included in the library.
+Aircraft performance models combine published specifications with calibration from public and NASA in-situ flight-state data where available. HyPlan currently includes data-fit climb, cruise, descent, turn, and/or approach parameters for several research platforms, including the NASA ER-2, G-III, G-V, WB-57, C-130, P-3, King Air B-200, and Twin Otter. These calibrations use IWG1 or ICARTT navigation/meteorological products and are documented in the per-aircraft calibration notebooks. Remaining aircraft use brochure-derived or sibling-airframe-inferred values, and calibrated quantities should be interpreted as representative operational behavior for the sampled mission mix rather than certified aircraft-envelope limits.
 
 # Research Impact Statement
 
@@ -131,7 +131,7 @@ Early versions of HyPlan have been applied in exploratory and pre-campaign plann
 
 In these applications, HyPlan supported evaluation of flight line configurations, terrain and solar constraints, and mission feasibility under logistical and environmental limitations, directly informing the design of core capabilities such as terrain-aware swath modeling, flight pattern generation, and mission-level scheduling.
 
-The software demonstrates strong community-readiness signals, including over 1,200 automated tests with greater than 80% code coverage, continuous integration on every commit, comprehensive API documentation, and more than 20 Jupyter notebooks that serve as both tutorials and integration tests. Core calculations are validated against independent references including Vincenty geodesic [@vincenty1975direct] test cases, NOAA solar geometry calculations [@reda2004sunposition], and analytical sensor models.
+The software demonstrates strong community-readiness signals, including over 1,500 automated tests with greater than 80% code coverage, continuous integration on every commit, comprehensive API documentation, and more than 20 Jupyter notebooks that serve as both tutorials and integration tests. Core calculations are validated against independent references including Vincenty geodesic [@vincenty1975direct] test cases, NOAA solar geometry calculations [@reda2004sunposition], and analytical sensor models.
 
 HyPlan is under active development for integration into future NASA airborne campaign planning workflows, where its ability to unify sensor modeling, aircraft performance, and environmental constraints in a single framework is expected to support more reproducible and efficient mission design.
 
