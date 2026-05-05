@@ -229,7 +229,7 @@ class Campaign:
             )
         if flight_lines is None:
             flight_lines = self.flight_lines
-        return check_airspace_conflicts(flight_lines, self._airspaces)  # type: ignore[no-any-return]
+        return check_airspace_conflicts(flight_lines, self._airspaces)
 
     # ------------------------------------------------------------------
     # Flight lines and groups

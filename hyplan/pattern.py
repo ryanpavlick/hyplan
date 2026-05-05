@@ -310,7 +310,7 @@ def _invoke_generator(generator: Any, kind: str, params: dict) -> "Pattern":
     """Re-invoke a generator from a stored params dict (meters/degrees only)."""
     center = (params["center_lat"], params["center_lon"])
     heading = params.get("heading", 0.0)
-    # type: ignore[no-any-return]
+
     if kind == "rosette":
         return cast("Pattern", generator(
             center=center,

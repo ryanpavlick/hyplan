@@ -189,7 +189,7 @@ def compute_flight_plan(
         mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
         takeoff_wind_uv = _resolve_wind_uv(
             mid_lat, mid_lon,
-            first_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
+            first_target.altitude_msl, _current_time(),
             wind_source, wind_speed, wind_direction,
         )
         takeoff_info = aircraft.time_to_takeoff(
@@ -225,7 +225,7 @@ def compute_flight_plan(
             mid_lon = longitudes[mid_idx]
 
             sol = _resolve_track_hold_solution(
-                fl_tas, track_deg,  # type: ignore[arg-type]
+                fl_tas, track_deg,
                 mid_lat, mid_lon,  # type: ignore[arg-type]
                 segment.altitude_msl, _current_time(),
                 wind_source, wind_speed, wind_direction,
@@ -270,10 +270,10 @@ def compute_flight_plan(
             # model). Distance is the real ground covered during the loiter,
             # not the orbit circumference. With no altitude we fall back to a
             # Point/zero distance for callers that pass minimal Waypoints.
-            if segment.altitude_msl is not None:  # type: ignore[union-attr]
+            if segment.altitude_msl is not None:
                 from .segments import loiter_orbit_geometry
                 loiter_geom = loiter_orbit_geometry(segment, aircraft)  # type: ignore[arg-type]
-                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")  # type: ignore[union-attr]
+                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")
                 distance_m = speed_mps * segment.delay.m_as(ureg.second)  # type: ignore[union-attr]
                 distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
             else:
@@ -287,8 +287,8 @@ def compute_flight_plan(
                 "start_lon": segment.longitude,  # type: ignore[union-attr]
                 "end_lat": segment.latitude,  # type: ignore[union-attr]
                 "end_lon": segment.longitude,  # type: ignore[union-attr]
-                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
-                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
+                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
                 "segment_type": "loiter",
                 "segment_name": segment.name,  # type: ignore[union-attr]
                 "distance": distance_nm,
@@ -332,7 +332,7 @@ def compute_flight_plan(
             mid_lon = (start_wp.longitude + end_wp.longitude) / 2
             cruise_wind_uv = _resolve_wind_uv(
                 mid_lat, mid_lon,
-                end_wp.altitude_msl, _current_time(),  # type: ignore[arg-type]
+                end_wp.altitude_msl, _current_time(),
                 wind_source, wind_speed, wind_direction,
             )
             cruise_info = aircraft.time_to_cruise(
@@ -353,7 +353,7 @@ def compute_flight_plan(
                     wp_seg_type = segment.segment_type  # type: ignore[union-attr]
                 cruise_records = process_flight_phase(
                     start_wp, end_wp, cruise_info, phase_name,
-                    override_segment_type=wp_seg_type,  # type: ignore[arg-type]
+                    override_segment_type=wp_seg_type,
                 )
                 for r in cruise_records:
                     cumulative_minutes += r["time_to_segment"]
@@ -368,7 +368,7 @@ def compute_flight_plan(
         mid_lon = (last_target.longitude + return_airport.longitude) / 2
         return_wind_uv = _resolve_wind_uv(
             mid_lat, mid_lon,
-            last_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
+            last_target.altitude_msl, _current_time(),
             wind_source, wind_speed, wind_direction,
         )
         return_info = aircraft.time_to_return(

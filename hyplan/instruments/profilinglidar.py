@@ -133,7 +133,7 @@ class ProfilingLidar(Sensor):
                 f"{type(self).__name__}; no published default for this instrument"
             )
         altitude = _as_quantity(altitude_agl, "meter", "altitude_agl")
-        return (altitude * self.beam_divergence.to("radian").magnitude).to("meter")  # type: ignore[no-any-return]
+        return (altitude * self.beam_divergence.to("radian").magnitude).to("meter")
 
     def horizontal_resolution(
         self, ground_speed: Quantity, averaging_time: Quantity
@@ -141,7 +141,7 @@ class ProfilingLidar(Sensor):
         """Effective horizontal resolution for a post-processing averaging window."""
         speed = _as_quantity(ground_speed, "meter / second", "ground_speed")
         dt = _as_quantity(averaging_time, "second", "averaging_time")
-        return (speed * dt).to("meter")  # type: ignore[no-any-return]
+        return (speed * dt).to("meter")
 
     def pulses_per_profile(self, averaging_time: Quantity) -> int:
         """Number of laser pulses averaged into one profile at the given window."""

@@ -120,7 +120,7 @@ class Waypoint:
         return Waypoint(
             latitude=round(new_lat, 6),
             longitude=round(wrap_to_180(new_lon), 6),  # type: ignore[arg-type]
-            heading=self.heading,  # type: ignore[arg-type]
+            heading=self.heading,
             altitude_msl=self.altitude_msl,
             name=self.name,
             speed=self.speed,

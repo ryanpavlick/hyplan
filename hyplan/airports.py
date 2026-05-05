@@ -43,10 +43,10 @@ logger = logging.getLogger(__name__)
 class _AirportDB:
     """Encapsulated airport and runway data with thread-safe lazy initialization."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
-        self.gdf_airports: gpd.GeoDataFrame = None
-        self.df_runways: pd.DataFrame = None
+        self.gdf_airports: gpd.GeoDataFrame | None = None
+        self.df_runways: pd.DataFrame | None = None
 
     def load(
         self,
@@ -125,7 +125,7 @@ class Airport:
     """
     def __init__(self, icao: str):
         _db.ensure_loaded()
-        gdf_airports = _db.gdf_airports
+        gdf_airports = _db.require_airports()
 
         if icao not in gdf_airports.index:
             raise HyPlanValueError(f"Airport ICAO code {icao} not found in the dataset.")
@@ -210,9 +210,8 @@ class Airport:
     @property
     def runways(self) -> pd.DataFrame:
         """Runway details for this airport as a DataFrame."""
-        return _db.require_runways()[
-            _db.df_runways['airport_ident'] == self._icao
-        ]
+        df = _db.require_runways()
+        return df[df['airport_ident'] == self._icao]
 
 
 def _filter_airports_by_country(df_airports: pd.DataFrame, countries: List[str]) -> pd.DataFrame:

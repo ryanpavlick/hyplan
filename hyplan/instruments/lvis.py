@@ -61,7 +61,7 @@ class LVISLens:
             Footprint diameter in meters.
         """
         alt_m = altitude_agl.m_as(ureg.meter)
-        return np.tan(self.divergence_mrad / 1000.0) * alt_m * ureg.meter  # type: ignore[no-any-return]
+        return np.tan(self.divergence_mrad / 1000.0) * alt_m * ureg.meter
 
 
 #: LVIS narrow-divergence lens (0.531 mrad nominal).
@@ -173,7 +173,7 @@ class LVIS(Sensor):
             Maximum swath width in meters.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return 2 * altitude_agl * np.tan(np.radians(self.half_angle))  # type: ignore[return-value,no-any-return]
+        return 2 * altitude_agl * np.tan(np.radians(self.half_angle))
 
     # ------------------------------------------------------------------
     # LVIS-specific methods
@@ -224,7 +224,7 @@ class LVIS(Sensor):
         """
         spd = speed.m_as(ureg.meter / ureg.second)
         ms = self.swath_width(altitude_agl).magnitude
-        return spd * ms * ureg.meter ** 2 / ureg.second  # type: ignore[no-any-return]
+        return spd * ms * ureg.meter ** 2 / ureg.second
 
     def footprint_for_max_swath(self, altitude_agl: Quantity, speed: Quantity) -> Quantity:
         """Minimum footprint diameter needed to fill the max swath contiguously.
@@ -240,7 +240,7 @@ class LVIS(Sensor):
         """
         cr = self.coverage_rate(altitude_agl, speed).magnitude
         rr = self.rep_rate.magnitude
-        return np.sqrt(cr / rr) * ureg.meter  # type: ignore[no-any-return]
+        return np.sqrt(cr / rr) * ureg.meter
 
     def effective_swath_width(self, altitude_agl: Quantity, speed: Quantity) -> Quantity:
         """Achievable swath width accounting for contiguous coverage.
@@ -266,7 +266,7 @@ class LVIS(Sensor):
         rr = self.rep_rate.magnitude
 
         contiguous_swath = fp ** 2 * rr / spd
-        return min(ms, contiguous_swath) * ureg.meter  # type: ignore[no-any-return]
+        return min(ms, contiguous_swath) * ureg.meter
 
     def is_contiguous(self, altitude_agl: Quantity, speed: Quantity) -> bool:
         """Check whether the current configuration fills the max swath.
@@ -295,7 +295,7 @@ class LVIS(Sensor):
         """
         spd = speed.m_as(ureg.meter / ureg.second)
         rr = self.rep_rate.magnitude
-        return (spd / rr) * ureg.meter  # type: ignore[no-any-return]
+        return (spd / rr) * ureg.meter
 
     def is_along_track_contiguous(
         self, altitude_agl: Quantity, speed: Quantity
@@ -330,9 +330,9 @@ class LVIS(Sensor):
         spd = speed.m_as(ureg.meter / ureg.second)
         esw = self.effective_swath_width(altitude_agl, speed).magnitude
         if esw < 1e-9:
-            return 0.0 / ureg.meter ** 2  # type: ignore[no-any-return]
+            return 0.0 / ureg.meter ** 2
         rr = self.rep_rate.magnitude
-        return (rr / (spd * esw)) / ureg.meter ** 2  # type: ignore[no-any-return]
+        return (rr / (spd * esw)) / ureg.meter ** 2
 
     # ------------------------------------------------------------------
     # Survey solvers (inverse planning)
@@ -395,7 +395,7 @@ class LVIS(Sensor):
         # Geometry-limited: speed = rep_rate / (density * max_swath)
         speed_mps = rr / (d_target * ms)
 
-        return speed_mps * ureg.meter / ureg.second  # type: ignore[no-any-return]
+        return speed_mps * ureg.meter / ureg.second
 
     def solve_for_altitude(
         self,
@@ -444,7 +444,7 @@ class LVIS(Sensor):
             tan_div = np.tan(self.lens.divergence_mrad / 1000.0)
             alt_m = 1.0 / (np.sqrt(d_target) * tan_div)
 
-        return alt_m * ureg.meter  # type: ignore[no-any-return]
+        return alt_m * ureg.meter
 
     def summary(self, altitude_agl: Quantity, speed: Quantity) -> dict:
         """Compute all LVIS coverage parameters for a given flight configuration.
