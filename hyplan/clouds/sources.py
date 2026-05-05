@@ -544,7 +544,7 @@ def fetch_cloud_fraction_spatial(
                 f"GEE download URL generation failed for {name}"
             ) from exc
 
-        import requests as _requests
+        import requests as _requests  # type: ignore[import-untyped]
         import io
         resp = _requests.get(url, timeout=120)
         if resp.status_code != 200:

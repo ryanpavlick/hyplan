@@ -210,4 +210,4 @@ def _timestamps_to_seconds(timestamps: np.ndarray) -> np.ndarray:
         epoch = np.datetime64(0, "s")
         return (timestamps - epoch) / np.timedelta64(1, "s")  # type: ignore[no-any-return]
     # Already numeric (e.g. from pandas .values on a numeric column)
-    return timestamps.astype(float)
+    return timestamps.astype(float)  # type: ignore[no-any-return]

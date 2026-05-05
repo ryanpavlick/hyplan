@@ -612,7 +612,7 @@ class DubinsPath2D:
     @property
     def length(self) -> Quantity:
         """Air-frame path length (``time = length / TAS``)."""
-        return self._length_m * ureg.meter
+        return self._length_m * ureg.meter  # type: ignore[no-any-return]
 
     @property
     def geometry(self) -> LineString:
@@ -627,7 +627,7 @@ class DubinsPath2D:
     @property
     def min_turn_radius(self) -> Quantity:
         """Minimum 2D turn radius (m) — derived from speed and bank angle."""
-        return self._rhomin * ureg.meter
+        return self._rhomin * ureg.meter  # type: ignore[no-any-return]
 
     def sample_at_distance(self, distance: Union[Quantity, float]) -> Tuple[float, float, float]:
         """Return ``(lat, lon, heading_deg)`` at the given air-frame distance.

@@ -330,7 +330,7 @@ def polygon(
         waypoints.append(Waypoint(
             latitude=waypoints[0].latitude,
             longitude=waypoints[0].longitude,
-            heading=waypoints[0].heading,
+            heading=waypoints[0].heading,  # type: ignore[arg-type]
             altitude_msl=alt,
             name="V1",
             segment_type="pattern",
@@ -404,7 +404,7 @@ def sawtooth(
         if dist_from_start == 0:
             lat, lon = float(start_lat), float(start_lon)
         else:
-            lat, lon = pymap3d.vincenty.vreckon(
+            lat, lon = pymap3d.vincenty.vreckon(  # type: ignore[assignment]
                 start_lat, start_lon, dist_from_start, heading
             )
             lon = wrap_to_180(lon)  # type: ignore[assignment]
@@ -630,7 +630,7 @@ def glint_arc(
         waypoints.append(Waypoint(
             latitude=float(lat),
             longitude=float(lon),
-            heading=heading,
+            heading=heading,  # type: ignore[arg-type]
             altitude_msl=alt_q,
             name=f"GA{i+1}",
             segment_type="pattern",
@@ -692,7 +692,7 @@ def flight_lines_to_waypoint_path(
             seg_type = "pattern_turn" if j == 1 else "pattern"
             waypoints.append(Waypoint(
                 latitude=wp.latitude, longitude=wp.longitude,
-                heading=wp.heading, altitude_msl=alt,
+                heading=wp.heading, altitude_msl=alt,  # type: ignore[arg-type]
                 speed=wp.speed, name=name, segment_type=seg_type,
             ))
 
@@ -765,9 +765,9 @@ def coordinated_line(
         altitude_msl=pri_alt, site_name=primary_name,
     )
     primary_wps = [
-        Waypoint(pri_fl.lat1, pri_fl.lon1, pri_fl.waypoint1.heading, pri_alt,
+        Waypoint(pri_fl.lat1, pri_fl.lon1, pri_fl.waypoint1.heading, pri_alt,  # type: ignore[arg-type]
                  name=f"{primary_name}_start", segment_type="pattern"),
-        Waypoint(pri_fl.lat2, pri_fl.lon2, pri_fl.waypoint1.heading, pri_alt,
+        Waypoint(pri_fl.lat2, pri_fl.lon2, pri_fl.waypoint1.heading, pri_alt,  # type: ignore[arg-type]
                  name=f"{primary_name}_end", segment_type="pattern_turn"),
     ]
 
@@ -783,9 +783,9 @@ def coordinated_line(
         )
         suffix = f"_r{i+1}" if len(ratios) > 1 else ""
         secondary_pairs.append([
-            Waypoint(sec_fl.lat1, sec_fl.lon1, sec_fl.waypoint1.heading, sec_alt,
+            Waypoint(sec_fl.lat1, sec_fl.lon1, sec_fl.waypoint1.heading, sec_alt,  # type: ignore[arg-type]
                      name=f"{secondary_name}_start{suffix}", segment_type="pattern"),
-            Waypoint(sec_fl.lat2, sec_fl.lon2, sec_fl.waypoint1.heading, sec_alt,
+            Waypoint(sec_fl.lat2, sec_fl.lon2, sec_fl.waypoint1.heading, sec_alt,  # type: ignore[arg-type]
                      name=f"{secondary_name}_end{suffix}", segment_type="pattern_turn"),
         ])
 

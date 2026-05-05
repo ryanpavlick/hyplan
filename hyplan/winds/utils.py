@@ -98,7 +98,7 @@ def wind_speed_dir_from_uv(u_mps: float, v_mps: float) -> Tuple[float, float]:
 
 def _wind_factor(
     tas: Quantity,
-    heading_deg: Optional[float],
+    heading_deg: float,
     wind_speed: Optional[Quantity],
     wind_from_deg: Optional[float],
 ) -> float:
@@ -136,7 +136,7 @@ def _wind_factor(
 
 def _wind_factor_from_uv(
     tas: Quantity,
-    heading_deg: Optional[float],
+    heading_deg: float,
     u: Quantity,
     v: Quantity,
 ) -> float:

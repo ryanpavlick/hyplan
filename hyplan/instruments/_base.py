@@ -38,7 +38,7 @@ class Sensor:
         """
         if not isinstance(value, Quantity):
             raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
-        return value.to(expected_unit)
+        return value.to(expected_unit)  # type: ignore[return-value]
 
 
 @runtime_checkable

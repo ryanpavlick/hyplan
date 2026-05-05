@@ -102,7 +102,7 @@ class CasMachSchedule:
     crossover_ft: float
 
     def __post_init__(self) -> None:
-        self.cas = self.cas.to(ureg.knot)
+        self.cas = self.cas.to(ureg.knot)  # type: ignore[assignment]
 
     def tas_at(self, altitude: Quantity) -> Quantity:
         """True airspeed at *altitude* under ISA."""
@@ -145,7 +145,7 @@ class TasSchedule:
     def tas_at(self, altitude: Quantity) -> Quantity:
         """Interpolated TAS at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
-        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot
+        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot  # type: ignore[no-any-return]
 
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
@@ -203,17 +203,17 @@ class VerticalProfile:
         """Interpolated vertical rate at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
         fpm = float(np.interp(alt_ft, self._alts_ft, self._rates_fpm))
-        return fpm * ureg.feet / ureg.minute
+        return fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
     @property
     def sea_level_rate(self) -> Quantity:
         """Rate at the lowest altitude breakpoint (first row)."""
-        return self._rates_fpm[0] * ureg.feet / ureg.minute
+        return self._rates_fpm[0] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
     @property
     def ceiling_rate(self) -> Quantity:
         """Rate at the highest altitude breakpoint (last row)."""
-        return self._rates_fpm[-1] * ureg.feet / ureg.minute
+        return self._rates_fpm[-1] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ class ApproachProfile:
         speed = groundspeed if groundspeed is not None else self.tas_at(altitude_agl)
         speed_fpm = speed.m_as(ureg.feet / ureg.minute)
         vs_fpm = speed_fpm * np.tan(np.radians(self.glideslope_deg))
-        return vs_fpm * ureg.feet / ureg.minute
+        return vs_fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
 
     def time_to_touchdown(self, groundspeed: Optional[Quantity] = None) -> Quantity:
         """Integrate 1/VS from top_of_approach down to 0 ft AGL.
@@ -330,8 +330,8 @@ class ApproachProfile:
                 "at every breakpoint."
             )
         # trapezoidal integration of 1/VS over altitude (ft) → minutes.
-        minutes = float(np.trapezoid(1.0 / vs_fpm, alts_ft))
-        return minutes * ureg.minute
+        minutes = float(np.trapezoid(1.0 / vs_fpm, alts_ft))  # type: ignore[attr-defined]
+        return minutes * ureg.minute  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -951,13 +951,13 @@ class Aircraft:
         For staged climbs with intermediate level-off pauses (e.g., a
         weight-driven hold during climb-out), see :meth:`step_climb`.
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.climb_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
 
         if end_altitude > self.service_ceiling:
             raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
@@ -998,7 +998,7 @@ class Aircraft:
                 ).m_as(ureg.feet / ureg.minute)
                 for a in alts_ft
             ])
-            minutes = float(np.trapezoid(1.0 / rocs_fpm, alts_ft))
+            minutes = float(np.trapezoid(1.0 / rocs_fpm, alts_ft))  # type: ignore[attr-defined]
             time_to_climb = minutes * ureg.minute
 
         # Horizontal distance using average climb angle
@@ -1007,7 +1007,7 @@ class Aircraft:
         horizontal_speed = (true_air_speed * np.cos(climb_angle)).to(
             ureg.nautical_mile / ureg.hour
         )
-        if wind_along_track is not None:
+        if wind_along_track is not None and wind_along_track.magnitude != 0:
             # Add tailwind (signed) onto still-air horizontal speed to get
             # ground speed; integrate ground distance over time_to_climb.
             wind_kt = wind_along_track.m_as(ureg.knot)
@@ -1034,8 +1034,8 @@ class Aircraft:
 
         Returns ``(times, altitudes)`` as numpy arrays in minutes and feet.
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if end_altitude <= start_altitude:
             return np.array([0.0]), np.array([start_altitude.magnitude])
@@ -1199,13 +1199,13 @@ class Aircraft:
         ``ground_speed × time``; default ``None`` is still-air
         (backwards-compatible).
         """
-        start_altitude = start_altitude.to(ureg.feet)
-        end_altitude = end_altitude.to(ureg.feet)
+        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
+        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
 
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.descent_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
 
         if start_altitude <= end_altitude:
             return 0 * ureg.minute, 0 * ureg.nautical_mile
@@ -1229,7 +1229,7 @@ class Aircraft:
                 ).m_as(ureg.feet / ureg.minute)
                 for a in alts_ft
             ])
-            minutes = float(np.trapezoid(1.0 / rods_fpm, alts_ft))
+            minutes = float(np.trapezoid(1.0 / rods_fpm, alts_ft))  # type: ignore[attr-defined]
             time_to_descend = minutes * ureg.minute
 
         descent_rate_avg = self.descent_profile.rate_at(
@@ -1239,7 +1239,7 @@ class Aircraft:
         horizontal_speed = (true_air_speed * np.cos(descent_angle)).to(
             ureg.nautical_mile / ureg.hour
         )
-        if wind_along_track is not None:
+        if wind_along_track is not None and wind_along_track.magnitude != 0:
             wind_kt = wind_along_track.m_as(ureg.knot)
             ground_speed_kt = max(
                 0.0,

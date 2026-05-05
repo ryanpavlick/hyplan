@@ -708,7 +708,7 @@ def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, 
         azimuths.append(0.0)  # Single point, azimuth is undefined
 
     # Compute cumulative along-track distances
-    distances = np.array(distances)
+    distances = np.array(distances)  # type: ignore[assignment]
     along_track_distance = np.insert(np.cumsum(distances), 0, 0)
 
     return (

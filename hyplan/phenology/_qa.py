@@ -36,7 +36,7 @@ def apply_vi_qa_mask(
         Data with unreliable pixels masked.
     """
     bad = (pixel_reliability > max_reliability) | (pixel_reliability < 0)
-    return np.ma.masked_array(data, mask=bad)
+    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-any-return]
 
 
 def apply_lai_qa_mask(
@@ -73,7 +73,7 @@ def apply_lai_qa_mask(
     fill = data == 255
 
     bad = algo_bad | cloudy | fill
-    return np.ma.masked_array(data, mask=bad)
+    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-any-return]
 
 
 def apply_phenology_qa_mask(

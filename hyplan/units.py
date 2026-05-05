@@ -74,7 +74,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = speed * units[from_unit]
-    return float(q.m_as(units[to_unit]))
+    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
 
 def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     """

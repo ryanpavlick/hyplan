@@ -62,7 +62,7 @@ def to_excel(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     # Compute UTC base (minutes from midnight)
@@ -189,7 +189,7 @@ def to_pilot_excel(
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
         len(wps),
-        date=takeoff_time.date() if takeoff_time else None,
+        date=takeoff_time.date() if takeoff_time else None,  # type: ignore[arg-type]
     )
 
     if takeoff_time:

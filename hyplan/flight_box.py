@@ -179,7 +179,7 @@ def box_around_center_line(
     if polygon:
         along_track_buffer = 2000.0
         polygon = buffer_polygon_along_azimuth(polygon, along_track_buffer, swath.magnitude/2, azimuth)
-        box_length += ureg.Quantity(along_track_buffer, "meter")
+        box_length += ureg.Quantity(along_track_buffer, "meter")  # type: ignore[misc]
 
     nlines = max(1, int(np.ceil((box_width / swath_spacing).m_as("dimensionless"))))
 
@@ -550,7 +550,7 @@ def _generate_box_dem(
             corner_lats.append(lat)
             corner_lons.append(lon)
 
-    return terrain.generate_demfile(
+    return terrain.generate_demfile(  # type: ignore[no-any-return]
         np.array(corner_lats), wrap_to_180(np.array(corner_lons))  # type: ignore[arg-type]
     )
 
@@ -613,7 +613,7 @@ def altitude_msl_for_pixel_size(
     """
     min_elev, _ = terrain.get_min_max_elevations(dem_file)
     altitude_agl = instrument.altitude_agl_for_ground_sample_distance(pixel_size)
-    return altitude_agl + ureg.Quantity(float(min_elev), "meter")
+    return altitude_agl + ureg.Quantity(float(min_elev), "meter")  # type: ignore[no-any-return]
 
 
 def box_around_center_terrain(

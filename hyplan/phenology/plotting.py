@@ -254,7 +254,7 @@ def plot_year_over_year_heatmap(
     ax.set_xlabel("Day of Year")
     ax.set_ylabel("Year")
     ax.set_title(f"Vegetation Index — {polygon_id}")
-    ax.figure.colorbar(im, ax=ax, label="Value", pad=0.02)
+    ax.figure.colorbar(im, ax=ax, label="Value", pad=0.02)  # type: ignore[union-attr]
     ax.invert_yaxis()
 
     return ax

@@ -186,7 +186,7 @@ class _GriddedWindField(WindField):
         self._levs = slab[lev_name].values.astype(float)
         time_vals = slab[time_name].values
         self._times_raw = time_vals
-        self._times = np.array(
+        self._times = np.array(  # type: ignore[assignment]
             [(t - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
              for t in time_vals],
             dtype=float,

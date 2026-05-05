@@ -131,7 +131,7 @@ class FlightLine:
         levelling off briefly to burn fuel before continuing to climb)
         use :meth:`hyplan.aircraft.Aircraft.step_climb`.
         """
-        return self._waypoint1.altitude_msl
+        return self._waypoint1.altitude_msl  # type: ignore[return-value]
 
     @altitude_msl.setter
     def altitude_msl(self, value: Quantity):
@@ -197,7 +197,7 @@ class FlightLine:
         if not isinstance(altitude, Quantity):
             altitude = ureg.Quantity(altitude, "meter")
         else:
-            altitude = altitude.to("meter")
+            altitude = altitude.to("meter")  # type: ignore[assignment]
 
         if altitude.magnitude < 0:
             raise HyPlanValueError(
@@ -253,7 +253,7 @@ class FlightLine:
 
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=lat1, longitude=lon1, heading=float(az) % 360,
                        altitude_msl=alt,
                        name=f"{site_name}_start" if site_name else "start")
@@ -296,7 +296,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=lat1, longitude=lon1,
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -353,7 +353,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)
+        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
         wp1 = Waypoint(latitude=float(lat1), longitude=float(lon1),
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -576,8 +576,8 @@ class FlightLine:
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_north_m, offset_east_m)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_north_m, offset_east_m)
 
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)

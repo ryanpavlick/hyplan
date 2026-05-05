@@ -194,13 +194,13 @@ class SidelookingRadar(Sensor):
     def wavelength(self) -> Quantity:
         """Radar wavelength derived from frequency."""
         c = 299792458 * ureg.meter / ureg.second
-        return (c / self.frequency).to(ureg.meter)
+        return (c / self.frequency).to(ureg.meter)  # type: ignore[no-any-return]
 
     @property
     def range_resolution(self) -> Quantity:
         """Slant-range resolution from bandwidth: c / (2 * B)."""
         c = 299792458 * ureg.meter / ureg.second
-        return (c / (2 * self.bandwidth)).to(ureg.meter)
+        return (c / (2 * self.bandwidth)).to(ureg.meter)  # type: ignore[no-any-return]
 
     @property
     def half_angle(self) -> float:
@@ -234,17 +234,17 @@ class SidelookingRadar(Sensor):
         h = altitude_agl.magnitude
         near_ground = h * np.tan(np.radians(self.near_range_angle))
         far_ground = h * np.tan(np.radians(self.far_range_angle))
-        return (far_ground - near_ground) * ureg.meter
+        return (far_ground - near_ground) * ureg.meter  # type: ignore[no-any-return]
 
     def near_range_ground_distance(self, altitude_agl: Quantity) -> Quantity:
         """Ground distance from nadir to near edge of swath."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return altitude_agl.magnitude * np.tan(np.radians(self.near_range_angle)) * ureg.meter
+        return altitude_agl.magnitude * np.tan(np.radians(self.near_range_angle)) * ureg.meter  # type: ignore[no-any-return]
 
     def far_range_ground_distance(self, altitude_agl: Quantity) -> Quantity:
         """Ground distance from nadir to far edge of swath."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return altitude_agl.magnitude * np.tan(np.radians(self.far_range_angle)) * ureg.meter
+        return altitude_agl.magnitude * np.tan(np.radians(self.far_range_angle)) * ureg.meter  # type: ignore[no-any-return]
 
     def ground_range_resolution(self, altitude_agl: Quantity, incidence_angle: float | None = None) -> Quantity:
         """
@@ -261,7 +261,7 @@ class SidelookingRadar(Sensor):
         """
         if incidence_angle is None:
             incidence_angle = self.swath_center_angle
-        return (self.range_resolution / np.sin(np.radians(incidence_angle))).to(ureg.meter)
+        return (self.range_resolution / np.sin(np.radians(incidence_angle))).to(ureg.meter)  # type: ignore[no-any-return]
 
     def ground_sample_distance(self, altitude_agl: Quantity) -> dict:
         """
@@ -295,7 +295,7 @@ class SidelookingRadar(Sensor):
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         if incidence_angle is None:
             incidence_angle = self.swath_center_angle
-        return (altitude_agl / np.cos(np.radians(incidence_angle))).to(ureg.meter)
+        return (altitude_agl / np.cos(np.radians(incidence_angle))).to(ureg.meter)  # type: ignore[no-any-return]
 
     def swath_offset_angles(self) -> tuple:
         """
@@ -329,7 +329,7 @@ class SidelookingRadar(Sensor):
             Line spacing in meters (center-to-center).
         """
         sw = self.swath_width(altitude_agl)
-        return sw * (1.0 - overlap_fraction)
+        return sw * (1.0 - overlap_fraction)  # type: ignore[no-any-return]
 
 
 # ── UAVSAR Instrument Definitions ──────────────────────────────────────────
