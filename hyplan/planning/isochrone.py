@@ -404,7 +404,11 @@ def compute_refuel_isochrone(
         ``refuel_airport``, ``refuel_count``, ``day_total_time_min``,
         ``sortie_cycle_1_min``, ``sortie_cycle_2_min``,
         ``sortie_margin_min``, ``day_margin_min``,
-        ``limiting_constraint`` describe the chosen path.
+        ``limiting_leg`` describe the chosen path.  ``limiting_leg``
+        values for refuel results are ``"sortie"`` | ``"flight_day"`` |
+        ``"both"`` | ``"slack"`` | ``"unflyable"`` (a different value
+        vocabulary than ``compute_isochrone``'s, but the column name is
+        shared so consumers holding both gdfs use the same accessor).
 
         ``gdf.attrs`` includes ``refuel_airports_evaluated``,
         ``refuel_airports_unreachable``, and ``refuel_airports_used``.
@@ -467,8 +471,9 @@ def compute_refuel_isochrone(
         warnings.warn(
             f"flight_day_budget ({flight_day_budget_min:.1f} min) is less "
             f"than sortie_budget + refuel_time "
-            f"({sortie_budget_min + refuel_time_min:.1f} min); refueling is "
-            f"impossible — refuel candidates will not extend reach.",
+            f"({sortie_budget_min + refuel_time_min:.1f} min); a full fuel "
+            f"cycle plus refuel will not fit, so the day clock may strongly "
+            f"limit refuel routes.",
             stacklevel=2,
         )
 
@@ -594,11 +599,19 @@ def plot_isochrone(
     """Render the isochrone on a Folium map.
 
     Args:
-        gdf: A GeoDataFrame returned by :func:`compute_isochrone`.
+        gdf: A GeoDataFrame returned by :func:`compute_isochrone` or
+            :func:`compute_refuel_isochrone`.  Refuel results are
+            recognized via ``gdf.attrs["refuel_airports_evaluated"]``
+            and trigger refuel-airport markers + per-itinerary dot
+            coloring (see ``color`` below).
         base_map: Optional existing Folium map to add to.  If ``None``,
             a new one is created centered on ``start`` with the
             ``tiles`` basemap loaded.
-        color: Polygon stroke + fill color.
+        color: Polygon stroke + fill color.  For refuel-isochrone
+            results, this color is also used for ``"direct"`` ray dots,
+            but ``"outbound_refuel"`` and ``"return_refuel"`` dots use
+            a fixed palette (steel blue / red) so the itinerary
+            structure is legible regardless of the polygon color.
         fill_opacity: Polygon fill opacity (0–1).
         tiles: Folium basemap identifier when constructing a new map.
             Built-in choices include ``"OpenStreetMap"`` (default),
@@ -957,18 +970,25 @@ def _solve_rays(
 
         return totals, diags
 
-    # Expanding bracket.  Work on all still-feasible rays at once.
+    # Expanding bracket.  Work on all still-feasible rays at once.  First
+    # verify that the zero-distance target is itself feasible; otherwise
+    # binary search would converge to d=0 and report an over-budget "boundary".
     active_indices = np.flatnonzero(active)
     totals, _ = _evaluate_many(active_indices, d_hi[active_indices])
-    infeasible_seed = ~np.isfinite(totals)
-    if np.any(infeasible_seed):
-        seed_indices = active_indices[infeasible_seed]
-        zero_unflyable[seed_indices] = True
-        active[seed_indices] = False
+    zero_totals, _ = _evaluate_many(
+        active_indices, np.zeros_like(active_indices, dtype=float)
+    )
+    zero_infeasible = (
+        ~np.isfinite(zero_totals) | (zero_totals > feasible_budget_min)
+    )
+    if np.any(zero_infeasible):
+        zero_indices = active_indices[zero_infeasible]
+        zero_unflyable[zero_indices] = True
+        active[zero_indices] = False
 
     feasible = np.isfinite(totals) & (totals <= feasible_budget_min)
     expanding = np.zeros(n_rays, dtype=bool)
-    expanding[active_indices[feasible]] = True
+    expanding[active_indices[feasible & ~zero_infeasible]] = True
 
     while np.any(expanding):
         d_lo[expanding] = d_hi[expanding]
@@ -1021,6 +1041,21 @@ def _solve_rays(
 
         final_diag = final_by_index[i]
         final_total = final_diag["total_time_min"]
+        if final_diag["distance_nmi"] == 0.0:
+            probe_totals, _ = _evaluate_many(
+                np.array([i]), np.array([distance_tolerance_nmi])
+            )
+            if (
+                not np.isfinite(probe_totals[0])
+                or probe_totals[0] > feasible_budget_min
+            ):
+                rows.append(
+                    _unflyable_ray(
+                        azimuth_deg=float(azimuth_deg), start=start, mode=mode,
+                        on_station_min=on_station_min,
+                    )
+                )
+                continue
 
         if mode == "one_way":
             final_diag["net_headwind_kt"] = float("nan")
@@ -1331,12 +1366,15 @@ def _evaluate_refuel_at_d(
     reserve_min: float,
     refuel_time_min: float,
     refuel_eligibility: list[dict],
+    template: Optional[str] = None,
+    refuel_label: Optional[str] = None,
 ) -> Optional[dict]:
-    """Try direct + each eligible refuel placement at the given target.
+    """Evaluate one or more refuel itinerary templates at the given target.
 
-    Returns a diagnostic dict for the feasible itinerary with the
-    largest ``min(sortie_margin, day_margin)`` (the most-extending one),
-    or ``None`` if no itinerary is feasible.
+    When ``template`` is provided, only that template is evaluated.  For
+    refuel templates, ``refuel_label`` narrows the evaluation to one airport.
+    The refuel solver uses this filtered mode so each template gets its own
+    monotonic bracket/binary-search boundary before the best route is selected.
     """
     cycle_cap_min = sortie_budget_min - reserve_min
     candidates: list[dict] = []
@@ -1347,7 +1385,7 @@ def _evaluate_refuel_at_d(
         cruise_altitude=cruise_altitude, t_anchor=start_time,
         wind_source=wind_source,
     )
-    if np.isfinite(t_st):
+    if (template is None or template == "direct") and np.isfinite(t_st):
         anchor_tr = start_time + datetime.timedelta(
             minutes=t_st + on_station_min
         )
@@ -1386,126 +1424,134 @@ def _evaluate_refuel_at_d(
                 })
 
     # --- outbound_refuel(R): start → R → target → recovery -----------------
-    for elig in refuel_eligibility:
-        if not elig["outbound_ok"]:
-            continue
-        r_wp = elig["wp"]
-        t_sR, _ = _leg_time(
-            aircraft=aircraft, start_wp=start, end_wp=r_wp,
-            cruise_altitude=cruise_altitude, t_anchor=start_time,
-            wind_source=wind_source,
-        )
-        if not np.isfinite(t_sR) or t_sR > cycle_cap_min:
-            continue
-        anchor_2 = start_time + datetime.timedelta(
-            minutes=t_sR + refuel_time_min
-        )
-        t_Rt, hw_Rt = _leg_time(
-            aircraft=aircraft, start_wp=r_wp, end_wp=target,
-            cruise_altitude=cruise_altitude, t_anchor=anchor_2,
-            wind_source=wind_source,
-        )
-        if not np.isfinite(t_Rt):
-            continue
-        anchor_tr = anchor_2 + datetime.timedelta(
-            minutes=t_Rt + on_station_min
-        )
-        t_tr, hw_tr = _leg_time(
-            aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
-            cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
-            wind_source=wind_source,
-        )
-        if not np.isfinite(t_tr):
-            continue
-        cycle_1 = t_sR
-        cycle_2 = t_Rt + on_station_min + t_tr
-        day_total = cycle_1 + refuel_time_min + cycle_2
-        sortie_margin = cycle_cap_min - max(cycle_1, cycle_2)
-        day_margin = flight_day_budget_min - day_total
-        if sortie_margin < 0 or day_margin < 0:
-            continue
-        candidates.append({
-            "itinerary": "outbound_refuel",
-            "refuel_airport": elig["label"],
-            "refuel_count": 1,
-            "refuel_time_min": refuel_time_min,
-            "start_to_target_time_min": float("nan"),
-            "start_to_refuel_time_min": t_sR,
-            "refuel_to_target_time_min": t_Rt,
-            "target_to_refuel_time_min": float("nan"),
-            "refuel_to_return_time_min": float("nan"),
-            "target_to_return_time_min": t_tr,
-            "outbound_time_min": t_sR + refuel_time_min + t_Rt,
-            "return_time_min": t_tr,
-            "total_time_min": day_total,
-            "outbound_headwind_kt": hw_Rt,  # R → target
-            "return_headwind_kt": hw_tr,
-            "day_total_time_min": day_total,
-            "sortie_cycle_1_min": cycle_1,
-            "sortie_cycle_2_min": cycle_2,
-            "sortie_margin_min": sortie_margin,
-            "day_margin_min": day_margin,
-        })
+    if template is None or template == "outbound_refuel":
+        for elig in refuel_eligibility:
+            if not elig["outbound_ok"]:
+                continue
+            if refuel_label is not None and elig["label"] != refuel_label:
+                continue
+            r_wp = elig["wp"]
+            t_sR, _ = _leg_time(
+                aircraft=aircraft, start_wp=start, end_wp=r_wp,
+                cruise_altitude=cruise_altitude, t_anchor=start_time,
+                wind_source=wind_source,
+            )
+            if not np.isfinite(t_sR) or t_sR > cycle_cap_min:
+                continue
+            anchor_2 = start_time + datetime.timedelta(
+                minutes=t_sR + refuel_time_min
+            )
+            t_Rt, hw_Rt = _leg_time(
+                aircraft=aircraft, start_wp=r_wp, end_wp=target,
+                cruise_altitude=cruise_altitude, t_anchor=anchor_2,
+                wind_source=wind_source,
+            )
+            if not np.isfinite(t_Rt):
+                continue
+            anchor_tr = anchor_2 + datetime.timedelta(
+                minutes=t_Rt + on_station_min
+            )
+            t_tr, hw_tr = _leg_time(
+                aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
+                cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
+                wind_source=wind_source,
+            )
+            if not np.isfinite(t_tr):
+                continue
+            cycle_1 = t_sR
+            cycle_2 = t_Rt + on_station_min + t_tr
+            day_total = cycle_1 + refuel_time_min + cycle_2
+            sortie_margin = cycle_cap_min - max(cycle_1, cycle_2)
+            day_margin = flight_day_budget_min - day_total
+            if sortie_margin < 0 or day_margin < 0:
+                continue
+            candidates.append({
+                "itinerary": "outbound_refuel",
+                "refuel_airport": elig["label"],
+                "refuel_count": 1,
+                "refuel_time_min": refuel_time_min,
+                "start_to_target_time_min": float("nan"),
+                "start_to_refuel_time_min": t_sR,
+                "refuel_to_target_time_min": t_Rt,
+                "target_to_refuel_time_min": float("nan"),
+                "refuel_to_return_time_min": float("nan"),
+                "target_to_return_time_min": t_tr,
+                "outbound_time_min": t_sR + refuel_time_min + t_Rt,
+                "return_time_min": t_tr,
+                "total_time_min": day_total,
+                "outbound_headwind_kt": hw_Rt,  # R → target
+                "return_headwind_kt": hw_tr,
+                "day_total_time_min": day_total,
+                "sortie_cycle_1_min": cycle_1,
+                "sortie_cycle_2_min": cycle_2,
+                "sortie_margin_min": sortie_margin,
+                "day_margin_min": day_margin,
+            })
 
     # --- return_refuel(R): start → target → R → recovery ------------------
-    for elig in refuel_eligibility:
-        if not elig["return_ok"]:
-            continue
-        r_wp = elig["wp"]
-        # Reuse t_st from direct-leg evaluation (same anchor).
-        if not np.isfinite(t_st):
-            continue
-        anchor_tR = start_time + datetime.timedelta(
-            minutes=t_st + on_station_min
-        )
-        t_tR, _ = _leg_time(
-            aircraft=aircraft, start_wp=target, end_wp=r_wp,
-            cruise_altitude=cruise_altitude, t_anchor=anchor_tR,
-            wind_source=wind_source,
-        )
-        if not np.isfinite(t_tR):
-            continue
-        cycle_1 = t_st + on_station_min + t_tR
-        if cycle_1 > cycle_cap_min:
-            continue
-        anchor_Rrec = start_time + datetime.timedelta(
-            minutes=cycle_1 + refuel_time_min
-        )
-        t_Rrec, hw_Rrec = _leg_time(
-            aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
-            cruise_altitude=cruise_altitude, t_anchor=anchor_Rrec,
-            wind_source=wind_source,
-        )
-        if not np.isfinite(t_Rrec):
-            continue
-        cycle_2 = t_Rrec
-        day_total = cycle_1 + refuel_time_min + cycle_2
-        sortie_margin = cycle_cap_min - max(cycle_1, cycle_2)
-        day_margin = flight_day_budget_min - day_total
-        if sortie_margin < 0 or day_margin < 0:
-            continue
-        candidates.append({
-            "itinerary": "return_refuel",
-            "refuel_airport": elig["label"],
-            "refuel_count": 1,
-            "refuel_time_min": refuel_time_min,
-            "start_to_target_time_min": t_st,
-            "start_to_refuel_time_min": float("nan"),
-            "refuel_to_target_time_min": float("nan"),
-            "target_to_refuel_time_min": t_tR,
-            "refuel_to_return_time_min": t_Rrec,
-            "target_to_return_time_min": float("nan"),
-            "outbound_time_min": t_st,
-            "return_time_min": t_tR + refuel_time_min + t_Rrec,
-            "total_time_min": day_total,
-            "outbound_headwind_kt": hw_st,  # start → target
-            "return_headwind_kt": hw_Rrec,  # R → recovery
-            "day_total_time_min": day_total,
-            "sortie_cycle_1_min": cycle_1,
-            "sortie_cycle_2_min": cycle_2,
-            "sortie_margin_min": sortie_margin,
-            "day_margin_min": day_margin,
-        })
+    if template is None or template == "return_refuel":
+        for elig in refuel_eligibility:
+            if not elig["return_ok"]:
+                continue
+            if refuel_label is not None and elig["label"] != refuel_label:
+                continue
+            r_wp = elig["wp"]
+            # Cycle 1's start→target leg was computed unconditionally
+            # at the top of this function; bail this refuel placement
+            # if that leg is unflyable.
+            if not np.isfinite(t_st):
+                continue
+            anchor_tR = start_time + datetime.timedelta(
+                minutes=t_st + on_station_min
+            )
+            t_tR, _ = _leg_time(
+                aircraft=aircraft, start_wp=target, end_wp=r_wp,
+                cruise_altitude=cruise_altitude, t_anchor=anchor_tR,
+                wind_source=wind_source,
+            )
+            if not np.isfinite(t_tR):
+                continue
+            cycle_1 = t_st + on_station_min + t_tR
+            if cycle_1 > cycle_cap_min:
+                continue
+            anchor_Rrec = start_time + datetime.timedelta(
+                minutes=cycle_1 + refuel_time_min
+            )
+            t_Rrec, hw_Rrec = _leg_time(
+                aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
+                cruise_altitude=cruise_altitude, t_anchor=anchor_Rrec,
+                wind_source=wind_source,
+            )
+            if not np.isfinite(t_Rrec):
+                continue
+            cycle_2 = t_Rrec
+            day_total = cycle_1 + refuel_time_min + cycle_2
+            sortie_margin = cycle_cap_min - max(cycle_1, cycle_2)
+            day_margin = flight_day_budget_min - day_total
+            if sortie_margin < 0 or day_margin < 0:
+                continue
+            candidates.append({
+                "itinerary": "return_refuel",
+                "refuel_airport": elig["label"],
+                "refuel_count": 1,
+                "refuel_time_min": refuel_time_min,
+                "start_to_target_time_min": t_st,
+                "start_to_refuel_time_min": float("nan"),
+                "refuel_to_target_time_min": float("nan"),
+                "target_to_refuel_time_min": t_tR,
+                "refuel_to_return_time_min": t_Rrec,
+                "target_to_return_time_min": float("nan"),
+                "outbound_time_min": t_st,
+                "return_time_min": t_tR + refuel_time_min + t_Rrec,
+                "total_time_min": day_total,
+                "outbound_headwind_kt": hw_st,  # start → target
+                "return_headwind_kt": hw_Rrec,  # R → recovery
+                "day_total_time_min": day_total,
+                "sortie_cycle_1_min": cycle_1,
+                "sortie_cycle_2_min": cycle_2,
+                "sortie_margin_min": sortie_margin,
+                "day_margin_min": day_margin,
+            })
 
     if not candidates:
         return None
@@ -1567,72 +1613,83 @@ def _solve_rays_refuel(
             altitude_msl=cruise_altitude,
         )
 
-    def _evaluate(az: float, d_nmi: float) -> Optional[dict]:
-        target = _make_target(az, d_nmi)
-        return _evaluate_refuel_at_d(
-            aircraft=aircraft,
-            start=start,
-            target=target,
-            recovery_wp=recovery_wp,
-            cruise_altitude=cruise_altitude,
-            start_time=start_time,
-            wind_source=wind_source,
-            on_station_min=on_station_min,
-            sortie_budget_min=sortie_budget_min,
-            flight_day_budget_min=flight_day_budget_min,
-            reserve_min=reserve_min,
-            refuel_time_min=refuel_time_min,
-            refuel_eligibility=refuel_eligibility,
-        )
+    specs: list[tuple[str, Optional[str]]] = [("direct", None)]
+    for elig in refuel_eligibility:
+        if elig["outbound_ok"]:
+            specs.append(("outbound_refuel", elig["label"]))
+        if elig["return_ok"]:
+            specs.append(("return_refuel", elig["label"]))
 
     rows: list[dict] = []
     for az in azimuths_deg:
         az_f = float(az)
-        # Seed at d = initial_hi.  If feasible, expand by doubling.
-        d_lo = 0.0
-        d_hi = initial_hi
-        seed = _evaluate(az_f, d_hi)
-        if seed is None:
-            # Seed infeasible — could be that initial_hi already over-
-            # shoots, so try binary search starting from [0, d_hi].
-            # If even d=0 is infeasible (e.g., return leg unflyable),
-            # mark as unflyable.
-            zero_diag = _evaluate(az_f, 0.0)
-            if zero_diag is None:
-                rows.append(_unflyable_refuel_row(
-                    azimuth_deg=az_f, start=start,
+        solved: list[tuple[float, dict]] = []
+
+        for template, refuel_label in specs:
+            def _evaluate_spec(d_nmi: float) -> Optional[dict]:
+                target = _make_target(az_f, d_nmi)
+                return _evaluate_refuel_at_d(
+                    aircraft=aircraft,
+                    start=start,
+                    target=target,
+                    recovery_wp=recovery_wp,
+                    cruise_altitude=cruise_altitude,
+                    start_time=start_time,
+                    wind_source=wind_source,
                     on_station_min=on_station_min,
-                ))
+                    sortie_budget_min=sortie_budget_min,
+                    flight_day_budget_min=flight_day_budget_min,
+                    reserve_min=reserve_min,
+                    refuel_time_min=refuel_time_min,
+                    refuel_eligibility=refuel_eligibility,
+                    template=template,
+                    refuel_label=refuel_label,
+                )
+
+            zero_diag = _evaluate_spec(0.0)
+            if zero_diag is None:
                 continue
-        else:
-            # Expand bracket.
-            while True:
-                d_lo = d_hi
-                d_hi *= 2.0
-                if d_hi > 20000.0:
-                    raise HyPlanRuntimeError(
-                        f"Refuel-isochrone bracket exceeded 20000 nmi at "
-                        f"azimuth {az_f:.1f}°."
-                    )
-                if _evaluate(az_f, d_hi) is None:
-                    break
 
-        # Binary search.
-        while d_hi - d_lo > distance_tolerance_nmi:
-            d_mid = 0.5 * (d_lo + d_hi)
-            if _evaluate(az_f, d_mid) is not None:
-                d_lo = d_mid
-            else:
-                d_hi = d_mid
+            d_lo = 0.0
+            d_hi = initial_hi
+            seed = _evaluate_spec(d_hi)
+            if seed is not None:
+                while True:
+                    d_lo = d_hi
+                    d_hi *= 2.0
+                    if d_hi > 20000.0:
+                        raise HyPlanRuntimeError(
+                            f"Refuel-isochrone bracket exceeded 20000 nmi "
+                            f"at azimuth {az_f:.1f}°."
+                        )
+                    if _evaluate_spec(d_hi) is None:
+                        break
 
-        # Final diagnostics at d_lo.
-        final = _evaluate(az_f, d_lo)
-        if final is None:
-            # Should not happen if we found a feasible seed; fall back.
+            while d_hi - d_lo > distance_tolerance_nmi:
+                d_mid = 0.5 * (d_lo + d_hi)
+                if _evaluate_spec(d_mid) is not None:
+                    d_lo = d_mid
+                else:
+                    d_hi = d_mid
+
+            final_for_spec = _evaluate_spec(d_lo)
+            if final_for_spec is not None:
+                solved.append((d_lo, final_for_spec))
+
+        if not solved:
             rows.append(_unflyable_refuel_row(
-                azimuth_deg=az_f, start=start, on_station_min=on_station_min,
+                azimuth_deg=az_f, start=start,
+                on_station_min=on_station_min,
             ))
             continue
+
+        d_lo, final = max(
+            solved,
+            key=lambda item: (
+                item[0],
+                min(item[1]["sortie_margin_min"], item[1]["day_margin_min"]),
+            ),
+        )
 
         target = _make_target(az_f, d_lo)
         hw_o = final["outbound_headwind_kt"]
@@ -1658,7 +1715,7 @@ def _solve_rays_refuel(
             "on_station_min": on_station_min,
             "net_headwind_kt": 0.5 * (hw_o + hw_r),
             "headwind_asymmetry_kt": 0.5 * (hw_o - hw_r),
-            "limiting_constraint": limiting,
+            "limiting_leg": limiting,
         }
         row.update(final)
         rows.append(row)
@@ -1701,5 +1758,5 @@ def _unflyable_refuel_row(
         "sortie_cycle_2_min": nan,
         "sortie_margin_min": 0.0,
         "day_margin_min": 0.0,
-        "limiting_constraint": "slack",
+        "limiting_leg": "unflyable",
     }

@@ -1050,7 +1050,7 @@ class TestRefuel:
             assert (row["refuel_count"] == 0) == (it == "direct")
             assert row["sortie_margin_min"] >= -1e-6
             assert row["day_margin_min"] >= -1e-6
-            assert row["limiting_constraint"] in {
+            assert row["limiting_leg"] in {
                 "sortie", "flight_day", "both", "slack",
             }
             day = row["day_total_time_min"]
