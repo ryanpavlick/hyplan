@@ -26,6 +26,17 @@ and flight lines.
 .. autofunction:: hyplan.plotting.plot_conflict_matrix
 ```
 
+## Isochrone visualization
+
+```{eval-rst}
+.. autofunction:: hyplan.plotting.plot_isochrone_static
+```
+
+`plot_isochrone_static` is the static (Cartopy) companion to the
+interactive Folium `plot_isochrone` (in `hyplan.planning`).  Use it
+for publication-quality figures and layered comparisons (still-air
+vs. windy, multi-budget concentric reach, refuel scenarios).
+
 ## Terrain
 
 ```{eval-rst}

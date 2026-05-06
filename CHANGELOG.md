@@ -1,5 +1,178 @@
 # Changelog
 
+## v1.5.0 — 2026-05-06
+
+This release introduces **wind-aware isochrones** — reachability
+boundaries that answer "where can the aircraft observe and recover
+within a given time budget?".  Four public functions (`compute_isochrone`,
+`compute_concentric_isochrones`, `compute_refuel_isochrone`,
+`evaluate_target_reachability`) plus two plotters (Folium for
+interactive use, Cartopy for static figures) cover round-trip,
+one-way, and return-safe modes; refuel-extended reach with two-clock
+budget tracking; multi-budget concentric contours; and single-target
+spot checks.  No breaking changes to existing public APIs.
+
+This release also prunes three aircraft (Learjet, BAe-146, Dash-8)
+that shipped with brochure-only models in v1.4 but never received
+calibration.  The fleet count drops from 15 to 12.
+
+### Why this release
+
+Pre-v1.5, deciding "is this study area reachable?" required either
+hand calculation or running `compute_flight_plan` against multiple
+candidate targets.  Real campaigns ask the question constantly —
+during pre-flight site selection, in-flight re-tasking after weather,
+and when negotiating refuel logistics with hosts.  v1.5 turns this
+into a one-call query whose output (a GeoDataFrame of boundary
+points) drops directly into existing flight-line workflows.
+
+The isochrone solver uses the same wind-correction machinery as
+`compute_flight_plan` (cruise track-hold via `_track_hold_solution_from_uv`,
+calibrated climb / cruise / descent profiles per aircraft, and the
+existing `WindField` provider stack), so results are consistent
+between the two functions.
+
+### Wind-aware isochrones — `compute_isochrone(...)`
+
+`compute_isochrone(aircraft, start, budget, ...)` returns a
+`GeoDataFrame` of boundary points around `start` reachable within
+`budget`, accounting for climb / descent overhead, on-station dwell,
+mandatory reserve, and a wind field.
+
+* **Three modes**:
+  - `"one_way"` — single-leg reach.
+  - `"round_trip"` — out-and-back from the same place (default).
+  - `"return_safe"` — out, observe at target, recover at a *different*
+    airport within `budget`.
+* **Wind correction** — cruise wind sampled at the cruise-segment
+  midpoint with up to three fixed-point iterations on cruise time.
+  Climb and descent are still-air in v1.5 (a known simplification
+  documented in the module's "Limitations" section; configurable
+  segmented sampling is queued for a follow-up).
+* **Diagnostics per ray** — `outbound_time_min`, `return_time_min`,
+  `outbound_headwind_kt`, `return_headwind_kt`, `net_headwind_kt`,
+  `headwind_asymmetry_kt`, `time_slack_min`, `limiting_leg`.
+* **`gdf.attrs`** stashes invocation context (mode, budget, reserve,
+  on-station time, cruise altitude, return destination, wind source,
+  start time) so a saved boundary remains self-describing.
+
+Notebook tutorial: [`notebooks/isochrone.ipynb`](notebooks/isochrone.ipynb)
+walks through all three modes with a B-200 from KEFD, fleet
+comparison (G-V vs. G-III vs. B-200), MERRA-2 reanalysis on a real
+date, and the Folium / Cartopy plotters.
+
+### Refuel-extended reach — `compute_refuel_isochrone(...)`
+
+For campaigns that allow a mid-mission refuel stop at a pre-cleared
+field, `compute_refuel_isochrone` extends each ray's reach by trying
+three itinerary templates per azimuth — `direct`, `outbound_refuel(R)`,
+`return_refuel(R)` — and picks the one that goes farthest while
+honoring both a **per-fuel-cycle `sortie_budget`** (resets after each
+refuel) and a **total wall-clock `flight_day_budget`** (does not
+reset, absorbs `refuel_time`).  `reserve` applies per fuel cycle only.
+
+* `max_refuel_stops=1` in v1 — a single sortie touches at most two
+  tanks.  Chained refuels deferred.
+* Per-template independent bracket-and-search per ray; the winning
+  template's diagnostics populate the row, with explicit per-leg
+  time columns (`start_to_refuel_time_min`,
+  `refuel_to_target_time_min`, etc.) so consumers don't have to
+  guess which legs are populated for which itinerary.
+* `gdf.attrs` reports `refuel_airports_evaluated`,
+  `refuel_airports_unreachable` (with reason), and
+  `refuel_airports_used`.
+* Refuel-leg caching — fixed legs (`start → R` and, for
+  anchor-invariant winds, `R → recovery`) are computed once in the
+  prefilter and reused per probe instead of being recomputed on
+  every binary-search iteration.
+
+### Single-target spot checks — `evaluate_target_reachability(...)`
+
+The complement of `compute_refuel_isochrone`: rather than sweeping
+azimuths to find the boundary, this asks *given this target*, which
+itineraries reach it?  Returns a structured dict with the best route
+plus all feasible alternatives, sorted by ascending day-total time.
+
+```python
+result = evaluate_target_reachability(aircraft, start, target, ...)
+# {"reachable": True,
+#  "best": {"itinerary": "outbound_refuel", "refuel_airport": "KLBB", ...},
+#  "alternatives": [{"itinerary": "return_refuel", ...}, ...],
+#  "unreachable_reason": None, ...}
+```
+
+Useful for pre-flight site go/no-go decisions and flight-following
+re-tasking ("can we still catch this overpass?").
+
+### Concentric reach — `compute_concentric_isochrones(...)`
+
+Sweep multiple budgets (e.g., 1 / 2 / 3 / 4 hr) in one call.  Each
+budget seeds the next larger budget's lower bound, so total cost is
+roughly O(M+N) instead of O(M·N) for M budgets and N rays.  Returns
+one stacked GeoDataFrame tagged with `budget_min` / `budget_hr`
+columns; `plot_isochrone_static` auto-renders nested contours with
+a viridis color ramp.
+
+### Plotters
+
+* `plot_isochrone(gdf, ...)` — interactive Folium map (in
+  `hyplan.planning.isochrone`).  Recognizes refuel results and
+  decorates them with refuel-airport markers (used / evaluated /
+  unreachable) and per-itinerary dot coloring; recognizes concentric
+  results and labels the popup accordingly.
+* `plot_isochrone_static(layers, ...)` — publication-quality Cartopy
+  plotter (in `hyplan.plotting`, alongside `plot_airspace_map`).
+  Accepts either a single GeoDataFrame or a list of
+  `(gdf, color, label)` tuples for layered comparison; auto-handles
+  concentric (viridis ramp), refuel markers, and optional wind-barb
+  overlay sampled from a `WindField`.
+
+### Fleet pruning: Learjet, BAe-146, Dash-8 removed
+
+The v1.4 release shipped 15 aircraft; three (Learjet 35,
+British Aerospace BAe-146, de Havilland Dash-8) carried only
+brochure-derived performance values that never made it onto the
+calibration roadmap.  Rather than letting brochure-only entries
+linger and silently drift in mission timing, v1.5 removes them.
+Calibration data for these airframes (notably the FAAM BAe-146)
+remains accessible behind the same auth-walled paths documented in
+[`docs/calibration.md`](docs/calibration.md); when a campaign
+requires one of these platforms, the relevant calibration loader
+skeleton is in place to ingest a delivered IWG1/ICARTT archive.
+
+The remaining fleet is **12 aircraft**: NASA ER-2, G-III, G-IV, G-V,
+C-20A, P-3, WB-57, B-777, King Air B-200, King Air A-90, C-130, and
+Twin Otter.  Eight (ER-2, G-III, G-V, WB-57, P-3, B-200, Twin Otter,
+C-130) are data-fit calibrated; the rest carry brochure-derived
+performance with `confidence=0.7` until calibration data lands.
+
+### Notebook polish
+
+* `notebooks/aircraft_performance.ipynb` — climb-rate plot now
+  splits cleanly by VerticalProfile mode; the stale "analytical
+  exponential" chart title is gone.
+* `notebooks/calibration/er2/calibration.ipynb` — narrative no
+  longer hard-codes a sortie count that drifted post-BlueFlux.
+
+### API additions (all backward-compatible)
+
+* New: `hyplan.compute_isochrone`,
+  `hyplan.compute_concentric_isochrones`,
+  `hyplan.compute_refuel_isochrone`,
+  `hyplan.evaluate_target_reachability`,
+  `hyplan.isochrone_polygon`, `hyplan.plot_isochrone`,
+  `hyplan.plot_isochrone_static`.
+* Stability: the `hyplan.planning.isochrone` module is **Stable** —
+  see [`docs/stability.md`](docs/stability.md).
+
+### Removed
+
+* `hyplan.Learjet`, `hyplan.BAe146`, `hyplan.Dash8` aircraft classes.
+  Callers using these names will get an `ImportError`; replace with
+  a calibrated alternative or load via the campaign's own
+  calibration archive.
+
+
 ## v1.4.1 — 2026-05-05
 
 Patch release.  No public-API changes; ships post-release CI

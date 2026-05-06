@@ -24,6 +24,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Flight planning** — Define flight lines, generate multi-line coverage patterns, and compute complete mission plans with takeoff, transit, data collection, and landing segments
 - **Pattern workflows** — Build reusable racetrack, rosette, polygon, sawtooth, spiral, and glint-arc patterns as first-class objects that can be edited, serialized, and re-planned
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
+- **Wind-aware isochrones** — Compute reachability boundaries from a base airport given an aircraft, time budget, and wind field; supports refuel-extended reach with two-clock budget tracking, single-target spot checks, and multi-budget concentric contours; static (Cartopy) and interactive (Folium) plotters
 - **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
 - **Lidar & radar** — LVIS full-waveform lidar and UAVSAR L/P/Ka-band SAR sensor models
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
@@ -217,6 +218,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `flight_box` | Generate parallel flight lines covering a geographic area |
 | `flight_plan` | Compute complete mission plans with timing and altitude profiles |
 | `flight_optimizer` | Graph-based flight line ordering with multi-day and refueling support |
+| `planning.isochrone` | Wind-aware reachability boundaries — direct, refuel-extended, concentric multi-budget; single-target spot checks |
 | `flight_patterns` | Flight pattern generators returning `Pattern` objects (racetrack, rosette, spiral, sawtooth, polygon, glint arc, coordinated line) |
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
 | `campaign` | Campaign manager for organizing free-standing lines and patterns, caching reference data, tracking revisions, and persisting plans |
@@ -271,6 +273,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
 | [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
 | [airspace_check.ipynb](notebooks/airspace_check.ipynb) | Detect conflicts between flight lines and FAA / OpenAIP airspace boundaries (restricted, prohibited, controlled) |
+| [isochrone.ipynb](notebooks/isochrone.ipynb) | Wind-aware reachability boundaries: round-trip / one-way / return-safe modes, MERRA-2 winds, fleet comparison, refuel-extended reach, concentric multi-budget contours, single-target spot checks |
 
 ### Instruments & Sensors
 
@@ -361,7 +364,7 @@ If you use HyPlan in your research, please cite it as:
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
   license = {Apache-2.0},
-  version = {1.4.1}
+  version = {1.5.0}
 }
 ```
 

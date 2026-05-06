@@ -15,7 +15,7 @@ authors:
 affiliations:
   - name: National Aeronautics and Space Administration, Washington, DC, USA
     index: 1
-date: 5 May 2026
+date: 6 May 2026
 bibliography: paper.bib
 ---
 
@@ -25,7 +25,7 @@ Airborne remote sensing---using instrumented aircraft to collect data over the E
 
 HyPlan is an open-source Python library that provides a unified, reproducible, and extensible framework for planning airborne remote sensing missions. It encodes the physics of sensor--platform--environment interactions into composable building blocks covering the full mission-planning lifecycle, from study-area definition and flight line generation through swath and GSD calculations to multi-day mission plans with line-ordering optimization. It includes pre-configured models for a range of NASA airborne instruments (e.g., AVIRIS-3, PRISM, LVIS, UAVSAR, HyTES) and multiple research aircraft, along with tools for solar geometry, terrain-aware swath modeling, cloud climatology, airport selection, and satellite overpass prediction.
 
-HyPlan's core technical contribution is **terrain-aware swath modeling using ray--terrain intersection**, which captures terrain-induced variations in swath width and position that flat-Earth approximations miss; the effect can be substantial in mountainous regions, where swath width may vary by hundreds of meters along a single flight line. A complementary contribution is **wind-aware trajectory modeling subject to aircraft performance constraints**, combining Dubins paths (trochoidal under non-zero wind) with altitude-dependent climb, cruise, and descent models to produce physically realistic flight paths and segment-by-segment timing.
+HyPlan's core technical contribution is **terrain-aware swath modeling using ray--terrain intersection**, which captures terrain-induced variations in swath width and position that flat-Earth approximations miss; the effect can be substantial in mountainous regions, where swath width may vary by hundreds of meters along a single flight line. A complementary contribution is **wind-aware trajectory modeling subject to aircraft performance constraints**, combining Dubins paths (trochoidal under non-zero wind) with altitude-dependent climb, cruise, and descent models to produce physically realistic flight paths and segment-by-segment timing. The same wind and aircraft-performance machinery powers **wind-aware reachability isochrones**, which compute the boundary of operationally feasible study areas from a given base airport given a time budget, optional refuel candidates, and a wind field---turning "is this site reachable?" into a one-call query that drops directly into the rest of the planning workflow.
 
 # Statement of Need
 
@@ -102,7 +102,7 @@ These modules enable users to determine not only where and how to fly, but also 
 
 ### Logistics-aware mission planning
 
-HyPlan incorporates logistics considerations directly into the planning process. The `flight_plan` module models complete sorties, while `flight_optimizer` addresses the problem of ordering flight lines across multiple days subject to constraints such as aircraft endurance, maximum daily flight time, and the availability of refueling airports.
+HyPlan incorporates logistics considerations directly into the planning process. The `flight_plan` module models complete sorties, while `flight_optimizer` addresses the problem of ordering flight lines across multiple days subject to constraints such as aircraft endurance, maximum daily flight time, and the availability of refueling airports. The complementary `planning.isochrone` module answers the upstream "where *can* we observe?" question by computing wind-aware reachability boundaries around a base airport, with optional refuel-extended reach (two-clock per-cycle / per-day budget tracking) and single-target spot checks. Together these turn site selection, multi-day scheduling, and refuel-aware feasibility into a coherent programmatic workflow.
 
 Airport selection is supported through integration with the OurAirports database [@ourairports], enabling filtering by runway length, surface type, and proximity. Airspace conflict detection uses FAA NASR and OpenAIP [@openaip] data to identify intersections with restricted, prohibited, or controlled airspace. These logistics constraints interact with solar and environmental timing, creating a coupled optimization problem that HyPlan addresses through heuristic graph-based methods using NetworkX [@hagberg2008networkx].
 

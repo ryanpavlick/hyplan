@@ -24,6 +24,7 @@ specific version if you depend on exact signatures.
 | `hyplan.FlightLine` | Flight line creation, splitting, clipping, offsetting |
 | `hyplan.Waypoint` | Navigation waypoints with heading, altitude, speed |
 | `hyplan.planning` | `compute_flight_plan` and segment record builders |
+| `hyplan.planning.isochrone` | Wind-aware reachability boundaries (`compute_isochrone`, `compute_concentric_isochrones`, `compute_refuel_isochrone`, `evaluate_target_reachability`) |
 | `hyplan.terrain` | DEM download, elevation lookup, ray-terrain intersection |
 | `hyplan.swath` | Swath polygon generation and gap/overlap analysis |
 | `hyplan.winds` | Wind field abstractions, MERRA-2, GMAO, GFS providers |
