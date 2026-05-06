@@ -18,7 +18,26 @@ operate within the time budget.
 
 ```{eval-rst}
 .. autofunction:: hyplan.planning.compute_isochrone
+.. autofunction:: hyplan.planning.compute_refuel_isochrone
 ```
+
+### Refuel-aware reach
+
+`compute_refuel_isochrone` extends the standard isochrone with a single
+optional refuel stop drawn from a list of pre-cleared candidates.  Two
+clocks are tracked: a per-fuel-cycle `sortie_budget` (resets after each
+refuel) and a total wall-clock `flight_day_budget` (does not reset and
+absorbs `refuel_time`).  `reserve` applies *per fuel cycle* only.
+
+For every azimuth, three itineraries are evaluated and the most-extending
+one wins:
+
+* `direct` — `start → target → recovery`
+* `outbound_refuel(R)` — `start → R → target → recovery`
+* `return_refuel(R)` — `start → target → R → recovery`
+
+v1 limits `max_refuel_stops` to 1 (a single sortie touches at most two
+tanks).  Chained refuels are deferred.
 
 ## Helpers
 

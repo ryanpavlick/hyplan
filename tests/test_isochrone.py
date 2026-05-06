@@ -11,6 +11,7 @@ from hyplan import (
     NASA_GIII,
     Waypoint,
     compute_isochrone,
+    compute_refuel_isochrone,
     isochrone_polygon,
     ureg,
 )
@@ -703,3 +704,408 @@ def test_attrs_metadata_present(giii, kedw_wp, cruise_alt):
     assert not missing, f"missing attrs: {missing}"
     assert gdf.attrs["aircraft_type"] == "Gulfstream III"
     assert gdf.attrs["mode"] == "round_trip"
+
+
+# ---------------------------------------------------------------------------
+# Refuel-aware isochrone
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def kefd_wp() -> Waypoint:
+    """KEFD (Ellington Field, Houston) at runway elevation."""
+    return Waypoint(
+        latitude=29.6073, longitude=-95.1586, heading=0.0,
+        altitude_msl=32 * ureg.feet, name="KEFD",
+    )
+
+
+@pytest.fixture
+def klbb_wp() -> Waypoint:
+    """KLBB (Lubbock, TX) at runway elevation — ~410 nmi NW of KEFD."""
+    return Waypoint(
+        latitude=33.6636, longitude=-101.8228, heading=0.0,
+        altitude_msl=3282 * ureg.feet, name="KLBB",
+    )
+
+
+@pytest.fixture
+def kbtr_wp() -> Waypoint:
+    """KBTR (Baton Rouge) at runway elevation — ~225 nmi E of KEFD."""
+    return Waypoint(
+        latitude=30.5332, longitude=-91.1496, heading=0.0,
+        altitude_msl=70 * ureg.feet, name="KBTR",
+    )
+
+
+@pytest.fixture
+def b200_cruise():
+    return 25000 * ureg.feet
+
+
+class TestRefuel:
+    """compute_refuel_isochrone: validation, behavior, diagnostics."""
+
+    # --- 1. validation -----------------------------------------------------
+
+    def test_empty_refuel_airports_raises(self, b200, kefd_wp, b200_cruise):
+        with pytest.raises(HyPlanValueError, match="refuel_airports"):
+            compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=8 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[],
+                mode="round_trip",
+            )
+
+    def test_one_way_rejected(self, b200, kefd_wp, klbb_wp, b200_cruise):
+        with pytest.raises(HyPlanValueError, match="mode"):
+            compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=8 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                mode="one_way",
+            )
+
+    def test_day_lt_sortie_warns(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        with pytest.warns(UserWarning, match="day clock will bind"):
+            gdf = compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=5 * ureg.hour,
+                flight_day_budget=3 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                mode="round_trip",
+                azimuth_resolution_deg=90.0,
+                distance_tolerance_nmi=5.0,
+            )
+        assert len(gdf) == 4
+
+    def test_max_refuel_stops_must_be_one(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        with pytest.raises(HyPlanValueError, match="max_refuel_stops"):
+            compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=8 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                max_refuel_stops=2,
+                mode="round_trip",
+            )
+
+    def test_negative_refuel_time_raises(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        with pytest.raises(HyPlanValueError, match="refuel_time"):
+            compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=8 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                refuel_time=-5 * ureg.minute,
+                mode="round_trip",
+            )
+
+    # --- 2. behavior -------------------------------------------------------
+
+    def test_unreachable_refuel_pruned(
+        self, b200, kefd_wp, b200_cruise,
+    ):
+        """Refuel airport too far away → not used; flagged unreachable."""
+        far_wp = Waypoint(
+            latitude=70.0, longitude=-95.0, heading=0.0,
+            altitude_msl=100 * ureg.feet, name="FAR",
+        )
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=2 * ureg.hour,
+            flight_day_budget=4 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[far_wp],
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=5.0,
+        )
+        assert "FAR" not in gdf.attrs["refuel_airports_used"]
+        assert any(
+            u["label"] == "FAR"
+            for u in gdf.attrs["refuel_airports_unreachable"]
+        )
+        assert (gdf["itinerary"] == "direct").all()
+
+    def test_refuel_strictly_extends_reach(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """Along the bearing toward KLBB, refuel boundary > direct boundary."""
+        common = dict(
+            aircraft=b200, start=kefd_wp,
+            cruise_altitude=b200_cruise,
+            mode="round_trip",
+            azimuth_resolution_deg=30.0,
+            distance_tolerance_nmi=2.0,
+        )
+        direct = compute_isochrone(
+            **common, budget=4 * ureg.hour,
+        )
+        refuel = compute_refuel_isochrone(
+            **common,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+        )
+        # Bearing KEFD→KLBB ≈ 322°; pick ray closest (330°).
+        d_dir_330 = direct.loc[
+            direct["azimuth_deg"] == 330.0, "distance_nmi"
+        ].iloc[0]
+        ref_330 = refuel.loc[refuel["azimuth_deg"] == 330.0].iloc[0]
+        assert ref_330["distance_nmi"] > d_dir_330 + 5.0
+        assert ref_330["itinerary"] == "outbound_refuel"
+        assert ref_330["refuel_airport"] == "KLBB"
+
+    def test_direct_wins_opposite_refuel(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """Rays away from refuel direction stay direct."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            mode="round_trip",
+            azimuth_resolution_deg=30.0,
+            distance_tolerance_nmi=2.0,
+        )
+        # KLBB is NW (~322°).  Ray at 150° (opposite) should be direct.
+        opp = gdf.loc[gdf["azimuth_deg"] == 150.0].iloc[0]
+        assert opp["itinerary"] == "direct"
+
+    def test_no_useful_refuel_matches_direct(
+        self, b200, kefd_wp, b200_cruise,
+    ):
+        """When the refuel airport is within reach but never improves any
+        ray, refuel boundary matches direct boundary within tolerance."""
+        # Refuel airport very close to start: a 5-min detour wastes
+        # 30 min refuel + small flight time and extends nothing.
+        nearby = Waypoint(
+            latitude=kefd_wp.latitude + 0.1, longitude=kefd_wp.longitude,
+            heading=0.0, altitude_msl=100 * ureg.feet, name="NEAR",
+        )
+        common = dict(
+            aircraft=b200, start=kefd_wp,
+            cruise_altitude=b200_cruise,
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=2.0,
+        )
+        direct = compute_isochrone(
+            **common, budget=4 * ureg.hour,
+        )
+        with pytest.warns(UserWarning):
+            refuel = compute_refuel_isochrone(
+                **common,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=4 * ureg.hour + 5 * ureg.minute,
+                refuel_airports=[nearby],
+                refuel_time=30 * ureg.minute,
+            )
+        for az in direct["azimuth_deg"]:
+            d_dir = direct.loc[
+                direct["azimuth_deg"] == az, "distance_nmi"
+            ].iloc[0]
+            d_ref = refuel.loc[
+                refuel["azimuth_deg"] == az, "distance_nmi"
+            ].iloc[0]
+            assert abs(d_dir - d_ref) < 5.0, f"az {az}: {d_dir} vs {d_ref}"
+
+    def test_refuel_time_monotone(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """Increasing refuel_time monotonically shrinks per-ray reach."""
+        common = dict(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=2.0,
+        )
+        short = compute_refuel_isochrone(refuel_time=30 * ureg.minute, **common)
+        long_ = compute_refuel_isochrone(refuel_time=90 * ureg.minute, **common)
+        for az in short["azimuth_deg"]:
+            d_s = short.loc[short["azimuth_deg"] == az, "distance_nmi"].iloc[0]
+            d_l = long_.loc[long_["azimuth_deg"] == az, "distance_nmi"].iloc[0]
+            assert d_l <= d_s + 2.0, f"az {az}: long {d_l} > short {d_s}"
+
+    def test_tight_day_budget_blocks_refuel(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """flight_day_budget = sortie + 5 min → refuel impossible."""
+        with pytest.warns(UserWarning):
+            gdf = compute_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=4 * ureg.hour + 5 * ureg.minute,
+                refuel_time=60 * ureg.minute,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                mode="round_trip",
+                azimuth_resolution_deg=60.0,
+                distance_tolerance_nmi=5.0,
+            )
+        assert (gdf["itinerary"] == "direct").all()
+
+    def test_reserve_per_cycle(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """reserve = 30 min applies to each cycle, not the day clock."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            reserve=30 * ureg.minute,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=2.0,
+        )
+        cap = 4 * 60 - 30  # min
+        assert (gdf["sortie_cycle_1_min"] <= cap + 1e-3).all()
+        c2 = gdf["sortie_cycle_2_min"].dropna()
+        assert (c2 <= cap + 1e-3).all()
+
+    def test_different_return_airport(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """return_safe with start≠recovery shows mixed itineraries."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+            azimuth_resolution_deg=30.0,
+            distance_tolerance_nmi=2.0,
+        )
+        kinds = set(gdf["itinerary"].unique())
+        # Should see at least direct and one refuel template.
+        assert "direct" in kinds
+        assert kinds & {"outbound_refuel", "return_refuel"}
+
+    def test_return_refuel_appears(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """Some ray geometry should select return_refuel."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+            azimuth_resolution_deg=15.0,
+            distance_tolerance_nmi=2.0,
+        )
+        assert (gdf["itinerary"] == "return_refuel").any()
+
+    # --- 3. diagnostics ----------------------------------------------------
+
+    def test_diagnostic_correctness(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """Per-leg columns sum, margins non-negative, schema invariants."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            on_station_time=10 * ureg.minute,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+            azimuth_resolution_deg=30.0,
+            distance_tolerance_nmi=2.0,
+        )
+        for _, row in gdf.iterrows():
+            it = row["itinerary"]
+            assert (row["refuel_count"] == 0) == (it == "direct")
+            assert row["sortie_margin_min"] >= -1e-6
+            assert row["day_margin_min"] >= -1e-6
+            assert row["limiting_constraint"] in {
+                "sortie", "flight_day", "both", "slack",
+            }
+            day = row["day_total_time_min"]
+            os_ = row["on_station_min"]
+            if it == "direct":
+                expected_c1 = (
+                    row["start_to_target_time_min"]
+                    + os_
+                    + row["target_to_return_time_min"]
+                )
+                assert abs(expected_c1 - row["sortie_cycle_1_min"]) < 0.1
+                assert np.isnan(row["sortie_cycle_2_min"])
+                assert abs(day - row["sortie_cycle_1_min"]) < 0.1
+            elif it == "outbound_refuel":
+                c1 = row["start_to_refuel_time_min"]
+                c2 = (
+                    row["refuel_to_target_time_min"]
+                    + os_
+                    + row["target_to_return_time_min"]
+                )
+                assert abs(c1 - row["sortie_cycle_1_min"]) < 0.1
+                assert abs(c2 - row["sortie_cycle_2_min"]) < 0.1
+                assert abs(
+                    day - (c1 + row["refuel_time_min"] + c2)
+                ) < 0.1
+            elif it == "return_refuel":
+                c1 = (
+                    row["start_to_target_time_min"]
+                    + os_
+                    + row["target_to_refuel_time_min"]
+                )
+                c2 = row["refuel_to_return_time_min"]
+                assert abs(c1 - row["sortie_cycle_1_min"]) < 0.1
+                assert abs(c2 - row["sortie_cycle_2_min"]) < 0.1
+                assert abs(
+                    day - (c1 + row["refuel_time_min"] + c2)
+                ) < 0.1
+
+    def test_refuel_used_matches_itinerary_set(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """attrs['refuel_airports_used'] = unique non-direct refuel labels."""
+        gdf = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+            azimuth_resolution_deg=30.0,
+            distance_tolerance_nmi=2.0,
+        )
+        from_rows = set(
+            r for r in gdf["refuel_airport"].dropna().unique()
+        )
+        assert set(gdf.attrs["refuel_airports_used"]) == from_rows
