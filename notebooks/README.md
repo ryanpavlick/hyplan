@@ -33,8 +33,9 @@ These notebooks cover the fundamental building blocks of flight planning: indivi
 | [flight_patterns.ipynb](flight_patterns.ipynb) | Generate standard survey patterns: racetracks, lawnmowers, expanding squares, spirals, and more. | When you need a pre-built survey pattern rather than custom flight lines. |
 | [dubins_path_planning.ipynb](dubins_path_planning.ipynb) | Compute minimum-radius turn paths (Dubins paths) between waypoints, respecting aircraft turning constraints. | When you need smooth, flyable transitions between waypoints or flight lines. |
 | [flight_optimizer_demo.ipynb](flight_optimizer_demo.ipynb) | Optimize flight line ordering to minimize transit time and total mission duration. | When you have many flight lines and want to find the most efficient ordering. |
+| [isochrone.ipynb](isochrone.ipynb) | Compute wind-aware isochrones (reachability polygons) — `one_way`, `round_trip`, and `return_safe` modes — for site selection and in-flight re-tasking. | When you need to determine which sites are feasible from a base airport given an endurance budget, or where an airborne aircraft can still reach and recover. |
 
-**Suggested order:** flight_line_operations &rarr; flight_box_generation &rarr; flight_plan_computation &rarr; flight_patterns &rarr; dubins_path_planning &rarr; flight_optimizer_demo
+**Suggested order:** flight_line_operations &rarr; flight_box_generation &rarr; flight_plan_computation &rarr; flight_patterns &rarr; dubins_path_planning &rarr; flight_optimizer_demo &rarr; isochrone
 
 ---
 
@@ -156,6 +157,7 @@ These notebooks read locally-cached IWG1 / ICARTT files from `data/<aircraft>/` 
 | flight_patterns | No | None | None | No |
 | dubins_path_planning | No | None | None | No |
 | flight_optimizer_demo | Yes | None | None | No |
+| isochrone | Optional (MERRA-2 section) | Optional (NASA Earthdata for MERRA-2) | `[winds]` for MERRA-2 | No |
 | sensor_comparison | No | None | None | No |
 | aircraft_performance | No | None | None | No |
 | solar_planning | No | None | None | No |

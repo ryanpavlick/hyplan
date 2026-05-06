@@ -1,0 +1,705 @@
+"""Tests for wind-aware isochrones (`hyplan.planning.isochrone`)."""
+
+from __future__ import annotations
+
+
+import numpy as np
+import pytest
+
+from hyplan import (
+    KingAirB200,
+    NASA_GIII,
+    Waypoint,
+    compute_isochrone,
+    isochrone_polygon,
+    ureg,
+)
+from hyplan.exceptions import HyPlanValueError
+from hyplan.winds import ConstantWindField, StillAirField
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def giii() -> NASA_GIII:
+    return NASA_GIII()
+
+
+@pytest.fixture
+def b200() -> KingAirB200:
+    return KingAirB200()
+
+
+@pytest.fixture
+def kedw_wp() -> Waypoint:
+    """KEDW (Edwards AFB) at runway elevation, dummy heading."""
+    return Waypoint(
+        latitude=34.905,
+        longitude=-117.884,
+        heading=0.0,
+        altitude_msl=2300 * ureg.feet,
+        name="KEDW",
+    )
+
+
+@pytest.fixture
+def cruise_alt():
+    return 35000 * ureg.feet
+
+
+# ---------------------------------------------------------------------------
+# 1. Still-air symmetry
+# ---------------------------------------------------------------------------
+
+def test_still_air_symmetry(giii, kedw_wp, cruise_alt):
+    """All rays equal within 1 nmi for a still-air round-trip."""
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=10.0,
+    )
+    spread = gdf["distance_nmi"].max() - gdf["distance_nmi"].min()
+    assert spread < 1.0, (
+        f"still-air round-trip should be symmetric within 1 nmi; "
+        f"spread = {spread:.2f}"
+    )
+    assert len(gdf) == 36
+    assert gdf.crs.to_epsg() == 4326
+
+
+# ---------------------------------------------------------------------------
+# 2. Still-air half-range
+# ---------------------------------------------------------------------------
+
+def test_still_air_half_range(giii, kedw_wp, cruise_alt):
+    """Round-trip radius is roughly cruise_TAS × budget / 2.
+
+    The aircraft covers ground during climb and descent too, so
+    the simple cruise-time half-range underestimates by ~6-10%.
+    Test against the upper-bound `cruise_TAS × budget / 2` formula
+    with a generous tolerance.
+    """
+    budget_hr = 4.0
+    cruise_tas_kt = giii.cruise_speed_at(cruise_alt).m_as(ureg.knot)
+    upper_bound_nmi = cruise_tas_kt * budget_hr / 2.0
+
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=30.0,
+    )
+    actual = gdf["distance_nmi"].mean()
+    # Actual must be < upper bound (climb/descent overhead steals time)
+    # but within 15% of it.
+    assert actual < upper_bound_nmi
+    rel_err = (upper_bound_nmi - actual) / upper_bound_nmi
+    assert rel_err < 0.15, (
+        f"still-air radius {actual:.0f} nmi differs from "
+        f"cruise-only upper bound {upper_bound_nmi:.0f} nmi by "
+        f"{rel_err*100:.1f}% — overhead seems unreasonable."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3. Headwind elongates one_way reach
+# ---------------------------------------------------------------------------
+
+def test_one_way_tailwind_elongates(giii, kedw_wp, cruise_alt):
+    """`one_way` boundary in tailwind direction farther than headwind."""
+    # Wind FROM west (270°), 30 kt.  Eastbound = tailwind, westbound =
+    # headwind.
+    wind = ConstantWindField(30 * ureg.knot, wind_from_deg=270.0)
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="one_way",
+        wind_source=wind,
+        azimuth_resolution_deg=90.0,
+    )
+    east = gdf[gdf.azimuth_deg == 90.0].iloc[0].distance_nmi
+    west = gdf[gdf.azimuth_deg == 270.0].iloc[0].distance_nmi
+    assert east > west * 1.10, (
+        f"one_way east reach with tailwind ({east:.1f}) should be "
+        f">10% beyond west reach with headwind ({west:.1f})."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4. Tailwind extends one_way reach beyond no-wind cruise range
+# ---------------------------------------------------------------------------
+
+def test_one_way_tailwind_exceeds_no_wind_range(giii, kedw_wp, cruise_alt):
+    """Regression: expanding bracket must not clip strong-tailwind reach."""
+    # Strong tailwind from west.  Naive `cruise_TAS × budget` upper bound
+    # would clip the eastbound boundary; expanding bracket should not.
+    wind = ConstantWindField(150 * ureg.knot, wind_from_deg=270.0)
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=3 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="one_way",
+        wind_source=wind,
+        azimuth_resolution_deg=90.0,
+    )
+    east = gdf[gdf.azimuth_deg == 90.0].iloc[0].distance_nmi
+    cruise_tas_kt = giii.cruise_speed_at(cruise_alt).m_as(ureg.knot)
+    naive_no_wind_range_nmi = cruise_tas_kt * 3.0  # 3 hr budget
+    assert east > naive_no_wind_range_nmi, (
+        f"east one_way reach with 150 kt tailwind ({east:.0f} nmi) "
+        f"should exceed no-wind range ({naive_no_wind_range_nmi:.0f} nmi)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. On-station dwell shrinks
+# ---------------------------------------------------------------------------
+
+def test_on_station_dwell_shrinks(giii, kedw_wp, cruise_alt):
+    """Increasing on_station_time shrinks every ray."""
+    common = dict(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=30.0,
+    )
+    base = compute_isochrone(**common, on_station_time=0 * ureg.minute)
+    shrunk = compute_isochrone(**common, on_station_time=60 * ureg.minute)
+    base_d = base.set_index("azimuth_deg")["distance_nmi"]
+    shrunk_d = shrunk.set_index("azimuth_deg")["distance_nmi"]
+    assert (shrunk_d < base_d).all(), (
+        f"on_station_time=60 should shrink every ray; "
+        f"violations: {(shrunk_d >= base_d).sum()}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. Reserve shrinks
+# ---------------------------------------------------------------------------
+
+def test_reserve_shrinks(giii, kedw_wp, cruise_alt):
+    """Increasing reserve shrinks every ray."""
+    common = dict(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=30.0,
+    )
+    base = compute_isochrone(**common, reserve=0 * ureg.minute)
+    shrunk = compute_isochrone(**common, reserve=30 * ureg.minute)
+    base_d = base.set_index("azimuth_deg")["distance_nmi"]
+    shrunk_d = shrunk.set_index("azimuth_deg")["distance_nmi"]
+    assert (shrunk_d < base_d).all()
+
+
+# ---------------------------------------------------------------------------
+# 7. Different return airport biases the boundary
+# ---------------------------------------------------------------------------
+
+def test_return_safe_biases_toward_alternate(giii, kedw_wp, cruise_alt):
+    """`return_safe` to a distant airport should bias rays toward it."""
+    # Synthetic alternate ~200 nmi south of KEDW.  Use Waypoint to avoid
+    # depending on the OurAirports data fixture.
+    alt_wp = Waypoint(
+        latitude=31.5,
+        longitude=-117.884,
+        heading=0.0,
+        altitude_msl=500 * ureg.feet,
+        name="alt-south",
+    )
+    rt = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=90.0,
+    )
+    rs = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="return_safe",
+        wind_source=StillAirField(),
+        return_destination=alt_wp,
+        azimuth_resolution_deg=90.0,
+    )
+    rt_idx = rt.set_index("azimuth_deg")["distance_nmi"]
+    rs_idx = rs.set_index("azimuth_deg")["distance_nmi"]
+    # Southbound (180°) should reach beyond round_trip; northbound (0°)
+    # should reach less, because the return leg is longer when the
+    # target is north and the recovery is south.
+    assert rs_idx[180.0] > rt_idx[180.0]
+    assert rs_idx[0.0] < rt_idx[0.0]
+
+
+# ---------------------------------------------------------------------------
+# 8. one_way reach exceeds round_trip reach on every ray
+# ---------------------------------------------------------------------------
+
+def test_one_way_exceeds_round_trip(giii, kedw_wp, cruise_alt):
+    """Same budget: one_way distance > round_trip distance everywhere."""
+    common = dict(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=3 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=30.0,
+    )
+    rt = compute_isochrone(**common, mode="round_trip")
+    ow = compute_isochrone(**common, mode="one_way")
+    rt_idx = rt.set_index("azimuth_deg")["distance_nmi"]
+    ow_idx = ow.set_index("azimuth_deg")["distance_nmi"]
+    assert (ow_idx > rt_idx).all()
+
+
+# ---------------------------------------------------------------------------
+# 9. In-flight reaches farther than pre-flight, all else equal
+# ---------------------------------------------------------------------------
+
+def test_inflight_reaches_farther_than_preflight(giii, kedw_wp, cruise_alt):
+    """Same lat/lon: at-cruise start reaches farther than runway-elev start."""
+    inflight_start = Waypoint(
+        latitude=kedw_wp.latitude,
+        longitude=kedw_wp.longitude,
+        heading=0.0,
+        altitude_msl=cruise_alt,
+        name="KEDW (in-flight)",
+    )
+    common = dict(
+        aircraft=giii,
+        budget=3 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="return_safe",
+        wind_source=StillAirField(),
+        return_destination=kedw_wp,
+        azimuth_resolution_deg=30.0,
+    )
+    pre = compute_isochrone(start=kedw_wp, **common)
+    flying = compute_isochrone(start=inflight_start, **common)
+    pre_idx = pre.set_index("azimuth_deg")["distance_nmi"]
+    flying_idx = flying.set_index("azimuth_deg")["distance_nmi"]
+    assert (flying_idx > pre_idx).all(), (
+        f"in-flight should reach farther on every ray; "
+        f"violations: {(flying_idx <= pre_idx).sum()}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10. Input validation
+# ---------------------------------------------------------------------------
+
+class TestValidation:
+    """Argument validation produces clean error messages."""
+
+    def test_return_safe_requires_destination(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="return_safe"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="return_safe",
+            )
+
+    def test_distinct_on_station_altitude_raises(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="[Mm]ulti-altitude"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt,
+                on_station_altitude=20000 * ureg.feet,
+                mode="round_trip",
+            )
+
+    def test_budget_le_reserve_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="budget"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=30 * ureg.minute,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                reserve=30 * ureg.minute,
+            )
+
+    def test_missing_start_altitude_raises(self, giii, cruise_alt):
+        bad_wp = Waypoint(34.0, -118.0, heading=0.0, altitude_msl=None)
+        with pytest.raises(HyPlanValueError, match="altitude_msl"):
+            compute_isochrone(
+                aircraft=giii, start=bad_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+            )
+
+    def test_invalid_mode_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="mode"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="bogus",
+            )
+
+    def test_non_positive_azimuth_resolution_raises(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="azimuth_resolution"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                azimuth_resolution_deg=0.0,
+            )
+
+    def test_excessive_azimuth_resolution_raises(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="azimuth_resolution"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                azimuth_resolution_deg=361.0,
+            )
+
+    def test_non_positive_distance_tolerance_raises(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="distance_tolerance"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                distance_tolerance_nmi=-0.1,
+            )
+
+    def test_negative_reserve_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="reserve"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                reserve=-5 * ureg.minute,
+            )
+
+    def test_negative_on_station_time_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="on_station_time"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                on_station_time=-5 * ureg.minute,
+            )
+
+    def test_cruise_below_start_altitude_raises(self, giii, kedw_wp):
+        """v1 rejects descending to cruise (start above cruise alt)."""
+        airborne = Waypoint(
+            latitude=kedw_wp.latitude, longitude=kedw_wp.longitude,
+            heading=0.0, altitude_msl=40000 * ureg.feet,
+        )
+        with pytest.raises(HyPlanValueError, match="initial descent|cruise"):
+            compute_isochrone(
+                aircraft=giii, start=airborne, budget=2 * ureg.hour,
+                cruise_altitude=20000 * ureg.feet, mode="round_trip",
+            )
+
+    def test_azimuth_resolution_above_120_raises(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        """≥3 rays needed for a polygon."""
+        with pytest.raises(HyPlanValueError, match="azimuth_resolution"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                azimuth_resolution_deg=180.0,
+            )
+
+
+# ---------------------------------------------------------------------------
+# 11. round_trip defaults to start
+# ---------------------------------------------------------------------------
+
+def test_round_trip_defaults_to_start(giii, kedw_wp, cruise_alt):
+    """round_trip without `return_destination` matches one with start."""
+    common = dict(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=3 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+    )
+    a = compute_isochrone(**common)
+    b = compute_isochrone(return_destination=kedw_wp, **common)
+    a_d = a.set_index("azimuth_deg")["distance_nmi"]
+    b_d = b.set_index("azimuth_deg")["distance_nmi"]
+    assert (a_d - b_d).abs().max() < 0.5  # within tolerance
+
+
+# ---------------------------------------------------------------------------
+# 12. Diagnostic correctness
+# ---------------------------------------------------------------------------
+
+def test_diagnostic_correctness(giii, kedw_wp, cruise_alt):
+    """Per-ray diagnostics are internally consistent."""
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        on_station_time=15 * ureg.minute,
+        azimuth_resolution_deg=60.0,
+    )
+    # total_time_min == outbound + on_station + return
+    sums = (
+        gdf["outbound_time_min"]
+        + gdf["on_station_min"]
+        + gdf["return_time_min"]
+    )
+    assert (gdf["total_time_min"] - sums).abs().max() < 0.1
+
+    # time_slack_min ≥ 0
+    assert (gdf["time_slack_min"] >= 0).all()
+
+    # limiting_leg ∈ {outbound, return, on_station}
+    assert gdf["limiting_leg"].isin(
+        {"outbound", "return", "on_station"}
+    ).all()
+
+    # net_headwind = (out + back) / 2; asymmetry = (out − back) / 2
+    expected_net = 0.5 * (
+        gdf["outbound_headwind_kt"] + gdf["return_headwind_kt"]
+    )
+    expected_asym = 0.5 * (
+        gdf["outbound_headwind_kt"] - gdf["return_headwind_kt"]
+    )
+    assert np.allclose(gdf["net_headwind_kt"], expected_net, atol=0.01)
+    assert np.allclose(
+        gdf["headwind_asymmetry_kt"], expected_asym, atol=0.01,
+    )
+
+
+def test_one_way_diagnostics_have_nan(giii, kedw_wp, cruise_alt):
+    """one_way mode leaves return-related diagnostics as NaN."""
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="one_way",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=120.0,
+    )
+    assert gdf["return_time_min"].isna().all()
+    assert gdf["net_headwind_kt"].isna().all()
+    assert gdf["headwind_asymmetry_kt"].isna().all()
+    # Total = outbound only.
+    assert (gdf["total_time_min"] - gdf["outbound_time_min"]).abs().max() < 0.01
+
+
+# ---------------------------------------------------------------------------
+# isochrone_polygon helper
+# ---------------------------------------------------------------------------
+
+def test_isochrone_polygon_closes(giii, kedw_wp, cruise_alt):
+    """The helper closes the boundary into a valid Polygon."""
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=3 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+    )
+    poly = isochrone_polygon(gdf)
+    assert poly.is_valid
+    assert poly.area > 0
+
+
+# ---------------------------------------------------------------------------
+# Metadata stash
+# ---------------------------------------------------------------------------
+
+def test_start_accepts_airport(giii, kedw_wp, cruise_alt):
+    """Passing an Airport as `start` produces the same result as the
+    equivalent Waypoint (matching ICAO code, runway elevation)."""
+    from hyplan.airports import Airport, initialize_data
+
+    initialize_data()
+    kedw_airport = Airport("KEDW")
+
+    common = dict(
+        aircraft=giii,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+    )
+    gdf_airport = compute_isochrone(start=kedw_airport, **common)
+    # Reconstruct an equivalent Waypoint manually.
+    kedw_equiv_wp = Waypoint(
+        latitude=kedw_airport.latitude,
+        longitude=kedw_airport.longitude,
+        heading=0.0,
+        altitude_msl=kedw_airport.elevation,
+        name=kedw_airport.icao_code,
+    )
+    gdf_wp = compute_isochrone(start=kedw_equiv_wp, **common)
+
+    a = gdf_airport.set_index("azimuth_deg")["distance_nmi"]
+    b = gdf_wp.set_index("azimuth_deg")["distance_nmi"]
+    assert (a - b).abs().max() < 0.5  # within tolerance
+    # attrs reflect the Airport's coordinates exactly.
+    assert gdf_airport.attrs["start_lat"] == pytest.approx(
+        kedw_airport.latitude
+    )
+    assert gdf_airport.attrs["start_lon"] == pytest.approx(
+        kedw_airport.longitude
+    )
+
+
+def test_start_airport_with_return_airport(giii, cruise_alt):
+    """Both `start` and `return_destination` can be Airports
+    (return_safe to a different recovery field)."""
+    from hyplan.airports import Airport, initialize_data
+
+    initialize_data()
+    kedw = Airport("KEDW")
+    kcos = Airport("KCOS")
+
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw,
+        budget=5 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="return_safe",
+        return_destination=kcos,
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+    )
+    assert len(gdf) == 6
+    # The return-destination metadata should reflect KCOS.
+    assert gdf.attrs["return_destination_label"] == "KCOS"
+    assert gdf.attrs["return_destination_lat"] == pytest.approx(
+        kcos.latitude
+    )
+
+
+def test_pure_crosswind_slows_groundspeed(giii, kedw_wp, cruise_alt):
+    """A pure crosswind on every ray must shrink the boundary vs still air.
+
+    Regression: the v1 manual along-track-only projection ignored
+    crab and would have produced an identical boundary.
+    """
+    # 60 kt wind from the west (270°).  Northbound (azimuth=0) and
+    # southbound (180°) rays have no along-track component — pure
+    # crosswind.  With crab handling, GS = sqrt(TAS² − xwind²) < TAS,
+    # so those rays should reach less far than still air.
+    wind = ConstantWindField(60 * ureg.knot, wind_from_deg=270.0)
+    common = dict(
+        aircraft=giii, start=kedw_wp, budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt, mode="round_trip",
+        azimuth_resolution_deg=90.0,
+    )
+    calm = compute_isochrone(wind_source=StillAirField(), **common)
+    crossed = compute_isochrone(wind_source=wind, **common)
+
+    calm_north = calm.set_index("azimuth_deg").loc[0.0, "distance_nmi"]
+    crossed_north = crossed.set_index("azimuth_deg").loc[0.0, "distance_nmi"]
+    calm_south = calm.set_index("azimuth_deg").loc[180.0, "distance_nmi"]
+    crossed_south = crossed.set_index("azimuth_deg").loc[180.0, "distance_nmi"]
+
+    # Crosswind should slow the aircraft on north / south rays.
+    assert crossed_north < calm_north - 5.0, (
+        f"pure-crosswind north ray ({crossed_north:.1f}) should be "
+        f">5 nmi shorter than still-air ({calm_north:.1f})"
+    )
+    assert crossed_south < calm_south - 5.0
+
+
+def test_unflyable_headwind_clips_to_zero(giii, cruise_alt):
+    """When wind exceeds TAS along a ray, the boundary clips to 0 nmi.
+
+    Tested in-flight (already at cruise altitude) so there's no
+    climb-distance carryover that masks the unflyable-cruise
+    behavior.
+    """
+    # G-III cruise TAS at FL350 ≈ 460 kt.  An 800 kt headwind from the
+    # east is unflyable on the eastbound ray.
+    airborne = Waypoint(34.905, -117.884, heading=0.0,
+                        altitude_msl=cruise_alt)
+    wind = ConstantWindField(800 * ureg.knot, wind_from_deg=90.0)
+    gdf = compute_isochrone(
+        aircraft=giii, start=airborne, budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt, mode="one_way",
+        wind_source=wind, azimuth_resolution_deg=90.0,
+    )
+    east = gdf.set_index("azimuth_deg").loc[90.0]
+    assert east["distance_nmi"] == 0.0, (
+        f"unflyable east ray should clip to 0 nmi, got "
+        f"{east['distance_nmi']:.1f}"
+    )
+    assert east["limiting_leg"] == "unflyable"
+    # Westbound is fine — strong tailwind.
+    west = gdf.set_index("azimuth_deg").loc[270.0]
+    assert west["distance_nmi"] > 100.0
+
+
+def test_return_destination_attrs_present(giii, kedw_wp, cruise_alt):
+    """attrs include return lat/lon when applicable."""
+    ret = Waypoint(38.806, -104.701, heading=0.0,
+                   altitude_msl=6187 * ureg.feet, name="KCOS")
+    gdf = compute_isochrone(
+        aircraft=giii, start=kedw_wp, budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt, mode="return_safe",
+        return_destination=ret, wind_source=StillAirField(),
+        azimuth_resolution_deg=120.0,
+    )
+    assert gdf.attrs["return_destination_lat"] == pytest.approx(38.806)
+    assert gdf.attrs["return_destination_lon"] == pytest.approx(-104.701)
+    assert gdf.attrs["return_destination_label"] == "KCOS"
+
+    # one_way: return attrs are None.
+    gdf_ow = compute_isochrone(
+        aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt, mode="one_way",
+        wind_source=StillAirField(), azimuth_resolution_deg=120.0,
+    )
+    assert gdf_ow.attrs["return_destination_lat"] is None
+    assert gdf_ow.attrs["return_destination_lon"] is None
+
+
+def test_attrs_metadata_present(giii, kedw_wp, cruise_alt):
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=120.0,
+    )
+    expected = {
+        "mode", "start_lat", "start_lon", "start_altitude_ft",
+        "cruise_altitude_ft", "budget_min", "budget_hr", "reserve_min",
+        "on_station_min", "return_destination_label", "aircraft_type",
+        "wind_source_kind", "start_time",
+    }
+    missing = expected - set(gdf.attrs.keys())
+    assert not missing, f"missing attrs: {missing}"
+    assert gdf.attrs["aircraft_type"] == "Gulfstream III"
+    assert gdf.attrs["mode"] == "round_trip"

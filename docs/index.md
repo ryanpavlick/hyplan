@@ -39,6 +39,7 @@ api/flight_box
 api/pattern
 api/flight_patterns
 api/flight_plan
+api/isochrone
 api/flight_optimizer
 ```
 
