@@ -679,3 +679,104 @@ class TestComputeFlightPlanApproachIntegration:
             flight_line.waypoint2, airport,
         )["total_time"].m_as(ureg.minute)
         assert return_rows["time_to_segment"].sum() == pytest.approx(expected, rel=1e-2)
+
+
+# ---------------------------------------------------------------------------
+# Phase-aware wind sampling: wind_sampling="phase_midpoint"
+# ---------------------------------------------------------------------------
+
+class _AltitudeWindField:
+    """Synthetic vertical wind profile.
+
+    Eastward wind grows linearly with altitude, mimicking a jet stream
+    that's stronger aloft.  `v` is zero everywhere.  Used to verify that
+    `wind_sampling="phase_midpoint"` actually samples climb / descent at
+    their phase-mid altitudes (not at cruise altitude).
+    """
+
+    def __init__(self, u_per_ft_kt: float):
+        self.u_per_ft_kt = u_per_ft_kt
+
+    def wind_at(self, lat, lon, altitude, time):
+        ft = altitude.m_as(ureg.feet)
+        u_kt = self.u_per_ft_kt * ft
+        return (
+            u_kt * 0.514444 * (ureg.meter / ureg.second),
+            0.0 * (ureg.meter / ureg.second),
+        )
+
+
+class TestPhaseAwareWind:
+    """compute_flight_plan(wind_sampling="phase_midpoint", ...)."""
+
+    @pytest.fixture
+    def airport(self):
+        return Airport("KSBA")
+
+    def test_invalid_wind_sampling_raises(self, b200, flight_line, airport):
+        with pytest.raises(HyPlanValueError, match="wind_sampling"):
+            compute_flight_plan(
+                aircraft=b200, flight_sequence=[flight_line],
+                takeoff_airport=airport, return_airport=airport,
+                wind_sampling="not_a_real_mode",
+            )
+
+    def test_constant_wind_phase_modes_match(
+        self, b200, flight_line, airport,
+    ):
+        """Under a uniform constant wind, phase_midpoint and
+        cruise_midpoint should produce identical results — the wind
+        is the same at every altitude, so per-phase sampling is
+        degenerate."""
+        from hyplan.winds import ConstantWindField
+        import datetime as _dt
+
+        wf = ConstantWindField(40 * ureg.knot, wind_from_deg=270.0)
+        t0 = _dt.datetime(2026, 5, 6, 12, tzinfo=_dt.timezone.utc)
+        plan_cm = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+            wind_source=wf, takeoff_time=t0,
+            wind_sampling="cruise_midpoint",
+        )
+        plan_pm = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+            wind_source=wf, takeoff_time=t0,
+            wind_sampling="phase_midpoint",
+        )
+        # Same total elapsed time within numeric noise.
+        t_cm = plan_cm["time_to_segment"].sum()
+        t_pm = plan_pm["time_to_segment"].sum()
+        assert abs(t_cm - t_pm) < 1e-3
+
+    def test_altitude_varying_wind_phase_modes_diverge(
+        self, b200, flight_line, airport,
+    ):
+        """Under a wind that varies with altitude, phase_midpoint must
+        differ from cruise_midpoint (climb-mid samples a different
+        altitude than cruise-mid)."""
+        import datetime as _dt
+        wf = _AltitudeWindField(u_per_ft_kt=0.005)  # 100 kt at 20000 ft
+        t0 = _dt.datetime(2026, 5, 6, 12, tzinfo=_dt.timezone.utc)
+        plan_cm = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+            wind_source=wf, takeoff_time=t0,
+            wind_sampling="cruise_midpoint",
+        )
+        plan_pm = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+            wind_source=wf, takeoff_time=t0,
+            wind_sampling="phase_midpoint",
+        )
+        t_cm = plan_cm["time_to_segment"].sum()
+        t_pm = plan_pm["time_to_segment"].sum()
+        # Difference should be measurable — at least 0.1 min on a
+        # short ~25 nmi line; on real ER-2 transits the delta is
+        # multiple minutes (see plans/ release notes).
+        assert abs(t_cm - t_pm) > 0.1, (
+            f"phase_midpoint must differ from cruise_midpoint under "
+            f"altitude-varying wind, got Δ = {abs(t_cm - t_pm):.4f} min"
+        )

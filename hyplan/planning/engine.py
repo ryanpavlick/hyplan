@@ -55,6 +55,7 @@ def compute_flight_plan(
     wind_source: Optional["WindField"] = None,
     takeoff_time: Optional[datetime.datetime] = None,
     climb_plan: Union["ClimbPlan", str, None] = "auto",
+    wind_sampling: str = "cruise_midpoint",
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -117,7 +118,29 @@ def compute_flight_plan(
               ``"loiter"`` segment in the output dataframe (zero
               forward distance, hold duration only), with the climb
               split into one row per inter-pause segment.
+        wind_sampling: How wind is sampled per phase when
+            ``wind_source`` is provided.
+
+            * ``"cruise_midpoint"`` (default) — single ``(u, v)`` per
+              leg sampled at the leg midpoint at cruise altitude;
+              passed to ``Aircraft._hybrid_path`` as ``wind=(u, v)``
+              and used for both 2D Dubins (trochoidal) and the
+              vertical phases.  Backward-compatible with v1.5.
+            * ``"phase_midpoint"`` — climb and descent each get their
+              own wind sample at the phase-mid altitude near the
+              phase-mid distance, projected onto the bearing.  Cruise
+              still gets a single midpoint sample at cruise altitude.
+              Captures vertical wind shear (jet streams) that
+              ``"cruise_midpoint"`` misses.
+
+            Ignored when ``wind_source`` is None (no wind / scalar
+            wind / wind_speed+wind_direction paths).
     """
+    if wind_sampling not in ("cruise_midpoint", "phase_midpoint"):
+        raise HyPlanValueError(
+            f"wind_sampling must be 'cruise_midpoint' or 'phase_midpoint', "
+            f"got {wind_sampling!r}."
+        )
     # Resolve the "auto" sentinel by reading the aircraft's
     # typical_climb_out policy.  No-op when the aircraft hasn't
     # populated the policy.
@@ -158,6 +181,28 @@ def compute_flight_plan(
         if takeoff_time is None:
             return None
         return takeoff_time + datetime.timedelta(minutes=cumulative_minutes)
+
+    def _phase_wind_kwargs(
+        mid_lat: float, mid_lon: float, alt: Quantity,
+    ) -> dict:
+        """Pick the wind kwargs to forward to time_to_* methods.
+
+        For ``wind_sampling="phase_midpoint"`` (and a wind_source
+        provider supplied), pass ``wind_source`` + ``t_anchor`` so
+        ``_hybrid_path`` does its own per-phase sampling.  Otherwise
+        resolve to a single ``(u, v)`` at the leg midpoint and pass as
+        ``wind=`` (the v1.5 behavior).
+        """
+        if wind_sampling == "phase_midpoint" and wind_source is not None:
+            return {
+                "wind_source": wind_source,
+                "t_anchor": _current_time(),
+            }
+        uv = _resolve_wind_uv(
+            mid_lat, mid_lon, alt, _current_time(),
+            wind_source, wind_speed, wind_direction,
+        )
+        return {"wind": uv}
     # Expand Patterns into their underlying flight lines or waypoints.
     # After expansion the sequence is FlightLine | Waypoint only — Pattern
     # objects are unwrapped into their constituent elements.
@@ -187,14 +232,12 @@ def compute_flight_plan(
             first_target = first_target.waypoint1
         mid_lat = (takeoff_airport.latitude + first_target.latitude) / 2
         mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
-        takeoff_wind_uv = _resolve_wind_uv(
-            mid_lat, mid_lon,
-            first_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
-            wind_source, wind_speed, wind_direction,
-        )
         takeoff_info = aircraft.time_to_takeoff(
-            takeoff_airport, first_target, wind=takeoff_wind_uv,
+            takeoff_airport, first_target,
             climb_plan=climb_plan,
+            **_phase_wind_kwargs(
+                mid_lat, mid_lon, first_target.altitude_msl,  # type: ignore[arg-type]
+            ),
         )
         takeoff_records = process_flight_phase(
             takeoff_airport, first_target, takeoff_info, "Departure",
@@ -330,15 +373,12 @@ def compute_flight_plan(
 
             mid_lat = (start_wp.latitude + end_wp.latitude) / 2
             mid_lon = (start_wp.longitude + end_wp.longitude) / 2
-            cruise_wind_uv = _resolve_wind_uv(
-                mid_lat, mid_lon,
-                end_wp.altitude_msl, _current_time(),  # type: ignore[arg-type]
-                wind_source, wind_speed, wind_direction,
-            )
             cruise_info = aircraft.time_to_cruise(
                 start_wp, end_wp,
                 true_air_speed=speed_override,
-                wind=cruise_wind_uv,
+                **_phase_wind_kwargs(
+                    mid_lat, mid_lon, end_wp.altitude_msl,  # type: ignore[arg-type]
+                ),
             )
             if cruise_info["total_time"].m_as(ureg.minute) > 0:
                 phase_name = (
@@ -366,13 +406,11 @@ def compute_flight_plan(
             last_target = last_target.waypoint2
         mid_lat = (last_target.latitude + return_airport.latitude) / 2
         mid_lon = (last_target.longitude + return_airport.longitude) / 2
-        return_wind_uv = _resolve_wind_uv(
-            mid_lat, mid_lon,
-            last_target.altitude_msl, _current_time(),  # type: ignore[arg-type]
-            wind_source, wind_speed, wind_direction,
-        )
         return_info = aircraft.time_to_return(
-            last_target, return_airport, wind=return_wind_uv,
+            last_target, return_airport,
+            **_phase_wind_kwargs(
+                mid_lat, mid_lon, last_target.altitude_msl,  # type: ignore[arg-type]
+            ),
         )
         if return_info["total_time"].m_as(ureg.minute) > 0:
             return_records = process_flight_phase(

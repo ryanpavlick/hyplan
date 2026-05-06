@@ -1365,6 +1365,10 @@ def test_plot_isochrone_static_smoke(
 ):
     """Plotter accepts single GDF, list-of-tuples, concentric, and
     refuel results without raising; returns (Figure, Axes)."""
+    pytest.importorskip(
+        "cartopy",
+        reason="plot_isochrone_static requires cartopy; not a core dep.",
+    )
     import matplotlib
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
@@ -1402,3 +1406,341 @@ def test_plot_isochrone_static_smoke(
         fig, ax = plot_isochrone_static(arg, basemap_scale="110m")
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Wind sampling: cruise_midpoint / phase_midpoint / segmented_cruise
+# ---------------------------------------------------------------------------
+
+class _StepWindField:
+    """Synthetic wind field: ``u = u_east_kt`` for ``lon >= lon0``,
+    ``u = u_west_kt`` otherwise.  ``v = 0``.  Used to exercise
+    cruise-segment quadrature under a sharp regime change."""
+
+    def __init__(self, lon0: float, u_west_kt: float, u_east_kt: float):
+        self.lon0 = lon0
+        self.u_west_mps = u_west_kt * 0.514444
+        self.u_east_mps = u_east_kt * 0.514444
+
+    def wind_at(self, lat, lon, altitude, time):
+        u_mps = self.u_east_mps if lon >= self.lon0 else self.u_west_mps
+        return (
+            u_mps * (ureg.meter / ureg.second),
+            0.0 * (ureg.meter / ureg.second),
+        )
+
+
+class _LinearWindField:
+    """Synthetic wind field with smoothly varying eastward wind:
+    ``u(lon) = u_at_lon0_kt + slope_kt_per_deg * (lon - lon0)``.
+    ``v = 0``.  Linear winds make midpoint quadrature exact in the
+    limit, so monotone convergence under decreasing segment spacing
+    is guaranteed."""
+
+    def __init__(self, lon0: float, u_at_lon0_kt: float, slope_kt_per_deg: float):
+        self.lon0 = lon0
+        self.u0_mps = u_at_lon0_kt * 0.514444
+        self.slope_mps_per_deg = slope_kt_per_deg * 0.514444
+
+    def wind_at(self, lat, lon, altitude, time):
+        u_mps = self.u0_mps + self.slope_mps_per_deg * (lon - self.lon0)
+        return (
+            u_mps * (ureg.meter / ureg.second),
+            0.0 * (ureg.meter / ureg.second),
+        )
+
+
+class _AltitudeWindField:
+    """Synthetic wind field where the eastward wind grows with
+    altitude (e.g., jet-stream-like).  Used to verify that
+    ``phase_midpoint`` actually samples climb/descent at the
+    phase-mid altitude rather than the cruise altitude."""
+
+    def __init__(self, u_per_ft_kt: float):
+        self.u_per_ft_kt = u_per_ft_kt
+
+    def wind_at(self, lat, lon, altitude, time):
+        ft = altitude.m_as(ureg.feet)
+        u_kt = self.u_per_ft_kt * ft
+        return (
+            u_kt * 0.514444 * (ureg.meter / ureg.second),
+            0.0 * (ureg.meter / ureg.second),
+        )
+
+
+class TestWindSampling:
+    """Configurable wind sampling: cruise_midpoint / phase_midpoint /
+    segmented_cruise."""
+
+    @staticmethod
+    def _leg_time_helper(
+        ac, start_wp, end_wp, cruise_alt, wind_source, **kw,
+    ):
+        from hyplan.planning.isochrone import _leg_time
+        import datetime as _dt
+        return _leg_time(
+            aircraft=ac, start_wp=start_wp, end_wp=end_wp,
+            cruise_altitude=cruise_alt,
+            t_anchor=_dt.datetime(2026, 5, 6, tzinfo=_dt.timezone.utc),
+            wind_source=wind_source,
+            **kw,
+        )
+
+    def _east_west_leg(self, cruise_alt, length_deg=10.0, lat=30.0, lon0=-100.0):
+        """Build start/end Waypoints for an east-west leg straddling
+        ``lon0``: start at ``lon0 - length_deg/2``, end at
+        ``lon0 + length_deg/2``."""
+        start = Waypoint(
+            latitude=lat, longitude=lon0 - length_deg / 2,
+            heading=90.0, altitude_msl=cruise_alt,
+        )
+        end = Waypoint(
+            latitude=lat, longitude=lon0 + length_deg / 2,
+            heading=90.0, altitude_msl=cruise_alt,
+        )
+        return start, end, lon0
+
+    # --- 1. StillAirField invariance -----------------------------------
+
+    def test_still_air_invariance(self, b200, b200_cruise):
+        from hyplan.winds import StillAirField
+        start, end, _ = self._east_west_leg(b200_cruise, length_deg=4.0)
+        wf = StillAirField()
+        t1, _ = self._leg_time_helper(b200, start, end, b200_cruise, wf,
+            wind_sampling="cruise_midpoint")
+        t2, _ = self._leg_time_helper(b200, start, end, b200_cruise, wf,
+            wind_sampling="phase_midpoint")
+        t3, _ = self._leg_time_helper(b200, start, end, b200_cruise, wf,
+            wind_sampling="segmented_cruise")
+        assert abs(t1 - t2) < 1e-9
+        assert abs(t1 - t3) < 1e-9
+
+    # --- 2. cruise_midpoint backward-compat under ConstantWindField ----
+
+    def test_cruise_midpoint_constant_wind_unchanged(
+        self, b200, b200_cruise,
+    ):
+        """Default mode under ConstantWindField produces the same
+        result as it did pre-patch (single sample, still-air
+        climb/descent).  We snapshot against a recompute using the
+        bare _leg_time call with the explicit default kwargs."""
+        from hyplan.winds import ConstantWindField
+        start, end, _ = self._east_west_leg(b200_cruise, length_deg=8.0)
+        wf = ConstantWindField(40 * ureg.knot, wind_from_deg=270.0)
+        t_default, hw_default = self._leg_time_helper(
+            b200, start, end, b200_cruise, wf,
+        )
+        t_explicit, hw_explicit = self._leg_time_helper(
+            b200, start, end, b200_cruise, wf,
+            wind_sampling="cruise_midpoint",
+        )
+        assert t_default == t_explicit
+        assert hw_default == hw_explicit
+        # Sanity: tailwind from the west on an east-bound leg.
+        assert hw_default < 0  # negative headwind = tailwind
+
+    # --- 3. ConstantWindField phase awareness --------------------------
+
+    def test_constant_wind_phase_awareness(
+        self, b200,
+    ):
+        """phase_midpoint differs from cruise_midpoint for a leg with
+        non-trivial climb/descent under a uniform wind.  With a
+        tailwind from the west, phase-aware mode allocates more ground
+        distance to climb/descent → less ground for cruise → total
+        leg time *decreases*."""
+        from hyplan.winds import ConstantWindField
+        # Long enough to require non-trivial cruise; ground-elevation
+        # start to FL250 cruise to ground-elevation recovery so both
+        # climb and descent are exercised.
+        cruise_alt = 25000 * ureg.feet
+        start = Waypoint(
+            latitude=30.0, longitude=-100.0, heading=90.0,
+            altitude_msl=100 * ureg.feet,
+        )
+        end = Waypoint(
+            latitude=30.0, longitude=-95.0, heading=90.0,
+            altitude_msl=100 * ureg.feet,
+        )
+        wf = ConstantWindField(50 * ureg.knot, wind_from_deg=270.0)
+        t_cm, _ = self._leg_time_helper(
+            b200, start, end, cruise_alt, wf,
+            wind_sampling="cruise_midpoint",
+        )
+        t_pm, _ = self._leg_time_helper(
+            b200, start, end, cruise_alt, wf,
+            wind_sampling="phase_midpoint",
+        )
+        assert abs(t_cm - t_pm) > 0.5, (
+            f"phase_midpoint should differ from cruise_midpoint by "
+            f">0.5 min, got {abs(t_cm - t_pm):.4f} min"
+        )
+        # Tailwind: phase-aware allocates more ground distance to
+        # climb/descent, so total time decreases.
+        assert t_pm < t_cm
+
+    # --- 4. Linear wind: convergence under decreasing spacing ----------
+
+    def test_linear_wind_convergence(self, b200, b200_cruise):
+        """Under a smooth linear wind, segmented_cruise error should
+        decrease monotonically as wind_sample_spacing decreases."""
+        # East-west leg ~600 nmi long, smoothly varying eastward wind
+        # from -50 kt at lon=-105 to +50 kt at lon=-95 (gradient
+        # 10 kt/deg).
+        start, end, lon0 = self._east_west_leg(
+            b200_cruise, length_deg=10.0, lon0=-100.0,
+        )
+        wf = _LinearWindField(
+            lon0=lon0, u_at_lon0_kt=0.0, slope_kt_per_deg=10.0,
+        )
+        spacings_nmi = [400.0, 200.0, 100.0, 50.0, 25.0]
+        times = []
+        for s in spacings_nmi:
+            t, _ = self._leg_time_helper(
+                b200, start, end, b200_cruise, wf,
+                wind_sampling="segmented_cruise",
+                wind_sample_spacing=s * ureg.nautical_mile,
+                max_wind_samples_per_leg=200,
+            )
+            times.append(t)
+        # Truth: by symmetry of the linear wind around the cruise
+        # midpoint (lon0), the average tailwind across the cruise is
+        # exactly zero.  The "exact" cruise time is therefore
+        # cruise_distance / TAS.  segmented_cruise should converge to
+        # this; finer spacing should be no farther from the limit
+        # value than coarser spacing.
+        finest = times[-1]
+        prev_err = abs(times[0] - finest)
+        for t in times[1:]:
+            err = abs(t - finest)
+            assert err <= prev_err + 1e-6, (
+                f"non-monotone convergence: errs {prev_err} -> {err}"
+            )
+            prev_err = err
+
+    # --- 5. Step wind: segmented beats cruise_midpoint -----------------
+
+    def test_step_wind_segmented_beats_midpoint(self, b200, b200_cruise):
+        """Step-function wind: cruise_midpoint samples one regime;
+        segmented integrates across the step.  Construct the leg so
+        the cruise midpoint sits clearly *east* of the discontinuity,
+        but the leg spans both regimes."""
+        # Leg from lon=-110 (well west of step at lon0=-100) to lon=-95
+        # (east of step) — total span 15°, midpoint at lon=-102.5.
+        # Wait: midpoint at lon=-102.5 is *west* of step at -100, so
+        # the cruise_midpoint samples the western (headwind) regime
+        # for the whole cruise — biased.  segmented sees both regimes.
+        cruise_alt = b200_cruise
+        lon_west = -110.0
+        lon_east = -95.0
+        start = Waypoint(
+            latitude=30.0, longitude=lon_west, heading=90.0,
+            altitude_msl=cruise_alt,
+        )
+        end = Waypoint(
+            latitude=30.0, longitude=lon_east, heading=90.0,
+            altitude_msl=cruise_alt,
+        )
+        wf = _StepWindField(lon0=-100.0, u_west_kt=-60.0, u_east_kt=60.0)
+        t_cm, _ = self._leg_time_helper(
+            b200, start, end, cruise_alt, wf,
+            wind_sampling="cruise_midpoint",
+        )
+        t_seg, _ = self._leg_time_helper(
+            b200, start, end, cruise_alt, wf,
+            wind_sampling="segmented_cruise",
+            wind_sample_spacing=25 * ureg.nautical_mile,
+            max_wind_samples_per_leg=100,
+        )
+        # The midpoint (lon=-102.5) sees u=-60 (headwind on east-bound
+        # leg).  segmented sees ~half headwind + half tailwind, so its
+        # reported time is shorter (and closer to the true mixed-wind
+        # integral).
+        assert t_seg < t_cm, f"segmented {t_seg} should be < midpoint {t_cm}"
+
+    # --- 6. Sample cap respected ---------------------------------------
+
+    def test_sample_cap_respected(self, b200, b200_cruise):
+        """wind_sample_spacing=1 nmi but max_wind_samples_per_leg=5 →
+        exactly 5 cruise subsegments, regardless of leg length."""
+        from hyplan.planning.isochrone import _cruise_time_segmented
+        from hyplan.winds import StillAirField
+        start_wp = Waypoint(
+            latitude=30.0, longitude=-100.0, heading=90.0,
+            altitude_msl=b200_cruise,
+        )
+        cruise_tas = b200.cruise_speed_at(b200_cruise)
+        cruise_tas_kt = cruise_tas.m_as(ureg.knot)
+        import datetime as _dt
+        result = _cruise_time_segmented(
+            wind_source=StillAirField(),
+            start_wp=start_wp, track_deg=90.0,
+            d_climb_nmi=0.0, cruise_distance_nmi=500.0,
+            cruise_altitude=b200_cruise,
+            cruise_tas=cruise_tas, cruise_tas_kt=cruise_tas_kt,
+            t_anchor=_dt.datetime(2026, 5, 6, tzinfo=_dt.timezone.utc),
+            t_climb_min=0.0,
+            n_segments=5,
+        )
+        assert result["n_samples"] == 5
+        assert result["status"] == "ok"
+
+    # --- 7. Unflyable status -------------------------------------------
+
+    def test_unflyable_status(self, b200, b200_cruise):
+        """Headwind > TAS in a subsegment → status='unflyable',
+        time=inf."""
+        from hyplan.winds import ConstantWindField
+        start, end, _ = self._east_west_leg(b200_cruise, length_deg=4.0)
+        # B-200 cruise TAS ~240 kt; pure 350 kt headwind is unflyable.
+        wf = ConstantWindField(350 * ureg.knot, wind_from_deg=90.0)
+        t, hw = self._leg_time_helper(
+            b200, start, end, b200_cruise, wf,
+            wind_sampling="segmented_cruise",
+            wind_sample_spacing=50 * ureg.nautical_mile,
+        )
+        assert t == float("inf")
+        assert hw == float("inf")
+
+    # --- 8. Validation -------------------------------------------------
+
+    def test_invalid_wind_sampling(self, b200, kefd_wp, b200_cruise):
+        with pytest.raises(HyPlanValueError, match="wind_sampling"):
+            compute_isochrone(
+                aircraft=b200, start=kefd_wp, budget=2 * ureg.hour,
+                cruise_altitude=b200_cruise, mode="round_trip",
+                wind_sampling="not_a_real_mode",
+            )
+
+    def test_negative_spacing(self, b200, kefd_wp, b200_cruise):
+        with pytest.raises(HyPlanValueError, match="wind_sample_spacing"):
+            compute_isochrone(
+                aircraft=b200, start=kefd_wp, budget=2 * ureg.hour,
+                cruise_altitude=b200_cruise, mode="round_trip",
+                wind_sample_spacing=-1 * ureg.nautical_mile,
+            )
+
+    def test_zero_max_samples(self, b200, kefd_wp, b200_cruise):
+        with pytest.raises(HyPlanValueError, match="max_wind_samples"):
+            compute_isochrone(
+                aircraft=b200, start=kefd_wp, budget=2 * ureg.hour,
+                cruise_altitude=b200_cruise, mode="round_trip",
+                max_wind_samples_per_leg=0,
+            )
+
+    # --- 9. Public-API smoke -------------------------------------------
+
+    def test_public_api_smoke(self, b200, kefd_wp, b200_cruise):
+        """compute_isochrone with segmented_cruise runs and produces a
+        valid GeoDataFrame."""
+        from hyplan.winds import ConstantWindField
+        gdf = compute_isochrone(
+            aircraft=b200, start=kefd_wp, budget=2 * ureg.hour,
+            cruise_altitude=b200_cruise, mode="round_trip",
+            wind_source=ConstantWindField(30 * ureg.knot, wind_from_deg=270.0),
+            wind_sampling="segmented_cruise",
+            wind_sample_spacing=50 * ureg.nautical_mile,
+            azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+        )
+        assert len(gdf) == 3
+        assert (gdf["distance_nmi"] > 0).all()

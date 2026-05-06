@@ -22,6 +22,7 @@ from ._base import (  # noqa: F401
 )
 
 from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi  # noqa: F401
+from .wind_path import climb_with_wind_field, descend_with_wind_field  # noqa: F401
 from ._planned_sortie import (  # noqa: F401
     PlannedSortie,
     load_planned_sortie,

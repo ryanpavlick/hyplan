@@ -21,20 +21,48 @@ Each leg is timed by the private :func:`_leg_time` helper, which integrates
 :meth:`Aircraft._descend` directly with along-track wind from the supplied
 ``WindField``.
 
+Wind sampling
+-------------
+
+The public functions accept three kwargs that select how wind is
+sampled per leg:
+
+* ``wind_sampling="cruise_midpoint"`` (default) — one wind sample at
+  the cruise-segment geographic midpoint, climb and descent still-air.
+  Strict v1.5 behavior; cheapest.
+* ``wind_sampling="phase_midpoint"`` — adds one wind sample each at
+  the climb-segment-mid and descent-segment-mid altitudes (projected
+  onto the great-circle bearing and passed into
+  ``Aircraft._climb`` / ``_descend`` as ``wind_along_track``).  Wind
+  changes the *ground distance* allocated to climb and descent, not
+  the climb/descent times themselves (climb rate is air-mass-relative
+  and independent of along-track wind).  Cruise wind sampled once at
+  the cruise midpoint; the net effect on total leg time arrives
+  through the cruise term, which sees a different
+  ``cruise_distance_nmi``.
+* ``wind_sampling="segmented_cruise"`` — same climb/descent treatment
+  as ``phase_midpoint`` plus splits cruise into N subsegments
+  (``min(max_wind_samples_per_leg, ceil(cruise_distance / wind_sample_spacing))``),
+  each with its own midpoint wind sample at a cumulative time anchor.
+  Recommended for transit legs > ~500 nmi or strong wind gradients
+  (jet streams, fronts).  Two-pass fixed-point on per-subsegment
+  times.
+
 Limitations
 -----------
 
-v1 applies the wind field only to the cruise segment of each leg.  Climb
-and descent are computed in still air.  This matches the simplest
-interpretation of the underlying ``Aircraft._climb`` / ``_descend`` calls
-when no ``wind_along_track`` is provided.  Vertically-varying wind (a
-jet stream that's stronger in the climb-out band than at cruise altitude
-and ditto for descent) is therefore not captured.  Per-phase wind
-sampling — sampling once at climb-mid altitude, once at cruise altitude,
-once at descent-mid altitude — is a planner-wide concern rather than an
-isochrone-specific one (it would also tighten ``compute_flight_plan``
-and the ER-2 ``planned_vs_flown`` validation), and is deferred to a
-follow-up improvement to ``Aircraft._hybrid_path`` / its callers.
+* Climb / descent times remain wind-independent in all modes.  Wind
+  only redistributes ground distance between phases.  True vertical-
+  wind integration during climb (where stronger winds aloft would
+  reduce climb-rate effectiveness) requires modifying
+  ``Aircraft._climb_with_wind``'s integrator and is out of scope.
+* Cruise sampling within ``segmented_cruise`` uses uniform spacing.
+  Adaptive segmentation (denser samples where the wind gradient is
+  high) is a follow-up.
+* The reported per-ray ``outbound_headwind_kt`` /
+  ``return_headwind_kt`` is the distance-weighted average across
+  cruise subsegments; per-segment headwinds are not surfaced in the
+  GeoDataFrame schema.
 """
 
 from __future__ import annotations
@@ -51,6 +79,10 @@ from pint import Quantity
 from shapely.geometry import Point, Polygon
 
 from ..aircraft._base import Aircraft
+from ..aircraft.wind_path import (
+    climb_with_wind_field,
+    descend_with_wind_field,
+)
 from ..airports import Airport
 from ..exceptions import HyPlanRuntimeError, HyPlanValueError
 from ..geometry import wrap_to_180
@@ -72,6 +104,9 @@ __all__ = [
 
 _VALID_MODES = ("one_way", "round_trip", "return_safe")
 _VALID_REFUEL_MODES = ("round_trip", "return_safe")
+_VALID_WIND_SAMPLING = ("cruise_midpoint", "phase_midpoint", "segmented_cruise")
+_DEFAULT_WIND_SAMPLE_SPACING_NMI = 100.0
+_DEFAULT_MAX_WIND_SAMPLES = 20
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +124,9 @@ def _validate_common_kwargs(
     valid_modes: Tuple[str, ...],
     azimuth_resolution_deg: float,
     distance_tolerance_nmi: float,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> Tuple[Waypoint, Quantity, float, float]:
     """Validate kwargs common to ``compute_isochrone`` and
     ``compute_refuel_isochrone``.
@@ -166,6 +204,22 @@ def _validate_common_kwargs(
             "isochrones are deferred."
         )
 
+    if wind_sampling not in _VALID_WIND_SAMPLING:
+        raise HyPlanValueError(
+            f"Invalid wind_sampling {wind_sampling!r}; must be one of "
+            f"{_VALID_WIND_SAMPLING}."
+        )
+    if wind_sample_spacing.m_as(ureg.nautical_mile) <= 0:
+        raise HyPlanValueError(
+            f"wind_sample_spacing must be positive, got "
+            f"{wind_sample_spacing}."
+        )
+    if max_wind_samples_per_leg < 1:
+        raise HyPlanValueError(
+            f"max_wind_samples_per_leg must be >= 1, got "
+            f"{max_wind_samples_per_leg}."
+        )
+
     return start_wp, cruise_altitude, reserve_min, on_station_min
 
 
@@ -188,6 +242,9 @@ def compute_isochrone(
     reserve: Quantity = 0 * ureg.minute,
     azimuth_resolution_deg: float = 5.0,
     distance_tolerance_nmi: float = 0.5,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> gpd.GeoDataFrame:
     """Compute a wind-aware isochrone around ``start``.
 
@@ -224,6 +281,21 @@ def compute_isochrone(
             Default 5.0 → 72 rays.
         distance_tolerance_nmi: Binary-search stop criterion (boundary
             distance precision in nmi).
+        wind_sampling: How wind is sampled per leg —
+            ``"cruise_midpoint"`` (default; one sample at cruise
+            midpoint, climb/descent still-air),
+            ``"phase_midpoint"`` (adds one wind sample each at the
+            climb-segment-mid and descent-segment-mid altitudes,
+            redistributing ground distance between phases), or
+            ``"segmented_cruise"`` (splits cruise into multiple
+            subsegments, ~``wind_sample_spacing`` apart).  See the
+            module docstring's "Wind sampling" section.
+        wind_sample_spacing: Cruise-segment spacing for
+            ``wind_sampling="segmented_cruise"`` (ignored otherwise).
+            Default 100 nmi.
+        max_wind_samples_per_leg: Hard cap on cruise subsegments to
+            keep ``_leg_time`` cost bounded for very long legs.
+            Default 20.
 
     Returns:
         A :class:`geopandas.GeoDataFrame` in ``EPSG:4326``, one row per
@@ -248,6 +320,9 @@ def compute_isochrone(
         valid_modes=_VALID_MODES,
         azimuth_resolution_deg=azimuth_resolution_deg,
         distance_tolerance_nmi=distance_tolerance_nmi,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     budget_min = budget.m_as(ureg.minute)
@@ -305,6 +380,9 @@ def compute_isochrone(
         reserve_min=reserve_min,
         azimuths_deg=azimuths,
         distance_tolerance_nmi=distance_tolerance_nmi,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     df = pd.DataFrame(rows)
@@ -354,6 +432,9 @@ def compute_concentric_isochrones(
     reserve: Quantity = 0 * ureg.minute,
     azimuth_resolution_deg: float = 5.0,
     distance_tolerance_nmi: float = 0.5,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> gpd.GeoDataFrame:
     """Compute multiple isochrone contours in one call (e.g., 1/2/3 hr).
 
@@ -367,7 +448,8 @@ def compute_concentric_isochrones(
         aircraft, start, cruise_altitude, on_station_altitude,
         start_time, wind_source, return_destination, mode,
         on_station_time, reserve, azimuth_resolution_deg,
-        distance_tolerance_nmi: same semantics as
+        distance_tolerance_nmi, wind_sampling, wind_sample_spacing,
+        max_wind_samples_per_leg: same semantics as
             :func:`compute_isochrone`.
         budgets: iterable of ``Quantity`` time values to sweep.
             Must be non-empty; sorted ascending internally.
@@ -401,6 +483,9 @@ def compute_concentric_isochrones(
         valid_modes=_VALID_MODES,
         azimuth_resolution_deg=azimuth_resolution_deg,
         distance_tolerance_nmi=distance_tolerance_nmi,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     budgets_min = sorted(b.m_as(ureg.minute) for b in budgets)
@@ -462,6 +547,9 @@ def compute_concentric_isochrones(
             azimuths_deg=azimuths,
             distance_tolerance_nmi=distance_tolerance_nmi,
             seed_d_lo=seed_d_lo,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
         )
         # Tag rows with budget; capture per-ray distances for next seed.
         new_seed = np.zeros(n_rays, dtype=float)
@@ -522,6 +610,9 @@ def compute_refuel_isochrone(
     wind_source: Optional[WindField] = None,
     azimuth_resolution_deg: float = 5.0,
     distance_tolerance_nmi: float = 0.5,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> gpd.GeoDataFrame:
     """Wind-aware isochrone with a single optional refuel stop.
 
@@ -592,6 +683,9 @@ def compute_refuel_isochrone(
         valid_modes=_VALID_REFUEL_MODES,
         azimuth_resolution_deg=azimuth_resolution_deg,
         distance_tolerance_nmi=distance_tolerance_nmi,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     if max_refuel_stops != 1:
@@ -677,6 +771,9 @@ def compute_refuel_isochrone(
         flight_day_budget_min=flight_day_budget_min,
         reserve_min=reserve_min,
         refuel_time_min=refuel_time_min,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     # --- sweep --------------------------------------------------------------
@@ -696,6 +793,9 @@ def compute_refuel_isochrone(
         refuel_eligibility=eligibility,
         azimuths_deg=azimuths,
         distance_tolerance_nmi=distance_tolerance_nmi,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     df = pd.DataFrame(rows)
@@ -755,6 +855,9 @@ def evaluate_target_reachability(
     reserve: Quantity = 0 * ureg.minute,
     start_time: Optional[datetime.datetime] = None,
     wind_source: Optional[WindField] = None,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> dict:
     """Evaluate reachability of a single target via direct + refuel paths.
 
@@ -798,6 +901,9 @@ def evaluate_target_reachability(
         valid_modes=_VALID_REFUEL_MODES,
         azimuth_resolution_deg=5.0,  # not used for single-point eval
         distance_tolerance_nmi=0.5,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     sortie_budget_min = sortie_budget.m_as(ureg.minute)
@@ -874,6 +980,9 @@ def evaluate_target_reachability(
             flight_day_budget_min=flight_day_budget_min,
             reserve_min=reserve_min,
             refuel_time_min=refuel_time_min,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
         )
     else:
         eligibility = []
@@ -892,6 +1001,9 @@ def evaluate_target_reachability(
         reserve_min=reserve_min,
         refuel_time_min=refuel_time_min,
         refuel_eligibility=eligibility,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
 
     if not candidates:
@@ -1244,6 +1356,9 @@ def _solve_rays(
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
     seed_d_lo: Optional[np.ndarray] = None,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> list[dict]:
     """Solve all radial rays, vectorizing candidate geometry per iteration.
 
@@ -1297,6 +1412,9 @@ def _solve_rays(
                 cruise_altitude=cruise_altitude,
                 t_anchor=start_time,
                 wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
             )
 
             if mode == "one_way":
@@ -1315,6 +1433,9 @@ def _solve_rays(
                     cruise_altitude=cruise_altitude,
                     t_anchor=return_anchor,
                     wind_source=wind_source,
+                    wind_sampling=wind_sampling,
+                    wind_sample_spacing=wind_sample_spacing,
+                    max_wind_samples_per_leg=max_wind_samples_per_leg,
                 )
                 total_min = t_out_min + on_station_min + t_back_min
 
@@ -1459,30 +1580,41 @@ def _leg_time(
     cruise_altitude: Quantity,
     t_anchor: datetime.datetime,
     wind_source: WindField,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> Tuple[float, float]:
     """Compute leg time (minutes) and along-track headwind (knots).
 
-    Implements the v1 leg-timing recipe:
+    Three wind-sampling modes (``wind_sampling``):
 
-    1. Geodetic distance + bearing from ``start_wp`` to ``end_wp``.
-    2. If ``start_wp.altitude_msl < cruise_altitude``, climb to
-       ``cruise_altitude`` in still air.  Wind during climb is a known
-       v1 simplification — see "Limitations" in the module docstring.
-    3. Cruise from end-of-climb to top-of-descent.  Crab + groundspeed
-       are solved via :func:`_track_hold_solution_from_uv` so a pure
-       crosswind correctly slows the aircraft (it must crab into the
-       wind to hold the great-circle track) and an unflyable wind
-       (crosswind > TAS or groundspeed ≤ 0) returns infinity, marking
-       the ray as infeasible.
-    4. If ``end_wp.altitude_msl < cruise_altitude``, descend in still
-       air.  Same v1 simplification as climb.
-    5. Cruise wind sampled at the cruise-leg midpoint and at time
-       ``t_anchor + t_climb + t_cruise/2``.  Up to three fixed-point
-       iterations on cruise time, early exit when ``|Δt_cruise| < 5 sec``.
+    * ``"cruise_midpoint"`` (default) — single cruise wind sample at
+      the cruise-segment geographic midpoint, with up to 3 fixed-point
+      iterations on cruise time.  Climb and descent are still-air
+      (v1.5 behavior, strictly backward-compatible).
+    * ``"phase_midpoint"`` — adds a single climb-segment-mid and
+      descent-segment-mid wind sample (each at the phase-mid
+      altitude), projected onto the great-circle bearing and passed
+      to :meth:`Aircraft._climb` / :meth:`Aircraft._descend` as
+      ``wind_along_track``.  This redistributes ground distance
+      between the climb/descent and cruise segments; cruise time is
+      then computed via the same one-sample logic as
+      ``"cruise_midpoint"``.  Climb/descent **times** are unchanged
+      (climb rate is air-mass-relative, not wind-dependent).
+    * ``"segmented_cruise"`` — same climb/descent treatment as
+      ``"phase_midpoint"`` plus splits cruise into N subsegments
+      (``min(max_wind_samples_per_leg, ceil(cruise_distance / wind_sample_spacing))``).
+      Each subsegment gets its own midpoint wind sample with
+      cumulative time anchor; per-subsegment groundspeed via
+      :func:`_track_hold_solution_from_uv`; total cruise time is the
+      sum.  Two-pass fixed-point on per-subsegment times.
 
     Returns ``(time_minutes, headwind_kt)``.  ``headwind_kt`` is the
-    signed *cruise-leg* along-track headwind (positive = headwind,
-    negative = tailwind); ``float("inf")`` when the leg is unflyable.
+    signed cruise-leg along-track headwind (positive = headwind,
+    negative = tailwind), distance-weighted across subsegments when
+    ``segmented_cruise`` is in use.  Returns ``(inf, inf)`` when the
+    leg is unflyable (crosswind > TAS or groundspeed ≤ 0 at any
+    sample).
     """
     # Geodesy.
     distance_m, bearing_deg = pymap3d.vincenty.vdist(
@@ -1498,18 +1630,52 @@ def _leg_time(
     end_alt = end_wp.altitude_msl
     assert start_alt is not None and end_alt is not None
 
-    # Climb segment (still-air; v1 simplification — see module docstring).
+    # --- Climb / descent: still-air for cruise_midpoint, wind-corrected
+    # ground distance for phase_midpoint / segmented_cruise. -----------
+    # Wind affects the *ground distance* covered during climb/descent
+    # (a tailwind extends the ground arc), not the times themselves
+    # (climb rate is air-mass-relative).  Net effect on total leg
+    # time arrives through the cruise term, which sees a different
+    # cruise_distance_nmi.
+    phase_aware = wind_sampling != "cruise_midpoint"
+
     if start_alt < cruise_altitude:
-        t_climb_q, d_climb_q = aircraft._climb(start_alt, cruise_altitude)
+        if phase_aware:
+            t_climb_q, d_climb_q, _ = climb_with_wind_field(
+                aircraft,
+                start_lat=start_wp.latitude,
+                start_lon=start_wp.longitude,
+                start_alt=start_alt,
+                cruise_alt=cruise_altitude,
+                track_deg=track_deg,
+                t_anchor=t_anchor,
+                wind_source=wind_source,
+            )
+        else:
+            t_climb_q, d_climb_q = aircraft._climb(start_alt, cruise_altitude)
         t_climb_min = t_climb_q.m_as(ureg.minute)
         d_climb_nmi = d_climb_q.m_as(ureg.nautical_mile)
     else:
         t_climb_min = 0.0
         d_climb_nmi = 0.0
 
-    # Descent segment (still-air; v1 simplification).
     if end_alt < cruise_altitude:
-        t_desc_q, d_desc_q = aircraft._descend(cruise_altitude, end_alt)
+        if phase_aware:
+            t_desc_q, d_desc_q, _ = descend_with_wind_field(
+                aircraft,
+                start_lat=start_wp.latitude,
+                start_lon=start_wp.longitude,
+                total_distance_nmi=distance_nmi,
+                cruise_alt=cruise_altitude,
+                end_alt=end_alt,
+                track_deg=track_deg,
+                t_anchor=t_anchor,
+                t_climb_min=t_climb_min,
+                d_climb_nmi=d_climb_nmi,
+                wind_source=wind_source,
+            )
+        else:
+            t_desc_q, d_desc_q = aircraft._descend(cruise_altitude, end_alt)
         t_desc_min = t_desc_q.m_as(ureg.minute)
         d_desc_nmi = d_desc_q.m_as(ureg.nautical_mile)
     else:
@@ -1526,9 +1692,71 @@ def _leg_time(
     cruise_tas = aircraft.cruise_speed_at(cruise_altitude)
     cruise_tas_kt = cruise_tas.m_as(ureg.knot)
 
-    # Cruise midpoint (geographic): the geographic midpoint of the
-    # cruise segment, which lies between (d_climb_nmi) and (distance −
-    # d_desc_nmi) along the bearing.
+    # --- Cruise: dispatch on wind_sampling. ----------------------------
+    if wind_sampling == "cruise_midpoint":
+        # Legacy code path — kept verbatim for backward compatibility.
+        return _cruise_midpoint_legacy(
+            wind_source=wind_source,
+            start_wp=start_wp,
+            track_deg=track_deg,
+            d_climb_nmi=d_climb_nmi,
+            cruise_distance_nmi=cruise_distance_nmi,
+            cruise_altitude=cruise_altitude,
+            cruise_tas=cruise_tas,
+            cruise_tas_kt=cruise_tas_kt,
+            t_anchor=t_anchor,
+            t_climb_min=t_climb_min,
+            t_desc_min=t_desc_min,
+        )
+
+    # phase_midpoint and segmented_cruise share the segmented engine,
+    # differing only in n_segments.
+    if wind_sampling == "phase_midpoint":
+        n_segments = 1
+    else:  # segmented_cruise
+        spacing_nmi = float(wind_sample_spacing.m_as(ureg.nautical_mile))
+        n_segments = min(
+            int(max_wind_samples_per_leg),
+            max(1, int(np.ceil(cruise_distance_nmi / spacing_nmi))),
+        )
+
+    cruise_result = _cruise_time_segmented(
+        wind_source=wind_source,
+        start_wp=start_wp,
+        track_deg=track_deg,
+        d_climb_nmi=d_climb_nmi,
+        cruise_distance_nmi=cruise_distance_nmi,
+        cruise_altitude=cruise_altitude,
+        cruise_tas=cruise_tas,
+        cruise_tas_kt=cruise_tas_kt,
+        t_anchor=t_anchor,
+        t_climb_min=t_climb_min,
+        n_segments=n_segments,
+    )
+    if cruise_result["status"] != "ok":
+        return float("inf"), float("inf")
+    return (
+        t_climb_min + cruise_result["time_min"] + t_desc_min,
+        cruise_result["headwind_kt"],
+    )
+
+
+def _cruise_midpoint_legacy(
+    *,
+    wind_source: WindField,
+    start_wp: Waypoint,
+    track_deg: float,
+    d_climb_nmi: float,
+    cruise_distance_nmi: float,
+    cruise_altitude: Quantity,
+    cruise_tas: Quantity,
+    cruise_tas_kt: float,
+    t_anchor: datetime.datetime,
+    t_climb_min: float,
+    t_desc_min: float,
+) -> Tuple[float, float]:
+    """v1.5 cruise-midpoint code path, factored out unchanged.  Returns
+    ``(total_leg_time_min, headwind_kt)``."""
     cruise_mid_dist_nmi = max(
         1e-3, d_climb_nmi + 0.5 * cruise_distance_nmi
     )
@@ -1575,13 +1803,9 @@ def _leg_time(
                 cruise_tas, track_deg, u_q, v_q,
             )
         except HyPlanValueError:
-            # Crosswind > TAS or unflyable headwind.  Mark this leg
-            # infeasible — the binary search above will pull the
-            # boundary back.
             return float("inf"), float("inf")
 
         gs_kt = sol["groundspeed"].m_as(ureg.knot)
-        # Along-track headwind = −(along-track tailwind) in knots.
         headwind_kt = -sol["alongtrack_wind"].m_as(ureg.knot)
         t_cruise_min_new = cruise_distance_nmi / gs_kt * 60.0
 
@@ -1595,6 +1819,122 @@ def _leg_time(
         t_cruise_min = t_cruise_min_new
 
     return t_climb_min + t_cruise_min + t_desc_min, headwind_kt
+
+
+def _cruise_time_segmented(
+    *,
+    wind_source: WindField,
+    start_wp: Waypoint,
+    track_deg: float,
+    d_climb_nmi: float,
+    cruise_distance_nmi: float,
+    cruise_altitude: Quantity,
+    cruise_tas: Quantity,
+    cruise_tas_kt: float,
+    t_anchor: datetime.datetime,
+    t_climb_min: float,
+    n_segments: int,
+) -> dict:
+    """Cruise-segment time + distance-weighted headwind under
+    segmented or phase-midpoint sampling.
+
+    Returns a dict ``{time_min, headwind_kt, n_samples, status}``
+    where ``status`` is ``"ok"`` or ``"unflyable"`` (in which case
+    ``time_min`` is ``inf`` and ``headwind_kt`` is ``inf``).
+
+    Two-pass loop:
+
+    1. Seed each subsegment time with the still-air estimate.
+    2. For each subsegment in order, sample wind at its midpoint
+       lat/lon at the cumulative anchor; solve track-hold; update
+       per-subsegment time.  Repeat once.
+    """
+    n_samples = max(1, int(n_segments))
+    subseg_nmi = cruise_distance_nmi / n_samples
+
+    # StillAirField: short-circuit (no wind queries).
+    if isinstance(wind_source, StillAirField):
+        return {
+            "time_min": cruise_distance_nmi / cruise_tas_kt * 60.0,
+            "headwind_kt": 0.0,
+            "n_samples": n_samples,
+            "status": "ok",
+        }
+
+    # ConstantWindField: a single (u, v) is enough — cache it and
+    # still run the segmented math (each subsegment's groundspeed
+    # solve is identical, so output is degenerate but correct).
+    constant_uv: Optional[tuple] = None
+    if isinstance(wind_source, ConstantWindField):
+        u_q, v_q = wind_source.wind_at(
+            start_wp.latitude, start_wp.longitude,
+            cruise_altitude, t_anchor,
+        )
+        constant_uv = (u_q, v_q)
+
+    # Pre-compute subsegment midpoint coordinates (lat/lon).  These
+    # don't change between passes; only the time anchor does (and
+    # only for time-varying winds).
+    mid_lats = np.empty(n_samples, dtype=float)
+    mid_lons = np.empty(n_samples, dtype=float)
+    for i in range(n_samples):
+        mid_dist_nmi = max(
+            1e-3, d_climb_nmi + (i + 0.5) * subseg_nmi,
+        )
+        mid_lat, mid_lon = pymap3d.vincenty.vreckon(
+            start_wp.latitude, start_wp.longitude,
+            mid_dist_nmi * 1852.0, track_deg,
+        )
+        mid_lats[i] = float(mid_lat)
+        mid_lons[i] = float(wrap_to_180(float(mid_lon)))
+
+    # Seed: still-air per-subsegment time.
+    t_subseg_min = np.full(n_samples, subseg_nmi / cruise_tas_kt * 60.0)
+    headwind_kt_per = np.zeros(n_samples, dtype=float)
+
+    for _pass in range(2):
+        cumulative_min = t_climb_min
+        for i in range(n_samples):
+            sample_offset_min = cumulative_min + 0.5 * float(t_subseg_min[i])
+            if constant_uv is not None:
+                u_q, v_q = constant_uv
+            else:
+                sample_time = t_anchor + datetime.timedelta(
+                    minutes=sample_offset_min,
+                )
+                u_q, v_q = wind_source.wind_at(
+                    float(mid_lats[i]), float(mid_lons[i]),
+                    cruise_altitude, sample_time,
+                )
+            try:
+                sol = _track_hold_solution_from_uv(
+                    cruise_tas, track_deg, u_q, v_q,
+                )
+            except HyPlanValueError:
+                return {
+                    "time_min": float("inf"),
+                    "headwind_kt": float("inf"),
+                    "n_samples": n_samples,
+                    "status": "unflyable",
+                }
+            gs_kt = sol["groundspeed"].m_as(ureg.knot)
+            headwind_kt_per[i] = -sol["alongtrack_wind"].m_as(ureg.knot)
+            t_subseg_min[i] = subseg_nmi / gs_kt * 60.0
+            cumulative_min += float(t_subseg_min[i])
+
+    total_time_min = float(np.sum(t_subseg_min))
+    if cruise_distance_nmi > 0:
+        # Distance-weighted average headwind (each subsegment has
+        # equal length, so this is just the arithmetic mean).
+        headwind_avg = float(np.mean(headwind_kt_per))
+    else:
+        headwind_avg = 0.0
+    return {
+        "time_min": total_time_min,
+        "headwind_kt": headwind_avg,
+        "n_samples": n_samples,
+        "status": "ok",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1625,6 +1965,9 @@ def _prefilter_refuel_airports(
     flight_day_budget_min: float,
     reserve_min: float,
     refuel_time_min: float,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> Tuple[list[dict], list[dict], list[dict]]:
     """Coerce refuel airports and prefilter per template.
 
@@ -1658,11 +2001,17 @@ def _prefilter_refuel_airports(
             aircraft=aircraft, start_wp=start, end_wp=r_wp,
             cruise_altitude=cruise_altitude, t_anchor=start_time,
             wind_source=wind_source,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
         )
         t_Rrec, hw_Rrec = _leg_time(
             aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
             cruise_altitude=cruise_altitude, t_anchor=later_anchor,
             wind_source=wind_source,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
         )
 
         outbound_ok = (
@@ -1751,6 +2100,9 @@ def _evaluate_refuel_at_d(
     refuel_eligibility: list[dict],
     template: Optional[str] = None,
     refuel_label: Optional[str] = None,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> list[dict]:
     """Evaluate one or more refuel itinerary templates at the given target.
 
@@ -1771,6 +2123,9 @@ def _evaluate_refuel_at_d(
         aircraft=aircraft, start_wp=start, end_wp=target,
         cruise_altitude=cruise_altitude, t_anchor=start_time,
         wind_source=wind_source,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
     )
     if (template is None or template == "direct") and np.isfinite(t_st):
         anchor_tr = start_time + datetime.timedelta(
@@ -1780,6 +2135,9 @@ def _evaluate_refuel_at_d(
             aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
             cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
             wind_source=wind_source,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
         )
         if np.isfinite(t_tr):
             cycle_1 = t_st + on_station_min + t_tr
@@ -1830,6 +2188,9 @@ def _evaluate_refuel_at_d(
                 aircraft=aircraft, start_wp=r_wp, end_wp=target,
                 cruise_altitude=cruise_altitude, t_anchor=anchor_2,
                 wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
             )
             if not np.isfinite(t_Rt):
                 continue
@@ -1840,6 +2201,9 @@ def _evaluate_refuel_at_d(
                 aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
                 cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
                 wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
             )
             if not np.isfinite(t_tr):
                 continue
@@ -1893,6 +2257,9 @@ def _evaluate_refuel_at_d(
                 aircraft=aircraft, start_wp=target, end_wp=r_wp,
                 cruise_altitude=cruise_altitude, t_anchor=anchor_tR,
                 wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
             )
             if not np.isfinite(t_tR):
                 continue
@@ -1916,6 +2283,9 @@ def _evaluate_refuel_at_d(
                     aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
                     cruise_altitude=cruise_altitude, t_anchor=anchor_Rrec,
                     wind_source=wind_source,
+                    wind_sampling=wind_sampling,
+                    wind_sample_spacing=wind_sample_spacing,
+                    max_wind_samples_per_leg=max_wind_samples_per_leg,
                 )
             if not np.isfinite(t_Rrec):
                 continue
@@ -1975,6 +2345,9 @@ def _solve_rays_refuel(
     refuel_eligibility: list[dict],
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
 ) -> list[dict]:
     """Per-ray expanding-bracket + binary-search across three itinerary
     templates.  Scalar per ray (no cross-ray vectorization) — simpler than
@@ -2043,6 +2416,9 @@ def _solve_rays_refuel(
                     refuel_eligibility=refuel_eligibility,
                     template=template,
                     refuel_label=refuel_label,
+                    wind_sampling=wind_sampling,
+                    wind_sample_spacing=wind_sample_spacing,
+                    max_wind_samples_per_leg=max_wind_samples_per_leg,
                 )
                 return cands[0] if cands else None
 
