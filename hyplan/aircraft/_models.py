@@ -69,18 +69,16 @@ class NASA_ER2(Aircraft):
     atmosphere.  Based at NASA Armstrong Flight Research Center (AFRC).
 
     Speed schedules, vertical-rate profile, and approach behavior calibrated
-    from 17 NASA AFRC IWG1
-    in-situ flight logs (2023-02 to 2025-08, ~64 000 cruise fixes above
-    60 kft).  See [notebooks/calibration/er2/calibration.ipynb] for
-    the full derivation: per-altitude-bin |VS| medians, breakpoint
-    selection rules, and validation against per-sortie observed timing.
+    from cached NASA AFRC IWG1 in-situ flight logs covering NASA 806 and
+    NASA 809.  See [notebooks/calibration/er2/calibration.ipynb] for the
+    full derivation: per-altitude-bin |VS| medians, breakpoint selection
+    rules, and validation against per-sortie observed timing.
 
     Vertical-rate highlights from the calibration:
 
-    * Step climb at 19-21 kft (fuel-burn-driven; the average operational
-      profile across the 17-sortie set shows VS dropping from ~4400 fpm
-      to ~540 fpm in the step band, recovering immediately at 23 kft to
-      ~4800 fpm, then declining through the cruise band).
+    * Weight-management level-offs and holds during climb-out are modeled
+      explicitly via ``typical_climb_out``; the ``climb_profile`` itself
+      is active-climb-only performance, not wall-clock climb-out timing.
     * Two-regime descent: peak idle-power |VS| ~3675 fpm at top-of-
       descent, decaying to ~840 fpm at top-of-approach as the aircraft
       configures for the terminal pattern.
@@ -95,7 +93,7 @@ class NASA_ER2(Aircraft):
 
     def __init__(self):
         # Distinct climb / cruise / descent TAS schedules from IWG1 per-altitude-bin
-        # medians (n=17 sorties, 2-kft bins, all bins with n >= 30 fixes).
+        # medians (cached NASA 806 + 809 sorties, bins with n >= 30 fixes).
         # Pre-Item-4 these were aliased to a single brochure 2-point linear curve;
         # the IWG1 data shows climb / descent are within ~5 kt of each other at
         # any given altitude (both reflect pitched flight) but cruise sits ~10-20
@@ -132,30 +130,26 @@ class NASA_ER2(Aircraft):
             descent_schedule=descent_schedule,
             # Active-climb median (VS >= 1500 fpm, ±2-kft bands around
             # {FL240, FL260, FL356} excluded — known weight-management
-            # hold altitudes), 5-kft bins, n>=100/bin across 199 IWG1
-            # sorties.  Ships per-bin medians directly; non-monotone
+            # hold altitudes), 5-kft bins across the cached IWG1 sortie
+            # set.  Ships per-bin medians directly; non-monotone
             # mid-altitude bumps reflect real hold-band-adjacent climb
-            # behaviour and are preserved.  The SL anchor is data-driven
-            # (3245 fpm) — the ER-2 is U-2-derived but isn't a U-2,
-            # and the active-climb data shows actual SL ROC well below
-            # the U-2 brochure 5000 fpm value.
+            # behaviour and are preserved.
             #
-            # See `notebooks/calibration/er2/calibration.ipynb` §5b
+            # See `notebooks/calibration/er2/calibration.ipynb` §5
             # for the active-only derivation and §6b for the IQR fit
             # validation.
             climb_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 3245 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 4290 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 4083 * ureg.feet / ureg.minute),
-                (15000 * ureg.feet, 3378 * ureg.feet / ureg.minute),
-                (20000 * ureg.feet, 3841 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 3621 * ureg.feet / ureg.minute),
-                (30000 * ureg.feet, 3212 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 2453 * ureg.feet / ureg.minute),
-                (40000 * ureg.feet, 2072 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 1724 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 4301 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 4330 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 3876 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 3934 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 3588 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 3113 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2447 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2083 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 1746 * ureg.feet / ureg.minute),
                 (50000 * ureg.feet, 1618 * ureg.feet / ureg.minute),
-                (55000 * ureg.feet, 1607 * ureg.feet / ureg.minute),
+                (55000 * ureg.feet, 1565 * ureg.feet / ureg.minute),
                 # Operational ceiling residual; FL600+ active-climb bins
                 # are too sparse (n<30) for a reliable empirical fit.
                 (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),
@@ -238,14 +232,14 @@ class NASA_ER2(Aircraft):
             # fits in the leg (steepened to FPA <= 6°) or, on legs
             # too short to fit, the planner falls back to the
             # spiral-up regime regardless of this cap.  With the
-            # active-climb-only climb_profile (Phase 2), pure
+            # active-climb-only climb_profile, pure
             # _climb() integration is now what the model represents,
             # and the typical pre-cruise mission overhead is
             # injected explicitly via the typical_climb_out below.
             climb_path_angle_max_deg=6.0,
             typical_climb_out=ClimbOutPolicy(
-                # Phase 3: climb_profile is active-only and the
-                # planner reads `explicit_climb_plan` via
+                # climb_profile is active-only and the planner reads
+                # `explicit_climb_plan` via
                 # `compute_flight_plan(climb_plan="auto")` (the
                 # default).  This recovers empirical-typical
                 # wall-clock TOC honestly: the holds appear as
@@ -259,12 +253,12 @@ class NASA_ER2(Aircraft):
                 ],
                 typical_overhead_min=14.0,
                 notes=(
-                    "climb_profile is active-climb-only (138-sortie IWG1 "
+                    "climb_profile is active-climb-only (cached NASA 806 + 809 IWG1 "
                     "median per 5-kft bin, VS >= 1500 fpm filter, hold "
                     "bands excluded). Pre-cruise mission overhead is "
                     "injected via explicit_climb_plan when the caller "
                     "uses climb_plan='auto' (the default).  The 12-min "
-                    "FL356 hold is the median of the 138-sortie cache; "
+                    "FL356 hold is the median of the cached sortie set; "
                     "individual sorties range 0-25+ min.  Power users "
                     "wanting pure aircraft physics pass climb_plan=None "
                     "to bypass the typical-mission absorption.  See "
@@ -272,7 +266,7 @@ class NASA_ER2(Aircraft):
                 ),
                 explicit_climb_plan=ClimbPlan(pauses=[
                     # Median weight-band .delay duration across the
-                    # 138-sortie cache.  Single representative pause
+                    # cached sortie set.  Single representative pause
                     # at FL356 — brief FL240/FL260 level-offs are
                     # too short to be worth modelling explicitly and
                     # contribute <2 min combined.
@@ -288,8 +282,8 @@ class NASA_ER2(Aircraft):
                 SourceRecord(
                     source_type="iwg1",
                     reference=(
-                        "NASA AFRC IWG1 in-situ flight logs, n=138 mission "
-                        "sorties 2023-03 to 2026-05 (NASA 806 + 809); "
+                        "NASA AFRC IWG1 in-situ flight logs from cached "
+                        "NASA 806 + 809 sorties; "
                         "calibrated climb (active-only median, VS >= 1500 fpm "
                         "outside known hold bands), descent (median), "
                         "approach_profile with empirical glideslope, and "

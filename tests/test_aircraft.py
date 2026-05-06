@@ -873,9 +873,10 @@ class TestER2Performance:
         """time_to_cruise's climb-phase time matches Aircraft._climb directly.
 
         The hybrid planner integrates climb_profile through `_climb`, so the
-        climb step encoded in the calibrated ER-2 climb_profile (19-21 kft
-        plateau) propagates into mission timing — previously the planner
-        used a constant-pitch Dubins path that ignored the step entirely.
+        calibrated active-climb profile propagates into mission timing.
+        Typical ER-2 level-offs and holds are represented separately via
+        ``typical_climb_out`` / ``ClimbPlan`` rather than baked into the
+        aircraft-intrinsic climb profile.
         """
         from hyplan.waypoint import Waypoint
         ac = NASA_ER2()
@@ -926,6 +927,29 @@ class TestER2Performance:
                 f"climb VS at {alt} ft ({rate:.0f}) should be below 90% of "
                 f"low-altitude peak ({peak:.0f})"
             )
+
+    def test_climb_profile_matches_active_iwg1_medians(self):
+        """ER-2 climb_profile uses hold-band-excluded active-climb medians."""
+        ac = NASA_ER2()
+        expected = {
+            5000: 4301,
+            10000: 4330,
+            15000: 3876,
+            20000: 3934,
+            25000: 3588,
+            30000: 3113,
+            35000: 2447,
+            40000: 2083,
+            45000: 1746,
+            50000: 1618,
+            55000: 1565,
+            66000: 200,
+        }
+        for alt_ft, expected_fpm in expected.items():
+            actual = ac.climb_profile.rate_at(alt_ft * ureg.feet).m_as(
+                ureg.feet / ureg.minute
+            )
+            assert actual == pytest.approx(expected_fpm, abs=0.5)
 
     def test_descent_profile_peaks_in_mid_altitude_band(self):
         """Median-based descent_profile peaks in the 25-45 kft band.
@@ -1039,8 +1063,8 @@ class TestER2Performance:
         whose total time grows by the hold duration relative to
         climb_plan=None.
 
-        After Phase 3a, NASA_ER2 ships with a 12-min FL356 hold; the
-        "auto" sentinel resolves to that ClimbPlan, which is distinct
+        NASA_ER2 ships with a 12-min FL356 hold; the "auto"
+        sentinel resolves to that ClimbPlan, which is distinct
         from `climb_plan=None` (no holds — pure active-climb).
         """
         from hyplan.airports import Airport

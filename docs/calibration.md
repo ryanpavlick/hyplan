@@ -43,7 +43,7 @@ the shape directly.
 
 | Aircraft class | Status | Source | Sorties | Notebook |
 |----------------|--------|--------|---------|----------|
-| `NASA_ER2` | Data-fit | NASA AFRC IWG1 | ~138 | [er2/calibration.ipynb](../notebooks/calibration/er2/calibration.ipynb) |
+| `NASA_ER2` | Data-fit | NASA AFRC IWG1 | cache-dependent | [er2/calibration.ipynb](../notebooks/calibration/er2/calibration.ipynb) |
 | `NASA_GIII` | Data-fit | NASA ASP archive IWG1 | ~153 | [giii/calibration.ipynb](../notebooks/calibration/giii/calibration.ipynb) |
 | `NASA_GV` | Data-fit | NASA ASP archive IWG1 | ~101 | [gv/calibration.ipynb](../notebooks/calibration/gv/calibration.ipynb) |
 | `NASA_WB57` | Data-fit | NASA ASP archive IWG1 | ~100 | [wb57/calibration.ipynb](../notebooks/calibration/wb57/calibration.ipynb) |
@@ -155,8 +155,8 @@ shares data) → A-90 (wind-derivation last resort).
   contamination filtering above autopilot precision.
 * The ER-2 notebook excludes weight-management hold bands
   (FL220–FL260, FL240–FL280, FL336–FL376) when computing
-  active-climb medians so the step-climb plateaus don't depress
-  the bin medians.
+  active-climb medians so sortie-specific level-offs and holds do
+  not depress the aircraft-intrinsic climb profile.
 * Default `confidence=0.85` for data-fit calibrations,
   `confidence=0.7` for inferred-from-sibling values.
 * `max_bank_deg` ships as `max(AFM normal-ops 30°, data p90)` so
