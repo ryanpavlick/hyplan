@@ -62,7 +62,9 @@ from ..winds.utils import _track_hold_solution_from_uv
 
 __all__ = [
     "compute_isochrone",
+    "compute_concentric_isochrones",
     "compute_refuel_isochrone",
+    "evaluate_target_reachability",
     "isochrone_polygon",
     "plot_isochrone",
 ]
@@ -337,6 +339,170 @@ def compute_isochrone(
     return gdf
 
 
+def compute_concentric_isochrones(
+    aircraft: Aircraft,
+    start: Union[Airport, Waypoint],
+    budgets: Sequence[Quantity],
+    *,
+    cruise_altitude: Optional[Quantity] = None,
+    on_station_altitude: Optional[Quantity] = None,
+    start_time: Optional[datetime.datetime] = None,
+    wind_source: Optional[WindField] = None,
+    return_destination: Union[Airport, Waypoint, None] = None,
+    mode: str = "round_trip",
+    on_station_time: Quantity = 0 * ureg.minute,
+    reserve: Quantity = 0 * ureg.minute,
+    azimuth_resolution_deg: float = 5.0,
+    distance_tolerance_nmi: float = 0.5,
+) -> gpd.GeoDataFrame:
+    """Compute multiple isochrone contours in one call (e.g., 1/2/3 hr).
+
+    Sweeps ``budgets`` in ascending order and seeds each budget's
+    bracket search from the previous (smaller) budget's converged
+    distances per ray, exploiting the fact that feasibility is
+    monotone in budget.  Total cost is roughly ``O(M + N)`` rather
+    than ``O(M·N)`` for ``M`` budgets and ``N`` rays.
+
+    Args:
+        aircraft, start, cruise_altitude, on_station_altitude,
+        start_time, wind_source, return_destination, mode,
+        on_station_time, reserve, azimuth_resolution_deg,
+        distance_tolerance_nmi: same semantics as
+            :func:`compute_isochrone`.
+        budgets: iterable of ``Quantity`` time values to sweep.
+            Must be non-empty; sorted ascending internally.
+
+    Returns:
+        A :class:`geopandas.GeoDataFrame` in EPSG:4326, one row per
+        ``(budget, azimuth)`` combination.  Columns match
+        :func:`compute_isochrone` plus ``budget_min`` and
+        ``budget_hr`` tagging which contour each row belongs to.
+        ``gdf.attrs["budgets_hr"]`` lists budgets in computed order
+        (ascending).
+
+    Refuel-aware concentric reach is intentionally out of scope —
+    sweeping ``(sortie, day)`` tuples is a different UI problem.
+    """
+    if not budgets:
+        raise HyPlanValueError(
+            "`budgets` must contain at least one Quantity."
+        )
+
+    # Reuse compute_isochrone's validation by validating each budget
+    # via _validate_common_kwargs once; this also coerces start to a
+    # Waypoint and resolves cruise_altitude defaults.
+    start, cruise_altitude, reserve_min, on_station_min = _validate_common_kwargs(
+        start=start,
+        cruise_altitude=cruise_altitude,
+        on_station_altitude=on_station_altitude,
+        on_station_time=on_station_time,
+        reserve=reserve,
+        mode=mode,
+        valid_modes=_VALID_MODES,
+        azimuth_resolution_deg=azimuth_resolution_deg,
+        distance_tolerance_nmi=distance_tolerance_nmi,
+    )
+
+    budgets_min = sorted(b.m_as(ureg.minute) for b in budgets)
+    smallest = budgets_min[0]
+    if smallest <= reserve_min:
+        raise HyPlanValueError(
+            f"smallest budget ({smallest:.1f} min) must exceed reserve "
+            f"({reserve_min:.1f} min)."
+        )
+
+    # Resolve recovery destination once (shared across budgets).
+    if mode == "one_way":
+        if return_destination is not None:
+            import warnings
+            warnings.warn(
+                "`return_destination` is ignored when mode='one_way'.",
+                stacklevel=2,
+            )
+        return_wp: Optional[Waypoint] = None
+        return_label = "—"
+    elif mode == "round_trip":
+        if return_destination is None:
+            return_wp = start
+            return_label = start.name or "start"
+        else:
+            return_wp = _resolve_destination(return_destination)
+            return_label = _destination_label(return_destination)
+    else:  # return_safe
+        if return_destination is None:
+            raise HyPlanValueError(
+                "`return_destination` is required when mode='return_safe'."
+            )
+        return_wp = _resolve_destination(return_destination)
+        return_label = _destination_label(return_destination)
+
+    if start_time is None:
+        start_time = datetime.datetime.now(datetime.timezone.utc)
+    if wind_source is None:
+        wind_source = StillAirField()
+
+    azimuths = np.arange(0.0, 360.0, azimuth_resolution_deg)
+    n_rays = len(azimuths)
+
+    all_rows: list[dict] = []
+    seed_d_lo = np.zeros(n_rays, dtype=float)
+
+    for budget_min in budgets_min:
+        rows = _solve_rays(
+            aircraft=aircraft,
+            start=start,
+            cruise_altitude=cruise_altitude,
+            start_time=start_time,
+            wind_source=wind_source,
+            return_wp=return_wp,
+            mode=mode,
+            on_station_min=on_station_min,
+            budget_min=budget_min,
+            reserve_min=reserve_min,
+            azimuths_deg=azimuths,
+            distance_tolerance_nmi=distance_tolerance_nmi,
+            seed_d_lo=seed_d_lo,
+        )
+        # Tag rows with budget; capture per-ray distances for next seed.
+        new_seed = np.zeros(n_rays, dtype=float)
+        for i, row in enumerate(rows):
+            row["budget_min"] = budget_min
+            row["budget_hr"] = budget_min / 60.0
+            new_seed[i] = float(row["distance_nmi"])
+            all_rows.append(row)
+        seed_d_lo = new_seed
+
+    df = pd.DataFrame(all_rows)
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
+
+    gdf.attrs.update({
+        "mode": mode,
+        "start_lat": start.latitude,
+        "start_lon": start.longitude,
+        "start_altitude_ft": (
+            start.altitude_msl.m_as(ureg.feet)
+            if start.altitude_msl is not None else None
+        ),
+        "cruise_altitude_ft": cruise_altitude.m_as(ureg.feet),
+        "budgets_min": budgets_min,
+        "budgets_hr": [b / 60.0 for b in budgets_min],
+        "reserve_min": reserve_min,
+        "on_station_min": on_station_min,
+        "return_destination_label": return_label,
+        "return_destination_lat": (
+            return_wp.latitude if return_wp is not None else None
+        ),
+        "return_destination_lon": (
+            return_wp.longitude if return_wp is not None else None
+        ),
+        "aircraft_type": aircraft.aircraft_type,
+        "wind_source_kind": type(wind_source).__name__,
+        "start_time": start_time.isoformat(),
+    })
+    return gdf
+
+
 def compute_refuel_isochrone(
     aircraft: Aircraft,
     start: Union[Airport, Waypoint],
@@ -570,6 +736,189 @@ def compute_refuel_isochrone(
         "refuel_airports_used": sorted(used),
     })
     return gdf
+
+
+def evaluate_target_reachability(
+    aircraft: Aircraft,
+    start: Union[Airport, Waypoint],
+    target: Union[Airport, Waypoint],
+    *,
+    sortie_budget: Quantity,
+    flight_day_budget: Optional[Quantity] = None,
+    cruise_altitude: Optional[Quantity] = None,
+    refuel_airports: Sequence[Union[Airport, Waypoint]] = (),
+    refuel_time: Quantity = 60 * ureg.minute,
+    return_destination: Union[Airport, Waypoint, None] = None,
+    mode: str = "return_safe",
+    on_station_altitude: Optional[Quantity] = None,
+    on_station_time: Quantity = 0 * ureg.minute,
+    reserve: Quantity = 0 * ureg.minute,
+    start_time: Optional[datetime.datetime] = None,
+    wind_source: Optional[WindField] = None,
+) -> dict:
+    """Evaluate reachability of a single target via direct + refuel paths.
+
+    The complement of :func:`compute_refuel_isochrone`: rather than
+    sweeping azimuths to find the boundary, this asks "given *this*
+    target, which itineraries reach it within budget?" and reports
+    every feasible option.
+
+    Args:
+        aircraft, start, sortie_budget, flight_day_budget, cruise_altitude,
+        refuel_airports, refuel_time, return_destination, mode,
+        on_station_altitude, on_station_time, reserve, start_time,
+        wind_source: same semantics as
+            :func:`compute_refuel_isochrone`.  ``flight_day_budget``
+            defaults to ``sortie_budget`` (the day clock then never
+            binds).  ``refuel_airports`` may be empty — only the direct
+            itinerary is then evaluated.
+        target: the point to evaluate.  Accepts an :class:`Airport` or
+            a :class:`Waypoint`.
+
+    Returns:
+        Dict with keys:
+            ``reachable``: ``bool``.
+            ``best``: itinerary diagnostic dict for the chosen route,
+                or ``None`` when ``reachable`` is False.
+            ``alternatives``: list of dicts for the other feasible
+                itineraries, sorted by ascending ``day_total_time_min``.
+            ``unreachable_reason``: short human-readable string when
+                ``reachable`` is False, else ``None``.
+            ``target_lat``, ``target_lon``: coordinates of the target.
+    """
+    import warnings
+
+    start, cruise_altitude, reserve_min, on_station_min = _validate_common_kwargs(
+        start=start,
+        cruise_altitude=cruise_altitude,
+        on_station_altitude=on_station_altitude,
+        on_station_time=on_station_time,
+        reserve=reserve,
+        mode=mode,
+        valid_modes=_VALID_REFUEL_MODES,
+        azimuth_resolution_deg=5.0,  # not used for single-point eval
+        distance_tolerance_nmi=0.5,
+    )
+
+    sortie_budget_min = sortie_budget.m_as(ureg.minute)
+    if flight_day_budget is None:
+        flight_day_budget_min = sortie_budget_min
+    else:
+        flight_day_budget_min = flight_day_budget.m_as(ureg.minute)
+    refuel_time_min = refuel_time.m_as(ureg.minute)
+
+    if refuel_time_min < 0:
+        raise HyPlanValueError(
+            f"`refuel_time` must be non-negative, got "
+            f"{refuel_time_min:.1f} min."
+        )
+    if sortie_budget_min <= reserve_min:
+        raise HyPlanValueError(
+            f"`sortie_budget` ({sortie_budget_min:.1f} min) must exceed "
+            f"`reserve` ({reserve_min:.1f} min)."
+        )
+    if flight_day_budget_min <= reserve_min:
+        raise HyPlanValueError(
+            f"`flight_day_budget` ({flight_day_budget_min:.1f} min) must "
+            f"exceed `reserve` ({reserve_min:.1f} min)."
+        )
+    if flight_day_budget_min < sortie_budget_min:
+        warnings.warn(
+            f"flight_day_budget ({flight_day_budget_min:.1f} min) is "
+            f"less than sortie_budget ({sortie_budget_min:.1f} min); "
+            f"the day clock will bind.",
+            stacklevel=2,
+        )
+
+    # Recovery destination.
+    if mode == "round_trip":
+        recovery_wp = (
+            _resolve_destination(return_destination)
+            if return_destination is not None
+            else start
+        )
+    else:  # return_safe
+        if return_destination is None:
+            raise HyPlanValueError(
+                "`return_destination` is required when mode='return_safe'."
+            )
+        recovery_wp = _resolve_destination(return_destination)
+
+    if start_time is None:
+        start_time = datetime.datetime.now(datetime.timezone.utc)
+    if wind_source is None:
+        wind_source = StillAirField()
+
+    # Coerce target.
+    target_wp = _airport_or_wp_to_waypoint(target, require_altitude=False)
+    if target_wp.altitude_msl is None:
+        target_wp = Waypoint(
+            latitude=target_wp.latitude,
+            longitude=target_wp.longitude,
+            heading=target_wp.heading,
+            altitude_msl=cruise_altitude,
+            name=target_wp.name,
+        )
+
+    # Refuel prefilter (or empty list when no refuel airports given).
+    if refuel_airports:
+        eligibility, _, _ = _prefilter_refuel_airports(
+            aircraft=aircraft,
+            start=start,
+            recovery_wp=recovery_wp,
+            cruise_altitude=cruise_altitude,
+            start_time=start_time,
+            wind_source=wind_source,
+            refuel_airports=refuel_airports,
+            sortie_budget_min=sortie_budget_min,
+            flight_day_budget_min=flight_day_budget_min,
+            reserve_min=reserve_min,
+            refuel_time_min=refuel_time_min,
+        )
+    else:
+        eligibility = []
+
+    candidates = _evaluate_refuel_at_d(
+        aircraft=aircraft,
+        start=start,
+        target=target_wp,
+        recovery_wp=recovery_wp,
+        cruise_altitude=cruise_altitude,
+        start_time=start_time,
+        wind_source=wind_source,
+        on_station_min=on_station_min,
+        sortie_budget_min=sortie_budget_min,
+        flight_day_budget_min=flight_day_budget_min,
+        reserve_min=reserve_min,
+        refuel_time_min=refuel_time_min,
+        refuel_eligibility=eligibility,
+    )
+
+    if not candidates:
+        return {
+            "reachable": False,
+            "best": None,
+            "alternatives": [],
+            "unreachable_reason": (
+                "no feasible itinerary within sortie_budget + "
+                "flight_day_budget"
+            ),
+            "target_lat": target_wp.latitude,
+            "target_lon": target_wp.longitude,
+        }
+
+    # candidates is sorted by extension headroom (descending) — that's
+    # the right order for the solver, but for "spot-check a target" the
+    # natural ordering is by elapsed wall-clock time.  Re-sort.
+    candidates.sort(key=lambda c: c["day_total_time_min"])
+    return {
+        "reachable": True,
+        "best": candidates[0],
+        "alternatives": candidates[1:],
+        "unreachable_reason": None,
+        "target_lat": target_wp.latitude,
+        "target_lon": target_wp.longitude,
+    }
 
 
 def isochrone_polygon(gdf: gpd.GeoDataFrame) -> Polygon:
@@ -894,8 +1243,18 @@ def _solve_rays(
     reserve_min: float,
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
+    seed_d_lo: Optional[np.ndarray] = None,
 ) -> list[dict]:
-    """Solve all radial rays, vectorizing candidate geometry per iteration."""
+    """Solve all radial rays, vectorizing candidate geometry per iteration.
+
+    ``seed_d_lo`` (when provided) sets the per-ray lower bound for the
+    bracket search.  Used by ``compute_concentric_isochrones`` to
+    amortize work across budgets: the previous (smaller) budget's
+    converged ``d_lo`` is feasible at the current (larger) budget by
+    monotonicity, so we skip the doubling phase below that distance.
+    Rays seeded with ``0`` are treated as fresh (matches the
+    no-seed default behavior).
+    """
     feasible_budget_min = budget_min - reserve_min
     n_rays = len(azimuths_deg)
     initial_hi = _initial_bracket_distance_nmi(
@@ -907,8 +1266,13 @@ def _solve_rays(
         reserve_min=reserve_min,
     )
 
-    d_lo = np.zeros(n_rays, dtype=float)
-    d_hi = np.full(n_rays, initial_hi, dtype=float)
+    if seed_d_lo is None:
+        seed_d_lo = np.zeros(n_rays, dtype=float)
+    seeded_mask = seed_d_lo > 0
+    d_lo = seed_d_lo.astype(float).copy()
+    # Ensure d_hi[i] > d_lo[i] for every ray; the doubling loop expands
+    # from there.
+    d_hi = np.maximum(initial_hi, d_lo + max(initial_hi, 1.0))
     active = np.ones(n_rays, dtype=bool)
     zero_unflyable = np.zeros(n_rays, dtype=bool)
 
@@ -981,14 +1345,20 @@ def _solve_rays(
     zero_infeasible = (
         ~np.isfinite(zero_totals) | (zero_totals > feasible_budget_min)
     )
-    if np.any(zero_infeasible):
-        zero_indices = active_indices[zero_infeasible]
+    # Seeded rays were known feasible at d=seed_d_lo>0 from a smaller
+    # budget; do not mark them unflyable just because d=0 is over the
+    # new budget (return-leg-binding rays where the boundary is
+    # strictly outside the start can have zero infeasibility but a
+    # valid annular feasible region).
+    zero_infeasible_for_unflyable = zero_infeasible & ~seeded_mask[active_indices]
+    if np.any(zero_infeasible_for_unflyable):
+        zero_indices = active_indices[zero_infeasible_for_unflyable]
         zero_unflyable[zero_indices] = True
         active[zero_indices] = False
 
     feasible = np.isfinite(totals) & (totals <= feasible_budget_min)
     expanding = np.zeros(n_rays, dtype=bool)
-    expanding[active_indices[feasible & ~zero_infeasible]] = True
+    expanding[active_indices[feasible & ~zero_infeasible_for_unflyable]] = True
 
     while np.any(expanding):
         d_lo[expanding] = d_hi[expanding]
@@ -1231,6 +1601,17 @@ def _leg_time(
 # Refuel-aware solver
 # ---------------------------------------------------------------------------
 
+def _anchor_invariant(wind_source: WindField) -> bool:
+    """True when ``wind_at`` returns the same (u, v) regardless of the
+    sample time, so leg-time results can be cached across anchors.
+
+    ``StillAirField`` and ``ConstantWindField`` are time-invariant by
+    construction; everything else (MERRA-2, GFS, GMAO) varies with time
+    and must be re-sampled at the correct anchor.
+    """
+    return isinstance(wind_source, (StillAirField, ConstantWindField))
+
+
 def _prefilter_refuel_airports(
     *,
     aircraft: Aircraft,
@@ -1273,12 +1654,12 @@ def _prefilter_refuel_airports(
             else (r_wp.name or f"({r_wp.latitude:.2f},{r_wp.longitude:.2f})")
         )
 
-        t_sR, _ = _leg_time(
+        t_sR, hw_sR = _leg_time(
             aircraft=aircraft, start_wp=start, end_wp=r_wp,
             cruise_altitude=cruise_altitude, t_anchor=start_time,
             wind_source=wind_source,
         )
-        t_Rrec, _ = _leg_time(
+        t_Rrec, hw_Rrec = _leg_time(
             aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
             cruise_altitude=cruise_altitude, t_anchor=later_anchor,
             wind_source=wind_source,
@@ -1345,7 +1726,9 @@ def _prefilter_refuel_airports(
             "outbound_ok": outbound_ok,
             "return_ok": return_ok,
             "t_sR_min": float(t_sR) if np.isfinite(t_sR) else float("inf"),
+            "hw_sR_kt": float(hw_sR) if np.isfinite(hw_sR) else float("nan"),
             "t_Rrec_min": float(t_Rrec) if np.isfinite(t_Rrec) else float("inf"),
+            "hw_Rrec_kt": float(hw_Rrec) if np.isfinite(hw_Rrec) else float("nan"),
         })
 
     return eligibility, evaluated, unreachable
@@ -1368,8 +1751,12 @@ def _evaluate_refuel_at_d(
     refuel_eligibility: list[dict],
     template: Optional[str] = None,
     refuel_label: Optional[str] = None,
-) -> Optional[dict]:
+) -> list[dict]:
     """Evaluate one or more refuel itinerary templates at the given target.
+
+    Returns the list of feasible itineraries sorted by extension
+    headroom (``min(sortie_margin, day_margin)``, descending).  Empty
+    list when no itinerary is feasible.
 
     When ``template`` is provided, only that template is evaluated.  For
     refuel templates, ``refuel_label`` narrows the evaluation to one airport.
@@ -1431,11 +1818,9 @@ def _evaluate_refuel_at_d(
             if refuel_label is not None and elig["label"] != refuel_label:
                 continue
             r_wp = elig["wp"]
-            t_sR, _ = _leg_time(
-                aircraft=aircraft, start_wp=start, end_wp=r_wp,
-                cruise_altitude=cruise_altitude, t_anchor=start_time,
-                wind_source=wind_source,
-            )
+            # start→R is sampled at start_time both in the prefilter and
+            # here, so the cached value is always the correct anchor.
+            t_sR = elig["t_sR_min"]
             if not np.isfinite(t_sR) or t_sR > cycle_cap_min:
                 continue
             anchor_2 = start_time + datetime.timedelta(
@@ -1514,14 +1899,24 @@ def _evaluate_refuel_at_d(
             cycle_1 = t_st + on_station_min + t_tR
             if cycle_1 > cycle_cap_min:
                 continue
-            anchor_Rrec = start_time + datetime.timedelta(
-                minutes=cycle_1 + refuel_time_min
-            )
-            t_Rrec, hw_Rrec = _leg_time(
-                aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
-                cruise_altitude=cruise_altitude, t_anchor=anchor_Rrec,
-                wind_source=wind_source,
-            )
+            if _anchor_invariant(wind_source):
+                # Wind sampled in the prefilter is anchor-invariant for
+                # StillAirField/ConstantWindField — reuse it without
+                # calling _leg_time again.
+                t_Rrec = elig["t_Rrec_min"]
+                hw_Rrec = elig["hw_Rrec_kt"]
+            else:
+                # Time-varying wind: R→recovery anchor depends on
+                # cycle_1 (which depends on d), so the prefilter sample
+                # is at the wrong time and we must recompute.
+                anchor_Rrec = start_time + datetime.timedelta(
+                    minutes=cycle_1 + refuel_time_min
+                )
+                t_Rrec, hw_Rrec = _leg_time(
+                    aircraft=aircraft, start_wp=r_wp, end_wp=recovery_wp,
+                    cruise_altitude=cruise_altitude, t_anchor=anchor_Rrec,
+                    wind_source=wind_source,
+                )
             if not np.isfinite(t_Rrec):
                 continue
             cycle_2 = t_Rrec
@@ -1553,16 +1948,15 @@ def _evaluate_refuel_at_d(
                 "day_margin_min": day_margin,
             })
 
-    if not candidates:
-        return None
-
-    # Pick the itinerary with the most extension headroom — i.e., the one
-    # whose own per-itinerary boundary lies furthest beyond this d.
-    best = max(
-        candidates,
+    # Sort feasible candidates by extension headroom — the itinerary
+    # whose own per-itinerary boundary lies furthest beyond this d
+    # comes first.  Callers consume ``[0]`` for "best" or scan the
+    # whole list for "all alternatives."
+    candidates.sort(
         key=lambda c: min(c["sortie_margin_min"], c["day_margin_min"]),
+        reverse=True,
     )
-    return best
+    return candidates
 
 
 def _solve_rays_refuel(
@@ -1626,9 +2020,14 @@ def _solve_rays_refuel(
         solved: list[tuple[float, dict]] = []
 
         for template, refuel_label in specs:
-            def _evaluate_spec(d_nmi: float) -> Optional[dict]:
+            def _evaluate_spec(
+                d_nmi: float,
+                *,
+                template: str = template,
+                refuel_label: Optional[str] = refuel_label,
+            ) -> Optional[dict]:
                 target = _make_target(az_f, d_nmi)
-                return _evaluate_refuel_at_d(
+                cands = _evaluate_refuel_at_d(
                     aircraft=aircraft,
                     start=start,
                     target=target,
@@ -1645,15 +2044,14 @@ def _solve_rays_refuel(
                     template=template,
                     refuel_label=refuel_label,
                 )
+                return cands[0] if cands else None
 
-            zero_diag = _evaluate_spec(0.0)
-            if zero_diag is None:
+            if _evaluate_spec(0.0) is None:
                 continue
 
             d_lo = 0.0
             d_hi = initial_hi
-            seed = _evaluate_spec(d_hi)
-            if seed is not None:
+            if _evaluate_spec(d_hi) is not None:
                 while True:
                     d_lo = d_hi
                     d_hi *= 2.0

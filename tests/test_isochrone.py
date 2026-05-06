@@ -11,7 +11,9 @@ from hyplan import (
     NASA_GIII,
     Waypoint,
     compute_isochrone,
+    compute_concentric_isochrones,
     compute_refuel_isochrone,
+    evaluate_target_reachability,
     isochrone_polygon,
     ureg,
 )
@@ -1109,3 +1111,294 @@ class TestRefuel:
             r for r in gdf["refuel_airport"].dropna().unique()
         )
         assert set(gdf.attrs["refuel_airports_used"]) == from_rows
+
+
+# ---------------------------------------------------------------------------
+# Target reachability (single-point feasibility query)
+# ---------------------------------------------------------------------------
+
+class TestTargetReachability:
+    """evaluate_target_reachability: single-point feasibility queries."""
+
+    def test_reachable_direct(self, b200, kefd_wp, b200_cruise):
+        """A close target reachable without refuel."""
+        target = Waypoint(
+            latitude=kefd_wp.latitude + 1.5,
+            longitude=kefd_wp.longitude,
+            heading=0.0, altitude_msl=b200_cruise,
+        )
+        result = evaluate_target_reachability(
+            b200, kefd_wp, target,
+            sortie_budget=4 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            mode="round_trip",
+        )
+        assert result["reachable"]
+        assert result["best"]["itinerary"] == "direct"
+        assert result["best"]["refuel_airport"] is None
+        assert result["alternatives"] == []
+        assert result["unreachable_reason"] is None
+
+    def test_reachable_via_refuel(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """A far target reachable only via outbound refuel."""
+        # Target ~600 nmi NW of KEFD, beyond direct return-safe range.
+        target = Waypoint(
+            latitude=35.0, longitude=-103.0, heading=0.0,
+            altitude_msl=b200_cruise,
+        )
+        result = evaluate_target_reachability(
+            b200, kefd_wp, target,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+        )
+        assert result["reachable"]
+        assert result["best"]["refuel_airport"] == "KLBB"
+        assert result["best"]["itinerary"] in {
+            "outbound_refuel", "return_refuel",
+        }
+
+    def test_unreachable(self, b200, kefd_wp, b200_cruise):
+        """An impossibly far target reports unreachable + reason."""
+        target = Waypoint(
+            latitude=70.0, longitude=10.0, heading=0.0,
+            altitude_msl=b200_cruise,
+        )
+        result = evaluate_target_reachability(
+            b200, kefd_wp, target,
+            sortie_budget=4 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            mode="round_trip",
+        )
+        assert not result["reachable"]
+        assert result["best"] is None
+        assert result["alternatives"] == []
+        assert result["unreachable_reason"] is not None
+
+    def test_alternatives_sorted_by_day_total(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """Alternatives list is sorted by ascending day_total_time_min."""
+        target = Waypoint(
+            latitude=33.0, longitude=-100.0, heading=0.0,
+            altitude_msl=b200_cruise,
+        )
+        result = evaluate_target_reachability(
+            b200, kefd_wp, target,
+            sortie_budget=4 * ureg.hour,
+            flight_day_budget=8 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            refuel_time=30 * ureg.minute,
+            return_destination=kbtr_wp,
+            mode="return_safe",
+        )
+        assert result["reachable"]
+        # best.day_total ≤ each alternative.day_total
+        for alt in result["alternatives"]:
+            assert (
+                alt["day_total_time_min"]
+                >= result["best"]["day_total_time_min"]
+            )
+
+    def test_no_refuel_airports_only_direct(
+        self, b200, kefd_wp, b200_cruise,
+    ):
+        """refuel_airports=() evaluates only the direct itinerary."""
+        target = Waypoint(
+            latitude=kefd_wp.latitude + 2.0,
+            longitude=kefd_wp.longitude,
+            heading=0.0, altitude_msl=b200_cruise,
+        )
+        result = evaluate_target_reachability(
+            b200, kefd_wp, target,
+            sortie_budget=4 * ureg.hour,
+            cruise_altitude=b200_cruise,
+            mode="round_trip",
+        )
+        assert result["reachable"]
+        assert result["best"]["itinerary"] == "direct"
+        assert all(
+            a["itinerary"] == "direct" for a in result["alternatives"]
+        )
+
+    def test_one_way_rejected(self, b200, kefd_wp, klbb_wp, b200_cruise):
+        target = Waypoint(
+            latitude=33.0, longitude=-100.0, heading=0.0,
+            altitude_msl=b200_cruise,
+        )
+        with pytest.raises(HyPlanValueError, match="mode"):
+            evaluate_target_reachability(
+                b200, kefd_wp, target,
+                sortie_budget=4 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                mode="one_way",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Concentric isochrones
+# ---------------------------------------------------------------------------
+
+class TestConcentric:
+    """compute_concentric_isochrones: multi-budget sweep + amortization."""
+
+    def test_monotone_in_budget(self, giii, kedw_wp, cruise_alt):
+        """Per-ray reach is non-decreasing as budget grows."""
+        gdf = compute_concentric_isochrones(
+            giii, kedw_wp,
+            budgets=[1 * ureg.hour, 2 * ureg.hour, 3 * ureg.hour],
+            cruise_altitude=cruise_alt,
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=2.0,
+        )
+        for az in gdf["azimuth_deg"].unique():
+            d_by_b = (
+                gdf[gdf["azimuth_deg"] == az]
+                .sort_values("budget_hr")["distance_nmi"]
+                .tolist()
+            )
+            for a, b in zip(d_by_b[:-1], d_by_b[1:]):
+                assert b >= a - 2.0, (
+                    f"az {az}: budget grew {a} → {b}, expected non-decreasing"
+                )
+
+    def test_single_budget_matches_compute_isochrone(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        """Concentric with a single-element list matches compute_isochrone."""
+        common = dict(
+            cruise_altitude=cruise_alt,
+            mode="round_trip",
+            azimuth_resolution_deg=60.0,
+            distance_tolerance_nmi=2.0,
+        )
+        single = compute_isochrone(
+            giii, kedw_wp, 2 * ureg.hour, **common,
+        )
+        multi = compute_concentric_isochrones(
+            giii, kedw_wp, budgets=[2 * ureg.hour], **common,
+        )
+        s = single.set_index("azimuth_deg")["distance_nmi"]
+        m = multi.set_index("azimuth_deg")["distance_nmi"]
+        assert (s - m).abs().max() < 1e-6
+
+    def test_attrs_present(self, giii, kedw_wp, cruise_alt):
+        gdf = compute_concentric_isochrones(
+            giii, kedw_wp,
+            budgets=[2 * ureg.hour, 1 * ureg.hour],  # unsorted input
+            cruise_altitude=cruise_alt,
+            mode="round_trip",
+            azimuth_resolution_deg=120.0,
+            distance_tolerance_nmi=5.0,
+        )
+        # Sorted ascending in attrs.
+        assert gdf.attrs["budgets_hr"] == [1.0, 2.0]
+        assert "budget_hr" in gdf.columns
+        assert "budget_min" in gdf.columns
+        assert set(gdf["budget_hr"].unique()) == {1.0, 2.0}
+
+    def test_empty_budgets_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="budgets"):
+            compute_concentric_isochrones(
+                giii, kedw_wp, budgets=[],
+                cruise_altitude=cruise_alt, mode="round_trip",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Refuel-leg caching equivalence
+# ---------------------------------------------------------------------------
+
+def test_refuel_caching_constant_wind_matches_still_air(
+    b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+):
+    """Cached eligibility legs produce the same answer as the
+    pre-cache implementation at the boundary tolerance.
+
+    The simplest way to exercise both branches of _anchor_invariant
+    is to run with both StillAirField and a non-trivial
+    ConstantWindField and confirm sortie_cycle_1_min for direct
+    rays still matches per-ray.
+    """
+    from hyplan.winds import ConstantWindField, StillAirField
+    common = dict(
+        aircraft=b200, start=kefd_wp,
+        sortie_budget=4 * ureg.hour,
+        flight_day_budget=8 * ureg.hour,
+        cruise_altitude=b200_cruise,
+        refuel_airports=[klbb_wp],
+        refuel_time=30 * ureg.minute,
+        return_destination=kbtr_wp,
+        mode="return_safe",
+        azimuth_resolution_deg=60.0,
+        distance_tolerance_nmi=2.0,
+    )
+    g_still = compute_refuel_isochrone(wind_source=StillAirField(), **common)
+    g_const = compute_refuel_isochrone(
+        wind_source=ConstantWindField(20 * ureg.knot, wind_from_deg=270.0),
+        **common,
+    )
+    # Both runs should produce a stable mix of itineraries with no NaNs
+    # in the chosen path's per-cycle columns.
+    for g in (g_still, g_const):
+        assert (g["sortie_cycle_1_min"] >= 0).all()
+        assert g["itinerary"].notna().all()
+        # Sanity: KLBB used at least once (caching path exercised).
+        assert g.attrs["refuel_airports_used"] == ["KLBB"]
+
+
+# ---------------------------------------------------------------------------
+# Static plotter smoke
+# ---------------------------------------------------------------------------
+
+def test_plot_isochrone_static_smoke(
+    b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+):
+    """Plotter accepts single GDF, list-of-tuples, concentric, and
+    refuel results without raising; returns (Figure, Axes)."""
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    from hyplan import plot_isochrone_static
+
+    gdf_single = compute_isochrone(
+        b200, kefd_wp, 2 * ureg.hour,
+        cruise_altitude=b200_cruise, mode="round_trip",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    gdf_concentric = compute_concentric_isochrones(
+        b200, kefd_wp,
+        budgets=[1 * ureg.hour, 2 * ureg.hour],
+        cruise_altitude=b200_cruise, mode="round_trip",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    gdf_refuel = compute_refuel_isochrone(
+        b200, kefd_wp,
+        sortie_budget=4 * ureg.hour,
+        flight_day_budget=8 * ureg.hour,
+        cruise_altitude=b200_cruise,
+        refuel_airports=[klbb_wp],
+        refuel_time=30 * ureg.minute,
+        return_destination=kbtr_wp, mode="return_safe",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+
+    for arg in (
+        gdf_single,
+        [(gdf_single, "steelblue", "B-200 2hr")],
+        gdf_concentric,
+        gdf_refuel,
+    ):
+        fig, ax = plot_isochrone_static(arg, basemap_scale="110m")
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)

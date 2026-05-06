@@ -145,7 +145,7 @@ from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath
 from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line  # noqa: F401
 
 # Flight planning and optimization
-from .planning import compute_flight_plan, compute_isochrone, compute_refuel_isochrone, isochrone_polygon, plot_isochrone  # noqa: F401
+from .planning import compute_flight_plan, compute_isochrone, compute_concentric_isochrones, compute_refuel_isochrone, evaluate_target_reachability, isochrone_polygon, plot_isochrone  # noqa: F401
 
 # Wind fields
 from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan  # noqa: F401
@@ -155,7 +155,8 @@ from .flight_optimizer import build_graph, greedy_optimize  # noqa: F401
 from .plotting import (  # noqa: F401
     map_flight_lines, plot_flight_plan, plot_altitude_trajectory,
     terrain_profile_along_track,
-    plot_airspace_map, plot_oceanic_tracks, plot_vertical_profile,
+    plot_airspace_map, plot_isochrone_static,
+    plot_oceanic_tracks, plot_vertical_profile,
     plot_conflict_matrix, map_airspace,
 )
 
@@ -223,11 +224,12 @@ __all__ = [
     "WindField", "StillAirField", "ConstantWindField", "MERRA2WindField", "GMAOWindField", "GFSWindField", "wind_field_from_plan",
     # Flight planning
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
-    "compute_isochrone", "compute_refuel_isochrone", "isochrone_polygon", "plot_isochrone",
+    "compute_isochrone", "compute_concentric_isochrones", "compute_refuel_isochrone", "evaluate_target_reachability", "isochrone_polygon", "plot_isochrone",
     "build_graph", "greedy_optimize",
     # Plotting
     "map_flight_lines", "terrain_profile_along_track",
-    "plot_airspace_map", "plot_oceanic_tracks", "plot_vertical_profile",
+    "plot_airspace_map", "plot_isochrone_static",
+    "plot_oceanic_tracks", "plot_vertical_profile",
     "plot_conflict_matrix", "map_airspace",
     # Exports
     "to_excel", "to_pilot_excel", "to_foreflight_csv",

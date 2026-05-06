@@ -31,6 +31,7 @@ __all__ = [
     "terrain_profile_along_track",
     "plot_altitude_trajectory",
     "plot_airspace_map",
+    "plot_isochrone_static",
     "plot_oceanic_tracks",
     "plot_vertical_profile",
     "plot_conflict_matrix",
@@ -1020,3 +1021,237 @@ def map_airspace(
 
     folium.LayerControl(collapsed=False).add_to(m)
     return m
+
+
+# ---------------------------------------------------------------------------
+# Isochrone static (Cartopy) plotter
+# ---------------------------------------------------------------------------
+
+def _isochrone_add_basemap(ax, *, scale: str = "50m") -> None:
+    """Vector Natural Earth basemap at the given resolution."""
+    import cartopy.feature as cfeature
+
+    ax.add_feature(cfeature.LAND.with_scale(scale), facecolor="#f0ece2")
+    ax.add_feature(cfeature.OCEAN.with_scale(scale), facecolor="#cfdcec")
+    ax.add_feature(
+        cfeature.LAKES.with_scale(scale),
+        facecolor="#cfdcec", edgecolor="#9aa9b8", linewidth=0.3,
+    )
+    ax.add_feature(
+        cfeature.COASTLINE.with_scale(scale),
+        edgecolor="#1f1f1f", linewidth=0.6,
+    )
+    ax.add_feature(
+        cfeature.BORDERS.with_scale(scale),
+        edgecolor="#5a5a5a", linewidth=0.5, alpha=0.7,
+    )
+    ax.add_feature(
+        cfeature.STATES.with_scale(scale),
+        edgecolor="#7a7a7a", linewidth=0.3, alpha=0.6,
+    )
+
+
+def _isochrone_sample_wind_grid(
+    wind_field, *, extent, altitude, time, n_lat=9, n_lon=12,
+):
+    """Sample a wind field on a regular lat/lon grid covering ``extent``."""
+    minx, maxx, miny, maxy = extent
+    lats = np.linspace(miny, maxy, n_lat)
+    lons = np.linspace(minx, maxx, n_lon)
+    LON, LAT = np.meshgrid(lons, lats)
+    U = np.zeros_like(LON)
+    V = np.zeros_like(LON)
+    for i in range(n_lat):
+        for j in range(n_lon):
+            u, v = wind_field.wind_at(
+                float(LAT[i, j]), float(LON[i, j]),
+                altitude, time,
+            )
+            U[i, j] = u.m_as(ureg.knot)
+            V[i, j] = v.m_as(ureg.knot)
+    return LON, LAT, U, V
+
+
+def plot_isochrone_static(
+    layers,
+    *,
+    points=(),
+    title: str = "",
+    figsize: Tuple[float, float] = (9, 9),
+    wind_field=None,
+    wind_altitude=None,
+    wind_time=None,
+    wind_caption: Optional[str] = None,
+    basemap_scale: str = "50m",
+    show_refuel_markers: bool = True,
+):
+    """Render one or more isochrones on a static Cartopy basemap.
+
+    Companion to ``hyplan.plot_isochrone`` (the Folium / interactive
+    plotter).  This produces publication-quality figures with
+    Natural Earth vector basemaps and is the right choice for static
+    output (papers, briefings, reports).
+
+    Args:
+        layers: Either a single :class:`gpd.GeoDataFrame` from
+            :func:`compute_isochrone`,
+            :func:`compute_refuel_isochrone`, or
+            :func:`compute_concentric_isochrones`; or an iterable of
+            ``(gdf, color, label)`` tuples for layered comparison
+            (e.g., still-air vs. windy).  When a single concentric
+            GDF is passed without explicit splitting, the function
+            auto-groups rows by ``budget_hr`` and renders each
+            contour with a viridis-indexed color.
+        points: Iterable of ``{"lat", "lon", "label", "color",
+            "marker", "markersize"}`` dicts for airports / waypoints
+            of interest.
+        title: Figure title.
+        figsize: Matplotlib figsize.
+        wind_field: Optional :class:`WindField` provider — when
+            supplied, samples wind on a grid covering the plot extent
+            and overlays as aviation-convention wind barbs (half-barb
+            5 kt, full barb 10 kt, flag 50 kt).
+        wind_altitude: Altitude (Quantity) for wind queries; required
+            when ``wind_field`` is supplied.
+        wind_time: UTC datetime to query the wind at; defaults to now.
+        wind_caption: Optional caption drawn in the corner.
+        basemap_scale: Natural Earth resolution: ``"110m"`` (lowest,
+            ships with cartopy), ``"50m"`` (default), or ``"10m"``
+            (highest; downloads on first use).
+        show_refuel_markers: When True (default) and the input GDF
+            has ``attrs["refuel_airports_evaluated"]``, draw refuel
+            airport markers (used = darkblue, evaluated-not-used =
+            gray, unreachable = light gray).
+
+    Returns:
+        ``(fig, ax)`` so the caller can add overlays after.
+    """
+    import cartopy.crs as ccrs
+    import datetime as _dt
+    from .planning.isochrone import isochrone_polygon
+
+    plate = ccrs.PlateCarree()
+
+    # Normalize input: gdf | sequence-of-tuples → list[(gdf, color, label)].
+    normalized: list = []
+    if isinstance(layers, gpd.GeoDataFrame):
+        single_gdf = layers
+        if "budget_hr" in single_gdf.columns:
+            # Concentric: split into one layer per budget with a
+            # sequential viridis color.
+            cmap = plt.get_cmap("viridis")
+            uniq = sorted(single_gdf["budget_hr"].unique())
+            for i, b in enumerate(uniq):
+                normalized.append((
+                    single_gdf[single_gdf["budget_hr"] == b].copy(),
+                    cmap(0.15 + 0.7 * (i / max(1, len(uniq) - 1))),
+                    f"{b:.1f} hr",
+                ))
+        else:
+            normalized.append((single_gdf, "steelblue", "isochrone"))
+    else:
+        normalized = list(layers)
+
+    polygons = [(isochrone_polygon(gdf), color, label) for gdf, color, label in normalized]
+    bounds = [poly.bounds for poly, _, _ in polygons]
+    for pt in points:
+        bounds.append((pt["lon"], pt["lat"], pt["lon"], pt["lat"]))
+
+    # Refuel markers contribute to extent so they aren't clipped.
+    refuel_layers = []
+    if show_refuel_markers:
+        for gdf, _, _ in normalized:
+            evaluated = gdf.attrs.get("refuel_airports_evaluated")
+            if evaluated:
+                used = set(gdf.attrs.get("refuel_airports_used", []))
+                refuel_layers.append((evaluated, used, gdf.attrs.get(
+                    "refuel_airports_unreachable", []
+                )))
+                for rec in evaluated:
+                    bounds.append((rec["lon"], rec["lat"], rec["lon"], rec["lat"]))
+
+    minx = min(b[0] for b in bounds)
+    miny = min(b[1] for b in bounds)
+    maxx = max(b[2] for b in bounds)
+    maxy = max(b[3] for b in bounds)
+    pad_lon = max(1.0, 0.08 * (maxx - minx))
+    pad_lat = max(1.0, 0.08 * (maxy - miny))
+    extent = (
+        minx - pad_lon, maxx + pad_lon,
+        miny - pad_lat, maxy + pad_lat,
+    )
+
+    fig, ax = plt.subplots(
+        figsize=figsize, subplot_kw={"projection": plate},
+    )
+    ax.set_extent(extent, crs=plate)  # type: ignore[attr-defined]
+    _isochrone_add_basemap(ax, scale=basemap_scale)
+    gl = ax.gridlines(  # type: ignore[attr-defined]
+        draw_labels=True, linewidth=0.4, color="0.4", alpha=0.35,
+    )
+    gl.top_labels = False
+    gl.right_labels = False
+
+    if wind_field is not None:
+        if wind_altitude is None:
+            raise ValueError(
+                "wind_altitude is required when wind_field is supplied"
+            )
+        wt = wind_time or _dt.datetime.now(_dt.timezone.utc)
+        LON, LAT, U_kt, V_kt = _isochrone_sample_wind_grid(
+            wind_field, extent=extent, altitude=wind_altitude, time=wt,
+        )
+        ax.barbs(
+            LON, LAT, U_kt, V_kt,
+            length=6, linewidth=0.6, color="0.25", alpha=0.65,
+            transform=plate,
+        )
+        if wind_caption:
+            ax.text(
+                0.01, 0.99, wind_caption,
+                transform=ax.transAxes, va="top", ha="left",
+                fontsize=8, color="0.15",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white",
+                          ec="0.7", alpha=0.85),
+            )
+
+    for poly, color, label in polygons:
+        xs, ys = poly.exterior.xy
+        ax.plot(xs, ys, color=color, lw=2.2, label=label, transform=plate)
+        ax.fill(xs, ys, color=color, alpha=0.18, transform=plate)
+
+    for evaluated, used, _unreach in refuel_layers:
+        for rec in evaluated:
+            is_used = rec["label"] in used
+            ax.plot(
+                rec["lon"], rec["lat"],
+                marker="P" if is_used else "o",
+                color="darkblue" if is_used else "0.45",
+                markersize=10 if is_used else 7,
+                markeredgecolor="white", markeredgewidth=0.8,
+                transform=plate, zorder=10,
+            )
+            ax.text(
+                rec["lon"] + 0.25, rec["lat"] + 0.25, rec["label"],
+                transform=plate, fontsize=8,
+                color="darkblue" if is_used else "0.35",
+                weight="bold" if is_used else "normal",
+            )
+
+    for pt in points:
+        ax.plot(
+            pt["lon"], pt["lat"], marker=pt.get("marker", "*"),
+            color=pt.get("color", "black"),
+            markersize=pt.get("markersize", 14),
+            transform=plate, label=pt.get("label"),
+        )
+        ax.text(
+            pt["lon"] + 0.35, pt["lat"] + 0.35, pt.get("label", ""),
+            transform=plate, fontsize=9, weight="bold",
+            color=pt.get("color", "black"),
+        )
+
+    ax.set_title(title)
+    ax.legend(loc="best")
+    plt.tight_layout()
+    return fig, ax

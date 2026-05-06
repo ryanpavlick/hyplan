@@ -18,8 +18,18 @@ operate within the time budget.
 
 ```{eval-rst}
 .. autofunction:: hyplan.planning.compute_isochrone
+.. autofunction:: hyplan.planning.compute_concentric_isochrones
 .. autofunction:: hyplan.planning.compute_refuel_isochrone
+.. autofunction:: hyplan.planning.evaluate_target_reachability
 ```
+
+### Concentric reach
+
+`compute_concentric_isochrones` sweeps multiple budgets in one call and
+amortizes the bracket search across them — each budget seeds the next
+larger budget's lower bound, so total cost is roughly O(M+N) rather than
+O(M·N) for M budgets and N rays.  Returns one stacked GeoDataFrame
+tagged with `budget_min` / `budget_hr` columns.
 
 ### Refuel-aware reach
 
@@ -39,12 +49,27 @@ one wins:
 v1 limits `max_refuel_stops` to 1 (a single sortie touches at most two
 tanks).  Chained refuels are deferred.
 
+### Single-target reachability
+
+`evaluate_target_reachability` is the complement of
+`compute_refuel_isochrone`: rather than sweeping azimuths to find the
+boundary, it asks "given *this* target, which itineraries reach it?"
+and returns a structured dict with the best route plus all feasible
+alternatives.
+
 ## Helpers
 
 ```{eval-rst}
 .. autofunction:: hyplan.planning.isochrone_polygon
 .. autofunction:: hyplan.planning.plot_isochrone
+.. autofunction:: hyplan.plot_isochrone_static
 ```
+
+`plot_isochrone` is the interactive Folium plotter.
+`plot_isochrone_static` (in `hyplan/plotting.py`) is the
+publication-quality Cartopy plotter — accepts either a single GDF or
+a list of `(gdf, color, label)` tuples for layered comparison, and
+auto-handles concentric and refuel results.
 
 ## See also
 
