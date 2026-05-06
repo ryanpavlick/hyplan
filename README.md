@@ -90,6 +90,20 @@ Google Earth Engine (required for `hyplan.clouds`) uses OAuth — run
 
 ---
 
+## Documentation
+
+Full API documentation is available at **[ryanpavlick.github.io/hyplan](https://ryanpavlick.github.io/hyplan/)**.
+
+To build the documentation locally:
+
+```bash
+pip install sphinx myst-parser furo sphinx-autodoc-typehints
+cd docs
+make html
+```
+
+---
+
 ## Quick Start
 
 ### Define a flight line
@@ -257,79 +271,65 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 
 | Notebook | Description |
 |----------|-------------|
-| [tutorial.ipynb](notebooks/tutorial.ipynb) | End-to-end workflow: sensor setup, flight box generation, solar checks, airport selection, optimization, flight planning, and map visualization |
-| [validation.ipynb](notebooks/validation.ipynb) | Validates HyPlan calculations against reference values (Vincenty, NOAA solar, analytical swath/GSD) |
-| [campaign_management.ipynb](notebooks/campaign_management.ipynb) | `Campaign` class for multi-flight, multi-day planning: study area, flight-line groups, save/reload across sessions |
+| [tutorial.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/tutorial.ipynb) | End-to-end workflow: sensor setup, flight box generation, solar checks, airport selection, optimization, flight planning, and map visualization |
+| [validation.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/validation.ipynb) | Validates HyPlan calculations against reference values (Vincenty, NOAA solar, analytical swath/GSD) |
+| [campaign_management.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/campaign_management.ipynb) | `Campaign` class for multi-flight, multi-day planning: study area, flight-line groups, save/reload across sessions |
 
 ### Flight Planning
 
 | Notebook | Description |
 |----------|-------------|
-| [flight_line_operations.ipynb](notebooks/flight_line_operations.ipynb) | Creating, clipping, splitting, offsetting, rotating, and exporting flight lines |
-| [flight_box_generation.ipynb](notebooks/flight_box_generation.ipynb) | Generating parallel flight lines over study areas with swath overlap control |
-| [flight_plan_computation.ipynb](notebooks/flight_plan_computation.ipynb) | Segment-by-segment flight plans with altitude profiles and map visualization |
-| [flight_optimizer_demo.ipynb](notebooks/flight_optimizer_demo.ipynb) | Greedy line ordering with endurance constraints, refueling, and multi-day scheduling |
-| [dubins_path_planning.ipynb](notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
-| [airport_selection.ipynb](notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
-| [flight_patterns.ipynb](notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
-| [airspace_check.ipynb](notebooks/airspace_check.ipynb) | Detect conflicts between flight lines and FAA / OpenAIP airspace boundaries (restricted, prohibited, controlled) |
-| [isochrone.ipynb](notebooks/isochrone.ipynb) | Wind-aware reachability boundaries: round-trip / one-way / return-safe modes, MERRA-2 winds, fleet comparison, refuel-extended reach, concentric multi-budget contours, single-target spot checks |
+| [flight_line_operations.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_line_operations.ipynb) | Creating, clipping, splitting, offsetting, rotating, and exporting flight lines |
+| [flight_box_generation.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_box_generation.ipynb) | Generating parallel flight lines over study areas with swath overlap control |
+| [flight_plan_computation.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_plan_computation.ipynb) | Segment-by-segment flight plans with altitude profiles and map visualization |
+| [flight_optimizer_demo.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_optimizer_demo.ipynb) | Greedy line ordering with endurance constraints, refueling, and multi-day scheduling |
+| [dubins_path_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/dubins_path_planning.ipynb) | Dubins path basics: turn radius, speed/bank effects, and flight line integration |
+| [airport_selection.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
+| [flight_patterns.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
+| [airspace_check.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/airspace_check.ipynb) | Detect conflicts between flight lines and FAA / OpenAIP airspace boundaries (restricted, prohibited, controlled) |
+| [isochrone.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/isochrone.ipynb) | Wind-aware reachability boundaries: round-trip / one-way / return-safe modes, MERRA-2 winds, fleet comparison, refuel-extended reach, concentric multi-budget contours, single-target spot checks |
 
 ### Instruments & Sensors
 
 | Notebook | Description |
 |----------|-------------|
-| [sensor_comparison.ipynb](notebooks/sensor_comparison.ipynb) | Comparing GSD, swath width, and critical speed across imaging spectrometers |
-| [frame_camera_planning.ipynb](notebooks/frame_camera_planning.ipynb) | Frame camera FOV, footprints, GSD, and along-track sampling |
-| [lidar_lvis_planning.ipynb](notebooks/lidar_lvis_planning.ipynb) | LVIS lens options, swath geometry, contiguous coverage, and coverage rates |
-| [radar_sar_missions.ipynb](notebooks/radar_sar_missions.ipynb) | UAVSAR L/P/Ka-band swath geometry, resolution, and InSAR line spacing |
-| [profiling_lidar_planning.ipynb](notebooks/profiling_lidar_planning.ipynb) | NASA `ProfilingLidar` family (HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile |
-| [awp_planning.ipynb](notebooks/awp_planning.ipynb) | NASA Langley Aerosol Wind Profiler: dual-LOS geometry, stable-segment flagging, terrain-aware profile placement |
-| [stereo_oblique_planning.ipynb](notebooks/stereo_oblique_planning.ipynb) | Stereo photogrammetry and oblique-camera mission design: convergence angle, GSD variation across the frame |
+| [sensor_comparison.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/sensor_comparison.ipynb) | Comparing GSD, swath width, and critical speed across imaging spectrometers |
+| [frame_camera_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/frame_camera_planning.ipynb) | Frame camera FOV, footprints, GSD, and along-track sampling |
+| [lidar_lvis_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/lidar_lvis_planning.ipynb) | LVIS lens options, swath geometry, contiguous coverage, and coverage rates |
+| [radar_sar_missions.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/radar_sar_missions.ipynb) | UAVSAR L/P/Ka-band swath geometry, resolution, and InSAR line spacing |
+| [profiling_lidar_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/profiling_lidar_planning.ipynb) | NASA `ProfilingLidar` family (HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile |
+| [awp_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/awp_planning.ipynb) | NASA Langley Aerosol Wind Profiler: dual-LOS geometry, stable-segment flagging, terrain-aware profile placement |
+| [stereo_oblique_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/stereo_oblique_planning.ipynb) | Stereo photogrammetry and oblique-camera mission design: convergence angle, GSD variation across the frame |
 
 ### Environment & Conditions
 
 | Notebook | Description |
 |----------|-------------|
-| [solar_planning.ipynb](notebooks/solar_planning.ipynb) | Solar azimuth/elevation, daily collection windows, seasonal and cross-site comparisons |
-| [glint_analysis.ipynb](notebooks/glint_analysis.ipynb) | Glint angle prediction, heading optimization, and time-of-day effects for aquatic missions |
-| [glint_arc_planning.ipynb](notebooks/glint_arc_planning.ipynb) | GlintArc geometry for specular reflection flight paths over water |
-| [terrain_aware_planning.ipynb](notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
-| [cloud_analysis.ipynb](notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
-| [cloud_analysis_gee.ipynb](notebooks/cloud_analysis_gee.ipynb) | Higher-resolution MODIS cloud analysis via Google Earth Engine (1 km), Terra vs Aqua morning/afternoon discrimination |
-| [winds.ipynb](notebooks/winds.ipynb) | Wind field models, flight plan wind correction, MERRA-2 reanalysis demo, direction/speed sensitivity |
-| [wind_effects.ipynb](notebooks/wind_effects.ipynb) | Quantitative wind effects on geometry: crab angle, swath rotation, trochoidal turn drift, along-track sampling |
-| [phenology_analysis.ipynb](notebooks/phenology_analysis.ipynb) | MODIS NDVI/EVI/LAI/FPAR + phenological transition dates for selecting optimal collection windows |
+| [solar_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/solar_planning.ipynb) | Solar azimuth/elevation, daily collection windows, seasonal and cross-site comparisons |
+| [glint_analysis.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/glint_analysis.ipynb) | Glint angle prediction, heading optimization, and time-of-day effects for aquatic missions |
+| [glint_arc_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/glint_arc_planning.ipynb) | GlintArc geometry for specular reflection flight paths over water |
+| [terrain_aware_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/terrain_aware_planning.ipynb) | DEM-based terrain profiles, AGL variation effects on GSD and swath |
+| [cloud_analysis.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/cloud_analysis.ipynb) | MODIS cloud cover from Google Earth Engine, visit simulation, campaign duration planning |
+| [cloud_analysis_gee.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/cloud_analysis_gee.ipynb) | Higher-resolution MODIS cloud analysis via Google Earth Engine (1 km), Terra vs Aqua morning/afternoon discrimination |
+| [winds.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/winds.ipynb) | Wind field models, flight plan wind correction, MERRA-2 reanalysis demo, direction/speed sensitivity |
+| [wind_effects.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/wind_effects.ipynb) | Quantitative wind effects on geometry: crab angle, swath rotation, trochoidal turn drift, along-track sampling |
+| [phenology_analysis.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/phenology_analysis.ipynb) | MODIS NDVI/EVI/LAI/FPAR + phenological transition dates for selecting optimal collection windows |
 
 ### Aircraft & Satellites
 
 | Notebook | Description |
 |----------|-------------|
-| [aircraft_performance.ipynb](notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
+| [aircraft_performance.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
 | [calibration/](notebooks/calibration/) | Per-aircraft calibration notebooks (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200, Twin Otter): per-altitude-bin medians, breakpoint selection, bank-angle analysis. See [docs/calibration.md](docs/calibration.md) for the methodology overview. |
-| [calibration/er2/sortie_replay.ipynb](notebooks/calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
-| [calibration/er2/planned_vs_flown.ipynb](notebooks/calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
-| [satellite_coordination.ipynb](notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
+| [calibration/er2/sortie_replay.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
+| [calibration/er2/planned_vs_flown.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
+| [satellite_coordination.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
 
 ### Export & Integration
 
 | Notebook | Description |
 |----------|-------------|
-| [export_formats.ipynb](notebooks/export_formats.ipynb) | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT, and text formats |
-
----
-
-## Documentation
-
-Full API documentation is available at **[ryanpavlick.github.io/hyplan](https://ryanpavlick.github.io/hyplan/)**.
-
-To build the documentation locally:
-
-```bash
-pip install sphinx myst-parser furo sphinx-autodoc-typehints
-cd docs
-make html
-```
+| [export_formats.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/export_formats.ipynb) | Export flight plans to Excel, KML, GPX, ForeFlight, Honeywell FMS, ER-2, ICARTT, and text formats |
 
 ---
 
