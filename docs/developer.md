@@ -127,6 +127,6 @@ old path for backward compatibility.
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `tests.yml` | Push/PR to main | Lint (ruff), type check (mypy, non-blocking), pytest with coverage on Python 3.9/3.11/3.12 |
+| `tests.yml` | Push/PR to main | Lint (ruff), type check (mypy, non-blocking), pytest with coverage on Python 3.10/3.11/3.12 |
 | `docs.yml` | Push to main | Build Sphinx docs and deploy to GitHub Pages |
 | `notebooks.yml` | Nightly + PR (if notebooks changed) | Execute tutorial, exports, and aircraft notebooks via papermill |

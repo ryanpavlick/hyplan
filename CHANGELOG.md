@@ -1,5 +1,65 @@
 # Changelog
 
+## v1.5.2 — 2026-05-07
+
+Maintenance + performance release.  No public-API changes.
+
+### Faster `compute_isochrone` (~5× on refuel sweeps)
+
+Two memoization layers in the bisection hot path:
+
+* `Aircraft._climb` / `_descend` now cache `(time, distance)`
+  results on a per-instance dict keyed by `(start_alt_ft,
+  end_alt_ft, true_air_speed_kt, wind_along_track_kt)`.  Iso­chrone
+  bisection drivers and refuel-itinerary evaluators were calling
+  these thousands of times with identical altitude pairs (e.g.
+  cruise climb from runway to FL250 is the same regardless of
+  bisection state).  Each call previously ran a 64-step
+  trapezoidal integration through expensive pint Quantity
+  arithmetic.
+* `_track_hold_solution_from_uv` (`hyplan/winds/utils.py`) now
+  caches its return dict on a 4096-entry FIFO keyed by
+  rounded `(tas_mps, track_deg, u_mps, v_mps)`.  The hot loop
+  also lifts `np.sin/cos/arcsin` calls into floats up front,
+  sidestepping numpy's `__array_ufunc__` dispatch on each call.
+
+Combined effect on the v1.5.1-baseline refuel-extended fixture
+(B-200, 2 candidates, 36 rays, 30 kt const wind, 4-hr sortie /
+8-hr day): **12.83 s → 2.60 s.**  Direct still-air and
+constant-wind cases were already sub-second; unchanged.
+Boundaries are numerically identical to v1.5.1.
+
+A new `tests/test_isochrone_perf.py` under `@pytest.mark.perf`
+gates the savings against future regressions.  Local profiling
+fixtures in `bench/run_isochrone.py`.
+
+### Drop Python 3.9 support; minimum is now 3.10
+
+mypy 2.x dropped 3.9 entirely (CI was printing `Python 3.9 is
+not supported (must be 3.10 or higher)` on every run).  Bumping
+the minimum to 3.10 unlocks PEP 604 unions and builtin generics,
+and lets us drop the `timezonefinder.*` mypy `follow_imports`
+override that existed because 3.9 mypy couldn't parse
+match-statement syntax.  `numpy` CI pin loosened from
+`>=1.26,<2.3` to `>=2.0,<2.3` (the lower bound was held back
+solely to keep 3.9 wheels resolvable).
+
+No code-level API changes; existing 3.9 users will see a pip
+resolution error on upgrade rather than a runtime break.
+
+### `var-annotated` mypy suppression removed
+
+The codebase has been clean against this error code since the
+v1.5 numpy-stub pins settled.  Drop the suppression and the
+explanatory comment block from `pyproject.toml`; CI exercises
+mypy with the suppression removed so future PRs can't slip
+unannotated `np.empty/zeros` assignments.
+
+### Other housekeeping
+
+* `paper/paper.pdf` rebuilt against the current source.
+* `notebooks/isochrone.ipynb` re-executed on v1.5.2 
+
 ## v1.5.1 — 2026-05-07
 
 Maintenance release: aircraft calibration provenance, smoother

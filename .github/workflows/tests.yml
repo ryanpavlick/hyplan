@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -25,14 +25,15 @@ jobs:
           pip install --upgrade pip
           pip install -e .
           # Pin numpy + pint to keep mypy stub behavior consistent
-          # across the Python 3.9 / 3.11 / 3.12 matrix.  Without
-          # these pins, pip resolves different numpy / pint versions
-          # per Python (newer numpy 2.x is 3.10+ only; older pint
-          # bundles different stubs), and mypy reports load-bearing
-          # `# type: ignore` comments as unused on one Python and
-          # required on another.  See the v1.4.1 CHANGELOG entry
-          # for the regression that prompted these pins.
-          pip install "numpy>=1.26,<2.3" "pint>=0.24,<0.26"
+          # across the Python 3.10 / 3.11 / 3.12 matrix.  Without
+          # these pins, pip resolves different versions per Python
+          # and mypy reports load-bearing `# type: ignore` comments
+          # as unused on one Python and required on another.  See
+          # the v1.4.1 CHANGELOG entry for the regression that
+          # prompted these pins.  numpy upper bound was tightened
+          # for 3.9 compatibility; with 3.9 dropped in v1.6 it can
+          # now move toward >=2.0 as the stubs continue to settle.
+          pip install "numpy>=2.0,<2.3" "pint>=0.24,<0.26"
           pip install pytest pytest-cov ruff mypy
 
       - name: Lint (ruff)

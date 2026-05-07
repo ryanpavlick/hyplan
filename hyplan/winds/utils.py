@@ -192,6 +192,11 @@ def _resolve_wind_factor(
     return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
 
 
+_MPS = ureg.meter / ureg.second
+_TRACK_HOLD_CACHE: dict[tuple[float, float, float, float], dict] = {}
+_TRACK_HOLD_CACHE_MAX = 4096
+
+
 def _track_hold_solution_from_uv(
     tas: Quantity,
     track_deg: float,
@@ -218,34 +223,46 @@ def _track_hold_solution_from_uv(
         HyPlanValueError: If crosswind exceeds TAS (track cannot be held)
             or if resulting groundspeed is non-positive (unflyable).
     """
-    tas_mps = tas.m_as(ureg.meter / ureg.second)
-    u_mps = u.m_as(ureg.meter / ureg.second)
-    v_mps = v.m_as(ureg.meter / ureg.second)
+    tas_mps = tas.m_as(_MPS)
+    u_mps = u.m_as(_MPS)
+    v_mps = v.m_as(_MPS)
+
+    # Cache key rounded to 0.001 m/s × 0.001° to handle float jitter.
+    # Hot path: isochrone bisections call with the same (tas, track,
+    # u, v) tuple thousands of times — only the rounded set differs.
+    key = (
+        round(tas_mps, 3),
+        round(track_deg % 360.0, 3),
+        round(u_mps, 3),
+        round(v_mps, 3),
+    )
+    cached = _TRACK_HOLD_CACHE.get(key)
+    if cached is not None:
+        return cached
 
     track_rad = np.radians(track_deg)
 
     # Decompose wind into along-track and cross-track components
     # Track unit vector: (sin(track), cos(track))
-    tailwind = u_mps * np.sin(track_rad) + v_mps * np.cos(track_rad)
-    crosswind = u_mps * np.cos(track_rad) - v_mps * np.sin(track_rad)
+    sin_t = float(np.sin(track_rad))
+    cos_t = float(np.cos(track_rad))
+    tailwind = u_mps * sin_t + v_mps * cos_t
+    crosswind = u_mps * cos_t - v_mps * sin_t
 
     # Crab angle: aircraft must point into the crosswind
-    sin_crab = -crosswind / tas_mps
-    sin_crab = float(np.clip(sin_crab, -1.0, 1.0))
-
     if abs(crosswind) > tas_mps:
         raise HyPlanValueError(
             f"Crosswind {abs(crosswind):.1f} m/s exceeds TAS "
             f"{tas_mps:.1f} m/s on track {track_deg:.0f}°; "
             f"cannot hold desired ground track."
         )
-
-    crab_rad = np.arcsin(sin_crab)
+    sin_crab = float(np.clip(-crosswind / tas_mps, -1.0, 1.0))
+    crab_rad = float(np.arcsin(sin_crab))
     crab_deg = float(np.degrees(crab_rad))
     heading_deg = (track_deg + crab_deg) % 360.0
 
     # Along-track groundspeed
-    groundspeed_mps = tas_mps * np.cos(crab_rad) + tailwind
+    groundspeed_mps = tas_mps * float(np.cos(crab_rad)) + tailwind
 
     if groundspeed_mps <= 0:
         raise HyPlanValueError(
@@ -254,14 +271,18 @@ def _track_hold_solution_from_uv(
             f"TAS {tas_mps:.1f} m/s); unflyable."
         )
 
-    return {
+    result = {
         "track_deg": track_deg,
         "heading_deg": heading_deg,
         "crab_angle_deg": crab_deg,
-        "groundspeed": groundspeed_mps * ureg.meter / ureg.second,
-        "alongtrack_wind": tailwind * ureg.meter / ureg.second,
-        "crosstrack_wind": crosswind * ureg.meter / ureg.second,
+        "groundspeed": groundspeed_mps * _MPS,
+        "alongtrack_wind": tailwind * _MPS,
+        "crosstrack_wind": crosswind * _MPS,
     }
+    if len(_TRACK_HOLD_CACHE) >= _TRACK_HOLD_CACHE_MAX:
+        _TRACK_HOLD_CACHE.clear()
+    _TRACK_HOLD_CACHE[key] = result
+    return result
 
 
 def _resolve_track_hold_solution(

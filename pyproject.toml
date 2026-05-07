@@ -8,14 +8,13 @@ dynamic = ["version"]
 description = "Planning software for airborne remote sensing science campaigns"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Ryan Pavlick", email = "ryan.p.pavlick@nasa.gov"},
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -76,28 +75,15 @@ version_file = "hyplan/_version.py"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 filterwarnings = []
+markers = [
+    "perf: performance regression gates (timing-sensitive; may flake on noisy runners)",
+]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
-# Numpy stubs got stricter — np.empty/np.zeros assignments without an
-# explicit dtype-typed target now require a type annotation.  These
-# fire on pre-existing code; suppress until we add NDArray annotations.
-# Removing this suppression is queued as a follow-up: it should be
-# done module-by-module after the numpy + pint pins (see
-# .github/workflows/tests.yml) ensure consistent stub behavior across
-# the Python 3.9 / 3.11 / 3.12 matrix.
-disable_error_code = ["var-annotated"]
-
-# timezonefinder ships match-statement syntax (Python 3.10+) in its
-# implementation; mypy with python_version=3.9 can't parse it.  Skip
-# its source rather than descend into it.
-[[tool.mypy.overrides]]
-module = "timezonefinder.*"
-follow_imports = "skip"
-
 # pint's stubs vary across versions (newer numpy stub interactions
 # return PlainQuantity[Any] rather than the alias Quantity, breaking
 # assignment/arg-type/return-value checks across the codebase).
