@@ -426,6 +426,22 @@ class TestValidation:
                 azimuth_resolution_deg=180.0,
             )
 
+    def test_invalid_ray_strategy_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="ray_strategy"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                ray_strategy="bogus",
+            )
+
+    def test_invalid_adaptive_spacing_raises(self, giii, kedw_wp, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="adaptive_spacing"):
+            compute_isochrone(
+                aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt, mode="round_trip",
+                ray_strategy="adaptive", adaptive_spacing_nmi=0.0,
+            )
+
 
 # ---------------------------------------------------------------------------
 # 11. round_trip defaults to start
@@ -684,6 +700,78 @@ def test_return_destination_attrs_present(giii, kedw_wp, cruise_alt):
     )
     assert gdf_ow.attrs["return_destination_lat"] is None
     assert gdf_ow.attrs["return_destination_lon"] is None
+
+
+def test_auto_ray_strategy_uses_ellipse_for_distinct_return(
+    giii, kedw_wp, cruise_alt,
+):
+    """Distinct recovery fields get non-uniform ellipse-seeded azimuths."""
+    ret = Waypoint(38.806, -104.701, heading=0.0,
+                   altitude_msl=6187 * ureg.feet, name="KCOS")
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=5 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="return_safe",
+        return_destination=ret,
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=30.0,
+        ray_strategy="auto",
+    )
+    az = np.sort(gdf["azimuth_deg"].to_numpy())
+    spacings = np.diff(np.r_[az, az[0] + 360.0])
+    assert len(gdf) == 12
+    assert gdf.attrs["effective_ray_strategy"] == "ellipse"
+    assert spacings.max() - spacings.min() > 1.0
+
+
+def test_auto_ray_strategy_keeps_uniform_for_one_way(
+    giii, kedw_wp, cruise_alt,
+):
+    gdf = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=2 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="one_way",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=45.0,
+        ray_strategy="auto",
+    )
+    assert len(gdf) == 8
+    assert gdf.attrs["effective_ray_strategy"] == "uniform"
+    assert np.allclose(np.diff(np.sort(gdf["azimuth_deg"])), 45.0)
+
+
+def test_adaptive_ray_strategy_adds_midpoint_rays(
+    giii, kedw_wp, cruise_alt,
+):
+    base = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+        ray_strategy="uniform",
+    )
+    refined = compute_isochrone(
+        aircraft=giii,
+        start=kedw_wp,
+        budget=4 * ureg.hour,
+        cruise_altitude=cruise_alt,
+        mode="round_trip",
+        wind_source=StillAirField(),
+        azimuth_resolution_deg=60.0,
+        ray_strategy="adaptive",
+        adaptive_spacing_nmi=100.0,
+        max_adaptive_rays=24,
+    )
+    assert len(refined) > len(base)
+    assert len(refined) <= 24
+    assert refined.attrs["effective_ray_strategy"] == "adaptive"
 
 
 def test_attrs_metadata_present(giii, kedw_wp, cruise_alt):

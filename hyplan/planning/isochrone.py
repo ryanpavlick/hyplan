@@ -21,6 +21,17 @@ Each leg is timed by the private :func:`_leg_time` helper, which integrates
 :meth:`Aircraft._descend` directly with along-track wind from the supplied
 ``WindField``.
 
+Ray sampling
+------------
+
+The default ``ray_strategy="uniform"`` preserves the original fixed-azimuth
+sweep, which is convenient when consumers index rows by cardinal bearings.
+For distinct recovery fields, ``ray_strategy="auto"`` uses a two-focus
+ellipse approximation (start and recovery are the foci) to choose a better
+first-pass azimuth distribution before the real leg-time solver runs.
+``"adaptive"`` and ``"ellipse_adaptive"`` additionally insert midpoint rays
+where solved boundary chords are longer than ``adaptive_spacing_nmi``.
+
 Wind sampling
 -------------
 
@@ -105,8 +116,17 @@ __all__ = [
 _VALID_MODES = ("one_way", "round_trip", "return_safe")
 _VALID_REFUEL_MODES = ("round_trip", "return_safe")
 _VALID_WIND_SAMPLING = ("cruise_midpoint", "phase_midpoint", "segmented_cruise")
+_VALID_RAY_STRATEGIES = (
+    "uniform",
+    "auto",
+    "ellipse",
+    "adaptive",
+    "ellipse_adaptive",
+)
 _DEFAULT_WIND_SAMPLE_SPACING_NMI = 100.0
 _DEFAULT_MAX_WIND_SAMPLES = 20
+_DEFAULT_ADAPTIVE_SPACING_NMI = 100.0
+_DEFAULT_MAX_ADAPTIVE_RAYS = 180
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +147,9 @@ def _validate_common_kwargs(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+    ray_strategy: str = "uniform",
+    adaptive_spacing_nmi: Optional[float] = None,
+    max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> Tuple[Waypoint, Quantity, float, float]:
     """Validate kwargs common to ``compute_isochrone`` and
     ``compute_refuel_isochrone``.
@@ -220,6 +243,21 @@ def _validate_common_kwargs(
             f"{max_wind_samples_per_leg}."
         )
 
+    if ray_strategy not in _VALID_RAY_STRATEGIES:
+        raise HyPlanValueError(
+            f"Invalid ray_strategy {ray_strategy!r}; must be one of "
+            f"{_VALID_RAY_STRATEGIES}."
+        )
+    if adaptive_spacing_nmi is not None and adaptive_spacing_nmi <= 0:
+        raise HyPlanValueError(
+            f"adaptive_spacing_nmi must be positive when provided, got "
+            f"{adaptive_spacing_nmi}."
+        )
+    if max_adaptive_rays < 3:
+        raise HyPlanValueError(
+            f"max_adaptive_rays must be >= 3, got {max_adaptive_rays}."
+        )
+
     return start_wp, cruise_altitude, reserve_min, on_station_min
 
 
@@ -245,6 +283,9 @@ def compute_isochrone(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+    ray_strategy: str = "uniform",
+    adaptive_spacing_nmi: Optional[float] = None,
+    max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> gpd.GeoDataFrame:
     """Compute a wind-aware isochrone around ``start``.
 
@@ -296,6 +337,17 @@ def compute_isochrone(
         max_wind_samples_per_leg: Hard cap on cruise subsegments to
             keep ``_leg_time`` cost bounded for very long legs.
             Default 20.
+        ray_strategy: How sweep azimuths are chosen. ``"uniform"``
+            preserves the original fixed-angle sweep. ``"auto"`` uses
+            ellipse-aware seed rays when start and recovery differ,
+            otherwise uniform rays. ``"adaptive"`` adds midpoint rays
+            where solved boundary chords exceed ``adaptive_spacing_nmi``;
+            ``"ellipse"`` and ``"ellipse_adaptive"`` force the
+            two-focus seed distribution when possible.
+        adaptive_spacing_nmi: Target maximum boundary chord length for
+            adaptive refinement. Defaults to 100 nmi when an adaptive
+            strategy is selected.
+        max_adaptive_rays: Hard cap on adaptive ray count.
 
     Returns:
         A :class:`geopandas.GeoDataFrame` in ``EPSG:4326``, one row per
@@ -323,6 +375,9 @@ def compute_isochrone(
         wind_sampling=wind_sampling,
         wind_sample_spacing=wind_sample_spacing,
         max_wind_samples_per_leg=max_wind_samples_per_leg,
+        ray_strategy=ray_strategy,
+        adaptive_spacing_nmi=adaptive_spacing_nmi,
+        max_adaptive_rays=max_adaptive_rays,
     )
 
     budget_min = budget.m_as(ureg.minute)
@@ -366,8 +421,19 @@ def compute_isochrone(
         wind_source = StillAirField()
 
     # --- sweep --------------------------------------------------------------
-    azimuths = np.arange(0.0, 360.0, azimuth_resolution_deg)
-    rows = _solve_rays(
+    azimuths, effective_ray_strategy = _initial_ray_azimuths(
+        aircraft=aircraft,
+        start=start,
+        cruise_altitude=cruise_altitude,
+        return_wp=return_wp,
+        mode=mode,
+        on_station_min=on_station_min,
+        budget_min=budget_min,
+        reserve_min=reserve_min,
+        azimuth_resolution_deg=azimuth_resolution_deg,
+        ray_strategy=ray_strategy,
+    )
+    rows = _solve_rays_with_strategy(
         aircraft=aircraft,
         start=start,
         cruise_altitude=cruise_altitude,
@@ -383,6 +449,9 @@ def compute_isochrone(
         wind_sampling=wind_sampling,
         wind_sample_spacing=wind_sample_spacing,
         max_wind_samples_per_leg=max_wind_samples_per_leg,
+        effective_ray_strategy=effective_ray_strategy,
+        adaptive_spacing_nmi=adaptive_spacing_nmi,
+        max_adaptive_rays=max_adaptive_rays,
     )
 
     df = pd.DataFrame(rows)
@@ -413,6 +482,9 @@ def compute_isochrone(
         "aircraft_type": aircraft.aircraft_type,
         "wind_source_kind": type(wind_source).__name__,
         "start_time": start_time.isoformat(),
+        "ray_strategy": ray_strategy,
+        "effective_ray_strategy": effective_ray_strategy,
+        "n_rays": len(gdf),
     })
     return gdf
 
@@ -435,6 +507,9 @@ def compute_concentric_isochrones(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+    ray_strategy: str = "uniform",
+    adaptive_spacing_nmi: Optional[float] = None,
+    max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> gpd.GeoDataFrame:
     """Compute multiple isochrone contours in one call (e.g., 1/2/3 hr).
 
@@ -449,7 +524,8 @@ def compute_concentric_isochrones(
         start_time, wind_source, return_destination, mode,
         on_station_time, reserve, azimuth_resolution_deg,
         distance_tolerance_nmi, wind_sampling, wind_sample_spacing,
-        max_wind_samples_per_leg: same semantics as
+        max_wind_samples_per_leg, ray_strategy,
+        adaptive_spacing_nmi, max_adaptive_rays: same semantics as
             :func:`compute_isochrone`.
         budgets: iterable of ``Quantity`` time values to sweep.
             Must be non-empty; sorted ascending internally.
@@ -486,6 +562,9 @@ def compute_concentric_isochrones(
         wind_sampling=wind_sampling,
         wind_sample_spacing=wind_sample_spacing,
         max_wind_samples_per_leg=max_wind_samples_per_leg,
+        ray_strategy=ray_strategy,
+        adaptive_spacing_nmi=adaptive_spacing_nmi,
+        max_adaptive_rays=max_adaptive_rays,
     )
 
     budgets_min = sorted(b.m_as(ureg.minute) for b in budgets)
@@ -526,14 +605,25 @@ def compute_concentric_isochrones(
     if wind_source is None:
         wind_source = StillAirField()
 
-    azimuths = np.arange(0.0, 360.0, azimuth_resolution_deg)
+    azimuths, effective_ray_strategy = _initial_ray_azimuths(
+        aircraft=aircraft,
+        start=start,
+        cruise_altitude=cruise_altitude,
+        return_wp=return_wp,
+        mode=mode,
+        on_station_min=on_station_min,
+        budget_min=budgets_min[-1],
+        reserve_min=reserve_min,
+        azimuth_resolution_deg=azimuth_resolution_deg,
+        ray_strategy=ray_strategy,
+    )
     n_rays = len(azimuths)
 
     all_rows: list[dict] = []
     seed_d_lo = np.zeros(n_rays, dtype=float)
 
     for budget_min in budgets_min:
-        rows = _solve_rays(
+        rows = _solve_rays_with_strategy(
             aircraft=aircraft,
             start=start,
             cruise_altitude=cruise_altitude,
@@ -550,8 +640,16 @@ def compute_concentric_isochrones(
             wind_sampling=wind_sampling,
             wind_sample_spacing=wind_sample_spacing,
             max_wind_samples_per_leg=max_wind_samples_per_leg,
+            effective_ray_strategy=effective_ray_strategy,
+            adaptive_spacing_nmi=adaptive_spacing_nmi,
+            max_adaptive_rays=max_adaptive_rays,
         )
         # Tag rows with budget; capture per-ray distances for next seed.
+        # Adaptive strategies may add rays, so carry the refined azimuth set
+        # forward to larger budgets.
+        rows = sorted(rows, key=lambda r: r["azimuth_deg"])
+        azimuths = np.array([row["azimuth_deg"] for row in rows], dtype=float)
+        n_rays = len(azimuths)
         new_seed = np.zeros(n_rays, dtype=float)
         for i, row in enumerate(rows):
             row["budget_min"] = budget_min
@@ -587,6 +685,9 @@ def compute_concentric_isochrones(
         "aircraft_type": aircraft.aircraft_type,
         "wind_source_kind": type(wind_source).__name__,
         "start_time": start_time.isoformat(),
+        "ray_strategy": ray_strategy,
+        "effective_ray_strategy": effective_ray_strategy,
+        "n_rays": n_rays,
     })
     return gdf
 
@@ -1341,6 +1442,198 @@ def _target_coordinates(
     return lats_arr, lons_arr
 
 
+def _same_horizontal_position(a: Waypoint, b: Optional[Waypoint]) -> bool:
+    """Return True when two waypoints are horizontally indistinguishable."""
+    if b is None:
+        return False
+    dist_m, _ = pymap3d.vincenty.vdist(
+        a.latitude, a.longitude, b.latitude, b.longitude
+    )
+    return float(np.asarray(dist_m).ravel()[0]) < 100.0
+
+
+def _unique_sorted_azimuths(azimuths_deg: np.ndarray) -> np.ndarray:
+    """Normalize, de-duplicate, and sort azimuths in [0, 360)."""
+    wrapped = np.mod(np.asarray(azimuths_deg, dtype=float), 360.0)
+    rounded = np.round(wrapped, 8)
+    out: np.ndarray = np.array(
+        sorted(set(float(v) for v in rounded)), dtype=float,
+    )
+    return out
+
+
+def _uniform_azimuths(azimuth_resolution_deg: float) -> np.ndarray:
+    return _unique_sorted_azimuths(np.arange(0.0, 360.0, azimuth_resolution_deg))
+
+
+def _ellipse_seed_azimuths(
+    *,
+    aircraft: Aircraft,
+    start: Waypoint,
+    cruise_altitude: Quantity,
+    return_wp: Optional[Waypoint],
+    on_station_min: float,
+    budget_min: float,
+    reserve_min: float,
+    azimuth_resolution_deg: float,
+) -> np.ndarray:
+    """Approximate two-focus return-safe boundary and sample its perimeter.
+
+    The solved isochrone still comes from the real leg-time binary search.
+    This helper only chooses better first-pass ray bearings for cases where
+    the start and recovery point are distinct.
+    """
+    uniform = _uniform_azimuths(azimuth_resolution_deg)
+    if return_wp is None or _same_horizontal_position(start, return_wp):
+        return uniform
+
+    dist_m, bearing_deg = pymap3d.vincenty.vdist(
+        start.latitude, start.longitude, return_wp.latitude, return_wp.longitude
+    )
+    focus_distance_nmi = float(np.asarray(dist_m).ravel()[0]) / 1852.0
+    if focus_distance_nmi <= 1e-6:
+        return uniform
+
+    tas_kt = aircraft.cruise_speed_at(cruise_altitude).m_as(ureg.knot)
+    available_min = max(0.0, budget_min - reserve_min - on_station_min)
+    path_distance_nmi = tas_kt * (available_min / 60.0)
+    if path_distance_nmi <= focus_distance_nmi:
+        return uniform
+
+    n_rays = max(3, len(uniform))
+    a = 0.5 * path_distance_nmi
+    c = 0.5 * focus_distance_nmi
+    b_sq = max(0.0, a * a - c * c)
+    if b_sq <= 1e-6:
+        return uniform
+    b = float(np.sqrt(b_sq))
+
+    # Sample equally by approximate perimeter distance, not by ellipse
+    # parameter. That is the part that fixes vertex crowding most directly.
+    n_dense = max(720, 24 * n_rays)
+    t = np.linspace(0.0, 2.0 * np.pi, n_dense, endpoint=False)
+    x = a * np.cos(t)
+    y = b * np.sin(t)
+    dx = np.diff(np.r_[x, x[0]])
+    dy = np.diff(np.r_[y, y[0]])
+    seg = np.hypot(dx, dy)
+    cumulative = np.r_[0.0, np.cumsum(seg)]
+    perimeter = cumulative[-1]
+    if perimeter <= 0:
+        return uniform
+
+    sample_s = np.linspace(0.0, perimeter, n_rays, endpoint=False)
+    x_s = np.interp(sample_s, cumulative, np.r_[x, x[0]])
+    y_s = np.interp(sample_s, cumulative, np.r_[y, y[0]])
+
+    along_from_start = x_s + c
+    right_from_start = y_s
+    relative_deg = np.degrees(np.arctan2(right_from_start, along_from_start))
+    azimuths = float(np.asarray(bearing_deg).ravel()[0]) + relative_deg
+    return _unique_sorted_azimuths(azimuths)
+
+
+def _initial_ray_azimuths(
+    *,
+    aircraft: Aircraft,
+    start: Waypoint,
+    cruise_altitude: Quantity,
+    return_wp: Optional[Waypoint],
+    mode: str,
+    on_station_min: float,
+    budget_min: float,
+    reserve_min: float,
+    azimuth_resolution_deg: float,
+    ray_strategy: str,
+) -> tuple[np.ndarray, str]:
+    """Choose first-pass ray azimuths and report the effective strategy."""
+    two_focus = (
+        mode in {"round_trip", "return_safe"}
+        and not _same_horizontal_position(start, return_wp)
+    )
+
+    if ray_strategy == "auto":
+        effective = "ellipse" if two_focus else "uniform"
+    elif ray_strategy in {"ellipse", "ellipse_adaptive"} and not two_focus:
+        effective = "adaptive" if ray_strategy == "ellipse_adaptive" else "uniform"
+    else:
+        effective = ray_strategy
+
+    if effective in {"ellipse", "ellipse_adaptive"}:
+        azimuths = _ellipse_seed_azimuths(
+            aircraft=aircraft,
+            start=start,
+            cruise_altitude=cruise_altitude,
+            return_wp=return_wp,
+            on_station_min=on_station_min,
+            budget_min=budget_min,
+            reserve_min=reserve_min,
+            azimuth_resolution_deg=azimuth_resolution_deg,
+        )
+        if len(azimuths) < 3:
+            azimuths = _uniform_azimuths(azimuth_resolution_deg)
+            effective = "uniform"
+    else:
+        azimuths = _uniform_azimuths(azimuth_resolution_deg)
+
+    return azimuths, effective
+
+
+def _boundary_chord_lengths_nmi(rows: list[dict]) -> np.ndarray:
+    """Geodesic chord lengths between adjacent solved boundary vertices."""
+    if len(rows) < 2:
+        empty: np.ndarray = np.array([], dtype=float)
+        return empty
+    ordered = sorted(rows, key=lambda r: r["azimuth_deg"])
+    lats = np.array([r["target_lat"] for r in ordered], dtype=float)
+    lons = np.array([r["target_lon"] for r in ordered], dtype=float)
+    dist_m, _ = pymap3d.vincenty.vdist(
+        lats, lons, np.roll(lats, -1), np.roll(lons, -1)
+    )
+    chords: np.ndarray = np.asarray(dist_m, dtype=float) / 1852.0
+    return chords
+
+
+def _mid_azimuth_deg(a: float, b: float) -> float:
+    """Midpoint bearing from a to b around the 0/360 wrap."""
+    delta = (b - a) % 360.0
+    return (a + 0.5 * delta) % 360.0
+
+
+def _refined_azimuths_from_rows(
+    rows: list[dict],
+    *,
+    spacing_nmi: float,
+    max_rays: int,
+) -> np.ndarray:
+    """Add midpoint rays across long boundary chords."""
+    ordered = sorted(rows, key=lambda r: r["azimuth_deg"])
+    az: np.ndarray = np.array(
+        [r["azimuth_deg"] for r in ordered], dtype=float,
+    )
+    if len(az) >= max_rays:
+        return az
+
+    chords = _boundary_chord_lengths_nmi(ordered)
+    if not len(chords) or np.nanmax(chords) <= spacing_nmi:
+        return az
+
+    candidates: list[tuple[float, float]] = []
+    for i, chord in enumerate(chords):
+        if chord <= spacing_nmi:
+            continue
+        a = float(az[i])
+        b = float(az[(i + 1) % len(az)])
+        candidates.append((float(chord), _mid_azimuth_deg(a, b)))
+
+    candidates.sort(reverse=True, key=lambda item: item[0])
+    remaining = max(0, max_rays - len(az))
+    additions = [mid for _, mid in candidates[:remaining]]
+    if not additions:
+        return az
+    return _unique_sorted_azimuths(np.r_[az, additions])
+
+
 def _solve_rays(
     *,
     aircraft: Aircraft,
@@ -1568,6 +1861,83 @@ def _solve_rays(
             0.0, feasible_budget_min - final_total
         )
         rows.append(final_diag)
+
+    return rows
+
+
+def _solve_rays_with_strategy(
+    *,
+    aircraft: Aircraft,
+    start: Waypoint,
+    cruise_altitude: Quantity,
+    start_time: datetime.datetime,
+    wind_source: WindField,
+    return_wp: Optional[Waypoint],
+    mode: str,
+    on_station_min: float,
+    budget_min: float,
+    reserve_min: float,
+    azimuths_deg: np.ndarray,
+    distance_tolerance_nmi: float,
+    seed_d_lo: Optional[np.ndarray] = None,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+    effective_ray_strategy: str = "uniform",
+    adaptive_spacing_nmi: Optional[float] = None,
+    max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
+) -> list[dict]:
+    """Solve rays, optionally refining boundary gaps adaptively."""
+    azimuths = _unique_sorted_azimuths(azimuths_deg)
+    rows = _solve_rays(
+        aircraft=aircraft,
+        start=start,
+        cruise_altitude=cruise_altitude,
+        start_time=start_time,
+        wind_source=wind_source,
+        return_wp=return_wp,
+        mode=mode,
+        on_station_min=on_station_min,
+        budget_min=budget_min,
+        reserve_min=reserve_min,
+        azimuths_deg=azimuths,
+        distance_tolerance_nmi=distance_tolerance_nmi,
+        seed_d_lo=seed_d_lo if seed_d_lo is not None and len(seed_d_lo) == len(azimuths) else None,
+        wind_sampling=wind_sampling,
+        wind_sample_spacing=wind_sample_spacing,
+        max_wind_samples_per_leg=max_wind_samples_per_leg,
+    )
+
+    if effective_ray_strategy not in {"adaptive", "ellipse_adaptive"}:
+        return rows
+
+    spacing = adaptive_spacing_nmi or _DEFAULT_ADAPTIVE_SPACING_NMI
+    while len(azimuths) < max_adaptive_rays:
+        refined = _refined_azimuths_from_rows(
+            rows,
+            spacing_nmi=spacing,
+            max_rays=max_adaptive_rays,
+        )
+        if len(refined) == len(azimuths):
+            break
+        azimuths = refined
+        rows = _solve_rays(
+            aircraft=aircraft,
+            start=start,
+            cruise_altitude=cruise_altitude,
+            start_time=start_time,
+            wind_source=wind_source,
+            return_wp=return_wp,
+            mode=mode,
+            on_station_min=on_station_min,
+            budget_min=budget_min,
+            reserve_min=reserve_min,
+            azimuths_deg=azimuths,
+            distance_tolerance_nmi=distance_tolerance_nmi,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
+        )
 
     return rows
 
