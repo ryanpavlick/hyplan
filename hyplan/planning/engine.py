@@ -81,6 +81,7 @@ def compute_flight_plan(
     takeoff_time: Optional[datetime.datetime] = None,
     climb_plan: Union["ClimbPlan", str, None] = "auto",
     wind_sampling: str = "cruise_midpoint",
+    n_samples: int = 20,
 ) -> gpd.GeoDataFrame:
     """
     Compute a flight plan with segment classifications.
@@ -160,6 +161,12 @@ def compute_flight_plan(
 
             Ignored when ``wind_source`` is None (no wind / scalar
             wind / wind_speed+wind_direction paths).
+        n_samples: Number of points sampled along each Dubins phase
+            sub-linestring (climb / cruise / transit / descent).
+            Defaults to 20.  Increase for smoother-looking turns in
+            plotted output (e.g. ``n_samples=80`` removes visible
+            polygonalization on tight Dubins arcs); has no effect on
+            timing, which is computed analytically.
     """
     if wind_sampling not in ("cruise_midpoint", "phase_midpoint"):
         raise HyPlanValueError(
@@ -253,6 +260,7 @@ def compute_flight_plan(
         takeoff_info = aircraft.time_to_takeoff(
             takeoff_airport, first_target,
             climb_plan=climb_plan,
+            n_samples=n_samples,
             **_phase_wind_kwargs(
                 mid_lat, mid_lon, first_target.altitude_msl,  # type: ignore[arg-type]
             ),
@@ -394,6 +402,7 @@ def compute_flight_plan(
             cruise_info = aircraft.time_to_cruise(
                 start_wp, end_wp,
                 true_air_speed=speed_override,
+                n_samples=n_samples,
                 **_phase_wind_kwargs(
                     mid_lat, mid_lon, end_wp.altitude_msl,  # type: ignore[arg-type]
                 ),
@@ -426,6 +435,7 @@ def compute_flight_plan(
         mid_lon = (last_target.longitude + return_airport.longitude) / 2
         return_info = aircraft.time_to_return(
             last_target, return_airport,
+            n_samples=n_samples,
             **_phase_wind_kwargs(
                 mid_lat, mid_lon, last_target.altitude_msl,  # type: ignore[arg-type]
             ),

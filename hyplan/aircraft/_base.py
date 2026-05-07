@@ -1302,6 +1302,7 @@ class Aircraft:
         wind_source: Optional["WindField"] = None,
         t_anchor: Optional[datetime.datetime] = None,
         climb_plan: Union["ClimbPlan", str, None] = "auto",
+        n_samples: int = 20,
     ) -> dict:
         """Calculate time from takeoff to the first waypoint.
 
@@ -1344,6 +1345,7 @@ class Aircraft:
             wind=wind, wind_source=wind_source, t_anchor=t_anchor,
             phase="climb",
             climb_plan=climb_plan,
+            n_samples=n_samples,
         )
 
     def time_to_return(
@@ -1353,6 +1355,7 @@ class Aircraft:
         wind: Optional[Tuple[float, float]] = None,
         wind_source: Optional["WindField"] = None,
         t_anchor: Optional[datetime.datetime] = None,
+        n_samples: int = 20,
     ) -> dict:
         """Calculate time from the last waypoint back to the airport.
 
@@ -1385,6 +1388,7 @@ class Aircraft:
                 waypoint, airport_waypoint,
                 wind=wind, wind_source=wind_source, t_anchor=t_anchor,
                 phase="descent",
+                n_samples=n_samples,
             )
 
         # New: Dubins descent stops at the FAF (final approach fix); the
@@ -1413,6 +1417,7 @@ class Aircraft:
             waypoint, top_of_approach_waypoint,
             wind=wind, wind_source=wind_source, t_anchor=t_anchor,
             phase="descent",
+            n_samples=n_samples,
         )
         approach_time = self.approach_profile.time_to_touchdown().to(ureg.minute)
         approach_distance = approach_distance_nmi * ureg.nautical_mile
@@ -1634,6 +1639,7 @@ class Aircraft:
         t_anchor: Optional[datetime.datetime] = None,
         phase: str = "cruise",
         climb_plan: Optional["ClimbPlan"] = None,
+        n_samples: int = 20,
     ) -> dict:
         """Solve a hybrid horizontal-Dubins + integrated-vertical path.
 
@@ -1964,7 +1970,7 @@ class Aircraft:
                         "start_time": (cum_time_min + cum_t_min_climb) * ureg.minute,
                         "end_time": (cum_time_min + cum_t_min_climb + sub_t_min) * ureg.minute,
                         "distance": sub_d_nmi * ureg.nautical_mile,
-                        "geometry": h_path.sublinestring(s_d_m, e_d_m),
+                        "geometry": h_path.sublinestring(s_d_m, e_d_m, n_samples=n_samples),
                         "start_lat": s_lat, "start_lon": s_lon,
                         "end_lat": e_lat, "end_lon": e_lon,
                         "start_heading": s_hdg, "end_heading": e_hdg,
@@ -2013,7 +2019,7 @@ class Aircraft:
                         "start_time": (cum_time_min + cum_t_min_climb) * ureg.minute,
                         "end_time": (cum_time_min + cum_t_min_climb + sub_t_min) * ureg.minute,
                         "distance": sub_d_nmi * ureg.nautical_mile,
-                        "geometry": h_path.sublinestring(s_d_m, e_d_m),
+                        "geometry": h_path.sublinestring(s_d_m, e_d_m, n_samples=n_samples),
                         "start_lat": s_lat, "start_lon": s_lon,
                         "end_lat": e_lat, "end_lon": e_lon,
                         "start_heading": s_hdg, "end_heading": e_hdg,
@@ -2030,7 +2036,7 @@ class Aircraft:
                     "start_time": cum_time_min * ureg.minute,
                     "end_time": (cum_time_min + climb_time_min) * ureg.minute,
                     "distance": climb_dist_nmi * ureg.nautical_mile,
-                    "geometry": h_path.sublinestring(0.0, end_d_m),
+                    "geometry": h_path.sublinestring(0.0, end_d_m, n_samples=n_samples),
                     "start_lat": s_lat, "start_lon": s_lon,
                     "end_lat": e_lat, "end_lon": e_lon,
                     "start_heading": s_hdg, "end_heading": e_hdg,
@@ -2048,7 +2054,7 @@ class Aircraft:
                 "start_time": cum_time_min * ureg.minute,
                 "end_time": (cum_time_min + cruise_time_min) * ureg.minute,
                 "distance": cruise_dist_nmi * ureg.nautical_mile,
-                "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
+                "geometry": h_path.sublinestring(cum_dist_m, end_d_m, n_samples=n_samples),
                 "start_lat": s_lat, "start_lon": s_lon,
                 "end_lat": e_lat, "end_lon": e_lon,
                 "start_heading": s_hdg, "end_heading": e_hdg,
@@ -2097,7 +2103,7 @@ class Aircraft:
                     "start_time": cum_time_min * ureg.minute,
                     "end_time": (cum_time_min + descent_time_min) * ureg.minute,
                     "distance": descent_dist_nmi * ureg.nautical_mile,
-                    "geometry": h_path.sublinestring(cum_dist_m, end_d_m),
+                    "geometry": h_path.sublinestring(cum_dist_m, end_d_m, n_samples=n_samples),
                     "start_lat": s_lat, "start_lon": s_lon,
                     "end_lat": e_lat, "end_lon": e_lon,
                     "start_heading": s_hdg, "end_heading": e_hdg,
@@ -2138,6 +2144,7 @@ class Aircraft:
         t_anchor: Optional[datetime.datetime] = None,
         phase: str = "cruise",
         climb_plan: Optional["ClimbPlan"] = None,
+        n_samples: int = 20,
     ) -> dict:
         """Calculate time to fly between two waypoints.
 
@@ -2167,5 +2174,6 @@ class Aircraft:
             wind=wind, wind_source=wind_source, t_anchor=t_anchor,
             phase=phase,
             climb_plan=climb_plan,
+            n_samples=n_samples,
         )
 
