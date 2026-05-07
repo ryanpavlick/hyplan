@@ -750,6 +750,79 @@ class TestPhaseAwareWind:
         t_pm = plan_pm["time_to_segment"].sum()
         assert abs(t_cm - t_pm) < 1e-3
 
+    def test_flag_below_min_safe_speed_no_stall_raises(self, b200):
+        """Aircraft without stall_speed_cas calibrated → raises."""
+        from copy import copy
+        from hyplan.planning.engine import flag_below_min_safe_speed
+        import pandas as pd
+        ac = copy(b200)
+        ac.stall_speed_cas = None
+        empty_plan = gpd.GeoDataFrame(pd.DataFrame())
+        with pytest.raises(HyPlanValueError, match="stall_speed_cas"):
+            flag_below_min_safe_speed(empty_plan, ac)
+
+    def test_flag_below_min_safe_speed_returns_empty_when_safe(
+        self, b200, flight_line, airport,
+    ):
+        """A normally-flown plan should produce an empty GeoDataFrame —
+        the schedules don't violate min-safe-speed at planned altitudes."""
+        from hyplan.planning.engine import flag_below_min_safe_speed
+        plan = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        flagged = flag_below_min_safe_speed(plan, b200)
+        assert len(flagged) == 0
+        assert "planned_tas_kts" in flagged.columns
+        assert "min_safe_tas_kts" in flagged.columns
+
+    def test_flag_below_min_safe_speed_flags_aggressive_margin(
+        self, b200, flight_line, airport,
+    ):
+        """A pathologically-large margin (e.g. 5.0×) forces the
+        min-safe-speed above the planned cruise schedule, so every
+        flight-line / climb / descent row gets flagged."""
+        from hyplan.planning.engine import flag_below_min_safe_speed
+        plan = compute_flight_plan(
+            aircraft=b200, flight_sequence=[flight_line],
+            takeoff_airport=airport, return_airport=airport,
+        )
+        flagged = flag_below_min_safe_speed(plan, b200, margin=5.0)
+        assert len(flagged) > 0
+        assert (
+            flagged["planned_tas_kts"] < flagged["min_safe_tas_kts"]
+        ).all()
+
+    def test_gridded_wind_without_takeoff_time_raises(
+        self, b200, flight_line, airport,
+    ):
+        """Gridded-wind providers require takeoff_time so each
+        segment can be queried at the right time anchor."""
+        # Build a stub gridded provider so the validation fires.  We
+        # supply the abstract `_build_urls` as a no-op since validation
+        # short-circuits before any URLs are needed.
+        from hyplan.winds import _GriddedWindField
+
+        class _StubGridded(_GriddedWindField):  # type: ignore[misc]
+            def __init__(self):
+                pass
+
+            def _build_urls(self, *args, **kwargs):
+                return []
+
+            def wind_at(self, lat, lon, altitude, time):
+                return (
+                    0.0 * (ureg.meter / ureg.second),
+                    0.0 * (ureg.meter / ureg.second),
+                )
+
+        with pytest.raises(HyPlanValueError, match="takeoff_time is required"):
+            compute_flight_plan(
+                aircraft=b200, flight_sequence=[flight_line],
+                takeoff_airport=airport, return_airport=airport,
+                wind_source=_StubGridded(),
+            )
+
     def test_altitude_varying_wind_phase_modes_diverge(
         self, b200, flight_line, airport,
     ):

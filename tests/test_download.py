@@ -39,3 +39,74 @@ class TestDownloadFile:
         # This should attempt the download (and fail due to bad URL)
         with pytest.raises(Exception):
             download_file(filepath, "https://invalid.example.com/bogus", replace=True, timeout=1)
+
+    def test_successful_download_writes_file(self, tmp_path, monkeypatch):
+        """Mock requests.get to verify the success path: chunked write,
+        atomic rename from .tmp, no leftover .tmp file."""
+        import requests
+
+        class _FakeResponse:
+            def __init__(self):
+                self._chunks = [b"hello ", b"world"]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size):
+                for c in self._chunks:
+                    yield c
+
+        def _fake_get(url, stream, timeout):
+            return _FakeResponse()
+
+        monkeypatch.setattr(requests, "get", _fake_get)
+
+        filepath = str(tmp_path / "out.bin")
+        download_file(filepath, "https://example.com/whatever", timeout=5)
+
+        # File written with full content; .tmp cleaned up.
+        assert os.path.exists(filepath)
+        with open(filepath, "rb") as f:
+            assert f.read() == b"hello world"
+        assert not os.path.exists(filepath + ".tmp")
+
+    def test_failed_download_cleans_up_tmp(self, tmp_path, monkeypatch):
+        """Mock requests.get to raise mid-download; verify the .tmp
+        file is removed on failure and the exception propagates."""
+        import requests
+
+        class _FakeBadResponse:
+            def __init__(self):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size):
+                yield b"partial"
+                raise requests.RequestException("simulated network failure")
+
+        def _fake_get(url, stream, timeout):
+            return _FakeBadResponse()
+
+        monkeypatch.setattr(requests, "get", _fake_get)
+
+        filepath = str(tmp_path / "incomplete.bin")
+        with pytest.raises(requests.RequestException):
+            download_file(filepath, "https://example.com/whatever", timeout=5)
+
+        # No partial output, no .tmp leftover.
+        assert not os.path.exists(filepath)
+        assert not os.path.exists(filepath + ".tmp")

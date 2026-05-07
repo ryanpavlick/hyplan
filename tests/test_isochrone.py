@@ -1496,6 +1496,77 @@ def test_plot_isochrone_static_smoke(
         plt.close(fig)
 
 
+def test_plot_isochrone_folium_smoke(
+    b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+):
+    """Folium plotter accepts plain / refuel / concentric gdfs without
+    raising; returns a folium.Map.  Exercises the polygon, start /
+    recovery markers, per-ray dot popup branches (including the
+    one_way headwind-only path), and the refuel-airport-marker branch."""
+    import folium
+    from hyplan.planning.isochrone import plot_isochrone
+
+    # 1. Plain round-trip: polygon + start marker, no recovery marker.
+    gdf_round = compute_isochrone(
+        b200, kefd_wp, 2 * ureg.hour,
+        cruise_altitude=b200_cruise, mode="round_trip",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    m1 = plot_isochrone(gdf_round)
+    assert isinstance(m1, folium.Map)
+
+    # 2. one_way: per-ray dot popup hits the headwind-only branch
+    #    (no return_time_min).
+    gdf_oneway = compute_isochrone(
+        b200, kefd_wp, 2 * ureg.hour,
+        cruise_altitude=b200_cruise, mode="one_way",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    m2 = plot_isochrone(gdf_oneway, color="firebrick", fill_opacity=0.3)
+    assert isinstance(m2, folium.Map)
+
+    # 3. return_safe with distinct recovery: exercises the recovery
+    #    marker branch.
+    gdf_rs = compute_isochrone(
+        b200, kefd_wp, 4 * ureg.hour,
+        cruise_altitude=b200_cruise, mode="return_safe",
+        return_destination=kbtr_wp,
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    m3 = plot_isochrone(gdf_rs, tiles="CartoDB positron", zoom_start=5)
+    assert isinstance(m3, folium.Map)
+
+    # 4. Concentric: budget_hr labelling branch in the polygon popup.
+    gdf_concentric = compute_concentric_isochrones(
+        b200, kefd_wp,
+        budgets=[1 * ureg.hour, 2 * ureg.hour],
+        cruise_altitude=b200_cruise, mode="round_trip",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    m4 = plot_isochrone(gdf_concentric)
+    assert isinstance(m4, folium.Map)
+
+    # 5. Refuel: refuel-airport-marker branches (used + unreachable).
+    gdf_refuel = compute_refuel_isochrone(
+        b200, kefd_wp,
+        sortie_budget=4 * ureg.hour,
+        flight_day_budget=8 * ureg.hour,
+        cruise_altitude=b200_cruise,
+        refuel_airports=[klbb_wp],
+        refuel_time=30 * ureg.minute,
+        return_destination=kbtr_wp, mode="return_safe",
+        azimuth_resolution_deg=120.0, distance_tolerance_nmi=5.0,
+    )
+    m5 = plot_isochrone(gdf_refuel)
+    assert isinstance(m5, folium.Map)
+
+    # 6. Pre-existing base_map: caller supplies a Folium map; plotter
+    #    should add layers without creating a new map.
+    base = folium.Map(location=[kefd_wp.latitude, kefd_wp.longitude])
+    m6 = plot_isochrone(gdf_round, base_map=base)
+    assert m6 is base
+
+
 # ---------------------------------------------------------------------------
 # Wind sampling: cruise_midpoint / phase_midpoint / segmented_cruise
 # ---------------------------------------------------------------------------

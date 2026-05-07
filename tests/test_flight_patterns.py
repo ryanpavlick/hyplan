@@ -644,3 +644,129 @@ class TestCoordinatedLine:
         result = self._make_result(heading=45.0, ground_speed_ratio=1.2)
         for wp in result["primary"] + result["secondary"]:
             assert wp.heading == pytest.approx(45.0, abs=1.0)
+
+
+# ---------------------------------------------------------------------------
+# Pattern container: validation + waypoint-based serialization
+# ---------------------------------------------------------------------------
+
+
+class TestPatternContainer:
+    """Validation paths and waypoint-based to_geojson / entry_waypoint
+    branches that aren't naturally exercised by the line-based
+    pattern tests above."""
+
+    def test_unknown_kind_rejected(self):
+        from hyplan.exceptions import HyPlanValueError
+        with pytest.raises(HyPlanValueError, match="Unknown pattern kind"):
+            Pattern(kind="not_a_real_kind", name="bad", params={})
+
+    def test_line_based_with_waypoints_rejected(self):
+        from hyplan.exceptions import HyPlanValueError
+        from hyplan.waypoint import Waypoint
+        wp = Waypoint(
+            latitude=34.0, longitude=-118.0, heading=0.0,
+            altitude_msl=ALT,
+        )
+        with pytest.raises(
+            HyPlanValueError, match="cannot carry waypoints",
+        ):
+            Pattern(
+                kind="racetrack", name="bad", params={},
+                waypoints=[wp],
+            )
+
+    def test_waypoint_based_with_lines_rejected(self):
+        from hyplan.exceptions import HyPlanValueError
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(10, "kilometer"),
+            az=0.0, altitude_msl=ALT,
+        )
+        with pytest.raises(
+            HyPlanValueError, match="cannot carry flight lines",
+        ):
+            Pattern(
+                kind="spiral", name="bad", params={},
+                lines={"a": fl},
+            )
+
+    def test_entry_exit_empty_line_pattern_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+        empty = Pattern(
+            kind="racetrack", name="empty", params={}, lines={},
+        )
+        with pytest.raises(HyPlanValueError, match="entry_waypoint is undefined"):
+            _ = empty.entry_waypoint
+        with pytest.raises(HyPlanValueError, match="exit_waypoint is undefined"):
+            _ = empty.exit_waypoint
+
+    def test_entry_exit_empty_waypoint_pattern_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+        empty = Pattern(
+            kind="spiral", name="empty", params={}, waypoints=[],
+        )
+        with pytest.raises(HyPlanValueError, match="entry_waypoint is undefined"):
+            _ = empty.entry_waypoint
+        with pytest.raises(HyPlanValueError, match="exit_waypoint is undefined"):
+            _ = empty.exit_waypoint
+
+    def test_waypoint_based_to_geojson_round_trip(self):
+        """Waypoint-based pattern's to_geojson emits one Point feature
+        per waypoint plus a connecting LineString when n >= 2."""
+        pat = spiral(
+            center=CENTER, heading=0.0,
+            altitude_start=ureg.Quantity(2000, "meter"),
+            altitude_end=ureg.Quantity(4000, "meter"),
+            radius=ureg.Quantity(2, "kilometer"), n_turns=1,
+        )
+        gj = pat.to_geojson()
+        assert gj["type"] == "FeatureCollection"
+        assert len(gj["features"]) >= 2  # 1+ points + 1 linestring
+        types = [f["geometry"]["type"] for f in gj["features"]]
+        assert "LineString" in types
+        assert "Point" in types
+        clone = Pattern.from_dict(pat.to_dict())
+        assert clone.kind == pat.kind
+        assert len(clone.waypoints) == len(pat.waypoints)
+
+    def test_waypoint_based_to_geojson_single_waypoint_skips_linestring(self):
+        """With a single waypoint the connecting LineString feature is
+        omitted (need at least 2 coords)."""
+        from hyplan.waypoint import Waypoint
+        wp = Waypoint(
+            latitude=34.0, longitude=-118.0, heading=0.0,
+            altitude_msl=ALT,
+        )
+        pat = Pattern(
+            kind="spiral", name="single", params={}, waypoints=[wp],
+        )
+        gj = pat.to_geojson()
+        types = [f["geometry"]["type"] for f in gj["features"]]
+        assert types == ["Point"]
+
+    def test_replace_line_unknown_id_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+        pat = racetrack(
+            center=CENTER, heading=0.0, altitude=ALT,
+            leg_length=ureg.Quantity(10, "km"),
+            n_legs=2, offset=ureg.Quantity(2, "km"),
+        )
+        new_line = FlightLine.start_length_azimuth(
+            lat1=35.0, lon1=-119.0,
+            length=ureg.Quantity(5, "km"),
+            az=0.0, altitude_msl=ALT,
+        )
+        with pytest.raises(HyPlanValueError, match="not part of pattern"):
+            pat.replace_line("not_a_real_id", new_line)
+
+    def test_replace_line_non_flightline_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+        pat = racetrack(
+            center=CENTER, heading=0.0, altitude=ALT,
+            leg_length=ureg.Quantity(10, "km"),
+            n_legs=2, offset=ureg.Quantity(2, "km"),
+        )
+        line_id = next(iter(pat.lines))
+        with pytest.raises(HyPlanValueError, match="must be a FlightLine"):
+            pat.replace_line(line_id, "not a FlightLine")  # type: ignore[arg-type]
