@@ -15,9 +15,11 @@ Post v1.6 (climb/descent + track-hold caches):
 * const wind 60 kt, GIII, 72 rays:                    ~0.76 s
 * refuel-extended,  B200, 2 candidates, 36 rays:      ~2.60 s
 
-Targets below have generous 2-3x headroom over the post-v1.6 numbers
-to absorb shared-runner jitter without flaking.  A regression to
-within 50% of the v1.5.1 baseline triggers the alarm.
+Targets below have ~5-6x headroom over the post-v1.5.2 numbers on
+a fast local machine, sized to absorb shared-runner variance
+(GitHub Actions runs ~3x slower than typical dev hardware) without
+flaking.  A regression to the v1.5.1 baseline (~38 s on the
+shared runner) still triggers the alarm.
 """
 from __future__ import annotations
 import time
@@ -57,7 +59,7 @@ def _kefd_wp(altitude):
 
 
 def test_perf_still_air():
-    """Round-trip still-air isochrone, GIII, 36 rays.  Target: < 2 s."""
+    """Round-trip still-air isochrone, GIII, 36 rays.  Target: < 4 s."""
     cruise_alt = ureg.Quantity(40000, "feet")
     t0 = time.perf_counter()
     gdf = compute_isochrone(
@@ -68,11 +70,11 @@ def test_perf_still_air():
     )
     dt = time.perf_counter() - t0
     assert len(gdf) == 36
-    assert dt < 2.0, f"still-air 36-ray isochrone took {dt:.2f}s (target <2s)"
+    assert dt < 4.0, f"still-air 36-ray isochrone took {dt:.2f}s (target <4s)"
 
 
 def test_perf_constant_wind():
-    """Round-trip constant-wind isochrone, GIII, 72 rays.  Target: < 3 s."""
+    """Round-trip constant-wind isochrone, GIII, 72 rays.  Target: < 6 s."""
     cruise_alt = ureg.Quantity(40000, "feet")
     wind = ConstantWindField(wind_speed=60 * ureg.knot, wind_from_deg=270.0)
     t0 = time.perf_counter()
@@ -84,13 +86,16 @@ def test_perf_constant_wind():
     )
     dt = time.perf_counter() - t0
     assert len(gdf) == 72
-    assert dt < 3.0, f"constant-wind 72-ray isochrone took {dt:.2f}s (target <3s)"
+    assert dt < 6.0, f"constant-wind 72-ray isochrone took {dt:.2f}s (target <6s)"
 
 
 def test_perf_refuel(airports):
     """Refuel-extended isochrone, B-200, 2 candidates, 36 rays.
 
-    Target: < 8 s (v1.5.1 baseline 12.8 s; post-v1.6 ≈ 2.6 s).
+    Target: < 20 s on shared CI runners (post-v1.5.2 ≈ 2.6 s on
+    fast dev hardware, ≈ 8.5 s on GitHub Actions).  v1.5.1
+    baseline on the same shared runner is ≈ 38 s, so this still
+    fires the alarm on a regression to baseline.
     """
     cruise_alt = ureg.Quantity(25000, "feet")
     wind = ConstantWindField(wind_speed=30 * ureg.knot, wind_from_deg=270.0)
@@ -106,7 +111,8 @@ def test_perf_refuel(airports):
     )
     dt = time.perf_counter() - t0
     assert len(gdf) == 36
-    assert dt < 8.0, (
+    assert dt < 20.0, (
         f"refuel-extended 36-ray isochrone took {dt:.2f}s "
-        f"(target <8s; v1.5.1 was 12.8s, v1.6 is 2.6s)"
+        f"(target <20s; v1.5.1 baseline ~38s on this runner, "
+        f"post-v1.5.2 ~8.5s)"
     )
