@@ -926,6 +926,58 @@ class Aircraft:
         return float(np.degrees(np.arccos(inv_cos_bank)))
 
     # ------------------------------------------------------------------
+    # Vertical-phase shared helpers (used by _climb and _descend)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _horizontal_air_speed(
+        avg_vertical_rate: Quantity, true_air_speed: Quantity,
+    ) -> Quantity:
+        """Project a vertical rate + TAS pair to horizontal-component
+        air speed, using ``TAS · cos(arctan(rate / TAS))``.
+
+        Returns a :class:`pint.Quantity` in nautical miles per hour.
+        Used by both :meth:`_climb` and :meth:`_descend`; the only
+        difference at the call site is how ``avg_vertical_rate`` is
+        derived (averaged endpoint ROC for climb, profile-lookup at
+        midpoint altitude for descent).
+        """
+        angle = np.arctan(avg_vertical_rate / true_air_speed).to(ureg.radian)
+        return (true_air_speed * np.cos(angle)).to(
+            ureg.nautical_mile / ureg.hour,
+        )
+
+    @staticmethod
+    def _along_track_ground_distance(
+        horizontal_air_speed: Quantity,
+        phase_time: Quantity,
+        wind_along_track: Optional[Quantity],
+    ) -> Quantity:
+        """Convert horizontal air speed + phase time to *ground*
+        distance, applying a signed along-track wind when supplied.
+
+        ``wind_along_track`` is positive for tailwind, negative for
+        headwind.  Pass ``None`` (or zero) for still-air behavior.
+        Ground speed is clamped at zero — extreme headwind cannot
+        reverse the aircraft's direction; the worst case is a
+        zero-distance phase.
+
+        Returns a :class:`pint.Quantity` in nautical miles.
+        """
+        if wind_along_track is not None and wind_along_track.magnitude != 0:
+            wind_kt = wind_along_track.m_as(ureg.knot)
+            ground_speed_kt = max(
+                0.0,
+                horizontal_air_speed.m_as(ureg.knot) + wind_kt,
+            )
+            horizontal_speed = ground_speed_kt * (
+                ureg.nautical_mile / ureg.hour
+            )
+        else:
+            horizontal_speed = horizontal_air_speed
+        return (horizontal_speed * phase_time).to(ureg.nautical_mile)
+
+    # ------------------------------------------------------------------
     # Climb
     # ------------------------------------------------------------------
 
@@ -1005,25 +1057,15 @@ class Aircraft:
             minutes = float(np.trapezoid(1.0 / rocs_fpm, alts_ft))  # type: ignore[attr-defined]
             time_to_climb = minutes * ureg.minute
 
-        # Horizontal distance using average climb angle
+        # Horizontal distance using average climb angle, with optional
+        # along-track wind shifting ground distance (climb time itself
+        # is air-mass-relative — wind doesn't change it).
         avg_roc = (roc_start + roc_end) / 2
-        climb_angle = np.arctan(avg_roc / true_air_speed).to(ureg.radian)
-        horizontal_speed = (true_air_speed * np.cos(climb_angle)).to(
-            ureg.nautical_mile / ureg.hour
+        horizontal_air_speed = self._horizontal_air_speed(
+            avg_roc, true_air_speed,
         )
-        if wind_along_track is not None and wind_along_track.magnitude != 0:
-            # Add tailwind (signed) onto still-air horizontal speed to get
-            # ground speed; integrate ground distance over time_to_climb.
-            wind_kt = wind_along_track.m_as(ureg.knot)
-            ground_speed_kt = max(
-                0.0,
-                horizontal_speed.m_as(ureg.knot) + wind_kt,
-            )
-            horizontal_speed = ground_speed_kt * (
-                ureg.nautical_mile / ureg.hour
-            )
-        horizontal_distance = (horizontal_speed * time_to_climb).to(
-            ureg.nautical_mile
+        horizontal_distance = self._along_track_ground_distance(
+            horizontal_air_speed, time_to_climb, wind_along_track,
         )
 
         return time_to_climb, horizontal_distance
@@ -1236,24 +1278,14 @@ class Aircraft:
             minutes = float(np.trapezoid(1.0 / rods_fpm, alts_ft))  # type: ignore[attr-defined]
             time_to_descend = minutes * ureg.minute
 
-        descent_rate_avg = self.descent_profile.rate_at(
+        avg_rod = self.descent_profile.rate_at(
             (start_altitude + end_altitude) / 2
         )
-        descent_angle = np.arctan(descent_rate_avg / true_air_speed).to(ureg.radian)
-        horizontal_speed = (true_air_speed * np.cos(descent_angle)).to(
-            ureg.nautical_mile / ureg.hour
+        horizontal_air_speed = self._horizontal_air_speed(
+            avg_rod, true_air_speed,
         )
-        if wind_along_track is not None and wind_along_track.magnitude != 0:
-            wind_kt = wind_along_track.m_as(ureg.knot)
-            ground_speed_kt = max(
-                0.0,
-                horizontal_speed.m_as(ureg.knot) + wind_kt,
-            )
-            horizontal_speed = ground_speed_kt * (
-                ureg.nautical_mile / ureg.hour
-            )
-        horizontal_distance = (horizontal_speed * time_to_descend).to(
-            ureg.nautical_mile
+        horizontal_distance = self._along_track_ground_distance(
+            horizontal_air_speed, time_to_descend, wind_along_track,
         )
 
         return time_to_descend, horizontal_distance
@@ -1413,6 +1445,183 @@ class Aircraft:
             "dubins_path": cruise_descent["dubins_path"],
         }
 
+    # ------------------------------------------------------------------
+    # Wind-resolution helpers used by _hybrid_path
+    # ------------------------------------------------------------------
+
+    def _resolve_cruise_wind_uv(
+        self,
+        start_waypoint: Waypoint,
+        end_waypoint: Waypoint,
+        cruise_altitude: Quantity,
+        *,
+        wind: Optional[Tuple[float, float]] = None,
+        wind_source: Optional["WindField"] = None,
+        t_anchor: Optional[datetime.datetime] = None,
+    ) -> Optional[Tuple[float, float]]:
+        """Resolve the cruise (u, v) wind tuple for the 2D Dubins solver.
+
+        ``wind`` and ``wind_source`` are mutually exclusive (raises
+        if both supplied).  When ``wind_source`` is given, the field
+        is sampled at cruise altitude at the geodetic leg midpoint,
+        at ``t_anchor`` (defaulting to ``utcnow``); StillAirField
+        short-circuits to ``(0, 0)`` without querying.  When neither
+        is given, returns ``None`` (still-air).
+        """
+        if wind is not None and wind_source is not None:
+            raise HyPlanValueError(
+                "Pass either `wind=(u, v)` or `wind_source=<WindField>`, "
+                "not both."
+            )
+        if wind_source is None:
+            return wind
+        from ..winds.simple import StillAirField  # avoid top-level cycle
+        if isinstance(wind_source, StillAirField):
+            return (0.0, 0.0)
+        geo_dist_m, geo_bearing = pymap3d.vincenty.vdist(
+            start_waypoint.latitude, start_waypoint.longitude,
+            end_waypoint.latitude, end_waypoint.longitude,
+        )
+        if float(geo_dist_m) <= 0:
+            return (0.0, 0.0)
+        cm_lat, cm_lon = pymap3d.vincenty.vreckon(
+            start_waypoint.latitude, start_waypoint.longitude,
+            0.5 * float(geo_dist_m), float(geo_bearing),
+        )
+        sample_t = (
+            t_anchor
+            if t_anchor is not None
+            else datetime.datetime.now(datetime.timezone.utc)
+        )
+        u_q, v_q = wind_source.wind_at(
+            float(cm_lat),
+            float(((float(cm_lon) + 180.0) % 360.0) - 180.0),
+            cruise_altitude, sample_t,
+        )
+        return (
+            u_q.m_as(ureg.meter / ureg.second),
+            v_q.m_as(ureg.meter / ureg.second),
+        )
+
+    def _resolve_phase_winds(
+        self,
+        start_waypoint: Waypoint,
+        end_waypoint: Waypoint,
+        start_alt: Quantity,
+        cruise_altitude: Quantity,
+        end_alt: Quantity,
+        *,
+        cruise_tas: Quantity,
+        leg_length_nmi: float,
+        wind: Optional[Tuple[float, float]] = None,
+        wind_source: Optional["WindField"] = None,
+        t_anchor: Optional[datetime.datetime] = None,
+    ) -> Tuple[Optional[Quantity], Optional[Quantity]]:
+        """Resolve per-phase along-track wind components for climb and
+        descent.
+
+        Returns ``(wind_along_q_climb, wind_along_q_descent)`` as
+        signed Quantities (positive = tailwind) or ``None`` for
+        still-air.
+
+        Default behavior (no ``wind_source``): both phases project
+        the leg-midpoint cruise (u, v) onto the great-circle bearing,
+        matching the legacy single-(u, v) treatment.
+
+        With ``wind_source``: each phase is overridden with a sample
+        taken at the phase-mid altitude near the phase-mid distance
+        (climb-arc midpoint for climb; descent-arc midpoint for
+        descent), capturing vertical wind shear that the
+        cruise-altitude midpoint sample misses.
+        """
+        # Default: project cruise (u, v) — same value for both phases.
+        wind_along_q: Optional[Quantity] = None
+        if wind is not None:
+            u_mps, v_mps = wind
+            _, az_fwd = pymap3d.vincenty.vdist(
+                start_waypoint.latitude, start_waypoint.longitude,
+                end_waypoint.latitude, end_waypoint.longitude,
+            )
+            az_rad = math.radians(float(az_fwd))
+            tailwind_mps = u_mps * math.sin(az_rad) + v_mps * math.cos(az_rad)
+            wind_along_q = tailwind_mps * (ureg.meter / ureg.second)
+
+        if wind_source is None:
+            return wind_along_q, wind_along_q
+
+        # Phase-aware override: sample wind_source at each phase's
+        # midpoint geometry.
+        from .wind_path import _project_wind_along_track
+        sample_t0 = (
+            t_anchor
+            if t_anchor is not None
+            else datetime.datetime.now(datetime.timezone.utc)
+        )
+        _, az_fwd_pm = pymap3d.vincenty.vdist(
+            start_waypoint.latitude, start_waypoint.longitude,
+            end_waypoint.latitude, end_waypoint.longitude,
+        )
+        az_pm_deg = float(az_fwd_pm)
+
+        wind_along_q_climb = wind_along_q
+        wind_along_q_descent = wind_along_q
+
+        if start_alt < cruise_altitude:
+            t_seed_q, d_seed_q = self._climb(start_alt, cruise_altitude)
+            t_seed_min = t_seed_q.m_as(ureg.minute)
+            d_seed_nmi = d_seed_q.m_as(ureg.nautical_mile)
+            wind_along_q_climb = _project_wind_along_track(
+                wind_source=wind_source,
+                start_lat=start_waypoint.latitude,
+                start_lon=start_waypoint.longitude,
+                track_deg=az_pm_deg,
+                mid_dist_nmi=max(1e-3, 0.5 * d_seed_nmi),
+                altitude=(start_alt + cruise_altitude) / 2,
+                sample_time=(
+                    sample_t0
+                    + datetime.timedelta(minutes=0.5 * t_seed_min)
+                ),
+            )
+
+        if end_alt < cruise_altitude:
+            t_seed_q_d, d_seed_q_d = self._descend(cruise_altitude, end_alt)
+            t_seed_d_min = t_seed_q_d.m_as(ureg.minute)
+            d_seed_d_nmi = d_seed_q_d.m_as(ureg.nautical_mile)
+            if start_alt < cruise_altitude:
+                t_climb_seed_q, d_climb_seed_q = self._climb(
+                    start_alt, cruise_altitude,
+                )
+                t_climb_seed_min = t_climb_seed_q.m_as(ureg.minute)
+                d_climb_seed_nmi = d_climb_seed_q.m_as(ureg.nautical_mile)
+            else:
+                t_climb_seed_min = 0.0
+                d_climb_seed_nmi = 0.0
+            cruise_tas_kt_seed = cruise_tas.m_as(ureg.knot)
+            cruise_seed_nmi = max(
+                0.0, leg_length_nmi - d_climb_seed_nmi - d_seed_d_nmi,
+            )
+            cruise_seed_min = (
+                cruise_seed_nmi / cruise_tas_kt_seed * 60.0
+                if cruise_tas_kt_seed > 0 else 0.0
+            )
+            wind_along_q_descent = _project_wind_along_track(
+                wind_source=wind_source,
+                start_lat=start_waypoint.latitude,
+                start_lon=start_waypoint.longitude,
+                track_deg=az_pm_deg,
+                mid_dist_nmi=max(1e-3, leg_length_nmi - 0.5 * d_seed_d_nmi),
+                altitude=(cruise_altitude + end_alt) / 2,
+                sample_time=(
+                    sample_t0
+                    + datetime.timedelta(
+                        minutes=t_climb_seed_min + cruise_seed_min
+                        + 0.5 * t_seed_d_min,
+                    )
+                ),
+            )
+
+        return wind_along_q_climb, wind_along_q_descent
+
     def _hybrid_path(
         self,
         start_waypoint: Waypoint,
@@ -1516,43 +1725,10 @@ class Aircraft:
         # climb / descent get their own phase-mid samples below.
         # Mutually exclusive with ``wind`` to keep the API
         # unambiguous.
-        if wind is not None and wind_source is not None:
-            raise HyPlanValueError(
-                "Pass either `wind=(u, v)` or `wind_source=<WindField>`, "
-                "not both."
-            )
-        if wind_source is not None:
-            from ..winds.simple import StillAirField  # avoid top-level cycle
-            if isinstance(wind_source, StillAirField):
-                wind = (0.0, 0.0)
-            else:
-                geo_dist_m, geo_bearing = pymap3d.vincenty.vdist(
-                    start_waypoint.latitude, start_waypoint.longitude,
-                    end_waypoint.latitude, end_waypoint.longitude,
-                )
-                if float(geo_dist_m) > 0:
-                    cm_lat, cm_lon = pymap3d.vincenty.vreckon(
-                        start_waypoint.latitude,
-                        start_waypoint.longitude,
-                        0.5 * float(geo_dist_m),
-                        float(geo_bearing),
-                    )
-                    cm_t = (
-                        t_anchor
-                        if t_anchor is not None
-                        else datetime.datetime.now(datetime.timezone.utc)
-                    )
-                    u_q, v_q = wind_source.wind_at(
-                        float(cm_lat),
-                        float(((float(cm_lon) + 180.0) % 360.0) - 180.0),
-                        cruise_altitude, cm_t,
-                    )
-                    wind = (
-                        u_q.m_as(ureg.meter / ureg.second),
-                        v_q.m_as(ureg.meter / ureg.second),
-                    )
-                else:
-                    wind = (0.0, 0.0)
+        wind = self._resolve_cruise_wind_uv(
+            start_waypoint, end_waypoint, cruise_altitude,
+            wind=wind, wind_source=wind_source, t_anchor=t_anchor,
+        )
 
         # Bank for the horizontal Dubins arc.  Start from the
         # phase-specific calibrated value, then clip against the
@@ -1576,100 +1752,12 @@ class Aircraft:
         L_m = h_path.length.m_as(ureg.meter)
         L_nmi = L_m / 1852.0
 
-        # Project wind onto the great-circle bearing from start to end
-        # so the vertical phases see a signed along-track component.
-        # A headwind (positive_along_track < 0) shrinks the climb's
-        # forward distance; a tailwind extends it.
-        wind_along_q: Optional[Quantity] = None
-        if wind is not None:
-            u_mps, v_mps = wind
-            _, az_fwd = pymap3d.vincenty.vdist(
-                start_waypoint.latitude, start_waypoint.longitude,
-                end_waypoint.latitude, end_waypoint.longitude,
-            )
-            az_rad = math.radians(float(az_fwd))
-            tailwind_mps = u_mps * math.sin(az_rad) + v_mps * math.cos(az_rad)
-            wind_along_q = tailwind_mps * (ureg.meter / ureg.second)
-
-        # Per-phase along-track wind.  Default: both climb and descent
-        # use the same (cruise-altitude midpoint) projection — matches
-        # the legacy single-(u, v) behavior.  When ``wind_source`` is
-        # provided, override each with a sample taken at the phase-mid
-        # altitude near the phase-mid distance.  Wind affects the
-        # *ground distance* allocated to climb / descent, not the times
-        # themselves (climb rate is air-mass-relative).
-        wind_along_q_climb = wind_along_q
-        wind_along_q_descent = wind_along_q
-        if wind_source is not None:
-            from .wind_path import _project_wind_along_track
-            _t_anchor = (
-                t_anchor
-                if t_anchor is not None
-                else datetime.datetime.now(datetime.timezone.utc)
-            )
-            _, az_fwd_pm = pymap3d.vincenty.vdist(
-                start_waypoint.latitude, start_waypoint.longitude,
-                end_waypoint.latitude, end_waypoint.longitude,
-            )
-            az_pm_deg = float(az_fwd_pm)
-            if start_alt < cruise_altitude:
-                t_seed_q, d_seed_q = self._climb(start_alt, cruise_altitude)
-                t_seed_min = t_seed_q.m_as(ureg.minute)
-                d_seed_nmi = d_seed_q.m_as(ureg.nautical_mile)
-                wind_along_q_climb = _project_wind_along_track(
-                    wind_source=wind_source,
-                    start_lat=start_waypoint.latitude,
-                    start_lon=start_waypoint.longitude,
-                    track_deg=az_pm_deg,
-                    mid_dist_nmi=max(1e-3, 0.5 * d_seed_nmi),
-                    altitude=(start_alt + cruise_altitude) / 2,
-                    sample_time=(
-                        _t_anchor
-                        + datetime.timedelta(minutes=0.5 * t_seed_min)
-                    ),
-                )
-            if end_alt < cruise_altitude:
-                t_seed_q_d, d_seed_q_d = self._descend(
-                    cruise_altitude, end_alt,
-                )
-                t_seed_d_min = t_seed_q_d.m_as(ureg.minute)
-                d_seed_d_nmi = d_seed_q_d.m_as(ureg.nautical_mile)
-                t_climb_seed_min = (
-                    self._climb(start_alt, cruise_altitude)[0].m_as(ureg.minute)
-                    if start_alt < cruise_altitude
-                    else 0.0
-                )
-                d_climb_seed_nmi = (
-                    self._climb(start_alt, cruise_altitude)[1].m_as(
-                        ureg.nautical_mile
-                    )
-                    if start_alt < cruise_altitude
-                    else 0.0
-                )
-                cruise_tas_kt_seed = cruise_tas.m_as(ureg.knot)
-                cruise_seed_nmi = max(
-                    0.0,
-                    L_nmi - d_climb_seed_nmi - d_seed_d_nmi,
-                )
-                cruise_seed_min = (
-                    cruise_seed_nmi / cruise_tas_kt_seed * 60.0
-                    if cruise_tas_kt_seed > 0 else 0.0
-                )
-                wind_along_q_descent = _project_wind_along_track(
-                    wind_source=wind_source,
-                    start_lat=start_waypoint.latitude,
-                    start_lon=start_waypoint.longitude,
-                    track_deg=az_pm_deg,
-                    mid_dist_nmi=max(1e-3, L_nmi - 0.5 * d_seed_d_nmi),
-                    altitude=(cruise_altitude + end_alt) / 2,
-                    sample_time=(
-                        _t_anchor
-                        + datetime.timedelta(
-                            minutes=t_climb_seed_min + cruise_seed_min
-                            + 0.5 * t_seed_d_min,
-                        )
-                    ),
-                )
+        wind_along_q_climb, wind_along_q_descent = self._resolve_phase_winds(
+            start_waypoint, end_waypoint,
+            start_alt, cruise_altitude, end_alt,
+            cruise_tas=cruise_tas, leg_length_nmi=L_nmi,
+            wind=wind, wind_source=wind_source, t_anchor=t_anchor,
+        )
 
         # Climb segment (start.alt -> cruise.alt).  When ``climb_plan``
         # is supplied (and the leg actually climbs), use ``step_climb``
