@@ -1,6 +1,6 @@
 # HyPlan Notebooks: Learning Path & Reference Guide
 
-This directory contains Jupyter notebooks that teach you how to plan airborne remote sensing campaigns using HyPlan. The notebooks are organized as a guided curriculum, from introductory concepts through advanced mission types and operational workflows.
+This directory contains Jupyter notebooks that teach you how to plan airborne remote sensing campaigns using HyPlan. The notebooks are organized as a guided curriculum, from introductory concepts through advanced mission types, wind-aware reachability, calibration, and campaign workflows.
 
 ---
 
@@ -29,11 +29,11 @@ These notebooks cover the fundamental building blocks of flight planning: indivi
 |----------|-------------|-------------|
 | [flight_line_operations.ipynb](flight_line_operations.ipynb) | Create, inspect, and manipulate individual flight lines. Covers azimuth, offsets, splitting, merging, and geodetic properties. | When you need to understand or customize individual flight line geometry. |
 | [flight_box_generation.ipynb](flight_box_generation.ipynb) | Generate sets of parallel flight lines (flight boxes) from a center line or study area polygon, with configurable overlap and spacing. | When you need to cover a study area with parallel flight lines. |
-| [flight_plan_computation.ipynb](flight_plan_computation.ipynb) | Compute a complete flight plan from flight lines: segment expansion, timing, fuel estimates, and summary metrics. | When you need to go from flight lines to a flyable, timed mission plan. |
+| [flight_plan_computation.ipynb](flight_plan_computation.ipynb) | Compute a complete flight plan from flight lines: segment expansion, aircraft-performance-aware timing, phase labels, and summary metrics. | When you need to go from flight lines to a realistic, timed mission plan. |
 | [flight_patterns.ipynb](flight_patterns.ipynb) | Generate standard survey patterns: racetracks, lawnmowers, expanding squares, spirals, and more. | When you need a pre-built survey pattern rather than custom flight lines. |
 | [dubins_path_planning.ipynb](dubins_path_planning.ipynb) | Compute minimum-radius turn paths (Dubins paths) between waypoints, respecting aircraft turning constraints. | When you need smooth, flyable transitions between waypoints or flight lines. |
-| [flight_optimizer_demo.ipynb](flight_optimizer_demo.ipynb) | Optimize flight line ordering to minimize transit time and total mission duration. | When you have many flight lines and want to find the most efficient ordering. |
-| [isochrone.ipynb](isochrone.ipynb) | Compute wind-aware isochrones (reachability polygons) — `one_way`, `round_trip`, and `return_safe` modes — for site selection and in-flight re-tasking. | When you need to determine which sites are feasible from a base airport given an endurance budget, or where an airborne aircraft can still reach and recover. |
+| [flight_optimizer_demo.ipynb](flight_optimizer_demo.ipynb) | Optimize flight line ordering and sortie grouping subject to endurance, daily flight-time, and refuel-airport constraints. | When you have many flight lines and want to build efficient multi-sortie or multi-day plans. |
+| [isochrone.ipynb](isochrone.ipynb) | Compute wind-aware reachability polygons — `one_way`, `round_trip`, `return_safe`, concentric, and refuel-aware examples — with direct, ellipse, and adaptive ray strategies. | When you need to determine which sites are feasible from a base airport, compare recovery/refuel options, or estimate where an airborne aircraft can still reach and recover. |
 
 **Suggested order:** flight_line_operations &rarr; flight_box_generation &rarr; flight_plan_computation &rarr; flight_patterns &rarr; dubins_path_planning &rarr; flight_optimizer_demo &rarr; isochrone
 
@@ -44,7 +44,7 @@ These notebooks cover the fundamental building blocks of flight planning: indivi
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
 | [sensor_comparison.ipynb](sensor_comparison.ipynb) | Compare sensors across the HyPlan registry: GSD, swath width, spectral range, and altitude constraints. | When choosing between sensors or understanding how sensor parameters affect planning. |
-| [aircraft_performance.ipynb](aircraft_performance.ipynb) | Compare aircraft performance: ceiling, endurance, payload capacity, and speed envelopes. | When selecting an aircraft or understanding how aircraft limits constrain your mission. |
+| [aircraft_performance.ipynb](aircraft_performance.ipynb) | Compare aircraft performance: ceiling, endurance, payload capacity, calibrated speed schedules, climb/descent profiles, and turn behavior. | When selecting an aircraft or understanding how aircraft limits constrain your mission. |
 
 **Suggested order:** sensor_comparison &rarr; aircraft_performance
 
@@ -57,8 +57,8 @@ These notebooks help you account for real-world environmental factors that affec
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
 | [solar_planning.ipynb](solar_planning.ipynb) | Compute solar geometry (elevation, azimuth) and identify optimal illumination windows for a study site. | When your science requires specific solar illumination conditions (e.g., avoiding long shadows). |
-| [winds.ipynb](winds.ipynb) | Obtain wind data from constant assumptions or MERRA-2 reanalysis, and understand wind conventions (from-direction, U/V components). | When you need wind inputs for flight planning or want to assess wind conditions at your site. |
-| [wind_effects.ipynb](wind_effects.ipynb) | Analyze how wind affects flight execution: ground speed, crab angle, swath distortion, and mission timing. | When you need to understand how wind changes your flight plan's timing and coverage. |
+| [winds.ipynb](winds.ipynb) | Obtain wind data from constant assumptions or reanalysis / forecast providers, and understand wind conventions (from-direction, U/V components). | When you need wind inputs for flight planning or want to assess wind conditions at your site. |
+| [wind_effects.ipynb](wind_effects.ipynb) | Analyze how wind affects flight execution: ground speed, crab angle, swath distortion, mission timing, and long-leg wind-sampling assumptions. | When you need to understand how wind changes your flight plan's timing and coverage. |
 | [cloud_analysis.ipynb](cloud_analysis.ipynb) | Retrieve and analyze cloud fraction data from Open-Meteo to assess clear-sky probability for your study area. | When scheduling missions around cloud cover using freely available data (no credentials needed). |
 | [cloud_analysis_gee.ipynb](cloud_analysis_gee.ipynb) | Retrieve cloud fraction from Google Earth Engine (MODIS/ERA5) for longer historical records and climatological analysis. | When you need multi-year cloud climatology and have GEE credentials. |
 | [phenology_analysis.ipynb](phenology_analysis.ipynb) | Analyze vegetation phenology (green-up, peak, senescence) from satellite data to time missions to target phenological stages. | When your science targets specific vegetation states (e.g., peak greenness, leaf-off). |
@@ -109,11 +109,11 @@ Specialized notebooks for planning missions with different instrument types, eac
 
 ## Aircraft Calibration
 
-How HyPlan's aircraft performance models are derived from real-world telemetry. Eight platforms are now data-calibrated from NASA AFRC IWG1 logs and NASA / NOAA ICARTT campaigns; the per-aircraft notebooks document the methodology, source data, and resulting paste-ready constructor blocks. See [docs/calibration.md](../docs/calibration.md) for the calibration concepts overview.
+How HyPlan's aircraft performance models are derived from real-world telemetry. Several research platforms are now data-calibrated from NASA AFRC IWG1 logs and NASA / NOAA ICARTT campaigns; the per-aircraft notebooks document the methodology, source data, validation diagnostics, and resulting paste-ready constructor blocks. See [docs/calibration.md](../docs/calibration.md) for the calibration concepts overview.
 
 | Notebook | Aircraft | Source | When to Use |
 |----------|----------|--------|-------------|
-| [calibration/er2/calibration.ipynb](calibration/er2/calibration.ipynb) | NASA ER-2 (N806/N809) | NASA AFRC IWG1 (~17 sorties) | Reproduce the ER-2 calibration; methodology reference for the other aircraft. |
+| [calibration/er2/calibration.ipynb](calibration/er2/calibration.ipynb) | NASA ER-2 (N806/N809) | NASA AFRC IWG1 | Reproduce the ER-2 calibration; methodology reference for the other aircraft. |
 | [calibration/giii/calibration.ipynb](calibration/giii/calibration.ipynb) | NASA G-III (N520) | NASA ASP archive IWG1 | Reproduce the G-III calibration. |
 | [calibration/gv/calibration.ipynb](calibration/gv/calibration.ipynb) | NASA G-V (N95) | NASA ASP archive IWG1 | Reproduce the G-V calibration. |
 | [calibration/wb57/calibration.ipynb](calibration/wb57/calibration.ipynb) | NASA WB-57 (N926/N927) | NASA ASP archive IWG1 | Reproduce the WB-57 calibration. |
@@ -134,7 +134,7 @@ These notebooks read locally-cached IWG1 / ICARTT files from `data/<aircraft>/` 
 
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
-| [export_formats.ipynb](export_formats.ipynb) | Export flight plans to KML, GeoJSON, CSV, IWG1, and other formats for use in Google Earth, GIS tools, and pilot briefing packages. | When you need to share flight plans with pilots, collaborators, or load them into external tools. |
+| [export_formats.ipynb](export_formats.ipynb) | Export flight plans to KML, KMZ, GPX, XLSX, CSV, IWG1 / ICARTT-style files, TrackAir, ForeFlight, Honeywell, and pilot-facing briefing formats. | When you need to share flight plans with collaborators, GIS tools, notebooks, or flight-team review workflows. |
 
 ---
 
