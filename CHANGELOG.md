@@ -1,5 +1,63 @@
 # Changelog
 
+## v1.5.1 — 2026-05-07
+
+Maintenance release: aircraft calibration provenance, smoother
+plotted Dubins arcs, and paper / docs polish.  No breaking changes.
+
+### Aircraft calibration status (`Aircraft.calibration_status`)
+
+Every shipped aircraft now carries an explicit
+`calibration_status` attribute, surfaced in the docstring and on
+the instance.  Three values:
+
+* `"calibrated"` — climb / cruise / descent profiles fit to in-situ
+  IWG1 / ICARTT data.  Eight aircraft today: `NASA_ER2`,
+  `NASA_GIII`, `NASA_GV`, `NASA_WB57`, `NASA_P3`, `KingAirB200`,
+  `C130`, `TwinOtter`.
+* `"inferred"` — performance mirrored from a calibrated cousin
+  airframe of the same type certificate.  `NCAR_GV` (mirrors
+  `NASA_GV`) and `NASA_C20A` (mirrors `NASA_GIII`).
+* `"uncalibrated"` — performance from manufacturer brochures with
+  no in-situ flight-data fit.  `NASA_GIV`, `NASA_B777`,
+  `KingAirA90`.
+
+Uncalibrated and inferred classes carry an explicit `.. warning::`
+or `.. note::` block in their docstrings flagging the provenance
+limitation.  The status field is the default mechanism for
+querying provenance programmatically; `confidence` and `sources`
+remain available for finer-grained inspection.
+
+### Plotting: `n_samples` for transit Dubins arcs
+
+`compute_flight_plan(...)` gains an `n_samples: int = 20` kwarg
+that plumbs through `time_to_takeoff` / `time_to_cruise` /
+`time_to_return` to `_hybrid_path`'s sublinestring sampling.
+Higher values densify the per-phase Dubins-arc geometry so
+transits render as smooth curves rather than visible polylines at
+typical figure scales.  Default preserves prior behaviour.
+Timing is computed analytically and is unchanged.
+
+### Paper / figures
+
+* fig2 wind narrative: 80 kt south wind (173°) demonstrates the
+  "wind aligned with mission saves time" case — the planner
+  reroutes the relocation strip to its wind-favorable traversal
+  direction and the mission completes 8.5 min faster than still
+  air on a 93.0 min baseline (~9.1%).  Caption rewritten to
+  reflect this.
+* fig2 PDF / PNG re-rendered at `n_samples=80`; transit Dubins
+  arcs are now visibly smooth.
+* paper.pdf rebuilt via `openjournals/inara`.
+
+### Other housekeeping
+
+* `notebooks/README.md` — wording refresh to reflect v1.5.0
+  capabilities (wind-aware reachability, calibration scope,
+  optimizer + sortie grouping).
+* `paper/talks/` is now gitignored (drafted slide decks live
+  there; not part of the published artifact).
+
 ## v1.5.0 — 2026-05-06
 
 This release introduces **wind-aware isochrones** — reachability
