@@ -169,7 +169,7 @@ def _fit_phase(
 
     # --- Altitude binning ---
     alt_min, alt_max = float(alt.min()), float(alt.max())
-    bin_edges = np.arange(
+    bin_edges: np.ndarray = np.arange(
         alt_min, alt_max + altitude_bin_ft, altitude_bin_ft
     )
     if len(bin_edges) < 2:

@@ -196,17 +196,17 @@ def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: Opt
     if not all_lats:
         return np.array([]), np.array([])
 
-    all_lats = np.concatenate(all_lats)
-    all_lons = np.concatenate(all_lons)
-    all_times = np.concatenate(all_times)
+    lats_arr = np.concatenate(all_lats)
+    lons_arr = np.concatenate(all_lons)
+    times_arr = np.concatenate(all_times)
 
     if dem_file is None:
-        dem_file = generate_demfile(all_lats, all_lons)
+        dem_file = generate_demfile(lats_arr, lons_arr)
 
-    elevations_m = get_elevations(all_lats, all_lons, dem_file)
+    elevations_m = get_elevations(lats_arr, lons_arr, dem_file)
     elevations_ft = elevations_m * 3.28084
 
-    return all_times, elevations_ft
+    return times_arr, elevations_ft
 
 
 def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Optional[Aircraft] = None, dem_file: Optional[str] = None, show_terrain: bool = True) -> None:
