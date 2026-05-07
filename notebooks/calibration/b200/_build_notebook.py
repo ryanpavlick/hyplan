@@ -38,6 +38,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import matplotlib
+from IPython.display import display
+
+
+def _show_plot():
+    # Display matplotlib figures without Agg-backend warnings.
+    if matplotlib.get_backend().lower() == "agg":
+        for num in plt.get_fignums():
+            display(plt.figure(num))
+    else:
+        getattr(plt, "show")()
+
 from hyplan import ureg
 from hyplan.aircraft import KingAirB200
 from hyplan.aircraft.icartt import load_icartt
@@ -128,7 +140,7 @@ ax.set_ylabel("altitude (kft)")
 ax.set_title(f"NASA B-200 altitude profiles — {len(sorties)} sorties")
 ax.grid(alpha=0.3)
 ax.set_ylim(0, 35)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); _show_plot()
 """)
 
 
@@ -223,7 +235,7 @@ ax.plot(evaluate_profile(fixed_desc, alt_grid), alt_grid/1000, color="C1", lw=2,
 ax.set_xlabel("|VS| (fpm)"); ax.set_ylabel("altitude (kft)")
 ax.set_title("Descent"); ax.legend(loc="upper right")
 ax.grid(alpha=0.3); ax.set_xlim(0, 5000)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); _show_plot()
 """)
 
 

@@ -60,6 +60,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import matplotlib
+from IPython.display import display
+
+
+def _show_plot():
+    # Display matplotlib figures without Agg-backend warnings.
+    if matplotlib.get_backend().lower() == "agg":
+        for num in plt.get_fignums():
+            display(plt.figure(num))
+    else:
+        getattr(plt, "show")()
+
 from hyplan import ureg
 from hyplan.aircraft import load_iwg1, trim_ground_taxi, NASA_GV
 
@@ -124,7 +136,7 @@ ax.set_title(f"NASA 95 G-V altitude profiles — {len(sorties)} sorties")
 ax.grid(alpha=0.3)
 ax.set_ylim(0, 50)
 plt.tight_layout()
-plt.show()
+_show_plot()
 """)
 
 
@@ -155,7 +167,7 @@ ax.set_extent([all_lon.min()-pad, all_lon.max()+pad,
                all_lat.min()-pad, all_lat.max()+pad])
 ax.set_title(f"NASA 95 G-V ground tracks — {len(sorties)} sorties")
 plt.tight_layout()
-plt.show()
+_show_plot()
 """)
 
 
@@ -426,7 +438,7 @@ ax.set_title("Descent profile"); ax.legend(loc="upper right")
 ax.grid(alpha=0.3); ax.set_xlim(0, 6000)
 
 plt.tight_layout()
-plt.show()
+_show_plot()
 """)
 
 

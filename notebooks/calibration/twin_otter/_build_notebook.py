@@ -29,6 +29,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import matplotlib
+from IPython.display import display
+
+
+def _show_plot():
+    # Display matplotlib figures without Agg-backend warnings.
+    if matplotlib.get_backend().lower() == "agg":
+        for num in plt.get_fignums():
+            display(plt.figure(num))
+    else:
+        getattr(plt, "show")()
+
 from hyplan import ureg
 from hyplan.aircraft import TwinOtter
 from hyplan.aircraft.icartt import load_icartt
@@ -167,7 +179,7 @@ ax.plot((-descent_bins["vs_med"]).abs(), descent_bins["alt_bin_ft"]/1000, "o",
 ax.plot(evaluate_profile(fixed_desc, alt_grid), alt_grid/1000, color="C1", lw=2, label="proposed")
 ax.set_xlabel("|VS| (fpm)"); ax.set_ylabel("altitude (kft)"); ax.set_title("Descent")
 ax.legend(loc="upper right"); ax.grid(alpha=0.3)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); _show_plot()
 """)
 
 
