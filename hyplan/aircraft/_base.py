@@ -532,6 +532,26 @@ class Aircraft:
             ``climb_profile`` is tuned to absorb.  Pure metadata in
             v1.5 — names the absorption posture so it's queryable
             rather than buried in comments.
+        calibration_status: Provenance label for the performance
+            model.  One of:
+
+            * ``"calibrated"`` — climb / cruise / descent profiles
+              and TAS schedules are fit to in-situ flight data
+              (IWG1 / ICARTT) per
+              :doc:`docs/calibration.md </calibration>`.
+            * ``"inferred"`` — performance is mirrored from a
+              calibrated cousin airframe of the same type
+              certificate (e.g. ``NCAR_GV`` mirrors ``NASA_GV``);
+              not directly measured against the target airframe.
+            * ``"uncalibrated"`` — performance comes from
+              brochures, AFM tables, or rough estimates with no
+              measured-data fit.  Timing and reachability output
+              for these aircraft should be treated as a
+              best-effort starting point rather than a calibrated
+              model.
+
+            Defaults to ``"uncalibrated"``; calibrated subclasses
+            set this explicitly.
     """
 
     def __init__(
@@ -558,6 +578,7 @@ class Aircraft:
         climb_path_angle_max_deg: Optional[float] = None,
         typical_climb_out: Optional[ClimbOutPolicy] = None,
         stall_speed_cas: Optional[Quantity] = None,
+        calibration_status: Literal["calibrated", "inferred", "uncalibrated"] = "uncalibrated",
     ):
         if not isinstance(aircraft_type, str):
             raise HyPlanTypeError("Aircraft type must be a string.")
@@ -583,6 +604,13 @@ class Aircraft:
         self.engine_type = engine_type
         self.confidence = confidence or PerformanceConfidence()
         self.sources = sources or []
+
+        if calibration_status not in ("calibrated", "inferred", "uncalibrated"):
+            raise HyPlanValueError(
+                f"calibration_status must be one of 'calibrated', "
+                f"'inferred', 'uncalibrated'; got {calibration_status!r}."
+            )
+        self.calibration_status = calibration_status
 
         self.range = range.to(ureg.nautical_mile) if range is not None else None
         self.endurance = endurance.to(ureg.hour) if endurance is not None else None

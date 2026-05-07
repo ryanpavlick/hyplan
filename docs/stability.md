@@ -61,7 +61,11 @@ continue to be refined as ADS-B calibration data becomes available.
 | `hyplan.instruments.SidelookingRadar` | SAR sensor model (UAVSAR variants) |
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |
-| `hyplan.aircraft.NCAR_GV` | NCAR HIAPER class — defined but auth-walled calibration data deferred until NCAR EOL ORDER access lands |
+| `hyplan.aircraft.NCAR_GV` | NCAR HIAPER class — defined but auth-walled calibration data deferred (`calibration_status="inferred"` from `NASA_GV`) |
+| `hyplan.aircraft.NASA_C20A` | NASA C-20A class — `calibration_status="inferred"` from `NASA_GIII`; type-certificate equivalence assumed |
+| `hyplan.aircraft.NASA_GIV` | NASA G-IV — `calibration_status="uncalibrated"` (manufacturer brochure only) |
+| `hyplan.aircraft.NASA_B777` | NASA B-777 — `calibration_status="uncalibrated"` (manufacturer brochure only) |
+| `hyplan.aircraft.KingAirA90` | King Air A-90 — `calibration_status="uncalibrated"`; no public IWG1-grade A-90 data |
 
 ## Deprecation policy
 

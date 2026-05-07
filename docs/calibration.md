@@ -41,20 +41,26 @@ the shape directly.
 
 ## Calibration status
 
+Each aircraft class exposes its provenance via the
+`Aircraft.calibration_status` attribute, with values
+`"calibrated"`, `"inferred"`, or `"uncalibrated"` corresponding
+to the *Status* column below.
+
 | Aircraft class | Status | Source | Sorties | Notebook |
 |----------------|--------|--------|---------|----------|
-| `NASA_ER2` | Data-fit | NASA AFRC IWG1 | cache-dependent | [er2/calibration.ipynb](../notebooks/calibration/er2/calibration.ipynb) |
-| `NASA_GIII` | Data-fit | NASA ASP archive IWG1 | ~153 | [giii/calibration.ipynb](../notebooks/calibration/giii/calibration.ipynb) |
-| `NASA_GV` | Data-fit | NASA ASP archive IWG1 | ~101 | [gv/calibration.ipynb](../notebooks/calibration/gv/calibration.ipynb) |
-| `NASA_WB57` | Data-fit | NASA ASP archive IWG1 | ~100 | [wb57/calibration.ipynb](../notebooks/calibration/wb57/calibration.ipynb) |
-| `C130` | Data-fit | NASA ASP archive IWG1 (ACT-America) | ~87 | [c130/calibration.ipynb](../notebooks/calibration/c130/calibration.ipynb) |
-| `NASA_P3` | Data-fit | NASA ASP archive IWG1 | ~252 | [p3/calibration.ipynb](../notebooks/calibration/p3/calibration.ipynb) |
-| `KingAirB200` | Data-fit | NASA ICARTT (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS) | 250 | [b200/calibration.ipynb](../notebooks/calibration/b200/calibration.ipynb) |
-| `TwinOtter` | Data-fit | NASA / NOAA ICARTT (FIREX-AQ N48RF) | ~17 | [twin_otter/calibration.ipynb](../notebooks/calibration/twin_otter/calibration.ipynb) |
-| `NCAR_GV` | Inferred | Mirrored from `NASA_GV` (same airframe class) | — | (deferred — see below) |
-| `NASA_C20A` | Inferred | Mirrored from `NASA_GIII` (same type certificate) | — | (deferred — see below) |
-| `KingAirA90` | Brochure | None public | — | (deferred) |
-| Other classes | Brochure | Manufacturer specs | — | — |
+| `NASA_ER2` | calibrated | NASA AFRC IWG1 | cache-dependent | [er2/calibration.ipynb](../notebooks/calibration/er2/calibration.ipynb) |
+| `NASA_GIII` | calibrated | NASA ASP archive IWG1 | ~153 | [giii/calibration.ipynb](../notebooks/calibration/giii/calibration.ipynb) |
+| `NASA_GV` | calibrated | NASA ASP archive IWG1 | ~101 | [gv/calibration.ipynb](../notebooks/calibration/gv/calibration.ipynb) |
+| `NASA_WB57` | calibrated | NASA ASP archive IWG1 | ~100 | [wb57/calibration.ipynb](../notebooks/calibration/wb57/calibration.ipynb) |
+| `C130` | calibrated | NASA ASP archive IWG1 (ACT-America) | ~87 | [c130/calibration.ipynb](../notebooks/calibration/c130/calibration.ipynb) |
+| `NASA_P3` | calibrated | NASA ASP archive IWG1 | ~252 | [p3/calibration.ipynb](../notebooks/calibration/p3/calibration.ipynb) |
+| `KingAirB200` | calibrated | NASA ICARTT (ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS) | 250 | [b200/calibration.ipynb](../notebooks/calibration/b200/calibration.ipynb) |
+| `TwinOtter` | calibrated | NASA / NOAA ICARTT (FIREX-AQ N48RF) | ~17 | [twin_otter/calibration.ipynb](../notebooks/calibration/twin_otter/calibration.ipynb) |
+| `NCAR_GV` | inferred | Mirrored from `NASA_GV` (same airframe class) | — | (deferred — see below) |
+| `NASA_C20A` | inferred | Mirrored from `NASA_GIII` (same type certificate) | — | (deferred — see below) |
+| `NASA_GIV` | uncalibrated | Manufacturer brochure | — | — |
+| `NASA_B777` | uncalibrated | Manufacturer brochure | — | — |
+| `KingAirA90` | uncalibrated | Manufacturer brochure | — | (deferred) |
 
 Sortie counts may shift as data deliveries refresh.  See each
 notebook's §1 summary table for the current count.

@@ -215,6 +215,7 @@ class NASA_ER2(Aircraft):
             ),
             engine_type="jet",
             range=5000 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=8 * ureg.hour,
             useful_payload=2900 * ureg.pound,
             # Calibrated max descent flight path angle.  IWG1 cross-fleet
@@ -380,6 +381,7 @@ class NASA_GIII(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=3767 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=7.5 * ureg.hour,
             useful_payload=2610 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -409,6 +411,13 @@ class NASA_GIV(Aircraft):
 
     Twin turbofan operated by NASA Armstrong Flight Research Center (AFRC).
 
+    .. warning::
+
+        **Uncalibrated.**  Performance values come from manufacturer
+        brochures / type-certificate data; no in-situ flight-data fit
+        has been performed.  Treat planning output as a best-effort
+        starting point.
+
     See also:
         `https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_IV_-_AFRC>`_
     """
@@ -437,6 +446,7 @@ class NASA_GIV(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=5130 * ureg.nautical_mile,
+            calibration_status="uncalibrated",
             endurance=7.5 * ureg.hour,
             useful_payload=5610 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -529,6 +539,7 @@ class NASA_GV(Aircraft):
             ),
             engine_type="jet",
             range=5500 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=13 * ureg.hour,
             confidence=PerformanceConfidence(
                 climb=0.85, cruise=0.5, descent=0.85, turns=0.8,
@@ -565,6 +576,15 @@ class NCAR_GV(Aircraft):
     FL410-FL510 on long-duration atmospheric campaigns (HIPPO,
     SOCRATES, ORCAS, ATTREX) and carries a different flight-data
     suite (high-rate 25-Hz NetCDF).
+
+    .. note::
+
+        **Inferred.**  Performance is mirrored from the calibrated
+        ``NASA_GV`` model (same airframe class).  HIAPER-specific
+        IWG1 calibration is deferred until NCAR EOL data access is
+        secured.  Output is more reliable than a brochure-only
+        model but may not capture HIAPER-specific operational
+        differences.
 
     See also:
         `https://www.eol.ucar.edu/observing_facilities/hiaper`
@@ -625,6 +645,7 @@ class NCAR_GV(Aircraft):
             ),
             engine_type="jet",
             range=6500 * ureg.nautical_mile,
+            calibration_status="inferred",
             endurance=14 * ureg.hour,
             confidence=PerformanceConfidence(
                 # Inferred from NASA_GV; HIAPER-specific calibration deferred.
@@ -651,6 +672,14 @@ class NASA_C20A(Aircraft):
 
     Obtained from the U.S. Air Force in 2003. Primary platform for
     UAVSAR missions. Operated by NASA AFRC.
+
+    .. note::
+
+        **Inferred.**  Performance is mirrored from the calibrated
+        ``NASA_GIII`` model (same type certificate).  C-20A-specific
+        IWG1 calibration is deferred pending data access.  Output
+        is more reliable than a brochure-only model but may not
+        capture C-20A-specific operational differences.
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC <https://airbornescience.nasa.gov/aircraft/Gulfstream_C-20A_GIII_-_AFRC>`_
@@ -721,6 +750,7 @@ class NASA_C20A(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=3400 * ureg.nautical_mile,
+            calibration_status="inferred",
             endurance=6 * ureg.hour,
             useful_payload=2500 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -827,6 +857,7 @@ class NASA_P3(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=3800 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=12 * ureg.hour,
             useful_payload=18000 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -944,6 +975,7 @@ class NASA_WB57(Aircraft):
             turn_model=TurnModel(max_bank_deg=33.0),
             engine_type="jet",
             range=2500 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=6.5 * ureg.hour,
             useful_payload=8800 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -972,6 +1004,13 @@ class NASA_B777(Aircraft):
 
     Operated by NASA Langley Research Center (LaRC). Very large payload
     capacity (75,000 lbs) and long endurance (18 hours).
+
+    .. warning::
+
+        **Uncalibrated.**  Performance values come from manufacturer
+        brochures / type-certificate data; no in-situ flight-data fit
+        has been performed.  Treat planning output as a best-effort
+        starting point.
     """
 
     def __init__(self):
@@ -998,6 +1037,7 @@ class NASA_B777(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="jet",
             range=9000 * ureg.nautical_mile,
+            calibration_status="uncalibrated",
             endurance=18 * ureg.hour,
             useful_payload=75000 * ureg.pound,
         )
@@ -1009,6 +1049,13 @@ class NASA_B777(Aircraft):
 
 class KingAirA90(Aircraft):
     """Beechcraft King Air A90 twin-turboprop aircraft.
+
+    .. warning::
+
+        **Uncalibrated.**  Performance values come from manufacturer
+        brochures with no in-situ flight-data fit.  No public IWG1-grade
+        A-90 data is currently available; calibration is deferred.
+        Treat planning output as a best-effort starting point.
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90 <https://airbornescience.nasa.gov/aircraft/Beechcraft_King_Air_A90>`_
@@ -1038,6 +1085,7 @@ class KingAirA90(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=1500 * ureg.nautical_mile,
+            calibration_status="uncalibrated",
             endurance=6 * ureg.hour,
             useful_payload=2950 * ureg.pound,
         )
@@ -1117,6 +1165,7 @@ class KingAirB200(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=1632 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=6 * ureg.hour,
             useful_payload=4250 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -1230,6 +1279,7 @@ class C130(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=2500 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=10 * ureg.hour,
             useful_payload=45000 * ureg.pound,
             confidence=PerformanceConfidence(
@@ -1313,6 +1363,7 @@ class TwinOtter(Aircraft):
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
             range=800 * ureg.nautical_mile,
+            calibration_status="calibrated",
             endurance=6 * ureg.hour,
             useful_payload=4000 * ureg.pound,
             confidence=PerformanceConfidence(
