@@ -201,3 +201,6 @@ paper/jats/
 
 # papermill batch-run artifacts
 notebooks/.execution_logs/
+
+# Slide decks (drafted locally, not part of the published artifact)
+paper/talks/
