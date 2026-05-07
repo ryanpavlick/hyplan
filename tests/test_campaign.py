@@ -752,3 +752,24 @@ class TestComputePlanWithPatterns:
         plan = compute_flight_plan(aircraft=b200, flight_sequence=[fl, pat])
         # Expanded sequence has at least 1 flight_line + many waypoint legs
         assert len(plan) >= 2
+
+    def test_expand_sequence_unwraps_patterns(self):
+        """expand_sequence flattens Patterns into FlightLine/Waypoint;
+        non-Pattern entries pass through unchanged."""
+        from hyplan.flight_patterns import racetrack
+        from hyplan.planning import expand_sequence
+        from hyplan.flight_line import FlightLine
+        from hyplan.waypoint import Waypoint
+        fl = _make_flight_line(site_name="A")
+        pat = racetrack(
+            center=(34.0, -118.0), heading=0.0,
+            altitude=ureg.Quantity(20000, "feet"),
+            leg_length=ureg.Quantity(30, "km"),
+            n_legs=3, offset=ureg.Quantity(2, "km"),
+        )
+        result = expand_sequence([fl, pat])
+        # Pattern unwraps into multiple elements; original FlightLine
+        # passes through.
+        assert len(result) > 1
+        assert all(isinstance(s, (FlightLine, Waypoint)) for s in result)
+        assert result[0] is fl  # non-Pattern entries are reference-preserved

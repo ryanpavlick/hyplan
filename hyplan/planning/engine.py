@@ -43,6 +43,31 @@ __all__ = [
 ]
 
 
+def expand_sequence(
+    flight_sequence: List[Union[FlightLine, Waypoint, Pattern]],
+) -> List[Union[FlightLine, Waypoint]]:
+    """Expand any :class:`Pattern` objects into their underlying flight
+    lines and waypoints.
+
+    Patterns become a flat list of their constituent elements (via
+    :meth:`Pattern.elements`); :class:`FlightLine` and
+    :class:`Waypoint` entries pass through unchanged.  Returns a new
+    list; the input is not mutated.
+
+    This is the same expansion :func:`compute_flight_plan` performs
+    internally before timing each segment, exposed as a top-level
+    utility so callers can preview the unwrapped sequence (useful for
+    validation, plotting, or feeding into a different planner).
+    """
+    expanded: List[Union[FlightLine, Waypoint]] = []
+    for seg in flight_sequence:
+        if isinstance(seg, Pattern):
+            expanded.extend(seg.elements())
+        else:
+            expanded.append(seg)
+    return expanded
+
+
 def compute_flight_plan(
     aircraft: Aircraft,
     flight_sequence: List[Union[FlightLine, Waypoint, Pattern]],
@@ -204,14 +229,7 @@ def compute_flight_plan(
         )
         return {"wind": uv}
     # Expand Patterns into their underlying flight lines or waypoints.
-    # After expansion the sequence is FlightLine | Waypoint only — Pattern
-    # objects are unwrapped into their constituent elements.
-    expanded: List[Union[FlightLine, Waypoint]] = []
-    for seg in flight_sequence:
-        if isinstance(seg, Pattern):
-            expanded.extend(seg.elements())
-        else:
-            expanded.append(seg)
+    expanded = expand_sequence(flight_sequence)
 
     # Apply offsets to flight lines, if applicable.  Use a fresh
     # variable name (not `flight_sequence`) so the post-expansion

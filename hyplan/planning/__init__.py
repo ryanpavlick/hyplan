@@ -5,7 +5,7 @@ of flight lines and waypoints into a complete mission plan with takeoff,
 transit, data-collection, and landing phases.
 """
 
-from .engine import compute_flight_plan  # noqa: F401
+from .engine import compute_flight_plan, expand_sequence  # noqa: F401
 from .isochrone import (  # noqa: F401
     compute_isochrone,
     compute_concentric_isochrones,
@@ -18,6 +18,7 @@ from .segments import create_flight_line_record, process_flight_phase  # noqa: F
 
 __all__ = [
     "compute_flight_plan",
+    "expand_sequence",
     "compute_isochrone",
     "compute_concentric_isochrones",
     "compute_refuel_isochrone",

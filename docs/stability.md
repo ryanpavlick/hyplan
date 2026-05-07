@@ -24,7 +24,7 @@ specific version if you depend on exact signatures.
 | `hyplan.FlightLine` | Flight line creation, splitting, clipping, offsetting |
 | `hyplan.Waypoint` | Navigation waypoints with heading, altitude, speed |
 | `hyplan.planning` | `compute_flight_plan` and segment record builders |
-| `hyplan.planning.isochrone` | Wind-aware reachability boundaries (`compute_isochrone`, `compute_concentric_isochrones`, `compute_refuel_isochrone`, `evaluate_target_reachability`) |
+| `hyplan.planning.isochrone` | Wind-aware reachability boundaries (`compute_isochrone`, `compute_concentric_isochrones`, `compute_refuel_isochrone`, `evaluate_target_reachability`) — `wind_sampling="segmented_cruise"` is experimental |
 | `hyplan.terrain` | DEM download, elevation lookup, ray-terrain intersection |
 | `hyplan.swath` | Swath polygon generation and gap/overlap analysis |
 | `hyplan.winds` | Wind field abstractions, MERRA-2, GMAO, GFS providers |
@@ -61,6 +61,7 @@ continue to be refined as ADS-B calibration data becomes available.
 | `hyplan.instruments.SidelookingRadar` | SAR sensor model (UAVSAR variants) |
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |
+| `hyplan.aircraft.NCAR_GV` | NCAR HIAPER class — defined but auth-walled calibration data deferred until NCAR EOL ORDER access lands |
 
 ## Deprecation policy
 
