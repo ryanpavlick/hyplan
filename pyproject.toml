@@ -85,6 +85,10 @@ ignore_missing_imports = true
 # Numpy stubs got stricter — np.empty/np.zeros assignments without an
 # explicit dtype-typed target now require a type annotation.  These
 # fire on pre-existing code; suppress until we add NDArray annotations.
+# Removing this suppression is queued as a follow-up: it should be
+# done module-by-module after the numpy + pint pins (see
+# .github/workflows/tests.yml) ensure consistent stub behavior across
+# the Python 3.9 / 3.11 / 3.12 matrix.
 disable_error_code = ["var-annotated"]
 
 # timezonefinder ships match-statement syntax (Python 3.10+) in its
