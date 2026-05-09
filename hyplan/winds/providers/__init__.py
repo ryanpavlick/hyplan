@@ -5,4 +5,4 @@ from .gmao import GMAOWindField  # noqa: F401
 from .iwg1_trace import IWG1TraceWindField  # noqa: F401
 from .merra2 import MERRA2WindField  # noqa: F401
 
-__all__ = ["MERRA2WindField", "GMAOWindField", "GFSWindField", "IWG1TraceWindField"]
+__all__ = ["GFSWindField", "GMAOWindField", "IWG1TraceWindField", "MERRA2WindField"]

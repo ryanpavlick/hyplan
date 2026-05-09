@@ -26,14 +26,14 @@ from .pattern import Pattern
 from .glint import GlintArc
 
 __all__ = [
+    "coordinated_line",
+    "flight_lines_to_waypoint_path",
+    "glint_arc",
+    "polygon",
     "racetrack",
     "rosette",
-    "polygon",
     "sawtooth",
     "spiral",
-    "glint_arc",
-    "flight_lines_to_waypoint_path",
-    "coordinated_line",
 ]
 
 

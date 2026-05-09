@@ -17,14 +17,14 @@ from .isochrone import (  # noqa: F401
 from .segments import create_flight_line_record, process_flight_phase  # noqa: F401
 
 __all__ = [
-    "compute_flight_plan",
-    "expand_sequence",
-    "compute_isochrone",
     "compute_concentric_isochrones",
+    "compute_flight_plan",
+    "compute_isochrone",
     "compute_refuel_isochrone",
+    "create_flight_line_record",
     "evaluate_target_reachability",
+    "expand_sequence",
     "isochrone_polygon",
     "plot_isochrone",
-    "create_flight_line_record",
     "process_flight_phase",
 ]

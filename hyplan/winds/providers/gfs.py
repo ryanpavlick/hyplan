@@ -133,7 +133,7 @@ class GFSWindField(_GriddedWindField):
             raise HyPlanRuntimeError(
                 "cfgrib (with eccodes) is required for GFS GRIB2 data. "
                 "Install with: pip install cfgrib"
-            )
+            ) from None
         import requests
 
         xr = _require_xarray()

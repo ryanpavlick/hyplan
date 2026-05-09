@@ -281,7 +281,7 @@ def box_around_polygon(
             logger.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
             bounding_box = rotated_rectangle(polygon, azimuth)
     except Exception as e:
-        raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
+        raise HyPlanValueError(f"Failed to calculate bounding box: {e}") from e
 
     lat0, lon0, azimuth, length_m, width_m = rectangle_dimensions(bounding_box, azimuth)
     box_length = length_m * ureg.meter
@@ -409,7 +409,7 @@ def box_around_polygon_terrain(
             logger.info(f"Using rotated rectangle at azimuth {azimuth:.2f}°.")
             bounding_box = rotated_rectangle(polygon, azimuth)
     except Exception as e:
-        raise HyPlanValueError(f"Failed to calculate bounding box: {e}")
+        raise HyPlanValueError(f"Failed to calculate bounding box: {e}") from e
 
     lat0, lon0, azimuth, length_m, width_m = rectangle_dimensions(bounding_box, azimuth)
     box_length = length_m * ureg.meter

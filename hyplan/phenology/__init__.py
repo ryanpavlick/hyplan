@@ -28,12 +28,12 @@ from .sources import (  # noqa: F401
 )
 
 __all__ = [
+    "extract_phenology_stages",
     "fetch_phenology",
     "fetch_phenology_spatial",
-    "summarize_phenology_by_doy",
-    "extract_phenology_stages",
-    "plot_seasonal_profile",
-    "plot_phenology_calendar",
-    "plot_year_over_year_heatmap",
     "plot_cloud_phenology_combined",
+    "plot_phenology_calendar",
+    "plot_seasonal_profile",
+    "plot_year_over_year_heatmap",
+    "summarize_phenology_by_doy",
 ]

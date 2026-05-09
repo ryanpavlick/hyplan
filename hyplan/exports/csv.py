@@ -14,7 +14,7 @@ import geopandas as gpd
 from ..geometry import dd_to_foreflight_oneline, dd_to_nddmm
 from ._common import extract_waypoints, generate_wp_names
 
-__all__ = ["to_foreflight_csv", "to_honeywell_fms", "to_er2_csv"]
+__all__ = ["to_er2_csv", "to_foreflight_csv", "to_honeywell_fms"]
 
 
 # ---------------------------------------------------------------------------

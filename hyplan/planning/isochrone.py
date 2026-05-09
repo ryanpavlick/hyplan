@@ -105,8 +105,8 @@ from ..winds.simple import ConstantWindField, StillAirField
 from ..winds.utils import _track_hold_solution_from_uv
 
 __all__ = [
-    "compute_isochrone",
     "compute_concentric_isochrones",
+    "compute_isochrone",
     "compute_refuel_isochrone",
     "evaluate_target_reachability",
     "isochrone_polygon",
@@ -1692,7 +1692,7 @@ def _solve_rays(
         totals = np.empty(len(indices), dtype=float)
         diags: list[dict[str, Any]] = []
 
-        for j, idx in enumerate(indices):
+        for j, _idx in enumerate(indices):
             target = Waypoint(
                 latitude=float(target_lats[j]),
                 longitude=float(target_lons[j]),

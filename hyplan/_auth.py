@@ -17,7 +17,7 @@ def _require_earthaccess() -> Any:
         raise HyPlanRuntimeError(
             "earthaccess is required for NASA Earthdata authentication. "
             "Install with: pip install earthaccess"
-        )
+        ) from None
 
 
 def _earthdata_login() -> Any:

@@ -71,12 +71,12 @@ from .utils import (  # noqa: F401
 )
 
 __all__ = [
-    "WindField",
-    "StillAirField",
     "ConstantWindField",
-    "MERRA2WindField",
-    "GMAOWindField",
     "GFSWindField",
+    "GMAOWindField",
     "IWG1TraceWindField",
+    "MERRA2WindField",
+    "StillAirField",
+    "WindField",
     "wind_field_from_plan",
 ]

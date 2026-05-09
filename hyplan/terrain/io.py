@@ -222,7 +222,7 @@ def merge_tiles(output_filename: str, tile_file_list: list[str]) -> None:
         logger.info(f"Successfully merged tiles into {output_filename}")
     except Exception as e:
         logger.error(f"Failed to merge tiles: {e}")
-        raise HyPlanRuntimeError(f"Tile merging failed: {e}")
+        raise HyPlanRuntimeError(f"Tile merging failed: {e}") from e
 
 
 def generate_demfile(latitude: np.ndarray[Any, np.dtype[Any]], longitude: np.ndarray[Any, np.dtype[Any]], aws_dir: str = "https://copernicus-dem-30m.s3.amazonaws.com/") -> str:

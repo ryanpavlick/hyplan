@@ -100,7 +100,7 @@ def _require_rasterio() -> Any:
         raise HyPlanRuntimeError(
             "rasterio is required for phenology analysis. "
             "Install with: pip install rasterio"
-        )
+        ) from None
 
 
 def _require_xarray() -> Any:
@@ -113,7 +113,7 @@ def _require_xarray() -> Any:
         raise HyPlanRuntimeError(
             "xarray is required for spatial phenology analysis. "
             "Install with: pip install hyplan[phenology]"
-        )
+        ) from None
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarr
         raise HyPlanRuntimeError(
             "pyhdf is required to read MODIS HDF4 files. "
             "Install with: pip install pyhdf"
-        )
+        ) from None
 
     hdf = SD(hdf_path, SDC.READ)
 

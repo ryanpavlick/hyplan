@@ -126,7 +126,7 @@ def simulate_visits(
         else:
             day_sequence = list(range(day_start, day_stop + 1))
 
-        for seq_idx, current_day_of_year in enumerate(day_sequence):
+        for _seq_idx, current_day_of_year in enumerate(day_sequence):
             if crosses_year and current_day_of_year < day_start:
                 current_year = year + 1
             else:

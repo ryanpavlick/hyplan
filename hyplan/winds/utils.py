@@ -32,7 +32,7 @@ def _require_xarray() -> Any:
         raise HyPlanRuntimeError(
             "xarray and netcdf4 are required for gridded wind fields. "
             "Install them with: pip install hyplan[winds]"
-        )
+        ) from None
 
 
 def _earthdata_login() -> Any:

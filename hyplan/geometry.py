@@ -345,7 +345,7 @@ def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Cal
     try:
         utm_crs = get_utm_crs(lon, lat)
     except ValueError as e:
-        raise HyPlanValueError(f"Failed to determine UTM CRS for centroid ({lon}, {lat}): {e}")
+        raise HyPlanValueError(f"Failed to determine UTM CRS for centroid ({lon}, {lat}): {e}") from e
 
     # Define transformation functions
     wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
@@ -470,7 +470,7 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
         mrr_wgs84 = transform(utm_to_wgs84, mrr)
 
     except Exception as e:
-        raise HyPlanValueError(f"Failed to calculate minimum rotated rectangle: {e}")
+        raise HyPlanValueError(f"Failed to calculate minimum rotated rectangle: {e}") from e
 
     return mrr_wgs84
 
@@ -530,7 +530,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
         rotated_bbox_wgs84 = transform(utm_to_wgs84, rotated_bbox_utm)
 
     except Exception as e:
-        raise HyPlanValueError(f"Failed to compute rotated bounding rectangle: {e}")
+        raise HyPlanValueError(f"Failed to compute rotated bounding rectangle: {e}") from e
 
     return rotated_bbox_wgs84
 
@@ -658,7 +658,7 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
         buffered_polygon_wgs84 = transform(utm_to_wgs84, polygon_utm)
 
     except Exception as e:
-        raise HyPlanValueError(f"Failed to buffer polygon along azimuth: {e}")
+        raise HyPlanValueError(f"Failed to buffer polygon along azimuth: {e}") from e
 
     return buffered_polygon_wgs84
 

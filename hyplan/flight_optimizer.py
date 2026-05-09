@@ -498,7 +498,7 @@ def _find_closest_unvisited_item(
     best_node = None
     best_time = float("inf")
 
-    for item, key in item_keys:
+    for _item, key in item_keys:
         if key in visited_items:
             continue
         for endpoint in ["start", "end"]:
@@ -598,7 +598,7 @@ def _find_best_refuel_airport(
 
         # Check that after refueling here, at least one unvisited item is reachable.
         can_continue = False
-        for item, key in item_keys:
+        for _item, key in item_keys:
             if key in visited_items:
                 continue
             for endpoint in ["start", "end"]:
@@ -880,7 +880,7 @@ def greedy_optimize(
         logger.info(f"Day {day} complete: {daily_time:.2f}h flown")
 
     # Check for items that were never reachable
-    for item, key in item_keys:
+    for _item, key in item_keys:
         if key not in visited_items and key not in skipped_items:
             skipped_items.add(key)
 

@@ -42,9 +42,9 @@ from ._base import Sensor
 
 __all__ = [
     "AerosolWindProfiler",
-    "flag_awp_stable_segments",
     "awp_profile_locations_for_flight_line",
     "awp_profile_locations_for_plan",
+    "flag_awp_stable_segments",
 ]
 
 

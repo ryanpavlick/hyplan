@@ -79,6 +79,31 @@ markers = [
     "perf: performance regression gates (timing-sensitive; may flake on noisy runners)",
 ]
 
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Default ruff includes E (pycodestyle errors) and F (pyflakes).
+# Curated set of opt-in rules that catch real bugs.  Stylistic
+# rule sets (full SIM/RET/RUF/UP) are queued for a separate pass —
+# see TODO.md.
+extend-select = [
+    "B",    # flake8-bugbear (real bug-class issues)
+    "SIM115",  # open() without context manager (file-leak risk)
+]
+# B017 — test_radar uses pytest.raises(Exception) intentionally for
+#        broad-stack-trace assertions.
+# B008 — pint Quantity defaults like `ureg.feet` are common across
+#        the aircraft API; flagging them all is noisy.
+# B023 — function-uses-loop-variable: 2 sites in isochrone.py use
+#        the closure intentionally; verify before fixing.
+# B018 — 1 site in dubins3d.py is intentional XXX-debugging code.
+# B905 — zip-without-explicit-strict: ~40 sites; pure stylistic, low
+#        value to enforce in CI.
+# B007 — already fixed; keep enabled.
+# B904 — already fixed; keep enabled.
+ignore = ["B017", "B008", "B023", "B018", "B905"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true

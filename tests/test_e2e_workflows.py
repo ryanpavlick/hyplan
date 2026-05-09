@@ -346,8 +346,8 @@ class TestCloudScheduling:
         assert all_visited == {"SiteA", "SiteB", "SiteC"}
 
         # Each visit should have at least one day
-        for year, polygons in visit_tracker.items():
-            for poly_id, days in polygons.items():
+        for _year, polygons in visit_tracker.items():
+            for _poly_id, days in polygons.items():
                 assert len(days) >= 1
 
 

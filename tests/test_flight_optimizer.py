@@ -66,7 +66,7 @@ class TestBuildGraph:
 
     def test_edges_have_weight(self, b200, flight_lines, airports):
         G = build_graph(b200, flight_lines, airports)
-        for u, v, data in G.edges(data=True):
+        for _u, _v, data in G.edges(data=True):
             assert "weight" in data
             assert data["weight"] > 0
 

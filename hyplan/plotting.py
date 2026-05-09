@@ -27,16 +27,16 @@ from hyplan.waypoint import is_waypoint
 from hyplan.units import ureg
 
 __all__ = [
+    "map_airspace",
     "map_flight_lines",
-    "plot_flight_plan",
-    "terrain_profile_along_track",
-    "plot_altitude_trajectory",
     "plot_airspace_map",
+    "plot_altitude_trajectory",
+    "plot_conflict_matrix",
+    "plot_flight_plan",
     "plot_isochrone_static",
     "plot_oceanic_tracks",
     "plot_vertical_profile",
-    "plot_conflict_matrix",
-    "map_airspace",
+    "terrain_profile_along_track",
 ]
 
 

@@ -95,6 +95,31 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   vs 130 kt for WB-57; 126 kt vs 130-140 for G-V).  Add docstring
   notes that this reflects light science fuel state at landing.
 
+### Code quality polish
+
+* **Expanded ruff rule sets** — v1.6.x baseline enabled bugbear (`B`)
+  + `SIM115` (file-open without context manager).  Additional rule
+  sets queued, each behind ~10-50 minor stylistic fixes:
+  * `RUF` (ruff-specific): unused-unpacked-variable (~46 sites),
+    `[*]`-fixable simplifications (`RUF015` list-allocation, `RUF005`
+    collection-literal-concat, `RUF007` zip-pairwise, etc.).
+  * `RET` (flake8-return): RET504 unnecessary-assign (~14),
+    RET505 superfluous-else-return (~15, mostly `[*]`-fixable).
+  * `SIM` (flake8-simplify): SIM117 nested with-stmts (~11),
+    SIM108 if-else-as-expression (~9), SIM105 suppressible-exception
+    (~6), SIM102 collapsible-if (~2).
+  * `UP` (pyupgrade): only ~2 minor sites remain.
+  Pure cosmetic; no bug fixes; gradually opt in.
+
+* **B905 zip-without-explicit-strict** — ~40 sites.  `zip(a, b)` →
+  `zip(a, b, strict=True)` (length-mismatch detection) or
+  `strict=False` (silent truncation, current behavior).  Pure
+  defensive coding; would need per-site judgment of which.
+
+* **`tests/test_radar.py`** uses `pytest.raises(Exception)` 19
+  places (B017).  Would benefit from narrowing to specific
+  exception types where possible.
+
 ---
 
 ## Investigated, deferred to later

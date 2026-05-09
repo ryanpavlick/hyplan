@@ -17,7 +17,7 @@ import numpy as np
 
 from ._common import extract_waypoints, generate_wp_names
 
-__all__ = ["to_txt", "to_trackair"]
+__all__ = ["to_trackair", "to_txt"]
 
 
 def to_txt(

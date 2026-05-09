@@ -48,7 +48,7 @@ def _get_ee() -> Any:
             raise HyPlanRuntimeError(
                 "earthengine-api is required for cloud analysis. "
                 "Install it with: pip install hyplan[clouds]"
-            )
+            ) from None
         try:
             _ee_mod.Initialize()
         except Exception as e:
@@ -488,7 +488,7 @@ def fetch_cloud_fraction_spatial(
         raise HyPlanRuntimeError(
             "xarray and numpy are required for spatial cloud maps. "
             "Install with: pip install xarray numpy"
-        )
+        ) from None
 
     if satellite not in _VALID_SATELLITES:
         raise HyPlanValueError(

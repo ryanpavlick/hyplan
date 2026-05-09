@@ -457,7 +457,7 @@ class PhaseBankAngles:
             raise HyPlanValueError(
                 f"Unknown phase {phase!r}; expected one of "
                 "'climb', 'cruise', 'descent', 'approach'."
-            )
+            ) from None
 
 
 @dataclass
@@ -1160,7 +1160,7 @@ class Aircraft:
 
         mode = self.climb_profile._mode
 
-        if mode == "full" or mode == "constant" and len(self.climb_profile.points) > 2:
+        if mode == "full" or (mode == "constant" and len(self.climb_profile.points) > 2):
             # Numerical integration for multi-point or full profiles
             altitudes = np.linspace(
                 start_altitude.magnitude, end_altitude.magnitude, n_points

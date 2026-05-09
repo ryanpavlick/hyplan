@@ -18,23 +18,23 @@ from ..units import ureg
 from ._base import Sensor
 
 __all__ = [
-    "LineScanner",
-    "AVIRISClassic",
-    "AVIRISNextGen",
     "AVIRIS3",
     "AVIRIS5",
-    "HyTES",
-    "PRISM",
-    "MASTER",
-    "GLiHT_VNIR",
-    "GLiHT_Thermal",
-    "GLiHT_SIF",
-    "GCAS_UV_Vis",
     "GCAS_VNIR",
-    "eMAS",
+    "MASTER",
     "PICARD",
-    "create_sensor",
+    "PRISM",
     "SENSOR_REGISTRY",
+    "AVIRISClassic",
+    "AVIRISNextGen",
+    "GCAS_UV_Vis",
+    "GLiHT_SIF",
+    "GLiHT_Thermal",
+    "GLiHT_VNIR",
+    "HyTES",
+    "LineScanner",
+    "create_sensor",
+    "eMAS",
 ]
 
 

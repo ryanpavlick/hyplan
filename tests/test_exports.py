@@ -2,6 +2,7 @@
 
 import datetime
 import os
+from pathlib import Path
 
 import pytest
 
@@ -573,7 +574,7 @@ class TestToTrackAir:
         plan, _ = flight_plan_with_lines
         path = str(tmp_path / "sections.txt")
         to_trackair(plan, path, mission_name="TEST", author="R. Pavlick")
-        text = open(path).read()
+        text = Path(path).read_text()
         assert "[general]" in text
         assert "[spex]" in text
         assert "[strips]" in text
@@ -582,7 +583,7 @@ class TestToTrackAir:
         plan, _ = flight_plan_with_lines
         path = str(tmp_path / "meta.txt")
         to_trackair(plan, path, mission_name="SCOAPE2", author="A. Chlus")
-        text = open(path).read()
+        text = Path(path).read_text()
         assert "Flight plan name = SCOAPE2" in text
         assert "Designed by = A. Chlus" in text
 
@@ -591,7 +592,7 @@ class TestToTrackAir:
         path = str(tmp_path / "strips.txt")
         to_trackair(plan, path)
         n_lines = plan[plan["segment_type"] == "flight_line"].shape[0]
-        text = open(path).read()
+        text = Path(path).read_text()
         for i in range(1, n_lines + 1):
             assert f"\n{i}=" in text
 
@@ -600,7 +601,7 @@ class TestToTrackAir:
         plan, _ = flight_plan_with_lines
         path = str(tmp_path / "fmt.txt")
         to_trackair(plan, path)
-        text = open(path).read()
+        text = Path(path).read_text()
         in_strips = False
         for line in text.splitlines():
             if line.strip() == "[strips]":
@@ -617,7 +618,7 @@ class TestToTrackAir:
         plan, _ = flight_plan_with_lines
         path = str(tmp_path / "sensor.txt")
         to_trackair(plan, path, sensor=AVIRIS3())
-        text = open(path).read()
+        text = Path(path).read_text()
         # FOV and swath width should be non-empty numbers
         for line in text.splitlines():
             if line.startswith("Field of view ="):
@@ -629,7 +630,7 @@ class TestToTrackAir:
         plan, _ = flight_plan_with_lines
         path = str(tmp_path / "nosensor.txt")
         to_trackair(plan, path)
-        text = open(path).read()
+        text = Path(path).read_text()
         for line in text.splitlines():
             if line.startswith("Field of view ="):
                 assert line.split("=", 1)[1].strip() == ""

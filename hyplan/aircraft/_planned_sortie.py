@@ -716,7 +716,7 @@ def parse_green_card_pdf(path: Path | str) -> PlannedSortie:
             raise ValueError(f"Green Card PDF is empty: {path}")
         header_text = pdf.pages[0].extract_text() or ""
 
-        for pi, page in enumerate(pdf.pages):
+        for _pi, page in enumerate(pdf.pages):
             tables = page.extract_tables()
             for tab in tables:
                 for row in tab:

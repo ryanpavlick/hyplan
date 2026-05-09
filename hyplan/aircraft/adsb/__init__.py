@@ -25,11 +25,11 @@ from .pipeline import fit_aircraft_from_adsb
 #   from hyplan.aircraft.adsb.io import load_flights
 
 __all__ = [
-    "fit_aircraft_from_adsb",
-    "label_phases",
-    "reconstruct_airdata",
-    "fit_schedules",
     "FitResult",
     "FlightPhaseData",
     "ScheduleFitMetrics",
+    "fit_aircraft_from_adsb",
+    "fit_schedules",
+    "label_phases",
+    "reconstruct_airdata",
 ]

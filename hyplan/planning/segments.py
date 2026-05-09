@@ -36,7 +36,7 @@ def _direct_segment_record(
     wind_speed: Quantity | None = None,
     wind_direction: float | None = None,
     wind_source: WindField | None = None,
-    segment_time: "datetime.datetime | None" = None,
+    segment_time: datetime.datetime | None = None,
 ) -> dict[str, Any]:
     """Create a direct great-circle segment between two pattern waypoints.
 
@@ -106,7 +106,7 @@ def loiter_orbit_geometry(
     n_points: int = 72,
     *,
     phase: str = "cruise",
-) -> "LineString":
+) -> LineString:
     """Closed ground-track polygon for a Waypoint loiter (right-hand orbit).
 
     Computes the turn radius from the aircraft's per-phase bank angle
@@ -264,7 +264,7 @@ def process_flight_phase(
     # beyond the horizontal track), so time is a more reliable splitting key.
     phase_items = list(phase_info["phases"].items())
     phase_times = []
-    for phase, details in phase_items:
+    for _phase, details in phase_items:
         dt = (details["end_time"] - details["start_time"]).m_as(ureg.minute)
         phase_times.append(dt)
 

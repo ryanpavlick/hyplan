@@ -71,7 +71,7 @@ def _mod2pi(angle: float) -> float:
 
 class _DubinsSegment:
     """Result of a 2D Dubins path computation (t, p, q segment lengths)."""
-    __slots__ = ("t", "p", "q", "length", "case")
+    __slots__ = ("case", "length", "p", "q", "t")
 
     def __init__(self, t: float, p: float, q: float, length: float, case: str):
         self.t = t

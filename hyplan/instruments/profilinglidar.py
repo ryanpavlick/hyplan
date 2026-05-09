@@ -41,7 +41,7 @@ from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..units import ureg
 from ._base import Sensor
 
-__all__ = ["ProfilingLidar", "HSRL2", "HALO", "CPL"]
+__all__ = ["CPL", "HALO", "HSRL2", "ProfilingLidar"]
 
 
 def _as_quantity(value: object, unit: str, label: str) -> Quantity:

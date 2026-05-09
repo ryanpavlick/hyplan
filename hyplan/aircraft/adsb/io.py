@@ -27,7 +27,7 @@ def _require_traffic() -> Any:
         raise HyPlanRuntimeError(
             "The 'traffic' library is required for ADS-B ingestion. "
             "Install it with:  pip install hyplan[adsb]"
-        )
+        ) from None
 
 
 def load_flights(

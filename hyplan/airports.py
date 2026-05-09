@@ -27,9 +27,17 @@ from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .geometry import haversine
 
 __all__ = [
-    "Airport", "initialize_data", "find_nearest_airport", "find_nearest_airports",
-    "airports_within_radius", "get_airports", "get_runways", "get_airport_details",
-    "get_longest_runway", "generate_geojson", "get_runway_details"
+    "Airport",
+    "airports_within_radius",
+    "find_nearest_airport",
+    "find_nearest_airports",
+    "generate_geojson",
+    "get_airport_details",
+    "get_airports",
+    "get_longest_runway",
+    "get_runway_details",
+    "get_runways",
+    "initialize_data"
 ]
 
 OUR_AIRPORTS_URL = "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/airports.csv"
@@ -138,7 +146,7 @@ class Airport:
         try:
             self._geometry = Point(float(longitude), float(latitude))
         except (TypeError, ValueError):
-            raise HyPlanValueError(f"Invalid longitude/latitude for airport {icao}: {longitude}, {latitude}")
+            raise HyPlanValueError(f"Invalid longitude/latitude for airport {icao}: {longitude}, {latitude}") from None
 
         self._icao = airport_data['icao_code']
         self._iata = airport_data['iata_code']
@@ -297,7 +305,7 @@ def load_airports(
     try:
         df_airports = pd.read_csv(filepath, encoding="ISO-8859-1")
     except FileNotFoundError:
-        raise FileNotFoundError(f"The file {filepath} does not exist. Please run initialize_data().")
+        raise FileNotFoundError(f"The file {filepath} does not exist. Please run initialize_data().") from None
 
     df_airports['icao_code'] = df_airports['ident']
     df_airports.rename(columns={"latitude_deg": "latitude", "longitude_deg": "longitude"}, inplace=True)
@@ -346,7 +354,7 @@ def load_runways(filepath: str) -> pd.DataFrame:
     try:
         df_runways = pd.read_csv(filepath, encoding="ISO-8859-1")
     except FileNotFoundError:
-        raise FileNotFoundError(f"The file {filepath} does not exist. Please run initialize_data().")
+        raise FileNotFoundError(f"The file {filepath} does not exist. Please run initialize_data().") from None
 
     columns_to_keep = ['airport_ident', 'length_ft', 'width_ft', 'surface',
                        'le_heading_degT', 'he_heading_degT']

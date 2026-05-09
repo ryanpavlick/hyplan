@@ -43,16 +43,16 @@ from .exceptions import HyPlanRuntimeError, HyPlanValueError
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "SatelliteInfo",
     "SATELLITE_REGISTRY",
-    "get_satellite",
-    "fetch_tle",
+    "SatelliteInfo",
     "clear_tle_cache",
     "compute_ground_track",
-    "compute_swath_footprint",
-    "find_overpasses",
-    "find_all_overpasses",
     "compute_overpass_overlap",
+    "compute_swath_footprint",
+    "fetch_tle",
+    "find_all_overpasses",
+    "find_overpasses",
+    "get_satellite",
     "overpasses_to_kml",
 ]
 

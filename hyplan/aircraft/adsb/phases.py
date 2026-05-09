@@ -168,7 +168,7 @@ def _merge_short_phases(
         runs = _find_runs(phases)
         if len(runs) <= 1:
             break
-        for i, (start, end, label) in enumerate(runs):
+        for i, (start, end, _label) in enumerate(runs):
             duration = ts_sec[end - 1] - ts_sec[start]
             if duration >= min_seconds:
                 continue

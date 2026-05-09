@@ -21,10 +21,10 @@ from .terrain import ray_terrain_intersection
 from .geometry import get_utm_transforms, process_linestring
 
 __all__ = [
-    "generate_swath_polygon",
-    "calculate_swath_widths",
     "analyze_swath_gaps_overlaps",
+    "calculate_swath_widths",
     "export_polygon_to_kml",
+    "generate_swath_polygon",
 ]
 
 

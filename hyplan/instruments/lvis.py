@@ -33,12 +33,12 @@ from ._base import Sensor
 from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
-    "LVISLens",
-    "LVIS_LENS_NARROW",
-    "LVIS_LENS_MEDIUM",
-    "LVIS_LENS_WIDE",
-    "LVIS_LENSES",
     "LVIS",
+    "LVIS_LENSES",
+    "LVIS_LENS_MEDIUM",
+    "LVIS_LENS_NARROW",
+    "LVIS_LENS_WIDE",
+    "LVISLens",
 ]
 
 

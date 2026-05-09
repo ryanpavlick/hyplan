@@ -15,9 +15,9 @@ Exception hierarchy::
 
 __all__ = [
     "HyPlanError",
-    "HyPlanValueError",
-    "HyPlanTypeError",
     "HyPlanRuntimeError",
+    "HyPlanTypeError",
+    "HyPlanValueError",
 ]
 
 

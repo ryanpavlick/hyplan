@@ -18,12 +18,12 @@ import pandas as pd
 from ..units import ureg
 
 __all__ = [
-    "extract_waypoints",
-    "generate_wp_names",
+    "_compute_solar_azimuth",
+    "_compute_sza",
     "_safe_float",
     "_utc_fraction",
-    "_compute_sza",
-    "_compute_solar_azimuth",
+    "extract_waypoints",
+    "generate_wp_names",
 ]
 
 

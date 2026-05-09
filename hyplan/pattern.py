@@ -392,8 +392,8 @@ def _invoke_generator(generator: Any, kind: str, params: dict[str, Any]) -> Patt
 
 
 __all__ = [
-    "Pattern",
     "LINE_BASED_KINDS",
-    "WAYPOINT_BASED_KINDS",
     "PATTERN_KINDS",
+    "WAYPOINT_BASED_KINDS",
+    "Pattern",
 ]

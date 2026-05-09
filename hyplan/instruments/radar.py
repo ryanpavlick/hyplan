@@ -29,11 +29,11 @@ from ._base import Sensor
 from ..exceptions import HyPlanValueError
 
 __all__ = [
+    "RadarExclusionConflict",
     "SidelookingRadar",
+    "UAVSAR_Kaband",
     "UAVSAR_Lband",
     "UAVSAR_Pband",
-    "UAVSAR_Kaband",
-    "RadarExclusionConflict",
     "check_lband_radar_exclusions",
 ]
 
