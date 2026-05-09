@@ -20,7 +20,6 @@ import pandas as pd
 import logging
 from pathlib import Path
 from shapely.geometry import Point
-from typing import List, Union
 
 from .units import convert_distance, ureg
 from .download import download_file
@@ -43,18 +42,18 @@ logger = logging.getLogger(__name__)
 class _AirportDB:
     """Encapsulated airport and runway data with thread-safe lazy initialization."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self.gdf_airports: gpd.GeoDataFrame = None
         self.df_runways: pd.DataFrame = None
 
     def load(
         self,
-        countries: List[str] | None = None,
+        countries: list[str] | None = None,
         min_runway_length: int | None = None,
-        runway_surface: Union[str, List[str]] | None = None,
-        airport_types: List[str] | None = None,
-        cache_dir: Union[str, Path] | None = None,
+        runway_surface: str | list[str] | None = None,
+        airport_types: list[str] | None = None,
+        cache_dir: str | Path | None = None,
         refresh: bool = False,
     ) -> None:
         """Download (if needed) and load airport/runway data."""
@@ -152,7 +151,7 @@ class Airport:
             self._elevation = None
         else:
             self._elevation_ft = float(elevation_ft)
-            self._elevation = (self._elevation_ft * ureg.foot).to(ureg.meter)  # type: ignore[attr-defined]
+            self._elevation = (self._elevation_ft * ureg.foot).to(ureg.meter)
 
     def __repr__(self):
         return f"<Airport {self._icao} - {self._name}>"
@@ -215,7 +214,7 @@ class Airport:
         ]
 
 
-def _filter_airports_by_country(df_airports: pd.DataFrame, countries: List[str]) -> pd.DataFrame:
+def _filter_airports_by_country(df_airports: pd.DataFrame, countries: list[str]) -> pd.DataFrame:
     """
     Filter airports DataFrame to only include airports in the specified countries.
 
@@ -228,7 +227,7 @@ def _filter_airports_by_country(df_airports: pd.DataFrame, countries: List[str])
     """
     return df_airports[df_airports['iso_country'].isin(countries)]
 
-def _filter_airports_by_type(df_airports: pd.DataFrame, airport_types: List[str]) -> pd.DataFrame:
+def _filter_airports_by_type(df_airports: pd.DataFrame, airport_types: list[str]) -> pd.DataFrame:
     """
     Filter airports DataFrame to only include specified airport types.
 
@@ -241,7 +240,7 @@ def _filter_airports_by_type(df_airports: pd.DataFrame, airport_types: List[str]
     """
     return df_airports[df_airports['type'].isin(airport_types)]
 
-def _filter_runways(df_runways: pd.DataFrame, length_ft: int | None = None, surface: Union[str, List[str]] | None = None, partial_match: bool = False) -> pd.DataFrame:
+def _filter_runways(df_runways: pd.DataFrame, length_ft: int | None = None, surface: str | list[str] | None = None, partial_match: bool = False) -> pd.DataFrame:
     """
     Filter runways based on minimum length and/or surface type.
 
@@ -270,10 +269,10 @@ def _filter_runways(df_runways: pd.DataFrame, length_ft: int | None = None, surf
 
 def load_airports(
     filepath: str,
-    countries: List[str] | None = None,
+    countries: list[str] | None = None,
     min_runway_length: int | None = None,
-    runway_surface: Union[str, List[str]] | None = None,
-    airport_types: List[str] | None = None,
+    runway_surface: str | list[str] | None = None,
+    airport_types: list[str] | None = None,
     runways_filepath: str | None = None
 ) -> gpd.GeoDataFrame:
     """
@@ -355,11 +354,11 @@ def load_runways(filepath: str) -> pd.DataFrame:
     return df_runways
 
 def initialize_data(
-    countries: List[str] | None = None,
+    countries: list[str] | None = None,
     min_runway_length: int | None = None,
-    runway_surface: Union[str, List[str]] | None = None,
-    airport_types: List[str] | None = None,
-    cache_dir: Union[str, Path] | None = None,
+    runway_surface: str | list[str] | None = None,
+    airport_types: list[str] | None = None,
+    cache_dir: str | Path | None = None,
     refresh: bool = False
 ) -> None:
     """Initialize airport and runway data with filtering options.
@@ -393,7 +392,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     _, tree_idx = gdf_airports.sindex.nearest(point)
     return gdf_airports.iloc[tree_idx[0]]['icao_code']  # type: ignore[no-any-return]
 
-def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
+def find_nearest_airports(lat: float, lon: float, n: int = 5) -> list[str]:
     """Find the N nearest airports to a given latitude and longitude.
 
     Returns:
@@ -408,7 +407,7 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> List[str]:
 def airports_within_radius(
     lat: float, lon: float, radius: float, unit: str = "kilometers",
     return_details: bool = False
-) -> Union[List[str], gpd.GeoDataFrame]:
+) -> list[str] | gpd.GeoDataFrame:
     """Find all airports within a specified radius of a given point.
 
     Args:
@@ -451,7 +450,7 @@ def get_runways() -> pd.DataFrame:
     """Get the initialized DataFrame of runways."""
     return _db.require_runways()
 
-def get_airport_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
+def get_airport_details(icao_codes: str | list[str]) -> pd.DataFrame:
     """Get details of airports for given ICAO code(s)."""
     gdf_airports = _db.require_airports()
     if isinstance(icao_codes, str):
@@ -470,7 +469,7 @@ def get_longest_runway(icao: str) -> float | None:
         return None
     return float(rows['length_ft'].max())
 
-def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, List[str]] | None = None) -> None:
+def generate_geojson(filepath: str = "airports.geojson", icao_codes: str | list[str] | None = None) -> None:
     """
     Generate a GeoJSON file of the airports using GeoPandas with CRS explicitly set to EPSG:4326.
 
@@ -496,7 +495,7 @@ def generate_geojson(filepath: str = "airports.geojson", icao_codes: Union[str, 
     subset.to_file(filepath, driver="GeoJSON")
     logger.info(f"GeoJSON file generated at {filepath} with CRS EPSG:4326 and {len(subset)} airports.")
 
-def get_runway_details(icao_codes: Union[str, List[str]]) -> pd.DataFrame:
+def get_runway_details(icao_codes: str | list[str]) -> pd.DataFrame:
     """
     Retrieve details of all runways for one or more airports.
 

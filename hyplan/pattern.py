@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, cast
+from typing import Any, cast
 
 from .flight_line import FlightLine
 from .waypoint import Waypoint
@@ -58,8 +58,8 @@ class Pattern:
     name: str
     params: dict
     pattern_id: str = ""
-    lines: Dict[str, FlightLine] = field(default_factory=dict)
-    waypoints: List[Waypoint] = field(default_factory=list)
+    lines: dict[str, FlightLine] = field(default_factory=dict)
+    waypoints: list[Waypoint] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.kind not in PATTERN_KINDS:
@@ -85,7 +85,7 @@ class Pattern:
         return self.kind in WAYPOINT_BASED_KINDS
 
     @property
-    def line_ids(self) -> List[str]:
+    def line_ids(self) -> list[str]:
         return list(self.lines.keys())
 
     def elements(self):
@@ -186,7 +186,7 @@ class Pattern:
         return out
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Pattern":
+    def from_dict(cls, data: dict) -> Pattern:
         """Reconstruct a Pattern from a dict produced by :meth:`to_dict`."""
         kind = data["kind"]
         pattern = cls(
@@ -264,7 +264,7 @@ class Pattern:
                 })
         return {"type": "FeatureCollection", "features": features}
 
-    def regenerate(self, **overrides) -> "Pattern":
+    def regenerate(self, **overrides) -> Pattern:
         """Return a new Pattern by re-invoking the generator with params.
 
         Any keyword overrides are merged into :attr:`params` for the
@@ -306,11 +306,11 @@ def _waypoint_from_dict(d: dict) -> Waypoint:
     )
 
 
-def _invoke_generator(generator: Any, kind: str, params: dict) -> "Pattern":
+def _invoke_generator(generator: Any, kind: str, params: dict) -> Pattern:
     """Re-invoke a generator from a stored params dict (meters/degrees only)."""
     center = (params["center_lat"], params["center_lon"])
     heading = params.get("heading", 0.0)
-    # type: ignore[no-any-return]
+
     if kind == "rosette":
         return cast("Pattern", generator(
             center=center,

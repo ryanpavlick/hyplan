@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 from pint import Quantity
@@ -30,9 +30,9 @@ def _direct_segment_record(
     end_wp: Waypoint,
     aircraft: Aircraft,
     segment_type: str,
-    wind_speed: Optional[Quantity] = None,
-    wind_direction: Optional[float] = None,
-    wind_source: Optional["WindField"] = None,
+    wind_speed: Quantity | None = None,
+    wind_direction: float | None = None,
+    wind_source: WindField | None = None,
     segment_time=None,
 ) -> dict:
     """Create a direct great-circle segment between two pattern waypoints.
@@ -227,12 +227,12 @@ def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> di
 
 
 def process_flight_phase(
-    start: Union[Airport, Waypoint],
-    end: Union[Airport, Waypoint],
+    start: Airport | Waypoint,
+    end: Airport | Waypoint,
     phase_info: dict,
     segment_name: str,
     override_segment_type: str | None = None,
-) -> List[dict]:
+) -> list[dict]:
     """Process a flight phase using the detailed ``phase_info``.
 
     For each sub-phase in ``phase_info["phases"]``, this function determines

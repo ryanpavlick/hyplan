@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Literal, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from ..winds.base import WindField
@@ -56,20 +56,28 @@ class SourceRecord:
 
     Args:
         source_type: One of ``"poh"``, ``"afm"``, ``"brochure"``,
-            ``"adsb"``, ``"iwg1"``, ``"mission_log"``, ``"expert"``,
-            ``"derived"``.  ``"iwg1"`` denotes calibration from NASA's
-            Inter-agency Working Group 1 in-situ flight log format
-            (per-sortie .txt CSVs of measured TAS, wind, attitude,
-            etc.; see ``hyplan.aircraft.iwg1.load_iwg1``).
+            ``"adsb"``, ``"iwg1"``, ``"icartt"``, ``"netcdf"``,
+            ``"pangaea"``, ``"mission_log"``, ``"expert"``,
+            ``"inferred"``, ``"derived"``.  ``"iwg1"`` denotes
+            calibration from NASA's Inter-agency Working Group 1
+            in-situ flight log format (per-sortie .txt CSVs of measured
+            TAS, wind, attitude, etc.; see
+            ``hyplan.aircraft.iwg1.load_iwg1``).
         reference: Free-text citation.
         notes: Additional context.
         confidence: 0.0 (no confidence) to 1.0 (fully validated).
+        url: Landing-page URL for the data archive or product.  Empty
+            string if not applicable / unknown.
+        doi: DOI of the cited dataset, e.g. ``"10.5285/abcd1234..."``.
+            Empty string if not DOI-versioned.
     """
 
     source_type: str
     reference: str
     notes: str = ""
     confidence: float = 0.5
+    url: str = ""
+    doi: str = ""
 
 
 @dataclass
@@ -106,7 +114,7 @@ class CasMachSchedule:
     crossover_ft: float
 
     def __post_init__(self) -> None:
-        self.cas = self.cas.to(ureg.knot)  # type: ignore[assignment]
+        self.cas = self.cas.to(ureg.knot)
 
     def tas_at(self, altitude: Quantity) -> Quantity:
         """True airspeed at *altitude* under ISA."""
@@ -130,7 +138,7 @@ class TasSchedule:
             :class:`pint.Quantity`.  Altitudes must be ascending when N ≥ 2.
     """
 
-    points: List[Tuple[Quantity, Quantity]]
+    points: list[tuple[Quantity, Quantity]]
 
     def __post_init__(self) -> None:
         if len(self.points) < 1:
@@ -149,7 +157,7 @@ class TasSchedule:
     def tas_at(self, altitude: Quantity) -> Quantity:
         """Interpolated TAS at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
-        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot  # type: ignore[no-any-return]
+        return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot
 
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
@@ -177,7 +185,7 @@ class VerticalProfile:
         source: Free-text citation for traceability.
     """
 
-    points: List[Tuple[Quantity, Quantity]]
+    points: list[tuple[Quantity, Quantity]]
     source: str = ""
 
     def __post_init__(self) -> None:
@@ -207,17 +215,17 @@ class VerticalProfile:
         """Interpolated vertical rate at *altitude*.  Clamps at endpoints."""
         alt_ft = altitude.m_as(ureg.feet)
         fpm = float(np.interp(alt_ft, self._alts_ft, self._rates_fpm))
-        return fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
+        return fpm * ureg.feet / ureg.minute
 
     @property
     def sea_level_rate(self) -> Quantity:
         """Rate at the lowest altitude breakpoint (first row)."""
-        return self._rates_fpm[0] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
+        return self._rates_fpm[0] * ureg.feet / ureg.minute
 
     @property
     def ceiling_rate(self) -> Quantity:
         """Rate at the highest altitude breakpoint (last row)."""
-        return self._rates_fpm[-1] * ureg.feet / ureg.minute  # type: ignore[no-any-return]
+        return self._rates_fpm[-1] * ureg.feet / ureg.minute
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +304,7 @@ class ApproachProfile:
     def approx_vertical_rate_at(
         self,
         altitude_agl: Quantity,
-        groundspeed: Optional[Quantity] = None,
+        groundspeed: Quantity | None = None,
     ) -> Quantity:
         """Approximate vertical rate on a constant-glideslope path.
 
@@ -308,9 +316,9 @@ class ApproachProfile:
         speed = groundspeed if groundspeed is not None else self.tas_at(altitude_agl)
         speed_fpm = speed.m_as(ureg.feet / ureg.minute)
         vs_fpm = speed_fpm * np.tan(np.radians(self.glideslope_deg))
-        return vs_fpm * ureg.feet / ureg.minute  # type: ignore[no-any-return]
+        return vs_fpm * ureg.feet / ureg.minute
 
-    def time_to_touchdown(self, groundspeed: Optional[Quantity] = None) -> Quantity:
+    def time_to_touchdown(self, groundspeed: Quantity | None = None) -> Quantity:
         """Integrate 1/VS from top_of_approach down to 0 ft AGL.
 
         Uses the same TAS-vs-groundspeed convention as
@@ -334,8 +342,8 @@ class ApproachProfile:
                 "at every breakpoint."
             )
         # trapezoidal integration of 1/VS over altitude (ft) → minutes.
-        minutes = float(np.trapezoid(1.0 / vs_fpm, alts_ft))  # type: ignore[attr-defined]
-        return minutes * ureg.minute  # type: ignore[no-any-return]
+        minutes = float(np.trapezoid(1.0 / vs_fpm, alts_ft))
+        return minutes * ureg.minute
 
 
 # ---------------------------------------------------------------------------
@@ -414,10 +422,10 @@ class ClimbOutPolicy:
     """
 
     absorbed_in_climb_profile: bool
-    typical_holds: List[Tuple[Quantity, Quantity]] = field(default_factory=list)
+    typical_holds: list[tuple[Quantity, Quantity]] = field(default_factory=list)
     typical_overhead_min: float = 0.0
     notes: str = ""
-    explicit_climb_plan: Optional[ClimbPlan] = None
+    explicit_climb_plan: ClimbPlan | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -568,16 +576,16 @@ class Aircraft:
         descent_profile: VerticalProfile,
         turn_model: TurnModel,
         engine_type: Literal["jet", "turboprop", "piston"],
-        confidence: Optional[PerformanceConfidence] = None,
-        sources: Optional[List[SourceRecord]] = None,
-        range: Optional[Quantity] = None,
-        endurance: Optional[Quantity] = None,
-        useful_payload: Optional[Quantity] = None,
-        approach_profile: Optional[ApproachProfile] = None,
-        descent_path_angle_max_deg: Optional[float] = None,
-        climb_path_angle_max_deg: Optional[float] = None,
-        typical_climb_out: Optional[ClimbOutPolicy] = None,
-        stall_speed_cas: Optional[Quantity] = None,
+        confidence: PerformanceConfidence | None = None,
+        sources: list[SourceRecord] | None = None,
+        range: Quantity | None = None,
+        endurance: Quantity | None = None,
+        useful_payload: Quantity | None = None,
+        approach_profile: ApproachProfile | None = None,
+        descent_path_angle_max_deg: float | None = None,
+        climb_path_angle_max_deg: float | None = None,
+        typical_climb_out: ClimbOutPolicy | None = None,
+        stall_speed_cas: Quantity | None = None,
         calibration_status: Literal["calibrated", "inferred", "uncalibrated"] = "uncalibrated",
     ):
         if not isinstance(aircraft_type, str):
@@ -690,11 +698,11 @@ class Aircraft:
         # to 1 ft to avoid floating-point misses.  Cleared automatically
         # when the aircraft is garbage-collected.
         self._climb_cache: dict[
-            tuple[float, float, Optional[float], Optional[float]],
+            tuple[float, float, float | None, float | None],
             tuple[Quantity, Quantity],
         ] = {}
         self._descend_cache: dict[
-            tuple[float, float, Optional[float], Optional[float]],
+            tuple[float, float, float | None, float | None],
             tuple[Quantity, Quantity],
         ] = {}
 
@@ -847,8 +855,8 @@ class Aircraft:
     def approach_vertical_rate_at(
         self,
         altitude_agl: Quantity,
-        groundspeed: Optional[Quantity] = None,
-    ) -> Optional[Quantity]:
+        groundspeed: Quantity | None = None,
+    ) -> Quantity | None:
         """Approximate vertical rate on the terminal approach.
 
         When :attr:`approach_profile` is set, returns the geometric
@@ -998,7 +1006,7 @@ class Aircraft:
     def _along_track_ground_distance(
         horizontal_air_speed: Quantity,
         phase_time: Quantity,
-        wind_along_track: Optional[Quantity],
+        wind_along_track: Quantity | None,
     ) -> Quantity:
         """Convert horizontal air speed + phase time to *ground*
         distance, applying a signed along-track wind when supplied.
@@ -1032,8 +1040,8 @@ class Aircraft:
         self,
         start_altitude: Quantity,
         end_altitude: Quantity,
-        true_air_speed: Optional[Quantity] = None,
-        wind_along_track: Optional[Quantity] = None,
+        true_air_speed: Quantity | None = None,
+        wind_along_track: Quantity | None = None,
     ) -> tuple[Quantity, Quantity]:
         """Estimate time and horizontal distance during a continuous climb.
 
@@ -1054,8 +1062,8 @@ class Aircraft:
         For staged climbs with intermediate level-off pauses (e.g., a
         weight-driven hold during climb-out), see :meth:`step_climb`.
         """
-        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
-        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
+        start_altitude = start_altitude.to(ureg.feet)
+        end_altitude = end_altitude.to(ureg.feet)
 
         # Memoize on the (start_alt, end_alt, TAS, wind) tuple.  Hot
         # path for isochrone bisections that re-call _climb with
@@ -1075,7 +1083,7 @@ class Aircraft:
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.climb_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
 
         if end_altitude > self.service_ceiling:
             raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
@@ -1116,7 +1124,7 @@ class Aircraft:
                 ).m_as(ureg.feet / ureg.minute)
                 for a in alts_ft
             ])
-            minutes = float(np.trapezoid(1.0 / rocs_fpm, alts_ft))  # type: ignore[attr-defined]
+            minutes = float(np.trapezoid(1.0 / rocs_fpm, alts_ft))
             time_to_climb = minutes * ureg.minute
 
         # Horizontal distance using average climb angle, with optional
@@ -1144,8 +1152,8 @@ class Aircraft:
 
         Returns ``(times, altitudes)`` as numpy arrays in minutes and feet.
         """
-        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
-        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
+        start_altitude = start_altitude.to(ureg.feet)
+        end_altitude = end_altitude.to(ureg.feet)
 
         if end_altitude <= start_altitude:
             return np.array([0.0]), np.array([start_altitude.magnitude])
@@ -1208,9 +1216,9 @@ class Aircraft:
         self,
         start_altitude: Quantity,
         end_altitude: Quantity,
-        pauses: List[Tuple[Quantity, Quantity]],
-        wind_along_track: Optional[Quantity] = None,
-    ) -> Tuple[Quantity, Quantity]:
+        pauses: list[tuple[Quantity, Quantity]],
+        wind_along_track: Quantity | None = None,
+    ) -> tuple[Quantity, Quantity]:
         """Total time and forward distance for a staged climb with pauses.
 
         Real high-altitude aircraft step-climb out of weight-limited
@@ -1295,8 +1303,8 @@ class Aircraft:
         self,
         start_altitude: Quantity,
         end_altitude: Quantity,
-        true_air_speed: Optional[Quantity] = None,
-        wind_along_track: Optional[Quantity] = None,
+        true_air_speed: Quantity | None = None,
+        wind_along_track: Quantity | None = None,
     ) -> tuple[Quantity, Quantity]:
         """Estimate time and horizontal distance during descent.
 
@@ -1309,8 +1317,8 @@ class Aircraft:
         ``ground_speed × time``; default ``None`` is still-air
         (backwards-compatible).
         """
-        start_altitude = start_altitude.to(ureg.feet)  # type: ignore[assignment]
-        end_altitude = end_altitude.to(ureg.feet)  # type: ignore[assignment]
+        start_altitude = start_altitude.to(ureg.feet)
+        end_altitude = end_altitude.to(ureg.feet)
 
         cache_key = (
             float(start_altitude.m_as(ureg.feet)),
@@ -1327,7 +1335,7 @@ class Aircraft:
         if true_air_speed is None:
             avg_alt = (start_altitude + end_altitude) / 2
             true_air_speed = self.descent_speed_at(avg_alt)
-        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)  # type: ignore[assignment]
+        true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
 
         if start_altitude <= end_altitude:
             return 0 * ureg.minute, 0 * ureg.nautical_mile
@@ -1351,7 +1359,7 @@ class Aircraft:
                 ).m_as(ureg.feet / ureg.minute)
                 for a in alts_ft
             ])
-            minutes = float(np.trapezoid(1.0 / rods_fpm, alts_ft))  # type: ignore[attr-defined]
+            minutes = float(np.trapezoid(1.0 / rods_fpm, alts_ft))
             time_to_descend = minutes * ureg.minute
 
         avg_rod = self.descent_profile.rate_at(
@@ -1376,10 +1384,10 @@ class Aircraft:
         self,
         airport: Airport,
         waypoint: Waypoint,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
-        climb_plan: Union["ClimbPlan", str, None] = "auto",
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
+        climb_plan: ClimbPlan | str | None = "auto",
         n_samples: int = 20,
     ) -> dict:
         """Calculate time from takeoff to the first waypoint.
@@ -1430,9 +1438,9 @@ class Aircraft:
         self,
         waypoint: Waypoint,
         airport: Airport,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
         n_samples: int = 20,
     ) -> dict:
         """Calculate time from the last waypoint back to the airport.
@@ -1538,10 +1546,10 @@ class Aircraft:
         end_waypoint: Waypoint,
         cruise_altitude: Quantity,
         *,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
-    ) -> Optional[Tuple[float, float]]:
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
+    ) -> tuple[float, float] | None:
         """Resolve the cruise (u, v) wind tuple for the 2D Dubins solver.
 
         ``wind`` and ``wind_source`` are mutually exclusive (raises
@@ -1596,10 +1604,10 @@ class Aircraft:
         *,
         cruise_tas: Quantity,
         leg_length_nmi: float,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
-    ) -> Tuple[Optional[Quantity], Optional[Quantity]]:
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
+    ) -> tuple[Quantity | None, Quantity | None]:
         """Resolve per-phase along-track wind components for climb and
         descent.
 
@@ -1618,7 +1626,7 @@ class Aircraft:
         cruise-altitude midpoint sample misses.
         """
         # Default: project cruise (u, v) — same value for both phases.
-        wind_along_q: Optional[Quantity] = None
+        wind_along_q: Quantity | None = None
         if wind is not None:
             u_mps, v_mps = wind
             _, az_fwd = pymap3d.vincenty.vdist(
@@ -1710,13 +1718,13 @@ class Aircraft:
         start_waypoint: Waypoint,
         end_waypoint: Waypoint,
         *,
-        cruise_altitude: Optional[Quantity] = None,
-        true_air_speed: Optional[Quantity] = None,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
+        cruise_altitude: Quantity | None = None,
+        true_air_speed: Quantity | None = None,
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
         phase: str = "cruise",
-        climb_plan: Optional["ClimbPlan"] = None,
+        climb_plan: ClimbPlan | None = None,
         n_samples: int = 20,
     ) -> dict:
         """Solve a hybrid horizontal-Dubins + integrated-vertical path.
@@ -2216,12 +2224,12 @@ class Aircraft:
         self,
         start_waypoint: Waypoint,
         end_waypoint: Waypoint,
-        true_air_speed: Optional[Quantity] = None,
-        wind: Optional[Tuple[float, float]] = None,
-        wind_source: Optional["WindField"] = None,
-        t_anchor: Optional[datetime.datetime] = None,
+        true_air_speed: Quantity | None = None,
+        wind: tuple[float, float] | None = None,
+        wind_source: WindField | None = None,
+        t_anchor: datetime.datetime | None = None,
         phase: str = "cruise",
-        climb_plan: Optional["ClimbPlan"] = None,
+        climb_plan: ClimbPlan | None = None,
         n_samples: int = 20,
     ) -> dict:
         """Calculate time to fly between two waypoints.

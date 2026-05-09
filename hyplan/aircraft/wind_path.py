@@ -32,7 +32,6 @@ space-varying wind.
 from __future__ import annotations
 
 import datetime
-from typing import Tuple
 
 import numpy as np
 import pymap3d.vincenty
@@ -94,7 +93,7 @@ def climb_with_wind_field(
     track_deg: float,
     t_anchor: datetime.datetime,
     wind_source: WindField,
-) -> Tuple[Quantity, Quantity, Quantity]:
+) -> tuple[Quantity, Quantity, Quantity]:
     """Wind-aware climb time + ground distance.
 
     Args:
@@ -150,7 +149,7 @@ def descend_with_wind_field(
     t_climb_min: float,
     d_climb_nmi: float,
     wind_source: WindField,
-) -> Tuple[Quantity, Quantity, Quantity]:
+) -> tuple[Quantity, Quantity, Quantity]:
     """Wind-aware descent time + ground distance.
 
     The descent midpoint sits at ``total_distance_nmi − d_descent / 2``

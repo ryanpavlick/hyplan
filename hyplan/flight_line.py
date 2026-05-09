@@ -13,9 +13,9 @@ derived automatically from the geodesic geometry via Vincenty's formulae.
 
 from __future__ import annotations
 
+from typing import Any
 from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from pint import Quantity
-from typing import Optional, List, Dict, Union
 import pymap3d
 import pymap3d.vincenty
 import geopandas as gpd
@@ -51,9 +51,9 @@ class FlightLine:
         self,
         waypoint1: Waypoint,
         waypoint2: Waypoint,
-        site_name: Optional[str] = None,
-        site_description: Optional[str] = None,
-        investigator: Optional[str] = None,
+        site_name: str | None = None,
+        site_description: str | None = None,
+        investigator: str | None = None,
     ):
         if not is_waypoint(waypoint1) or not is_waypoint(waypoint2):
             raise HyPlanTypeError("waypoint1 and waypoint2 must be Waypoint objects.")
@@ -68,7 +68,7 @@ class FlightLine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _from_geometry(self, geometry: LineString, site_name: Optional[str] = None) -> "FlightLine":
+    def _from_geometry(self, geometry: LineString, site_name: str | None = None) -> FlightLine:
         """Create a new FlightLine from a LineString, inheriting metadata.
 
         Altitude, speed, and segment_type propagate from the source.
@@ -131,7 +131,7 @@ class FlightLine:
         levelling off briefly to burn fuel before continuing to climb)
         use :meth:`hyplan.aircraft.Aircraft.step_climb`.
         """
-        return self._waypoint1.altitude_msl  # type: ignore[return-value]
+        return self._waypoint1.altitude_msl
 
     @altitude_msl.setter
     def altitude_msl(self, value: Quantity):
@@ -197,7 +197,7 @@ class FlightLine:
         if not isinstance(altitude, Quantity):
             altitude = ureg.Quantity(altitude, "meter")
         else:
-            altitude = altitude.to("meter")  # type: ignore[assignment]
+            altitude = altitude.to("meter")
 
         if altitude.magnitude < 0:
             raise HyPlanValueError(
@@ -222,11 +222,11 @@ class FlightLine:
         length: Quantity,
         az: float,
         altitude_msl: Quantity | None = None,
-        site_name: Optional[str] = None,
-        site_description: Optional[str] = None,
-        investigator: Optional[str] = None,
+        site_name: str | None = None,
+        site_description: str | None = None,
+        investigator: str | None = None,
         **kwargs,
-    ) -> "FlightLine":
+    ) -> FlightLine:
         """Create a flight line from a start point, length, and azimuth.
 
         Args:
@@ -253,7 +253,7 @@ class FlightLine:
 
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
+        alt = cls._validate_altitude(altitude_msl)
         wp1 = Waypoint(latitude=lat1, longitude=lon1, heading=float(az) % 360,
                        altitude_msl=alt,
                        name=f"{site_name}_start" if site_name else "start")
@@ -274,10 +274,10 @@ class FlightLine:
         lat2: float,
         lon2: float,
         altitude_msl: Quantity | None = None,
-        site_name: Optional[str] = None,
-        site_description: Optional[str] = None,
-        investigator: Optional[str] = None,
-    ) -> "FlightLine":
+        site_name: str | None = None,
+        site_description: str | None = None,
+        investigator: str | None = None,
+    ) -> FlightLine:
         """Create a flight line from two endpoint coordinates.
 
         Args:
@@ -296,7 +296,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
+        alt = cls._validate_altitude(altitude_msl)
         wp1 = Waypoint(latitude=lat1, longitude=lon1,
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -318,11 +318,11 @@ class FlightLine:
         length: Quantity,
         az: float,
         altitude_msl: Quantity | None = None,
-        site_name: Optional[str] = None,
-        site_description: Optional[str] = None,
-        investigator: Optional[str] = None,
+        site_name: str | None = None,
+        site_description: str | None = None,
+        investigator: str | None = None,
         **kwargs,
-    ) -> "FlightLine":
+    ) -> FlightLine:
         """Create a flight line centered on a point, extending equally in both directions.
 
         Args:
@@ -353,7 +353,7 @@ class FlightLine:
         _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
         _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
 
-        alt = cls._validate_altitude(altitude_msl)  # type: ignore[arg-type]
+        alt = cls._validate_altitude(altitude_msl)
         wp1 = Waypoint(latitude=float(lat1), longitude=float(lon1),
                        heading=float(az12) % 360,
                        altitude_msl=alt,
@@ -368,7 +368,7 @@ class FlightLine:
                    investigator=investigator)
 
     @classmethod
-    def from_geojson(cls, feature: Dict) -> "FlightLine":
+    def from_geojson(cls, feature: dict[Any, Any]) -> FlightLine:
         """Reconstruct a FlightLine from a GeoJSON Feature dict.
 
         The feature must have a ``LineString`` geometry with at least two
@@ -376,7 +376,7 @@ class FlightLine:
         ``site_description``, and ``investigator`` are read if present.
 
         Args:
-            feature: GeoJSON Feature dict with LineString geometry.
+            feature: GeoJSON Feature dict[Any, Any] with LineString geometry.
 
         Returns:
             A new FlightLine.
@@ -425,9 +425,9 @@ class FlightLine:
 
     def clip_to_polygon(
         self,
-        clip_polygon: Union[Polygon, MultiPolygon],
-        merge_gap: Union[Quantity, float, None] = ureg.Quantity(10, "nautical_mile"),
-    ) -> Optional[List["FlightLine"]]:
+        clip_polygon: Polygon | MultiPolygon,
+        merge_gap: Quantity | float | None = ureg.Quantity(10, "nautical_mile"),
+    ) -> list[FlightLine] | None:
         """
         Clip the flight line to a specified polygon.
 
@@ -510,7 +510,7 @@ class FlightLine:
         logger.error(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
         raise HyPlanTypeError(f"Unexpected geometry type after clipping: {type(clipped_geometry)}")
 
-    def track(self, precision: Union[Quantity, float] = 100.0) -> LineString:
+    def track(self, precision: Quantity | float = 100.0) -> LineString:
         """
         Generate a LineString representing the flight line.
 
@@ -538,7 +538,7 @@ class FlightLine:
         track_lon = wrap_to_180(track_lon)
         return LineString(zip(track_lon, track_lat))  # type: ignore[arg-type]
 
-    def reverse(self) -> "FlightLine":
+    def reverse(self) -> FlightLine:
         """
         Reverse the direction of the flight line.
 
@@ -548,7 +548,7 @@ class FlightLine:
         reversed_geom = LineString(list(reversed(self.geometry.coords)))
         return self._from_geometry(reversed_geom)
 
-    def offset_north_east(self, offset_north: Quantity, offset_east: Quantity) -> "FlightLine":
+    def offset_north_east(self, offset_north: Quantity, offset_east: Quantity) -> FlightLine:
         """
         Offset the flight line in the north and east directions.
 
@@ -576,13 +576,13 @@ class FlightLine:
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_north_m, offset_east_m)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_north_m, offset_east_m)
 
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
 
-    def offset_across(self, offset_distance: Union[Quantity, float]) -> "FlightLine":
+    def offset_across(self, offset_distance: Quantity | float) -> FlightLine:
         """
         Offset the flight line perpendicular to its direction by a specified distance.
 
@@ -611,7 +611,7 @@ class FlightLine:
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
 
-    def offset_along(self, offset_start: Union[Quantity, float], offset_end: Union[Quantity, float]) -> "FlightLine":
+    def offset_along(self, offset_start: Quantity | float, offset_end: Quantity | float) -> FlightLine:
         """
         Offset the flight line along its direction by modifying the start and end points.
 
@@ -645,7 +645,7 @@ class FlightLine:
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
 
-    def rotate_around_midpoint(self, angle: float) -> "FlightLine":
+    def rotate_around_midpoint(self, angle: float) -> FlightLine:
         """
         Rotate the flight line around its midpoint by a specified angle.
 
@@ -675,7 +675,7 @@ class FlightLine:
 
         return self._from_geometry(LineString(rotated_coords))
 
-    def split_by_length(self, max_length: Quantity, gap_length: Optional[Quantity] = None) -> List["FlightLine"]:
+    def split_by_length(self, max_length: Quantity, gap_length: Quantity | None = None) -> list[FlightLine]:
         """
         Split the flight line into segments of a specified maximum length with an optional gap between segments.
 
@@ -733,7 +733,7 @@ class FlightLine:
     # Serialization
     # ------------------------------------------------------------------
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict[Any, Any]:
         """
         Convert the flight line to a dictionary representation.
 
@@ -754,7 +754,7 @@ class FlightLine:
             "investigator": self.investigator,
         }
 
-    def to_geojson(self) -> Dict:
+    def to_geojson(self) -> dict[Any, Any]:
         """
         Convert the flight line to a GeoJSON Feature dictionary.
 
@@ -790,7 +790,7 @@ def _validate_linestring(geometry: LineString):
             raise HyPlanValueError(f"Longitude {lon} is out of bounds (-180 to 180).")
 
 
-def to_gdf(flight_lines: List[FlightLine], crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+def to_gdf(flight_lines: list[FlightLine], crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
     """
     Convert a list of FlightLine objects to a GeoDataFrame.
 

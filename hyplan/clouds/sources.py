@@ -65,7 +65,7 @@ def _get_ee():
 # GEE / MODIS helpers
 # ---------------------------------------------------------------------------
 
-def _drop_z(geom: "BaseGeometry") -> "BaseGeometry":
+def _drop_z(geom: BaseGeometry) -> BaseGeometry:
     """Strip Z coordinates from a Shapely geometry, returning a 2D geometry."""
     return wkb.loads(wkb.dumps(geom, output_dimension=2))
 
@@ -78,7 +78,7 @@ _SATELLITE_COLLECTIONS = {
 }
 
 
-def get_binary_cloud(image: "ee.Image") -> "ee.Image":
+def get_binary_cloud(image: ee.Image) -> ee.Image:
     """Generate a binary cloud mask for a MODIS image.
 
     The MOD09GA/MYD09GA state_1km band encodes cloud state in bits 0-1
@@ -100,7 +100,7 @@ def get_binary_cloud(image: "ee.Image") -> "ee.Image":
     return result  # type: ignore[no-any-return]
 
 
-def calculate_cloud_fraction(image: "ee.Image", polygon_geometry: "ee.Geometry") -> "ee.Feature":
+def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
     """Calculate the cloud fraction over a polygon for a MODIS image.
 
     Args:
@@ -308,7 +308,7 @@ class OpenMeteoCloudFraction:
             DataFrame with columns ``polygon_id``, ``year``,
             ``day_of_year``, ``cloud_fraction`` (0.0-1.0).
         """
-        import requests as _requests  # type: ignore[import-untyped]
+        import requests as _requests
 
         if "Name" not in polygons.columns:
             raise HyPlanValueError(
@@ -462,7 +462,7 @@ def fetch_cloud_fraction_spatial(
     day_stop: int,
     scale: int = 1000,
     satellite: str = "both",
-) -> "dict[str, object]":
+) -> dict[str, object]:
     """Compute a per-pixel mean cloud fraction map for each polygon.
 
     Uses Google Earth Engine to produce a time-averaged cloud fraction
@@ -544,7 +544,7 @@ def fetch_cloud_fraction_spatial(
                 f"GEE download URL generation failed for {name}"
             ) from exc
 
-        import requests as _requests  # type: ignore[import-untyped]
+        import requests as _requests
         import io
         resp = _requests.get(url, timeout=120)
         if resp.status_code != 200:

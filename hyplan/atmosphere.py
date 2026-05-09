@@ -72,25 +72,25 @@ def temperature_at(altitude: Quantity) -> Quantity:
     stratosphere (isothermal at 216.65 K above 11 km).
     """
     alt_m = altitude.m_as(ureg.meter)
-    return _temperature_k(alt_m) * ureg.kelvin  # type: ignore[no-any-return]
+    return _temperature_k(alt_m) * ureg.kelvin
 
 
 def pressure_at(altitude: Quantity) -> Quantity:
     """ISA static pressure at *altitude*."""
     alt_m = altitude.m_as(ureg.meter)
-    return _pressure_pa(alt_m) * ureg.pascal  # type: ignore[no-any-return]
+    return _pressure_pa(alt_m) * ureg.pascal
 
 
 def density_at(altitude: Quantity) -> Quantity:
     """ISA air density at *altitude*."""
     alt_m = altitude.m_as(ureg.meter)
-    return _density_kgm3(alt_m) * (ureg.kilogram / ureg.meter**3)  # type: ignore[no-any-return]
+    return _density_kgm3(alt_m) * (ureg.kilogram / ureg.meter**3)
 
 
 def speed_of_sound(altitude: Quantity) -> Quantity:
     """Speed of sound at *altitude* from ISA temperature."""
     alt_m = altitude.m_as(ureg.meter)
-    return _speed_of_sound_ms(alt_m) * (ureg.meter / ureg.second)  # type: ignore[no-any-return]
+    return _speed_of_sound_ms(alt_m) * (ureg.meter / ureg.second)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ def cas_to_tas(cas: Quantity, altitude: Quantity) -> Quantity:
     mach = np.sqrt(5.0 * ((qc / p + 1.0) ** (2.0 / 7.0) - 1.0))
 
     tas_ms = mach * a
-    return (tas_ms * ureg.meter / ureg.second).to(cas.units)  # type: ignore[no-any-return]
+    return (tas_ms * ureg.meter / ureg.second).to(cas.units)
 
 
 def tas_to_cas(tas: Quantity, altitude: Quantity) -> Quantity:
@@ -146,7 +146,7 @@ def tas_to_cas(tas: Quantity, altitude: Quantity) -> Quantity:
 
     # CAS from impact pressure (using sea-level conditions)
     cas_ms = _A0 * np.sqrt(5.0 * ((qc / _P0 + 1.0) ** (2.0 / 7.0) - 1.0))
-    return (cas_ms * ureg.meter / ureg.second).to(tas.units)  # type: ignore[no-any-return]
+    return (cas_ms * ureg.meter / ureg.second).to(tas.units)
 
 
 def mach_to_tas(mach: float, altitude: Quantity) -> Quantity:
@@ -157,7 +157,7 @@ def mach_to_tas(mach: float, altitude: Quantity) -> Quantity:
     alt_m = altitude.m_as(ureg.meter)
     a = _speed_of_sound_ms(alt_m)
     tas_ms = mach * a
-    return (tas_ms * ureg.meter / ureg.second).to(ureg.knot)  # type: ignore[attr-defined,no-any-return]
+    return (tas_ms * ureg.meter / ureg.second).to(ureg.knot)
 
 
 def tas_to_mach(tas: Quantity, altitude: Quantity) -> float:

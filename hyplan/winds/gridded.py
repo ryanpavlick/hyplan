@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime
 import logging
 from abc import abstractmethod
-from typing import List, Tuple
 
 import numpy as np
 from pint import Quantity
@@ -61,7 +60,7 @@ class _GriddedWindField(WindField):
         self._fetch_slab()
 
     @abstractmethod
-    def _build_urls(self) -> List[str]:
+    def _build_urls(self) -> list[str]:
         """Return one or more OPeNDAP dataset URLs covering the time range."""
 
     def _open_dataset(self, url: str):
@@ -72,7 +71,7 @@ class _GriddedWindField(WindField):
         """Return dimension name mapping. Override if names differ."""
         return {"time": "time", "lev": "lev", "lat": "lat", "lon": "lon"}
 
-    def _var_names(self) -> Tuple[str, str]:
+    def _var_names(self) -> tuple[str, str]:
         """Return (u_name, v_name) variable names. Override if names differ."""
         return ("U", "V")
 
@@ -215,7 +214,7 @@ class _GriddedWindField(WindField):
         lon: float,
         altitude: Quantity,
         time: datetime.datetime,
-    ) -> Tuple[Quantity, Quantity]:
+    ) -> tuple[Quantity, Quantity]:
         """Interpolate wind at a point from the cached slab."""
         # Convert altitude to ISA pressure
         p_hpa = pressure_at(altitude).m_as(ureg.hectopascal)

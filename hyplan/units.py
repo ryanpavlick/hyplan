@@ -1,4 +1,3 @@
-from typing import Union
 
 from pint import UnitRegistry, Quantity, set_application_registry
 from .exceptions import HyPlanValueError
@@ -49,7 +48,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
     q = distance * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
+    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     """
@@ -74,7 +73,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = speed * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
+    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     """
@@ -98,7 +97,7 @@ def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = angle * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
+    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
 
 def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     """
@@ -122,9 +121,9 @@ def convert_time(time: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = time * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[attr-defined,no-any-return]
+    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
 
-def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Union[float, int, Quantity] = 1013.25) -> str:
+def altitude_to_flight_level(altitude: float | int | Quantity, pressure: float | int | Quantity = 1013.25) -> str:
     """
     Converts altitude to flight level (FL), considering atmospheric pressure.
 
@@ -147,7 +146,7 @@ def altitude_to_flight_level(altitude: Union[float, int, Quantity], pressure: Un
     elif isinstance(altitude, (int, float)):
         # Assume numeric value is in meters
         q_alt = altitude * ureg.meter
-        altitude_ft = q_alt.m_as("feet")  # type: ignore[union-attr]
+        altitude_ft = q_alt.m_as("feet")
     else:
         raise HyPlanValueError("Altitude must be a pint length or a number (assumed meters).")
 

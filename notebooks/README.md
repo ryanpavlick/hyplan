@@ -109,24 +109,50 @@ Specialized notebooks for planning missions with different instrument types, eac
 
 ## Aircraft Calibration
 
-How HyPlan's aircraft performance models are derived from real-world telemetry. Several research platforms are now data-calibrated from NASA AFRC IWG1 logs and NASA / NOAA ICARTT campaigns; the per-aircraft notebooks document the methodology, source data, validation diagnostics, and resulting paste-ready constructor blocks. See [docs/calibration.md](../docs/calibration.md) for the calibration concepts overview.
+How HyPlan's aircraft performance models are derived from real-world telemetry.  17 research platforms are data-calibrated from NASA / NOAA ICARTT campaigns, NASA AFRC IWG1 logs, and international archives (CEDA, AERIS, PANGAEA, DLR).  The per-aircraft notebooks document the methodology, source data, validation diagnostics, and paste-ready constructor blocks.  See [docs/calibration.md](../docs/calibration.md) for the calibration concepts overview.
+
+### NASA fleet
 
 | Notebook | Aircraft | Source | When to Use |
 |----------|----------|--------|-------------|
-| [calibration/er2/calibration.ipynb](calibration/er2/calibration.ipynb) | NASA ER-2 (N806/N809) | NASA AFRC IWG1 | Reproduce the ER-2 calibration; methodology reference for the other aircraft. |
-| [calibration/giii/calibration.ipynb](calibration/giii/calibration.ipynb) | NASA G-III (N520) | NASA ASP archive IWG1 | Reproduce the G-III calibration. |
-| [calibration/gv/calibration.ipynb](calibration/gv/calibration.ipynb) | NASA G-V (N95) | NASA ASP archive IWG1 | Reproduce the G-V calibration. |
-| [calibration/wb57/calibration.ipynb](calibration/wb57/calibration.ipynb) | NASA WB-57 (N926/N927) | NASA ASP archive IWG1 | Reproduce the WB-57 calibration. |
-| [calibration/c130/calibration.ipynb](calibration/c130/calibration.ipynb) | NASA C-130H (N436/N439) | NASA ASP archive IWG1 (ACT-America) | Reproduce the C-130H calibration. |
-| [calibration/p3/calibration.ipynb](calibration/p3/calibration.ipynb) | NASA P-3 (N426) | NASA ASP archive IWG1 | Reproduce the P-3 calibration. |
-| [calibration/b200/calibration.ipynb](calibration/b200/calibration.ipynb) | NASA King Air B-200 / UC-12 | NASA ICARTT (multi-campaign: ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS) | Reproduce the B-200 calibration. |
-| [calibration/twin_otter/calibration.ipynb](calibration/twin_otter/calibration.ipynb) | NOAA Twin Otter (N48RF) | NASA / NOAA ICARTT (FIREX-AQ) | Reproduce the Twin Otter calibration. |
-| [calibration/er2/sortie_replay.ipynb](calibration/er2/sortie_replay.ipynb) | NASA ER-2 | IWG1 + planned trace | Validate the calibrated ER-2 model against historical sorties. |
-| [calibration/er2/planned_vs_flown.ipynb](calibration/er2/planned_vs_flown.ipynb) | NASA ER-2 | Green Card / KML / IWG1 | Compare planned vs flown vs modeled for NM17 B / CO07v4 / CO06. |
+| [calibration/NASA_ER2/calibration.ipynb](calibration/NASA_ER2/calibration.ipynb) | NASA ER-2 (N806/N809) | NASA AFRC IWG1 | Reproduce the ER-2 calibration; methodology reference for the other aircraft. |
+| [calibration/NASA_GIII/calibration.ipynb](calibration/NASA_GIII/calibration.ipynb) | NASA G-III (N520) | NASA ASP archive IWG1 | Reproduce the G-III calibration (152 sorties). |
+| [calibration/NASA_GV/calibration.ipynb](calibration/NASA_GV/calibration.ipynb) | NASA G-V (N95) | NASA ASP archive IWG1 | Reproduce the G-V calibration (84 sorties). |
+| [calibration/NASA_WB57/calibration.ipynb](calibration/NASA_WB57/calibration.ipynb) | NASA WB-57 (N926/N927) | NASA ASP archive IWG1 | Reproduce the WB-57 calibration (100 sorties). |
+| [calibration/NASA_C130/calibration.ipynb](calibration/NASA_C130/calibration.ipynb) | NASA C-130H (N436/N439) | NASA ASP archive IWG1 (ACT-America) | Reproduce the C-130H calibration (91 sorties). |
+| [calibration/NASA_P3/calibration.ipynb](calibration/NASA_P3/calibration.ipynb) | NASA P-3 (N426) | NASA ASP archive IWG1 | Reproduce the P-3 calibration (252 sorties). |
+| [calibration/KingAirB200/calibration.ipynb](calibration/KingAirB200/calibration.ipynb) | NASA King Air B-200 / UC-12 | NASA ICARTT (multi-campaign: ACTAMERICA, DISCOVER-AQ, KORUS-AQ, LMOS) | Reproduce the B-200 calibration (250 sorties). |
 
-Each per-aircraft `_build_notebook.py` regenerates its `calibration.ipynb` from a single source of truth and shares helpers from `notebooks/calibration/_common.py` (`label_phases`, `per_bin`, `tas_per_bin`, `schedule_pts`, `evaluate_profile`, `summary_table`, `apply_sortie_filters`).
+### NOAA fleet
 
-These notebooks read locally-cached IWG1 / ICARTT files from `data/<aircraft>/` (gitignored — bring your own from the [NASA ASP archive](https://asp-archive.arc.nasa.gov/) or per-campaign data hubs).  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
+| Notebook | Aircraft | Source | When to Use |
+|----------|----------|--------|-------------|
+| [calibration/NOAA_WP3D/calibration.ipynb](calibration/NOAA_WP3D/calibration.ipynb) | NOAA WP-3D Orion (N42RF/N43RF) | NOAA CSL ICARTT + NOAA AOML HRD hurricane 1-sec text | Reproduce the WP-3D calibration (NOAA chemistry + Hurricane Hunter sorties). |
+| [calibration/NOAA_GIV/calibration.ipynb](calibration/NOAA_GIV/calibration.ipynb) | NOAA G-IV "Gonzo" (N49RF) | NOAA AOML HRD 1-sec text | Reproduce the G-IV calibration (93 hurricane synoptic-surveillance sorties). |
+| [calibration/NOAA_TwinOtter/calibration.ipynb](calibration/NOAA_TwinOtter/calibration.ipynb) | NOAA Twin Otter (N48RF/N46RF) | NASA / NOAA ICARTT (FIREX-AQ + 6 NOAA CSL campaigns) | Reproduce the Twin Otter calibration (164 sorties; per-file unit detection). |
+
+### International fleet (UK / EU / DE / DLR / BAS / AWI)
+
+| Notebook | Aircraft | Source | When to Use |
+|----------|----------|--------|-------------|
+| [calibration/NCAR_GV/calibration.ipynb](calibration/NCAR_GV/calibration.ipynb) | NCAR HIAPER (N677F) | NSF/NCAR HIAPER ICARTT NAV (DC3 2012, LaRC ASD) | Reproduce the HIAPER calibration (22 sorties; TAS reconstructed via wind triangle). |
+| [calibration/FAAM_BAe146/calibration.ipynb](calibration/FAAM_BAe146/calibration.ipynb) | FAAM BAe-146 (G-LUXE, UK) | CEDA FAAM Core Data Product 1 Hz | Reproduce the FAAM calibration (125 sorties across 27 ASMM-tagged campaigns 2017-2024). |
+| [calibration/SAFIRE_ATR42/calibration.ipynb](calibration/SAFIRE_ATR42/calibration.ipynb) | SAFIRE ATR-42 (F-HMTO, FR) | CEDA EUFAR + AERIS EUREC4A 2020 | Reproduce the ATR-42 calibration (44 sorties; mixed wind-triangle and native-TAS sources). |
+| [calibration/BAS_TwinOtter/calibration.ipynb](calibration/BAS_TwinOtter/calibration.ipynb) | BAS Twin Otter polar (UK) | CEDA BAS MASIN: OFCAP, ACCACIA, ORCHESTRA, IGP, ArcticCyclones | Reproduce the polar Twin Otter calibration (105 sorties across 5 archives). |
+| [calibration/NERC_DO228/calibration.ipynb](calibration/NERC_DO228/calibration.ipynb) | NERC ARSF Dornier 228 (D-CALM, UK) | CEDA NERC ARSF: ACTIVE 2005-2006 + Eyjafjallajökull 2010 | Reproduce the Do-228 calibration (34 sorties; wind-triangle TAS). |
+| [calibration/AWI_BaslerBT67/calibration.ipynb](calibration/AWI_BaslerBT67/calibration.ipynb) | AWI Polar 5/6 (Basler BT-67, DE) | PANGAEA: ACLOUD 2017 + HALO-AC3 2022 | Reproduce the BT-67 calibration (~78 sorties). |
+| [calibration/DLR_HALO/calibration.ipynb](calibration/DLR_HALO/calibration.ipynb) | DLR HALO (G550, D-ADLR, DE) | DLR HALO BAHAMAS (HALO-AC3 2022) | Reproduce the HALO calibration (18 sorties; single campaign, confidence 0.7). |
+
+### Special-purpose ER-2 notebooks
+
+| Notebook | Aircraft | Source | When to Use |
+|----------|----------|--------|-------------|
+| [calibration/NASA_ER2/sortie_replay.ipynb](calibration/NASA_ER2/sortie_replay.ipynb) | NASA ER-2 | IWG1 + planned trace | Validate the calibrated ER-2 model against historical sorties. |
+| [calibration/NASA_ER2/planned_vs_flown.ipynb](calibration/NASA_ER2/planned_vs_flown.ipynb) | NASA ER-2 | Green Card / KML / IWG1 | Compare planned vs flown vs modeled for NM17 B / CO07v4 / CO06. |
+
+The companion `calibration.ipynb` is a thin interactive wrapper around the per-aircraft `calibrate.py` script — both share helpers from [`notebooks/calibration/_common.py`](calibration/_common.py) (`label_phases`, `per_bin`, `tas_per_bin`, `schedule_pts`, `evaluate_profile`, `summary_table`, `apply_sortie_filters`).  Notebooks are regenerated by [`python -m notebooks.calibration._make_notebook`](calibration/_make_notebook.py) from the `AIRCRAFT_CONFIGS` table and the per-aircraft `calibrate.py` source of truth.
+
+These notebooks read locally-cached IWG1 / ICARTT / NetCDF files from `data/<aircraft-class>/` (gitignored — `data/NASA_GIII/`, `data/FAAM_BAe146/`, etc.).  Bring your own from the relevant archive — see [`docs/calibration.md`](../docs/calibration.md) for per-archive citation and access notes.  Install `pip install hyplan[planned]` for Green Card XLSX/PDF parsing.
 
 ---
 
@@ -178,16 +204,25 @@ These notebooks read locally-cached IWG1 / ICARTT files from `data/<aircraft>/` 
 | airspace_check | Yes | None | None | No |
 | airport_selection | Yes | None | None | No |
 | campaign_management | No | None | None | Yes (`exampledata/`) |
-| calibration/er2/calibration | No | None | None | Local `data/er2/` (gitignored) |
-| calibration/giii/calibration | No | None | None | Local `data/giii/` (gitignored) |
-| calibration/gv/calibration | No | None | None | Local `data/gv/` (gitignored) |
-| calibration/wb57/calibration | No | None | None | Local `data/wb57/` (gitignored) |
-| calibration/c130/calibration | No | None | None | Local `data/c130/` (gitignored) |
-| calibration/p3/calibration | No | None | None | Local `data/p3/` (gitignored) |
-| calibration/b200/calibration | No | None | None | Local `data/KingAirB200/` (gitignored) |
-| calibration/twin_otter/calibration | No | None | None | Local `data/TwinOtter/` (gitignored) |
-| calibration/er2/sortie_replay | No | None | None | Local `data/er2/` (gitignored) |
-| calibration/er2/planned_vs_flown | No | None | `[planned]` | Local `data/er2/` (gitignored) |
+| calibration/NASA_ER2/calibration | No | None | None | Local `data/NASA_ER2/` (gitignored) |
+| calibration/NASA_GIII/calibration | No | None | None | Local `data/NASA_GIII/` (gitignored) |
+| calibration/NASA_GV/calibration | No | None | None | Local `data/NASA_GV/` (gitignored) |
+| calibration/NASA_WB57/calibration | No | None | None | Local `data/NASA_WB57/` (gitignored) |
+| calibration/NASA_C130/calibration | No | None | None | Local `data/NASA_C130/` (gitignored) |
+| calibration/NASA_P3/calibration | No | None | None | Local `data/NASA_P3/` (gitignored) |
+| calibration/KingAirB200/calibration | No | None | None | Local `data/KingAirB200/` (gitignored) |
+| calibration/NOAA_WP3D/calibration | No | None | None | Local `data/WP3D/` + `data/HRD/` (gitignored) |
+| calibration/NOAA_GIV/calibration | No | None | None | Local `data/HRD/G-IV-SP_N49RF/` (gitignored) |
+| calibration/NOAA_TwinOtter/calibration | No | None | None | Local `data/NOAA_TwinOtter/` (gitignored) |
+| calibration/NCAR_GV/calibration | No | None | None | Local `data/HIAPER/` (gitignored) |
+| calibration/FAAM_BAe146/calibration | No | None | None | Local `data/FAAM/` (gitignored) |
+| calibration/SAFIRE_ATR42/calibration | No | None | None | Local `data/ATR42/` (gitignored) |
+| calibration/BAS_TwinOtter/calibration | No | None | None | Local `data/BAS_TwinOtter/` (gitignored) |
+| calibration/NERC_DO228/calibration | No | None | None | Local `data/DO228/` (gitignored) |
+| calibration/AWI_BaslerBT67/calibration | No | None | None | Local `data/BT67/` (gitignored) |
+| calibration/DLR_HALO/calibration | No | None | None | Local `data/HALO/` (gitignored) |
+| calibration/NASA_ER2/sortie_replay | No | None | None | Local `data/NASA_ER2/` (gitignored) |
+| calibration/NASA_ER2/planned_vs_flown | No | None | `[planned]` | Local `data/NASA_ER2/` (gitignored) |
 | satellite_coordination | Yes | None | None | No |
 | export_formats | Yes | None | None | No |
 | validation | No | None | None | No |

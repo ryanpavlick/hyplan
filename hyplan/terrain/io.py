@@ -8,7 +8,6 @@ import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
-from typing import List, Tuple
 
 import numpy as np
 import rasterio
@@ -19,6 +18,7 @@ from shapely.geometry import box
 from ..download import download_file
 from ..exceptions import HyPlanRuntimeError, HyPlanValueError
 from ._demgrid import DEMGrid
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def clear_localdem_cache(confirm: bool = True) -> None:
 # Tile index and download
 # ---------------------------------------------------------------------------
 
-def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, box]]]:
+def build_tile_index(tile_list_file: str) -> tuple[index.Index, list[tuple[str, box]]]:
     """
     Build an R-tree spatial index for DEM tiles from a tile list file.
 
@@ -93,7 +93,7 @@ def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, 
         tile_list_file (str): Path to the text file listing available DEM tiles.
 
     Returns:
-        Tuple[index.Index, List[Tuple[str, box]]]: A tuple of (rtree_index,
+        Tuple[index.Index, List[Tuple[str, box]]]: A tuple[Any, ...] of (rtree_index,
             tile_bboxes) where tile_bboxes is a list of (tile_name, bounding_box) pairs.
     """
     idx = index.Index()
@@ -115,7 +115,7 @@ def build_tile_index(tile_list_file: str) -> Tuple[index.Index, List[Tuple[str, 
     return idx, tile_bboxes
 
 
-def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: float, aws_dir: str) -> List[str]:
+def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: float, aws_dir: str) -> list[str]:
     """
     Download DEM tile files covering a geographic bounding box.
 
@@ -182,7 +182,7 @@ def download_dem_files(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     return valid_files
 
 
-def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
+def merge_tiles(output_filename: str, tile_file_list: list[str]) -> None:
     """
     Merge multiple DEM tile files into a single GeoTIFF using rasterio.
 
@@ -225,7 +225,7 @@ def merge_tiles(output_filename: str, tile_file_list: List[str]) -> None:
         raise HyPlanRuntimeError(f"Tile merging failed: {e}")
 
 
-def generate_demfile(latitude: np.ndarray, longitude: np.ndarray, aws_dir: str = "https://copernicus-dem-30m.s3.amazonaws.com/") -> str:
+def generate_demfile(latitude: np.ndarray[Any, np.dtype[Any]], longitude: np.ndarray[Any, np.dtype[Any]], aws_dir: str = "https://copernicus-dem-30m.s3.amazonaws.com/") -> str:
     """Generate a DEM file covering the specified latitude and longitude extents."""
     dem_cache_dir = os.path.join(get_cache_root(), "dem_cache")
     os.makedirs(dem_cache_dir, exist_ok=True)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
 
@@ -28,26 +28,26 @@ logger = logging.getLogger(__name__)
 
 
 def fit_aircraft_from_adsb(
-    source: Union[str, Path, object],
+    source: str | Path | object,
     *,
     # Identity
-    aircraft_type: Optional[str] = None,
-    tail_number: Optional[str] = None,
+    aircraft_type: str | None = None,
+    tail_number: str | None = None,
     operator: str = "Unknown",
     engine_type: Literal["jet", "turboprop", "piston"] = "jet",
     # Flight selection
-    icao24: Optional[Union[str, List[str]]] = None,
-    callsign: Optional[Union[str, List[str]]] = None,
-    start: Optional[datetime.datetime] = None,
-    stop: Optional[datetime.datetime] = None,
+    icao24: str | list[str] | None = None,
+    callsign: str | list[str] | None = None,
+    start: datetime.datetime | None = None,
+    stop: datetime.datetime | None = None,
     # Wind correction
-    wind_source: Union[str, WindField, None] = "still_air",
+    wind_source: str | WindField | None = "still_air",
     # Phase labeling
     phase_backend: str = "heuristic",
     # Fitting
     altitude_bin_ft: float = 2000.0,
     max_schedule_points: int = 6,
-    service_ceiling_ft: Optional[float] = None,
+    service_ceiling_ft: float | None = None,
     # Pipeline control
     aggregate: bool = True,
 ) -> Aircraft:
@@ -178,7 +178,7 @@ def _flight_id(flight) -> str:
     return f"{icao}_{cs}_{start}"
 
 
-def _infer_aircraft_type(flight) -> Optional[str]:
+def _infer_aircraft_type(flight) -> str | None:
     """Try to look up aircraft type from traffic's database."""
     try:
         from traffic.data import aircraft as ac_db

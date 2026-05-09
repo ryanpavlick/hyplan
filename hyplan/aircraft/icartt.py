@@ -19,7 +19,6 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -39,31 +38,46 @@ _COLUMN_PATTERNS = [
     # NCAR EOL HIAPER LRT files use short symbolic names (GLAT, TASX,
     # ATX, etc.); patterns are listed alongside the longer NASA Ames
     # / ICARTT conventions.
+    # NCAR/RAF NSF-GV files use ``GGLAT``/``GGLON`` (GPS-Reference);
+    # NASA Ames-style files use ``GLAT``/``GLON`` or ``LATITUDE``.
     ("latitude",         [r"\blatitude\b",      r"\blat[_\s-]*deg\b", r"\bgpslat\b",
-                          r"^glat$"],                                                   "deg"),
+                          r"^gg?lat$"],                                                 "deg"),
     ("longitude",        [r"\blongitude\b",     r"\blon[_\s-]*deg\b", r"\bgpslon\b",
-                          r"^glon$"],                                                   "deg"),
+                          r"^gg?lon$"],                                                 "deg"),
     ("altitude",         [r"^pressure[_\s-]*altitude", r"^press[_\s-]*alt",
                           r"^paltf?$"],                                                 "ft"),
     ("altitude_gps_ft",  [r"\bgps[_\s-]*alt", r"^gps[_\s-]*altitude\b", r"^ggalt$"],    "m"),
     ("altitude_radar_ft",[r"\bradar[_\s-]*altitude", r"\bradar[_\s-]*alt"],             "ft"),
-    ("groundspeed",      [r"\bground[_\s-]*speed\b", r"^gsf$"],                         "kt"),
+    # ``GGSPD`` = NCAR/RAF GPS reference groundspeed; ``GSF`` =
+    # generic; ``GRD_SPD`` (or "FMS_GRD_SPD" with an instrument
+    # prefix) is the convention in NASA LaRC PI-merge files.
+    # Underscore-replaced before regex match so the prefix doesn't
+    # block the ``\bgrd\b`` boundary.
+    ("groundspeed",      [r"\bground[_\s-]*speed\b", r"\bgrd[_\s-]*spd\b",
+                          r"\bggspd\b", r"\bgsf\b"],                                    "kt"),
     ("tas_kt",           [r"\btrue[_\s-]*air[_\s-]*speed\b", r"\btrueairspd\b",
-                          r"\btas[_\s-]*ms\b", r"\btas\b", r"^tasx?$"],                 "kt"),
+                          r"\btas[_\s-]*ms\b", r"\btas\b", r"\btasx?\b"],               "kt"),
     ("ias_kt",           [r"\bindicated[_\s-]*air[_\s-]*speed\b", r"\bias\b",
-                          r"^iasx?$"],                                                  "kt"),
-    ("mach",             [r"\bmach[_\s-]*number\b", r"\bmach\b", r"^machx?$"],          "mach"),
+                          r"\biasx?\b"],                                                "kt"),
+    ("mach",             [r"\bmach[_\s-]*number\b", r"\bmach\b", r"\bmachx?\b"],        "mach"),
     ("vertical_velocity",[r"\bvertical[_\s-]*speed\b", r"\bvert[_\s-]*wind",
-                          r"^vspd$"],                                                   "fpm"),
-    ("true_heading",     [r"\btrue[_\s-]*heading\b", r"^heading\b", r"\bhdg[_\s-]*deg\b",
-                          r"^thdg$"],                                                   "deg"),
-    ("track",            [r"\btrack[_\s-]*angle\b", r"\btrack\b", r"^tkat$"],           "deg"),
-    ("pitch_deg",        [r"\bpitch[_\s-]*angle\b", r"\bpitch[_\s-]*deg\b", r"^pitch\b"],"deg"),
-    ("roll_deg",         [r"\broll[_\s-]*angle\b", r"\broll[_\s-]*deg\b", r"^roll\b"],  "deg"),
-    ("aoa_deg",          [r"\bangle[_\s-]*of[_\s-]*attack\b", r"\baoa\b", r"^attack$"], "deg"),
-    ("wind_speed_kt",    [r"\bwind[_\s-]*speed\b", r"\bwspd[_\s-]*ms\b", r"^wsc?$"],    "kt"),
+                          r"\bvspd\b"],                                                 "fpm"),
+    ("true_heading",     [r"\btrue[_\s-]*heading\b", r"\bheading\b",
+                          r"\bhdg[_\s-]*deg\b", r"\bthdg\b", r"\bhdg\b"],               "deg"),
+    ("track",            [r"\btrack[_\s-]*angle\b", r"\btrack\b",
+                          r"\btkat\b", r"\btrk\b"],                                     "deg"),
+    ("pitch_deg",        [r"\bpitch[_\s-]*angle\b", r"\bpitch[_\s-]*deg\b",
+                          r"\bpitch\b"],                                                "deg"),
+    ("roll_deg",         [r"\broll[_\s-]*angle\b", r"\broll[_\s-]*deg\b",
+                          r"\broll\b"],                                                 "deg"),
+    ("aoa_deg",          [r"\bangle[_\s-]*of[_\s-]*attack\b", r"\baoa\b",
+                          r"\battack\b"],                                               "deg"),
+    # Wind speed: WNS (LaRC merge), WSC (NCAR/RAF), or "Wind Speed".
+    ("wind_speed_kt",    [r"\bwind[_\s-]*speed\b", r"\bwspd[_\s-]*ms\b",
+                          r"\bwsc?\b", r"\bwns\b"],                                     "kt"),
+    # Wind direction: WND (LaRC merge), WDC (NCAR/RAF), or "Wind Direction".
     ("wind_direction_deg",[r"\bwind[_\s-]*direction\b", r"\bwdir[_\s-]*deg\b",
-                           r"^wdc?$"],                                                  "deg"),
+                           r"\bwdc?\b", r"\bwnd\b"],                                    "deg"),
     ("ambient_temp_c",   [r"\bstatic[_\s-]*air[_\s-]*temp", r"\bambtemp\b",
                           r"\btstat[_\s-]*degc\b", r"\bambient[_\s-]*temp\b",
                           r"^atx?$"],                                                   "C"),
@@ -76,15 +90,23 @@ def _convert_to_canonical(name: str, unit_str: str, x: pd.Series) -> pd.Series:
     """Convert numeric column to the canonical unit, given ICT unit string."""
     u = (unit_str or "").lower().strip()
     if name in ("altitude", "altitude_radar_ft"):
+        if u in ("km", "kilometer", "kilometers"):
+            return x * 1000.0 / _M_PER_FT
         if "m" in u and "ft" not in u:  # meters
             return x / _M_PER_FT
         return x  # assume ft
     if name == "altitude_gps_ft":
         # GPS_Altitude is normally in meters in IWG1 spec; ICARTT
         # campaigns vary.  If unit string says ft, keep as-is.
+        if u in ("km", "kilometer", "kilometers"):
+            return x * 1000.0 / _M_PER_FT
         if "ft" in u:
             return x
         return x / _M_PER_FT
+    if name == "longitude":
+        # Some campaigns (e.g. DISCOVER-AQ 1-sec merges) publish
+        # longitude in the 0..360°E convention.  Wrap to [-180, 180).
+        return ((x + 180.0) % 360.0) - 180.0
     if name in ("groundspeed", "tas_kt", "ias_kt", "wind_speed_kt"):
         if "m/s" in u or "ms-1" in u or "ms_1" in u or u in ("ms", "mps"):
             return x * _KT_PER_MPS
@@ -98,7 +120,7 @@ def _convert_to_canonical(name: str, unit_str: str, x: pd.Series) -> pd.Series:
     return x
 
 
-def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
+def load_icartt(path: str | Path) -> pd.DataFrame:
     """Load one ICARTT ``.ict`` file into a DataFrame matching the
     :func:`load_iwg1` schema.
 
@@ -122,13 +144,24 @@ def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
     if not p.exists():
         raise FileNotFoundError(f"ICARTT file not found: {p}")
 
-    with p.open("r") as f:
-        lines = f.readlines()
+    # Some older ICARTT campaigns (e.g. NOAA CSL ARCPAC 2008) use
+    # ISO-8859 / Latin-1 encoding rather than UTF-8.  Open the header
+    # tolerantly; pandas reads the data block separately and is
+    # already byte-tolerant.
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        with p.open("r", encoding="latin-1") as f:
+            lines = f.readlines()
     if not lines:
         raise HyPlanValueError(f"ICARTT file is empty: {p}")
 
-    # Line 1: header_count, FFI
-    n_header = int(lines[0].split(",")[0].strip())
+    # Line 1: header_count, FFI.  ICARTT spec says comma-separated, but
+    # some older campaigns (ARCPAC 2008) ship space-separated.  Try the
+    # first numeric token from either delimiter.
+    first = lines[0].strip().replace(",", " ")
+    n_header = int(first.split()[0])
     # Line 7: UTC start date
     date_parts = [int(x) for x in re.findall(r"\d+", lines[6])][:3]
     if len(date_parts) != 3:
@@ -148,20 +181,41 @@ def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
 
     # Header line is line `n_header` (1-indexed) — actually it's index n_header-1.
     header_line = lines[n_header - 1]
-    columns = [s.strip() for s in header_line.split(",")]
+    # ICARTT spec is comma-delimited, but a few older NOAA CSL
+    # campaigns (ARCPAC 2008 etc.) ship whitespace-delimited rows.
+    # Detect by counting commas: if the column-header line has any
+    # comma we use the spec form; otherwise fall back to whitespace.
+    if "," in header_line:
+        columns = [s.strip() for s in header_line.split(",")]
+        sep_kwargs = {}
+    else:
+        columns = header_line.split()
+        sep_kwargs = {"sep": r"\s+"}
 
     # Read the data rows.  Use pandas with skiprows = n_header.
-    raw = pd.read_csv(
-        p, skiprows=n_header, header=None, names=columns,
-        on_bad_lines="skip", low_memory=False,
-    )
+    # Latin-1 encoding fallback covers older NOAA CSL campaigns
+    # (ARCPAC 2008 etc.) that ship ISO-8859 instead of UTF-8.
+    try:
+        raw = pd.read_csv(
+            p, skiprows=n_header, header=None, names=columns,
+            on_bad_lines="skip", low_memory=False, **sep_kwargs,
+        )
+    except UnicodeDecodeError:
+        raw = pd.read_csv(
+            p, skiprows=n_header, header=None, names=columns,
+            on_bad_lines="skip", low_memory=False, encoding="latin-1",
+            **sep_kwargs,
+        )
     if raw.empty:
         raise HyPlanValueError(f"ICARTT file has no data rows: {p}")
 
     # Replace sentinel values with NaN.  Per-column missing markers are
     # in line 12 (NV values), but using a global sentinel set covers
-    # the typical conventions.
-    SENTINELS = {-9999, -99999, -7777, -8888}
+    # the typical conventions: 4-, 5-, and 6-digit MISSING + LLOD/ULOD.
+    # ICARTT campaigns vary: NCAR/RAF uses -99999; ASP/LaRC merges use
+    # -999999; some older ICARTTs use -7777 / -8888 for LOD flags.
+    SENTINELS = {-9999, -99999, -999999, -7777, -8888,
+                 -77777, -88888, -777777, -888888}
     raw = raw.replace(list(SENTINELS), np.nan)
 
     out = pd.DataFrame()
@@ -181,7 +235,12 @@ def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
         for col in columns:
             if col in used_columns:
                 continue
-            ucol = col.lower()
+            # Replace `_` with space before regex match: PI-merge
+            # instrument prefixes (FMS_, IRS_, ADC_, A_, C_, etc.)
+            # would otherwise hide the canonical name behind a non-
+            # word-boundary character.  E.g., "FMS_TAS" → "fms tas",
+            # which `\btas\b` happily matches.
+            ucol = col.lower().replace("_", " ")
             for pat in patterns:
                 if re.search(pat, ucol, re.IGNORECASE):
                     unit = name_to_unit.get(col, unit_hint)
@@ -255,7 +314,7 @@ def load_icartt(path: Union[str, Path]) -> pd.DataFrame:
     return out
 
 
-def detect_platform(path: Union[str, Path]) -> Optional[str]:
+def detect_platform(path: str | Path) -> str | None:
     """Return the ``PLATFORM:`` metadata line value from an ICARTT
     file, or None if not present.  Useful for identifying which
     aircraft a given file represents (some campaign folders contain

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 from .._base import (
     PerformanceConfidence,
@@ -57,11 +56,11 @@ class FlightPhaseData:
     """
 
     phase: str
-    altitude_bins_ft: List[float]
-    median_tas_kt: List[float]
-    median_vs_fpm: List[float]
-    count_per_bin: List[int]
-    altitude_range_ft: Tuple[float, float]
+    altitude_bins_ft: list[float]
+    median_tas_kt: list[float]
+    median_vs_fpm: list[float]
+    count_per_bin: list[int]
+    altitude_range_ft: tuple[float, float]
 
 
 @dataclass
@@ -88,19 +87,19 @@ class FitResult:
     # Per-schedule fit quality
     # Keys: "climb_speed", "cruise_speed", "descent_speed",
     #        "climb_vertical", "descent_vertical"
-    metrics: Dict[str, ScheduleFitMetrics]
+    metrics: dict[str, ScheduleFitMetrics]
 
     # Provenance
-    icao24: Optional[str] = None
-    callsign: Optional[str] = None
-    aircraft_type_code: Optional[str] = None
+    icao24: str | None = None
+    callsign: str | None = None
+    aircraft_type_code: str | None = None
     n_flights: int = 1
-    flight_ids: List[str] = field(default_factory=list)
-    time_range: Optional[Tuple[datetime.datetime, datetime.datetime]] = None
+    flight_ids: list[str] = field(default_factory=list)
+    time_range: tuple[datetime.datetime, datetime.datetime] | None = None
     wind_source: str = "unknown"
 
     # Phase data (for diagnostics / plotting)
-    phase_data: List[FlightPhaseData] = field(default_factory=list)
+    phase_data: list[FlightPhaseData] = field(default_factory=list)
 
     def overall_confidence(self) -> PerformanceConfidence:
         """Derive :class:`PerformanceConfidence` from fit metrics.
@@ -111,7 +110,7 @@ class FitResult:
         """
 
         def _phase_conf(
-            speed_key: str, vert_key: Optional[str] = None
+            speed_key: str, vert_key: str | None = None
         ) -> float:
             sm = self.metrics.get(speed_key)
             if sm is None:
@@ -135,7 +134,7 @@ class FitResult:
             turns=0.3,
         )
 
-    def source_records(self) -> List[SourceRecord]:
+    def source_records(self) -> list[SourceRecord]:
         """Build :class:`SourceRecord` list for the fitted model."""
         pc = self.overall_confidence()
         avg_conf = (pc.climb + pc.cruise + pc.descent) / 3.0

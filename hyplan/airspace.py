@@ -52,9 +52,9 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
-import requests  # type: ignore[import-untyped]
+import requests
 from shapely.geometry import Polygon, MultiPolygon, box as box_geom, shape
 from shapely.geometry.base import BaseGeometry
 from shapely import STRtree
@@ -110,16 +110,16 @@ class Airspace:
     airspace_type: int
     floor_ft: float
     ceiling_ft: float
-    geometry: Union[Polygon, MultiPolygon]
+    geometry: Polygon | MultiPolygon
     country: str = ""
     source: str = "openaip"
     ceiling_unlimited: bool = False
-    effective_start: Optional[str] = None
-    effective_end: Optional[str] = None
+    effective_start: str | None = None
+    effective_end: str | None = None
     floor_reference: str = "MSL"  # "MSL", "SFC" (AGL), or "STD"
-    schedule: Optional[str] = None  # e.g. "0700 - 1800, MON - FRI"
-    gmt_offset: Optional[float] = None  # hours from UTC
-    dst_code: Optional[int] = None  # 0=no DST, 1=uses DST
+    schedule: str | None = None  # e.g. "0700 - 1800, MON - FRI"
+    gmt_offset: float | None = None  # hours from UTC
+    dst_code: int | None = None  # 0=no DST, 1=uses DST
 
 
 @dataclass
@@ -146,11 +146,11 @@ class AirspaceConflict:
     airspace: Airspace
     flight_line_index: int
     horizontal_intersection: BaseGeometry
-    vertical_overlap_ft: Tuple[float, float]
+    vertical_overlap_ft: tuple[float, float]
     severity: str = ""
-    entry_point: Optional[Tuple[float, float]] = None  # (lon, lat)
-    exit_point: Optional[Tuple[float, float]] = None  # (lon, lat)
-    distance_to_boundary_m: Optional[float] = None  # near-miss distance
+    entry_point: tuple[float, float] | None = None  # (lon, lat)
+    exit_point: tuple[float, float] | None = None  # (lon, lat)
+    distance_to_boundary_m: float | None = None  # near-miss distance
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class AirspaceConflict:
 # ---------------------------------------------------------------------------
 
 
-def summarize_airspaces(airspaces: List["Airspace"], header: str = "") -> str:
+def summarize_airspaces(airspaces: list[Airspace], header: str = "") -> str:
     """Return a formatted summary table of airspaces.
 
     Args:
@@ -188,8 +188,8 @@ def summarize_airspaces(airspaces: List["Airspace"], header: str = "") -> str:
 
 def check_airspace_conflicts(
     flight_lines,
-    airspaces: List[Airspace],
-) -> List[AirspaceConflict]:
+    airspaces: list[Airspace],
+) -> list[AirspaceConflict]:
     """Check flight lines for airspace conflicts.
 
     For each flight line the function tests:
@@ -217,7 +217,7 @@ def check_airspace_conflicts(
     as_geoms = [a.geometry for a in airspaces]
     tree = STRtree(as_geoms)
 
-    conflicts: List[AirspaceConflict] = []
+    conflicts: list[AirspaceConflict] = []
 
     for fl_idx, fl in enumerate(flight_lines):
         fl_geom = fl.geometry
@@ -259,7 +259,7 @@ def check_airspace_conflicts(
 
 def _extract_entry_exit(
     intersection: BaseGeometry,
-) -> Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]:
+) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
     """Extract entry and exit (lon, lat) from an intersection geometry.
 
     For a LineString, the first coordinate is the entry point and the
@@ -295,9 +295,9 @@ def _extract_entry_exit(
 
 def check_airspace_proximity(
     flight_lines,
-    airspaces: List[Airspace],
+    airspaces: list[Airspace],
     buffer_m: float = 1000.0,
-) -> List[AirspaceConflict]:
+) -> list[AirspaceConflict]:
     """Check for near-miss proximity to airspace without penetration.
 
     Returns conflicts where the flight line does *not* intersect the
@@ -327,7 +327,7 @@ def check_airspace_proximity(
     buffered_geoms = [a.geometry.buffer(buf_deg) for a in airspaces]
     tree = STRtree(buffered_geoms)
 
-    near_misses: List[AirspaceConflict] = []
+    near_misses: list[AirspaceConflict] = []
 
     for fl_idx, fl in enumerate(flight_lines):
         fl_geom = fl.geometry
@@ -370,9 +370,9 @@ def check_airspace_proximity(
 
 
 def convert_agl_floors(
-    airspaces: List[Airspace],
+    airspaces: list[Airspace],
     dem_file: str,
-) -> List[Airspace]:
+) -> list[Airspace]:
     """Convert AGL (SFC-referenced) floors to MSL using terrain elevations.
 
     For each airspace whose ``floor_reference`` is ``"SFC"``, computes
@@ -422,9 +422,9 @@ def convert_agl_floors(
 
 
 def filter_by_schedule(
-    airspaces: List[Airspace],
-    at_datetime: Optional["datetime"] = None,
-) -> List[Airspace]:
+    airspaces: list[Airspace],
+    at_datetime: datetime | None = None,
+) -> list[Airspace]:
     """Filter airspaces by their active schedule.
 
     Parses the ``schedule`` field (e.g. ``"0700 - 1800, MON - FRI"``)
@@ -462,9 +462,9 @@ _DAY_MAP = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6
 
 def _is_schedule_active(
     schedule: str,
-    gmt_offset: Optional[float],
-    dst_code: Optional[int],
-    at_utc: "datetime",
+    gmt_offset: float | None,
+    dst_code: int | None,
+    at_utc: datetime,
 ) -> bool:
     """Check if a schedule string is active at a given UTC time.
 
@@ -612,8 +612,8 @@ def classify_severity(airspace_type: int) -> str:
 
 
 def _resolve_type_filter(
-    type_filter: "int | str | list[int | str] | None",
-) -> Optional[set]:
+    type_filter: int | str | list[int | str] | None,
+) -> set | None:
     """Resolve a type filter specification to a set of integer type codes.
 
     Accepts a single type code (int), a type name (str), a list of
@@ -676,8 +676,8 @@ def clear_airspace_cache() -> None:
 
 
 def _cache_key(
-    bounds: Tuple[float, float, float, float],
-    country: "str | list | None",
+    bounds: tuple[float, float, float, float],
+    country: str | list | None,
 ) -> str:
     """Compute a deterministic cache filename from query parameters."""
     # Round bounds to 1 decimal degree so nearby queries share cache
@@ -700,7 +700,7 @@ def _is_cache_stale(cache_path: str, max_age_hours: float) -> bool:
     return age_hours > max_age_hours
 
 
-def _parse_airspace_item(item: dict) -> Optional[Airspace]:
+def _parse_airspace_item(item: dict) -> Airspace | None:
     """Parse a single OpenAIP airspace JSON object into an Airspace."""
     try:
         geojson = item.get("geometry")
@@ -766,7 +766,7 @@ def _parse_airspace_item(item: dict) -> Optional[Airspace]:
         return None
 
 
-def parse_airspace_items(items: List[dict]) -> List[Airspace]:
+def parse_airspace_items(items: list[dict]) -> list[Airspace]:
     """Parse a list of raw OpenAIP JSON items into Airspace objects.
 
     Items that cannot be parsed (missing geometry, non-polygon geometry,
@@ -793,7 +793,7 @@ class OpenAIPClient:
 
     BASE_URL = "https://api.core.openaip.net/api"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.environ.get("OPENAIP_API_KEY", "")
         if not self.api_key:
             raise HyPlanValueError(
@@ -803,11 +803,11 @@ class OpenAIPClient:
 
     def fetch_airspaces(
         self,
-        bounds: Tuple[float, float, float, float],
-        country: "str | list[str] | None" = None,
+        bounds: tuple[float, float, float, float],
+        country: str | list[str] | None = None,
         max_age_hours: float = 24.0,
-        type_filter: "int | str | list[int | str] | None" = None,
-    ) -> List[Airspace]:
+        type_filter: int | str | list[int | str] | None = None,
+    ) -> list[Airspace]:
         """Fetch airspaces within a bounding box.
 
         Uses a local JSON cache; stale entries are re-fetched.
@@ -835,10 +835,10 @@ class OpenAIPClient:
 
     def fetch_airspaces_raw(
         self,
-        bounds: Tuple[float, float, float, float],
-        country: "str | list[str] | None" = None,
+        bounds: tuple[float, float, float, float],
+        country: str | list[str] | None = None,
         max_age_hours: float = 24.0,
-    ) -> Tuple[List[Airspace], List[dict]]:
+    ) -> tuple[list[Airspace], list[dict]]:
         """Fetch airspaces and return both parsed objects and raw JSON items.
 
         Same as :meth:`fetch_airspaces` but also returns the raw API
@@ -872,7 +872,7 @@ class OpenAIPClient:
         min_lon, min_lat, max_lon, max_lat = bounds
 
         seen_ids: set = set()
-        items: List[dict] = []  # type: ignore[no-redef]
+        items: list[dict] = []  # type: ignore[no-redef]
         for c in countries:
             page_items = self._fetch_all_pages(bounds, c)
             for it in page_items:
@@ -903,12 +903,12 @@ class OpenAIPClient:
 
     def _fetch_all_pages(
         self,
-        bounds: Tuple[float, float, float, float],
-        country: Optional[str],
-    ) -> List[dict]:
+        bounds: tuple[float, float, float, float],
+        country: str | None,
+    ) -> list[dict]:
         """Fetch all pages of airspace results from the API."""
         min_lon, min_lat, max_lon, max_lat = bounds
-        all_items: List[dict] = []
+        all_items: list[dict] = []
         page = 1
         limit = 100
 
@@ -949,7 +949,7 @@ class OpenAIPClient:
         return all_items
 
     @staticmethod
-    def _parse_items(items: List[dict]) -> List[Airspace]:
+    def _parse_items(items: list[dict]) -> list[Airspace]:
         """Parse a list of raw JSON items into Airspace objects."""
         return parse_airspace_items(items)
 
@@ -959,7 +959,7 @@ class OpenAIPClient:
 # ---------------------------------------------------------------------------
 
 
-def _bounds_within_us(bounds: Tuple[float, float, float, float]) -> bool:
+def _bounds_within_us(bounds: tuple[float, float, float, float]) -> bool:
     """Return True if the bounding box falls within US airspace.
 
     Uses a generous box covering CONUS, Alaska, Hawaii, and territories.
@@ -971,13 +971,13 @@ def _bounds_within_us(bounds: Tuple[float, float, float, float]) -> bool:
 
 def fetch_and_check(
     flight_lines,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     buffer_m: float = 1000.0,
-    country: "str | list[str] | None" = None,
+    country: str | list[str] | None = None,
     max_age_hours: float = 24.0,
-    type_filter: "int | str | list[int | str] | None" = None,
+    type_filter: int | str | list[int | str] | None = None,
     use_faa: bool = True,
-) -> List[AirspaceConflict]:
+) -> list[AirspaceConflict]:
     """Fetch nearby airspaces and check flight lines for conflicts.
 
     This is a one-call convenience function that:
@@ -1115,9 +1115,9 @@ class FAATFRClient:
 
     def fetch_tfrs(
         self,
-        bounds: Optional[Tuple[float, float, float, float]] = None,
+        bounds: tuple[float, float, float, float] | None = None,
         effective_only: bool = False,
-    ) -> List[Airspace]:
+    ) -> list[Airspace]:
         """Fetch active TFRs, optionally filtered to a bounding box.
 
         Args:
@@ -1202,7 +1202,7 @@ class FAATFRClient:
         return airspaces  # type: ignore[return-value]
 
     @staticmethod
-    def _parse_date_from_description(description: str) -> Optional[str]:
+    def _parse_date_from_description(description: str) -> str | None:
         """Try to extract a start date from a tfrapi description string.
 
         Descriptions look like:
@@ -1227,7 +1227,7 @@ class FAATFRClient:
         return None
 
     @staticmethod
-    def _filter_effective(airspaces: List[Airspace]) -> List[Airspace]:
+    def _filter_effective(airspaces: list[Airspace]) -> list[Airspace]:
         """Remove TFRs whose start date is in the future."""
         from datetime import date as _date
 
@@ -1254,7 +1254,7 @@ class FAATFRClient:
     def _parse_wfs_feature(
         feature: dict,
         meta_map: dict,
-    ) -> Optional[Airspace]:
+    ) -> Airspace | None:
         """Convert a WFS GeoJSON feature + tfrapi metadata to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1319,7 +1319,7 @@ class FAATFRClient:
         }
 
     @staticmethod
-    def _dict_to_airspace(d: dict) -> Optional[Airspace]:
+    def _dict_to_airspace(d: dict) -> Airspace | None:
         """Deserialise a cached dict back to an Airspace."""
         try:
             geom = shape(d["geometry"])
@@ -1402,16 +1402,16 @@ class NASRAirspaceSource:
     def __init__(
         self,
         cache_ttl_days: float = 28.0,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
     ):
         self._cache_ttl_hours = cache_ttl_days * 24.0
         self._base_url = base_url or self.DEFAULT_BASE_URL
 
     def fetch_airspaces(
         self,
-        bounds: Tuple[float, float, float, float],
-        sua_types: Optional[List[str]] = None,
-    ) -> List[Airspace]:
+        bounds: tuple[float, float, float, float],
+        sua_types: list[str] | None = None,
+    ) -> list[Airspace]:
         """Fetch NASR airspace data within bounds.
 
         Args:
@@ -1460,8 +1460,8 @@ class NASRAirspaceSource:
 
     def _fetch_arcgis(
         self,
-        bounds: Tuple[float, float, float, float],
-    ) -> List[dict]:
+        bounds: tuple[float, float, float, float],
+    ) -> list[dict]:
         """Query the ArcGIS Feature Server for airspace features."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1487,7 +1487,7 @@ class NASRAirspaceSource:
         return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
-    def _feature_to_airspace(feature: dict) -> Optional[Airspace]:
+    def _feature_to_airspace(feature: dict) -> Airspace | None:
         """Convert a GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1578,8 +1578,8 @@ class NASRAirspaceSource:
 
     def fetch_sfras(
         self,
-        bounds: Tuple[float, float, float, float],
-    ) -> List[Airspace]:
+        bounds: tuple[float, float, float, float],
+    ) -> list[Airspace]:
         """Fetch Special Flight Rules Areas (SFRAs) within bounds.
 
         Queries the FAA Airspace ArcGIS layer for features with
@@ -1622,8 +1622,8 @@ class NASRAirspaceSource:
 
     def _fetch_sfra_arcgis(
         self,
-        bounds: Tuple[float, float, float, float],
-    ) -> List[dict]:
+        bounds: tuple[float, float, float, float],
+    ) -> list[dict]:
         """Query the ArcGIS Airspace layer for SFRA features."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1651,7 +1651,7 @@ class NASRAirspaceSource:
         return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
-    def _sfra_feature_to_airspace(feature: dict) -> Optional[Airspace]:
+    def _sfra_feature_to_airspace(feature: dict) -> Airspace | None:
         """Convert an Airspace-layer GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1709,9 +1709,9 @@ class NASRAirspaceSource:
 
     def fetch_class_airspace(
         self,
-        bounds: Tuple[float, float, float, float],
-        classes: Optional[List[str]] = None,
-    ) -> List[Airspace]:
+        bounds: tuple[float, float, float, float],
+        classes: list[str] | None = None,
+    ) -> list[Airspace]:
         """Fetch FAA Class B/C/D/E airspace within bounds.
 
         Args:
@@ -1757,9 +1757,9 @@ class NASRAirspaceSource:
 
     def _fetch_class_arcgis(
         self,
-        bounds: Tuple[float, float, float, float],
-        classes: List[str],
-    ) -> List[dict]:
+        bounds: tuple[float, float, float, float],
+        classes: list[str],
+    ) -> list[dict]:
         """Query the ArcGIS Class_Airspace layer."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1791,7 +1791,7 @@ class NASRAirspaceSource:
         return data.get("features", [])  # type: ignore[no-any-return]
 
     @staticmethod
-    def _class_feature_to_airspace(feature: dict) -> Optional[Airspace]:
+    def _class_feature_to_airspace(feature: dict) -> Airspace | None:
         """Convert a Class_Airspace GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1865,14 +1865,14 @@ class OceanicTrack:
         geometry: Shapely LineString of the track.
     """
 
-    ident: "str | int"
+    ident: str | int
     system: str
     valid_from: str
     valid_to: str
-    waypoints: List[Tuple[float, float, str]]
-    east_levels: Optional[List[str]] = None
-    west_levels: Optional[List[str]] = None
-    geometry: Optional["LineString"] = None
+    waypoints: list[tuple[float, float, str]]
+    east_levels: list[str] | None = None
+    west_levels: list[str] | None = None
+    geometry: LineString | None = None
 
 
 class FlightPlanDBClient:
@@ -1892,21 +1892,21 @@ class FlightPlanDBClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         cache_ttl_hours: float = 6.0,
     ):
         self._api_key = api_key
         self._cache_ttl = cache_ttl_hours
 
-    def fetch_nats(self) -> List[OceanicTrack]:
+    def fetch_nats(self) -> list[OceanicTrack]:
         """Fetch current North Atlantic Tracks."""
         return self._fetch_tracks(self.NAT_URL, "NAT")
 
-    def fetch_pacots(self) -> List[OceanicTrack]:
+    def fetch_pacots(self) -> list[OceanicTrack]:
         """Fetch current Pacific Organized Tracks."""
         return self._fetch_tracks(self.PACOT_URL, "PACOT")
 
-    def _fetch_tracks(self, url: str, system: str) -> List[OceanicTrack]:
+    def _fetch_tracks(self, url: str, system: str) -> list[OceanicTrack]:
         """Fetch and parse tracks from a FlightPlanDB endpoint."""
         from shapely.geometry import LineString
 

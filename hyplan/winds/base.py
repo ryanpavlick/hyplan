@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 from abc import ABC, abstractmethod
-from typing import Tuple
 
 from pint import Quantity
 
@@ -23,7 +22,7 @@ class WindField(ABC):
         lon: float,
         altitude: Quantity,
         time: datetime.datetime,
-    ) -> Tuple[Quantity, Quantity]:
+    ) -> tuple[Quantity, Quantity]:
         """Return (u, v) wind components at the given point.
 
         Args:

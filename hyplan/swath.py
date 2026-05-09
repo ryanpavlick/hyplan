@@ -6,7 +6,6 @@ accounting for cross-track field of view and altitude.
 :func:`calculate_swath_widths` measures port/starboard widths along the track.
 """
 
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -31,8 +30,8 @@ __all__ = [
 def _resolve_swath_boresight_azimuths(
     track_azimuths: np.ndarray,
     heading_mode: str = "track",
-    crab_angle_deg: Optional[float] = None,
-    heading_deg: Optional[float] = None,
+    crab_angle_deg: float | None = None,
+    heading_deg: float | None = None,
 ) -> np.ndarray:
     """Compute instrument boresight azimuths for swath edge computation.
 
@@ -61,9 +60,9 @@ def _resolve_swath_boresight_azimuths(
             f"heading_mode must be 'track' or 'crabbed', got {heading_mode!r}"
         )
     if heading_deg is not None:
-        return np.full_like(track_azimuths, heading_deg % 360.0)  # type: ignore[no-any-return]
+        return np.full_like(track_azimuths, heading_deg % 360.0)
     if crab_angle_deg is not None:
-        return (track_azimuths + crab_angle_deg) % 360.0  # type: ignore[no-any-return]
+        return (track_azimuths + crab_angle_deg) % 360.0
     raise ValueError(
         "heading_mode='crabbed' requires either crab_angle_deg or heading_deg"
     )
@@ -74,10 +73,10 @@ def generate_swath_polygon(
     sensor: ScanningSensor,
     along_precision: float = 100.0,
     across_precision: float = 10.0,
-    dem_file: Optional[str] = None,
+    dem_file: str | None = None,
     heading_mode: str = "track",
-    crab_angle_deg: Optional[float] = None,
-    heading_deg: Optional[float] = None,
+    crab_angle_deg: float | None = None,
+    heading_deg: float | None = None,
 ) -> Polygon:
     """Generate a swath polygon for a given flight line and sensor.
 
@@ -198,7 +197,7 @@ def calculate_swath_widths(swath_polygon: Polygon) -> dict:
     }
 
 def analyze_swath_gaps_overlaps(
-    swath_polygons: List[Polygon],
+    swath_polygons: list[Polygon],
 ) -> pd.DataFrame:
     """Pairwise gap/overlap analysis between adjacent swath polygons.
 

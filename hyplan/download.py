@@ -1,4 +1,4 @@
-import requests  # type: ignore[import-untyped]
+import requests
 import logging
 import os
 

@@ -14,7 +14,7 @@ import logging
 import os
 import time
 import pandas as pd
-import requests  # type: ignore[import-untyped]
+import requests
 
 from ..exceptions import HyPlanRuntimeError
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import itertools
 import logging
-from typing import Optional, Tuple
 
 import networkx as nx
 
@@ -165,7 +164,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     return total
 
 
-def _item_endpoints(item) -> Tuple[Waypoint, Waypoint]:
+def _item_endpoints(item) -> tuple[Waypoint, Waypoint]:
     """Return (entry, exit) Waypoints for a visit item.
 
     Visit items are FlightLine, Pattern, or bare Waypoint. A bare Waypoint
@@ -471,7 +470,7 @@ def _find_closest_unvisited_item(
     airports=None, time_since_refuel=0.0, time_elapsed=0.0,
     max_endurance=float("inf"), max_daily_flight_time=float("inf"),
     takeoff_landing_overhead=0.0,
-) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+) -> tuple[str | None, str | None, float | None]:
     """
     Find the closest unvisited visit item (FlightLine, Pattern, or bare
     Waypoint) that is feasible within constraints.
@@ -535,7 +534,7 @@ def _find_closest_unvisited_item(
     return best_key, best_node, best_time
 
 
-def _find_closest_airport(G, current_node, airports) -> Tuple[Optional[str], float]:
+def _find_closest_airport(G, current_node, airports) -> tuple[str | None, float]:
     """
     Find the closest airport from the current node.
 
@@ -560,7 +559,7 @@ def _find_best_refuel_airport(
     G, current_node, airports, visited_items, item_keys,
     time_since_refuel, time_elapsed, max_endurance, max_daily_flight_time,
     refuel_time, takeoff_landing_overhead,
-) -> Tuple[Optional[str], float]:
+) -> tuple[str | None, float]:
     """
     Find the best airport to refuel at, ensuring that refueling there
     actually enables reaching at least one more unvisited visit item

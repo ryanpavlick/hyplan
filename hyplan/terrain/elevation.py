@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 
 import numpy as np
 
 from ..geometry import process_linestring
 from ._demgrid import DEMGrid
 from .io import generate_demfile, load_dem
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndarray:
+def get_elevations(lats: np.ndarray[Any, np.dtype[Any]], lons: np.ndarray[Any, np.dtype[Any]], dem_file: str) -> np.ndarray[Any, np.dtype[Any]]:
     """
     Extract elevation values for given latitudes and longitudes from a DEM file.
 
@@ -28,8 +28,8 @@ def get_elevations(lats: np.ndarray, lons: np.ndarray, dem_file: str) -> np.ndar
 
 
 def get_elevations_from_grid(
-    lats: np.ndarray, lons: np.ndarray, dem: DEMGrid
-) -> np.ndarray:
+    lats: np.ndarray[Any, np.dtype[Any]], lons: np.ndarray[Any, np.dtype[Any]], dem: DEMGrid
+) -> np.ndarray[Any, np.dtype[Any]]:
     """Extract elevation values from a :class:`DEMGrid` (no file I/O)."""
     gt = dem.geotransform
     raster = dem.array
@@ -51,7 +51,7 @@ def get_elevations_from_grid(
     return raster[ys, xs]  # type: ignore[no-any-return]
 
 
-def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
+def get_min_max_elevations(dem_file: str) -> tuple[float, float]:
     """
     Get the minimum and maximum elevation values from a DEM file.
 
@@ -66,7 +66,7 @@ def get_min_max_elevations(dem_file: str) -> Tuple[float, float]:
 
 
 def terrain_elevation_along_track(flight_line, dem_file: str,
-                                   precision: float = 100.0) -> dict:
+                                   precision: float = 100.0) -> dict[Any, Any]:
     """Min, mean, and max terrain elevation (m MSL) along a flight line's nadir track.
 
     Samples the DEM at evenly-spaced points along the flight line and returns
@@ -81,7 +81,7 @@ def terrain_elevation_along_track(flight_line, dem_file: str,
         Dict with keys ``"min"``, ``"mean"``, and ``"max"`` (all in meters MSL).
     """
     lats, lons, *_ = process_linestring(flight_line.track(precision=precision))
-    elevations: np.ndarray = get_elevations(lats, lons, dem_file).astype(float)
+    elevations: np.ndarray[Any, np.dtype[Any]] = get_elevations(lats, lons, dem_file).astype(float)
     return {
         "min": float(np.nanmin(elevations)),
         "mean": float(np.nanmean(elevations)),
@@ -115,7 +115,7 @@ def terrain_aspect_azimuth(polygon, dem_file: str | None = None) -> float:
         dem_file = generate_demfile(lats_poly, lons_poly)
 
     dem = load_dem(dem_file)
-    elevations: np.ndarray = dem.array.astype(float)
+    elevations: np.ndarray[Any, np.dtype[Any]] = dem.array.astype(float)
 
     # np.gradient returns (d/d_row, d/d_col).  In a north-up GeoTIFF rows
     # increase southward, so the north component is the *negative* row gradient.

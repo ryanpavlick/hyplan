@@ -8,7 +8,7 @@ fit quality against a reference.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .models import FitResult
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def apply_prior(
     fit_result: FitResult,
-    prior_aircraft: Optional[Aircraft] = None,
+    prior_aircraft: Aircraft | None = None,
     blend_weight: float = 0.3,
 ) -> FitResult:
     """Blend fitted schedules with a prior aircraft model.
@@ -32,8 +32,8 @@ def apply_prior(
 
 def score_fit(
     fit_result: FitResult,
-    reference_aircraft: Optional[Aircraft] = None,
-) -> Dict[str, float]:
+    reference_aircraft: Aircraft | None = None,
+) -> dict[str, float]:
     """Score a fit result against a reference aircraft.
 
     Not yet implemented in v1.  Returns an empty dict.

@@ -37,7 +37,7 @@ class OpenMeteoCloudForecast:
         polygons: gpd.GeoDataFrame,
         forecast_days: int = 7,
         hourly: bool = False,
-        models: "list[str] | None" = None,
+        models: list[str] | None = None,
     ) -> pd.DataFrame:
         """Fetch cloud cover forecast for each polygon.
 
@@ -60,7 +60,7 @@ class OpenMeteoCloudForecast:
               ``cloud_fraction``, ``cloud_fraction_low``,
               ``cloud_fraction_mid``, ``cloud_fraction_high``.
         """
-        import requests as _requests  # type: ignore[import-untyped]
+        import requests as _requests
 
         if "Name" not in polygons.columns:
             raise HyPlanValueError(

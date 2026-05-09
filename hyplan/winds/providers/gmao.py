@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -37,11 +36,11 @@ class GMAOWindField(_GriddedWindField):
         url: Override the default GEOS-FP OPeNDAP URL.
     """
 
-    def __init__(self, *args, url: Optional[str] = None, **kwargs):
+    def __init__(self, *args, url: str | None = None, **kwargs):
         self._base_url = url or _GMAO_FP_URL
         super().__init__(*args, **kwargs)
 
-    def _build_urls(self) -> List[str]:
+    def _build_urls(self) -> list[str]:
         """Single URL — GEOS-FP is served as a single aggregated dataset."""
         return [self._base_url]
 
@@ -54,7 +53,7 @@ class GMAOWindField(_GriddedWindField):
         """
         return self._xr.open_dataset(url, engine="pydap", decode_times=False)
 
-    def _var_names(self) -> Tuple[str, str]:
+    def _var_names(self) -> tuple[str, str]:
         """GEOS-FP uses lowercase u/v."""
         return ("u", "v")
 

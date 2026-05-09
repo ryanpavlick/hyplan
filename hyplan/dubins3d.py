@@ -47,7 +47,6 @@ doi:10.2307/2372560
 """
 
 import math
-from typing import Optional, Tuple, Union
 
 import numpy as np
 from pint import Quantity
@@ -58,6 +57,7 @@ from .geometry import get_utm_transforms
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
 from .exceptions import HyPlanTypeError, HyPlanValueError
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ class _DubinsSegment:
 class _Dubins2D:
     """Standard 2D Dubins path solver with sampling."""
 
-    def __init__(self, qi: np.ndarray, qf: np.ndarray, rhomin: float,
+    def __init__(self, qi: np.ndarray[Any, np.dtype[Any]], qf: np.ndarray[Any, np.dtype[Any]], rhomin: float,
                  disable_ccc: bool = False):
         self.qi = qi.copy()
         self.qf = qf.copy()
@@ -191,7 +191,7 @@ class _Dubins2D:
 
     # --- Sampling ---
 
-    def get_coordinates_at(self, offset: float) -> np.ndarray:
+    def get_coordinates_at(self, offset: float) -> np.ndarray[Any, np.dtype[Any]]:
         """Get (x, y, heading) at a given arc-length offset along the path."""
         noffset = offset / self.rhomin
         qi = np.array([0.0, 0.0, self.qi[2]])
@@ -210,11 +210,11 @@ class _Dubins2D:
 
         q[0] = q[0] * self.rhomin + self.qi[0]
         q[1] = q[1] * self.rhomin + self.qi[1]
-        q[2] = _mod2pi(q[2])  # type: ignore[arg-type]
+        q[2] = _mod2pi(q[2])
         return q
 
 
-def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray:
+def _position_in_segment(offset: float, qi: np.ndarray[Any, np.dtype[Any]], case: str) -> np.ndarray[Any, np.dtype[Any]]:
     """Compute position after traversing a segment of given type."""
     q = np.zeros(3)
     if case == "L":
@@ -229,7 +229,7 @@ def _position_in_segment(offset: float, qi: np.ndarray, case: str) -> np.ndarray
         q[0] = qi[0] + math.cos(qi[2]) * offset
         q[1] = qi[1] + math.sin(qi[2]) * offset
         q[2] = qi[2]
-    return q  # type: ignore[no-any-return]
+    return q
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +442,7 @@ class _TrochoidDubins2D:
         diffs = np.diff(pts[:, :2], axis=0)
         return float(np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)))
 
-    def get_coordinates_at(self, time_offset: float) -> np.ndarray:
+    def get_coordinates_at(self, time_offset: float) -> np.ndarray[Any, np.dtype[Any]]:
         """Get ground-frame (x, y, heading) at a given time offset.
 
         Dispatches by solver mode:
@@ -475,7 +475,7 @@ class _TrochoidDubins2D:
                 self.airspeed * math.sin(air_hdg) + self.wind_v,
                 self.airspeed * math.cos(air_hdg) + self.wind_u,
             )
-            return np.array([gx, gy, ground_heading], dtype=np.float64)  # type: ignore[no-any-return]
+            return np.array([gx, gy, ground_heading], dtype=np.float64)
 
         from ._trochoid_solver import sample_trochoid
         return sample_trochoid(
@@ -520,10 +520,10 @@ class DubinsPath2D:
         self,
         start: Waypoint,
         end: Waypoint,
-        speed: Union[Quantity, float],
+        speed: Quantity | float,
         bank_angle: float,
         *,
-        wind: Optional[Tuple[float, float]] = None,
+        wind: tuple[float, float] | None = None,
         n_samples: int = 50,
     ):
         if not is_waypoint(start) or not is_waypoint(end):
@@ -565,7 +565,7 @@ class DubinsPath2D:
         qi = np.array([start_utm.x, start_utm.y, heading1])
         qf = np.array([end_utm.x, end_utm.y, heading2])
 
-        self._solver: Union[_Dubins2D, _TrochoidDubins2D]
+        self._solver: _Dubins2D | _TrochoidDubins2D
         if wind is None:
             self._solver = _Dubins2D(qi, qf, self._rhomin)
             self._length_m = float(self._solver.maneuver.length)
@@ -588,13 +588,13 @@ class DubinsPath2D:
 
     # -- private helpers ------------------------------------------------------
 
-    def _sample_points(self, n: int) -> np.ndarray:
+    def _sample_points(self, n: int) -> np.ndarray[Any, np.dtype[Any]]:
         """Return (n, 3) array of (lat, lon, heading_deg) along the path."""
         if self._length_m <= 0:
             single = np.array([[
                 self.start.latitude, self.start.longitude, self.start.heading,
             ]])
-            return single  # type: ignore[no-any-return]
+            return single
         if self._wind is None:
             offsets = np.linspace(0.0, self._length_m, n)
             samples = [self._solver.get_coordinates_at(float(d)) for d in offsets]
@@ -605,14 +605,14 @@ class DubinsPath2D:
         headings_math = np.array([s[2] for s in samples])
         lons, lats = self._from_utm(utm[:, 0], utm[:, 1])
         headings_geo = (90.0 - np.degrees(headings_math)) % 360.0
-        return np.column_stack([lats, lons, headings_geo])  # type: ignore[no-any-return]
+        return np.column_stack([lats, lons, headings_geo])
 
     # -- public surface -------------------------------------------------------
 
     @property
     def length(self) -> Quantity:
         """Air-frame path length (``time = length / TAS``)."""
-        return self._length_m * ureg.meter  # type: ignore[no-any-return]
+        return self._length_m * ureg.meter
 
     @property
     def geometry(self) -> LineString:
@@ -620,16 +620,16 @@ class DubinsPath2D:
         return self._geometry
 
     @property
-    def points(self) -> np.ndarray:
+    def points(self) -> np.ndarray[Any, np.dtype[Any]]:
         """Sampled path points as a ``(n, 3)`` array of ``(lat, lon, heading_deg)``."""
         return self._points
 
     @property
     def min_turn_radius(self) -> Quantity:
         """Minimum 2D turn radius (m) — derived from speed and bank angle."""
-        return self._rhomin * ureg.meter  # type: ignore[no-any-return]
+        return self._rhomin * ureg.meter
 
-    def sample_at_distance(self, distance: Union[Quantity, float]) -> Tuple[float, float, float]:
+    def sample_at_distance(self, distance: Quantity | float) -> tuple[float, float, float]:
         """Return ``(lat, lon, heading_deg)`` at the given air-frame distance.
 
         Distance is clamped to ``[0, length]`` to keep the call safe at
@@ -654,8 +654,8 @@ class DubinsPath2D:
 
     def sublinestring(
         self,
-        distance_start: Union[Quantity, float],
-        distance_end: Union[Quantity, float],
+        distance_start: Quantity | float,
+        distance_end: Quantity | float,
         *,
         n_samples: int = 20,
     ) -> LineString:

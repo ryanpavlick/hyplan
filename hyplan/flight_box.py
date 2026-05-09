@@ -13,7 +13,7 @@ for ``LineScanner`` users who need to derive flight altitude from a target GSD.
 
 import numpy as np
 import pymap3d.vincenty
-from typing import Optional, List, Callable, Dict, Union
+from collections.abc import Callable
 from pint import Quantity
 from shapely.geometry import Polygon
 import logging
@@ -60,7 +60,7 @@ def _validate_inputs(**kwargs) -> None:
         - Length-related parameters (`altitude`, `box_length`, `box_width`) are checked for dimensionality if they are `ureg.Quantity` and converted to meters.
         - Unknown parameters will be ignored, with a warning logged.
     """
-    rules: Dict[str, Callable[[Union[float, Quantity, Polygon, bool, None]], Optional[bool]]] = {
+    rules: dict[str, Callable[[float | Quantity | Polygon | bool | None], bool | None]] = {
         'altitude': lambda x: isinstance(x, (float, Quantity)) and x > 0,
         'box_length': lambda x: isinstance(x, (float, Quantity)) and x > 0,
         'box_width': lambda x: isinstance(x, (float, Quantity)) and x > 0,
@@ -118,8 +118,8 @@ def box_around_center_line(
     overlap: float = 20,
     alternate_direction: bool = True,
     starting_point: str = "center",
-    polygon: Optional[Polygon] = None,
-) -> List[flight_line.FlightLine]:
+    polygon: Polygon | None = None,
+) -> list[flight_line.FlightLine]:
     """
     Create a series of flight lines around a center line based on the given box dimensions and instrument properties.
 
@@ -179,7 +179,7 @@ def box_around_center_line(
     if polygon:
         along_track_buffer = 2000.0
         polygon = buffer_polygon_along_azimuth(polygon, along_track_buffer, swath.magnitude/2, azimuth)
-        box_length += ureg.Quantity(along_track_buffer, "meter")  # type: ignore[misc]
+        box_length += ureg.Quantity(along_track_buffer, "meter")
 
     nlines = max(1, int(np.ceil((box_width / swath_spacing).m_as("dimensionless"))))
 
@@ -231,13 +231,13 @@ def box_around_polygon(
     instrument: ScanningSensor,
     altitude_msl: Quantity,
     polygon: Polygon,
-    azimuth: Optional[float] = None,
+    azimuth: float | None = None,
     box_name: str = "Line",
     start_numbering: int = 1,
     overlap: float = 20,
     alternate_direction: bool = True,
     clip_to_polygon: bool = True,
-) -> List[flight_line.FlightLine]:
+) -> list[flight_line.FlightLine]:
     """
     Generate flight lines based on either:
     - The minimum rotated rectangle of a polygon (if `azimuth=None`)
@@ -287,7 +287,7 @@ def box_around_polygon(
 
     logger.info(
         f"Bounding box derived: Center=({lat0:.6f}, {lon0:.6f}), Azimuth={azimuth:.2f}°, "
-        f"Length={box_length.magnitude:.2f} m, Width={box_width.magnitude:.2f} m."  # type: ignore[attr-defined]
+        f"Length={box_length.magnitude:.2f} m, Width={box_width.magnitude:.2f} m."
     )
 
     # Call `box_around_center_line` to generate flight lines
@@ -312,17 +312,17 @@ def box_around_polygon_terrain(
     instrument: ScanningSensor,
     altitude_msl: Quantity,
     polygon: Polygon,
-    azimuth: Optional[float] = None,
+    azimuth: float | None = None,
     box_name: str = "Line",
     start_numbering: int = 1,
     overlap: float = 20,
     alternate_direction: bool = True,
     clip_to_polygon: bool = True,
-    clip_polygon: Optional[Polygon] = None,
+    clip_polygon: Polygon | None = None,
     safe_altitude: Quantity = ureg.Quantity(300, "meter"),
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
-    target_agl: Optional[Quantity] = None,
-) -> List[flight_line.FlightLine]:
+    target_agl: Quantity | None = None,
+) -> list[flight_line.FlightLine]:
     """Generate terrain-aware flight lines covering a polygon.
 
     Works for both ``LineScanner`` and ``SidelookingRadar`` sensors.
@@ -415,11 +415,11 @@ def box_around_polygon_terrain(
 
     logger.info(
         f"Bounding box: center=({lat0:.6f}, {lon0:.6f}), az={azimuth:.2f}°, "
-        f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."  # type: ignore[attr-defined]
+        f"length={box_length.magnitude:.0f} m, width={box_width.magnitude:.0f} m."
     )
 
-    box_length_m      = box_length.m_as("meter")  # type: ignore[attr-defined]
-    box_width_m       = box_width.m_as("meter")   # type: ignore[attr-defined]
+    box_length_m      = box_length.m_as("meter")
+    box_width_m       = box_width.m_as("meter")
     safe_altitude_m   = safe_altitude.m_as("meter")
     min_line_length_m = min_line_length.m_as("meter")
     mode3             = target_agl is not None
@@ -550,7 +550,7 @@ def _generate_box_dem(
             corner_lats.append(lat)
             corner_lons.append(lon)
 
-    return terrain.generate_demfile(  # type: ignore[no-any-return]
+    return terrain.generate_demfile(
         np.array(corner_lats), wrap_to_180(np.array(corner_lons))  # type: ignore[arg-type]
     )
 
@@ -613,7 +613,7 @@ def altitude_msl_for_pixel_size(
     """
     min_elev, _ = terrain.get_min_max_elevations(dem_file)
     altitude_agl = instrument.altitude_agl_for_ground_sample_distance(pixel_size)
-    return altitude_agl + ureg.Quantity(float(min_elev), "meter")  # type: ignore[no-any-return]
+    return altitude_agl + ureg.Quantity(float(min_elev), "meter")
 
 
 def box_around_center_terrain(
@@ -629,10 +629,10 @@ def box_around_center_terrain(
     overlap: float = 20,
     alternate_direction: bool = True,
     safe_altitude: Quantity = ureg.Quantity(300, "meter"),
-    polygon: Optional[Polygon] = None,
+    polygon: Polygon | None = None,
     min_line_length: Quantity = ureg.Quantity(200, "meter"),
-    target_agl: Optional[Quantity] = None,
-) -> List[flight_line.FlightLine]:
+    target_agl: Quantity | None = None,
+) -> list[flight_line.FlightLine]:
     """Create terrain-aware flight lines around an explicit center point.
 
     Constructs a rectangular survey box from the center coordinates and

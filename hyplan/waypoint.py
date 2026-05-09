@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 import warnings
-from typing import Dict, Optional, Union
 
 import pymap3d
 from shapely.geometry import Point
@@ -23,10 +23,10 @@ class Waypoint:
         latitude: float,
         longitude: float,
         heading: float,
-        altitude_msl: Union[Quantity, float, None] = None,
+        altitude_msl: Quantity | float | None = None,
         name: str | None = None,
-        speed: Union[Quantity, float, None] = None,
-        delay: Union[Quantity, float, None] = None,
+        speed: Quantity | float | None = None,
+        delay: Quantity | float | None = None,
         segment_type: str | None = None,
     ):
         """
@@ -58,7 +58,7 @@ class Waypoint:
             raise HyPlanTypeError("Heading must be a float or an int")
 
         # Validate and process altitude (MSL)
-        self.altitude_msl: Optional[Quantity]
+        self.altitude_msl: Quantity | None
         if altitude_msl is None:
             self.altitude_msl = None
         elif isinstance(altitude_msl, (int, float)):
@@ -69,7 +69,7 @@ class Waypoint:
             raise HyPlanTypeError("altitude_msl must be None, a float (meters), or a pint Quantity with length units")
 
         if self.altitude_msl is not None:
-            alt_m = self.altitude_msl.m_as(ureg.meter)  # type: ignore[union-attr]
+            alt_m = self.altitude_msl.m_as(ureg.meter)
             if alt_m < 0:
                 raise HyPlanValueError(f"Altitude must be non-negative, got {alt_m} m")
             if alt_m > 22000:
@@ -90,9 +90,9 @@ class Waypoint:
 
     def offset_north_east(
         self,
-        offset_north: Union[Quantity, float],
-        offset_east: Union[Quantity, float],
-    ) -> "Waypoint":
+        offset_north: Quantity | float,
+        offset_east: Quantity | float,
+    ) -> Waypoint:
         """Return a new Waypoint translated by geodetic N/E offsets.
 
         Args:
@@ -120,7 +120,7 @@ class Waypoint:
         return Waypoint(
             latitude=round(new_lat, 6),
             longitude=round(wrap_to_180(new_lon), 6),  # type: ignore[arg-type]
-            heading=self.heading,  # type: ignore[arg-type]
+            heading=self.heading,
             altitude_msl=self.altitude_msl,
             name=self.name,
             speed=self.speed,
@@ -128,7 +128,7 @@ class Waypoint:
             segment_type=self.segment_type,
         )
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict[Any, Any]:
         """Convert the waypoint to a dictionary representation.
 
         The returned dict round-trips through :meth:`Waypoint.from_dict`
@@ -154,7 +154,7 @@ class Waypoint:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "Waypoint":
+    def from_dict(cls, data: dict[Any, Any]) -> Waypoint:
         """Reconstruct a Waypoint from a :meth:`to_dict` dictionary.
 
         Required keys are ``latitude``, ``longitude``, and ``heading``.

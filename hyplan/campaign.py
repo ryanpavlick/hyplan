@@ -23,7 +23,6 @@ import datetime
 import json
 import logging
 import os
-from typing import Dict, List, Optional, Tuple
 
 from shapely.geometry import box, mapping, shape, Polygon
 
@@ -62,9 +61,9 @@ class Campaign:
     def __init__(
         self,
         name: str,
-        bounds: Optional[Tuple[float, float, float, float]] = None,
-        polygon: Optional[Polygon] = None,
-        country: Optional[str] = None,
+        bounds: tuple[float, float, float, float] | None = None,
+        polygon: Polygon | None = None,
+        country: str | None = None,
     ):
         if bounds is not None and polygon is not None:
             raise HyPlanValueError(
@@ -99,18 +98,18 @@ class Campaign:
         self._country = country
 
         # Airspace data
-        self._airspaces: Optional[List[Airspace]] = None
-        self._raw_airspace_items: Optional[List[dict]] = None
-        self._fetch_timestamp: Optional[str] = None
+        self._airspaces: list[Airspace] | None = None
+        self._raw_airspace_items: list[dict] | None = None
+        self._fetch_timestamp: str | None = None
 
         # Flight lines and groups
-        self._flight_lines: Dict[str, FlightLine] = {}  # id -> FlightLine
-        self._groups: List[dict] = []
+        self._flight_lines: dict[str, FlightLine] = {}  # id -> FlightLine
+        self._groups: list[dict] = []
         self._line_counter: int = 0
         self._group_counter: int = 0
 
         # Patterns (rosette, racetrack, polygon, sawtooth, spiral)
-        self._patterns: Dict[str, Pattern] = {}
+        self._patterns: dict[str, Pattern] = {}
         self._pattern_counter: int = 0
 
         # Revision metadata
@@ -132,15 +131,15 @@ class Campaign:
         return self._polygon
 
     @property
-    def bounds(self) -> Tuple[float, float, float, float]:
+    def bounds(self) -> tuple[float, float, float, float]:
         return self._bounds
 
     @property
-    def country(self) -> Optional[str]:
+    def country(self) -> str | None:
         return self._country
 
     @property
-    def airspaces(self) -> Optional[List[Airspace]]:
+    def airspaces(self) -> list[Airspace] | None:
         return self._airspaces
 
     @property
@@ -148,24 +147,24 @@ class Campaign:
         return self._airspaces is not None
 
     @property
-    def flight_lines(self) -> List[FlightLine]:
+    def flight_lines(self) -> list[FlightLine]:
         return list(self._flight_lines.values())
 
     @property
-    def flight_line_ids(self) -> List[str]:
+    def flight_line_ids(self) -> list[str]:
         return list(self._flight_lines.keys())
 
     @property
-    def groups(self) -> List[dict]:
+    def groups(self) -> list[dict]:
         return list(self._groups)
 
     @property
-    def patterns(self) -> List[Pattern]:
+    def patterns(self) -> list[Pattern]:
         """All patterns attached to this campaign, in insertion order."""
         return list(self._patterns.values())
 
     @property
-    def pattern_ids(self) -> List[str]:
+    def pattern_ids(self) -> list[str]:
         return list(self._patterns.keys())
 
     @property
@@ -186,7 +185,7 @@ class Campaign:
 
     def fetch_airspaces(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         force: bool = False,
     ) -> "Campaign":
         """Fetch airspaces from OpenAIP for this domain.
@@ -213,7 +212,7 @@ class Campaign:
     def check_conflicts(
         self,
         flight_lines=None,
-    ) -> List[AirspaceConflict]:
+    ) -> list[AirspaceConflict]:
         """Check flight lines against this campaign's airspaces.
 
         Args:
@@ -229,7 +228,7 @@ class Campaign:
             )
         if flight_lines is None:
             flight_lines = self.flight_lines
-        return check_airspace_conflicts(flight_lines, self._airspaces)  # type: ignore[no-any-return]
+        return check_airspace_conflicts(flight_lines, self._airspaces)
 
     # ------------------------------------------------------------------
     # Flight lines and groups
@@ -237,10 +236,10 @@ class Campaign:
 
     def add_flight_lines(
         self,
-        lines: List[FlightLine],
-        group_name: Optional[str] = None,
+        lines: list[FlightLine],
+        group_name: str | None = None,
         group_type: str = "manual",
-        generation_params: Optional[dict] = None,
+        generation_params: dict | None = None,
     ) -> str:
         """Add flight lines to the campaign and create a group.
 
@@ -413,7 +412,7 @@ class Campaign:
         pattern.pattern_id = pattern_id
 
         if pattern.is_line_based:
-            rekeyed: Dict[str, FlightLine] = {}
+            rekeyed: dict[str, FlightLine] = {}
             for fl in pattern.lines.values():
                 self._line_counter += 1
                 line_id = f"line_{self._line_counter:03d}"
@@ -454,7 +453,7 @@ class Campaign:
 
         new_pattern.pattern_id = pattern_id
         if new_pattern.is_line_based:
-            rekeyed: Dict[str, FlightLine] = {}
+            rekeyed: dict[str, FlightLine] = {}
             for fl in new_pattern.lines.values():
                 self._line_counter += 1
                 line_id = f"line_{self._line_counter:03d}"
@@ -504,7 +503,7 @@ class Campaign:
                 return pattern.lines[line_id]
         raise HyPlanValueError(f"Flight line '{line_id}' not found.")
 
-    def find_pattern_for_line(self, line_id: str) -> Optional[Pattern]:
+    def find_pattern_for_line(self, line_id: str) -> Pattern | None:
         """Return the Pattern owning *line_id*, or None if the line is
         free-standing or does not exist."""
         for pattern in self._patterns.values():
@@ -512,7 +511,7 @@ class Campaign:
                 return pattern
         return None
 
-    def all_flight_lines(self) -> List[FlightLine]:
+    def all_flight_lines(self) -> list[FlightLine]:
         """Return all FlightLines in the campaign: free-standing plus
         pattern-owned lines, in a stable order."""
         out = list(self._flight_lines.values())
@@ -521,10 +520,10 @@ class Campaign:
                 out.extend(pattern.lines.values())
         return out
 
-    def all_flight_lines_dict(self) -> Dict[str, FlightLine]:
+    def all_flight_lines_dict(self) -> dict[str, FlightLine]:
         """Return ``{line_id: FlightLine}`` for every flight line in the
         campaign — free-standing or pattern-owned."""
-        out: Dict[str, FlightLine] = dict(self._flight_lines)
+        out: dict[str, FlightLine] = dict(self._flight_lines)
         for pattern in self._patterns.values():
             if pattern.is_line_based:
                 out.update(pattern.lines)

@@ -17,10 +17,80 @@ per-aircraft builder; everything else lives here.
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
+
+
+# ---------------------------------------------------------------------------
+# Shared numerical helpers (deduped across per-aircraft loaders)
+# ---------------------------------------------------------------------------
+
+#: Conversion factors used everywhere in the calibration pipeline.
+M_PER_S_TO_KT = 1.9438444924406046
+M_TO_FT = 3.28083989501
+DEG_LAT_TO_M = 111_320.0  # m per degree latitude (sphere approx)
+
+
+def smooth_diff(
+    t_s: np.ndarray, x: np.ndarray, half_s: float = 90.0
+) -> np.ndarray:
+    """Centered finite difference of ``x(t)`` over a 2*half_s window.
+
+    Default ``half_s=90`` matches the 180-second window used for vertical
+    rate estimation across every aircraft loader.  For groundspeed
+    estimation from lat/lon, callers typically use ``half_s=5`` to avoid
+    over-smoothing.
+    """
+    lo = np.searchsorted(t_s, t_s - half_s, side="left")
+    hi = np.searchsorted(t_s, t_s + half_s, side="right") - 1
+    lo = np.clip(lo, 0, len(t_s) - 1)
+    hi = np.clip(hi, 0, len(t_s) - 1)
+    dt = t_s[hi] - t_s[lo]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(dt > 0, (x[hi] - x[lo]) / dt, np.nan)
+
+
+def vertical_rate_fpm(t_s: np.ndarray, alt_ft: np.ndarray) -> np.ndarray:
+    """Vertical rate in fpm via 180-second centered finite difference.
+
+    The standard recipe across all calibration scripts.  Use this so
+    every aircraft sees the same smoothing — phase labels (climb /
+    cruise / descent thresholds) are calibrated against this window.
+    """
+    return smooth_diff(t_s, alt_ft, half_s=90.0) * 60.0
+
+
+def wind_triangle_tas_kt(
+    t_s: np.ndarray,
+    lat: np.ndarray,
+    lon: np.ndarray,
+    u_wind: np.ndarray,
+    v_wind: np.ndarray,
+    half_s: float = 5.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reconstruct TAS and groundspeed in kt from position + wind.
+
+    Used for archives that don't ship native TAS (HIAPER DC3, SAFIRE
+    ATR-42 EUFAR, BAS Twin Otter ArcticCyclones / IGP, NERC DO-228).
+
+    ``u_wind`` / ``v_wind`` are the eastward / northward wind vector
+    components in m/s.  Groundspeed is computed from finite-difference
+    of position; TAS is groundspeed minus the wind vector
+    (``TAS_vec = GS_vec - wind_vec``).
+
+    Returns ``(tas_kt, groundspeed_kt)``.
+    """
+    cos_lat = np.cos(np.deg2rad(lat))
+    gs_e = smooth_diff(t_s, lon, half_s=half_s) * DEG_LAT_TO_M * cos_lat
+    gs_n = smooth_diff(t_s, lat, half_s=half_s) * DEG_LAT_TO_M
+    tas_e = gs_e - u_wind
+    tas_n = gs_n - v_wind
+    tas_ms = np.hypot(tas_e, tas_n)
+    gs_ms = np.hypot(gs_e, gs_n)
+    return tas_ms * M_PER_S_TO_KT, gs_ms * M_PER_S_TO_KT
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +273,19 @@ def summary_table(
     *,
     source_label: str | None = None,
     print_it: bool = True,
+    manifest_path: Path | str | None = None,
 ) -> pd.DataFrame:
     """Standardized post-§1 summary: counts + reason breakdown.
 
     Returns a one-row DataFrame; also prints a formatted view by
     default.  Each builder calls this in place of the loose
     "loaded N / skipped M / reason counter" output.
+
+    If ``manifest_path`` is given, also writes a per-sortie CSV listing
+    every input file with its kept/dropped status, exclusion reason,
+    duration, peak altitude, and date.  The manifest is the
+    auditable provenance trail for a calibration run; reviewers can
+    answer "did sortie X contribute?" without re-running the script.
     """
     raw_files = len(sorties) + len(skipped)
     valid = len(sorties)
@@ -242,4 +319,30 @@ def summary_table(
             for k, n in reasons.most_common():
                 print(f"  {n:4d}  {k}")
         print(f"date range:        {date_lo} → {date_hi}")
+
+    if manifest_path is not None:
+        rows = []
+        for key, frame in sorties.items():
+            t0 = frame["timestamp"].iloc[0]
+            t1 = frame["timestamp"].iloc[-1]
+            rows.append({
+                "key": key,
+                "status": "kept",
+                "reason": "",
+                "date": t0.date().isoformat(),
+                "duration_min": round((t1 - t0).total_seconds() / 60.0, 1),
+                "peak_alt_ft": int(round(float(frame["altitude"].max()))),
+                "n_fixes": int(len(frame)),
+            })
+        for key, reason in skipped:
+            rows.append({
+                "key": key, "status": "dropped", "reason": reason,
+                "date": "", "duration_min": "", "peak_alt_ft": "", "n_fixes": "",
+            })
+        manifest_df = pd.DataFrame(rows).sort_values(["status", "key"])
+        path = Path(manifest_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_df.to_csv(path, index=False)
+        if print_it:
+            print(f"manifest:          {path}")
     return df

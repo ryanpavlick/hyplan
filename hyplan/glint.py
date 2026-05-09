@@ -37,7 +37,6 @@ import numpy as np
 import geopandas as gpd
 
 from datetime import datetime
-from typing import Optional
 
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import transform
@@ -97,8 +96,8 @@ class GlintArc:
         observation_datetime: datetime,
         altitude_msl,
         speed,
-        bank_angle: Optional[float] = None,
-        site_name: Optional[str] = None,
+        bank_angle: float | None = None,
+        site_name: str | None = None,
         bank_direction: str = "right",
         collection_length=None,
     ):
@@ -125,7 +124,7 @@ class GlintArc:
     # CORE GEOMETRY
     # -------------------------------------------------------------------------
 
-    def _compute_arc(self):
+    def _compute_arc(self) -> None:
 
         # --- Solar geometry ---
         solar_az, solar_zen, *_ = sunpos(

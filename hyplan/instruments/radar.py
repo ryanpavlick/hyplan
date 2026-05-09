@@ -14,10 +14,10 @@ Proceedings*, 1-8. doi:10.1109/AERO.2008.4526385
 
 from __future__ import annotations
 
+from typing import Any
 import json
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Union
 
 import numpy as np
 from pint import Quantity
@@ -60,9 +60,9 @@ class RadarExclusionConflict:
 
 
 def check_lband_radar_exclusions(
-    swath_polygons: Union[Polygon, List[Polygon]],
-    geojson: Union[str, dict, None] = None,
-) -> List[RadarExclusionConflict]:
+    swath_polygons: Polygon | list[Polygon],
+    geojson: str | dict[Any, Any] | None = None,
+) -> list[RadarExclusionConflict]:
     """Check UAVSAR swath polygons against FAA L-Band radar exclusion zones.
 
     UAVSAR L-Band swaths must remain outside a 10 nautical mile radius of each
@@ -113,8 +113,8 @@ def check_lband_radar_exclusions(
         raise HyPlanValueError("geojson must be a GeoJSON FeatureCollection")
 
     # Parse exclusion zone polygons
-    zone_names: List[str] = []
-    zone_geoms: List[Polygon] = []
+    zone_names: list[str] = []
+    zone_geoms: list[Polygon] = []
     for feature in geojson.get("features", []):  # type: ignore[union-attr]
         geom = shape(feature["geometry"])
         if not isinstance(geom, Polygon):
@@ -129,7 +129,7 @@ def check_lband_radar_exclusions(
     # Spatial index over exclusion zones for fast candidate lookup
     tree = STRtree(zone_geoms)
 
-    conflicts: List[RadarExclusionConflict] = []
+    conflicts: list[RadarExclusionConflict] = []
     for swath_idx, swath in enumerate(swath_polygons):
         candidate_indices = tree.query(swath, predicate="intersects")
         for zone_idx in candidate_indices:
@@ -169,8 +169,8 @@ class SidelookingRadar(Sensor):
         azimuth_resolution: Quantity,   # meters (single-look)
         polarization: str,              # e.g. "quad-pol", "HH"
         look_direction: str = "left",   # "left" or "right"
-        peak_power: Optional[Quantity] = None,  # watts
-        antenna_length: Optional[Quantity] = None,  # meters
+        peak_power: Quantity | None = None,  # watts
+        antenna_length: Quantity | None = None,  # meters
     ):
         super().__init__(name)
 
@@ -194,13 +194,13 @@ class SidelookingRadar(Sensor):
     def wavelength(self) -> Quantity:
         """Radar wavelength derived from frequency."""
         c = 299792458 * ureg.meter / ureg.second
-        return (c / self.frequency).to(ureg.meter)  # type: ignore[no-any-return]
+        return (c / self.frequency).to(ureg.meter)
 
     @property
     def range_resolution(self) -> Quantity:
         """Slant-range resolution from bandwidth: c / (2 * B)."""
         c = 299792458 * ureg.meter / ureg.second
-        return (c / (2 * self.bandwidth)).to(ureg.meter)  # type: ignore[no-any-return]
+        return (c / (2 * self.bandwidth)).to(ureg.meter)
 
     @property
     def half_angle(self) -> float:
@@ -234,17 +234,17 @@ class SidelookingRadar(Sensor):
         h = altitude_agl.magnitude
         near_ground = h * np.tan(np.radians(self.near_range_angle))
         far_ground = h * np.tan(np.radians(self.far_range_angle))
-        return (far_ground - near_ground) * ureg.meter  # type: ignore[no-any-return]
+        return (far_ground - near_ground) * ureg.meter
 
     def near_range_ground_distance(self, altitude_agl: Quantity) -> Quantity:
         """Ground distance from nadir to near edge of swath."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return altitude_agl.magnitude * np.tan(np.radians(self.near_range_angle)) * ureg.meter  # type: ignore[no-any-return]
+        return altitude_agl.magnitude * np.tan(np.radians(self.near_range_angle)) * ureg.meter
 
     def far_range_ground_distance(self, altitude_agl: Quantity) -> Quantity:
         """Ground distance from nadir to far edge of swath."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return altitude_agl.magnitude * np.tan(np.radians(self.far_range_angle)) * ureg.meter  # type: ignore[no-any-return]
+        return altitude_agl.magnitude * np.tan(np.radians(self.far_range_angle)) * ureg.meter
 
     def ground_range_resolution(self, altitude_agl: Quantity, incidence_angle: float | None = None) -> Quantity:
         """
@@ -261,9 +261,9 @@ class SidelookingRadar(Sensor):
         """
         if incidence_angle is None:
             incidence_angle = self.swath_center_angle
-        return (self.range_resolution / np.sin(np.radians(incidence_angle))).to(ureg.meter)  # type: ignore[no-any-return]
+        return (self.range_resolution / np.sin(np.radians(incidence_angle))).to(ureg.meter)
 
-    def ground_sample_distance(self, altitude_agl: Quantity) -> dict:
+    def ground_sample_distance(self, altitude_agl: Quantity) -> dict[Any, Any]:
         """
         Ground sample distance at near range, center, and far range.
 
@@ -295,9 +295,9 @@ class SidelookingRadar(Sensor):
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         if incidence_angle is None:
             incidence_angle = self.swath_center_angle
-        return (altitude_agl / np.cos(np.radians(incidence_angle))).to(ureg.meter)  # type: ignore[no-any-return]
+        return (altitude_agl / np.cos(np.radians(incidence_angle))).to(ureg.meter)
 
-    def swath_offset_angles(self) -> tuple:
+    def swath_offset_angles(self) -> tuple[Any, ...]:
         """
         Return the (port_angle, starboard_angle) for swath polygon generation.
 
@@ -329,7 +329,7 @@ class SidelookingRadar(Sensor):
             Line spacing in meters (center-to-center).
         """
         sw = self.swath_width(altitude_agl)
-        return sw * (1.0 - overlap_fraction)  # type: ignore[no-any-return]
+        return sw * (1.0 - overlap_fraction)
 
 
 # ── UAVSAR Instrument Definitions ──────────────────────────────────────────
@@ -342,7 +342,7 @@ class UAVSAR_Lband(SidelookingRadar):
     Platform: Gulfstream III (C-20A)
     Typical altitude: ~12,500 m (41,000 ft)
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="UAVSAR L-band",
             frequency=1.2575 * ureg.GHz,
@@ -363,7 +363,7 @@ class UAVSAR_Pband(SidelookingRadar):
     Platform: Gulfstream III (C-20A)
     Typical altitude: ~12,500 m (41,000 ft)
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="UAVSAR P-band (AirMOSS)",
             frequency=0.430 * ureg.GHz,
@@ -384,7 +384,7 @@ class UAVSAR_Kaband(SidelookingRadar):
     Platform: Gulfstream III (C-20A)
     Typical altitude: ~12,500 m (41,000 ft)
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="UAVSAR Ka-band (GLISTIN-A)",
             frequency=35.66 * ureg.GHz,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Tuple, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pint import Quantity, Unit
 
@@ -38,7 +38,7 @@ class Sensor:
         """
         if not isinstance(value, Quantity):
             raise HyPlanTypeError(f"Expected a pint.Quantity for {expected_unit}, but got {type(value)}.")
-        return value.to(expected_unit)  # type: ignore[return-value]
+        return value.to(expected_unit)
 
 
 @runtime_checkable
@@ -65,7 +65,7 @@ class ScanningSensor(Protocol):
         """Half-FOV from boresight to swath edge, in degrees."""
         ...
 
-    def swath_offset_angles(self) -> Tuple[float, float]:
+    def swath_offset_angles(self) -> tuple[float, float]:
         """Cross-track angles for the port and starboard swath edges.
 
         Both angles are measured from nadir in degrees: negative = port

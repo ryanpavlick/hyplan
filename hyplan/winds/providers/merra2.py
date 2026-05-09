@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import List
 
 import numpy as np
 
@@ -80,7 +79,7 @@ class MERRA2WindField(_GriddedWindField):
         store = self._xr.backends.PydapDataStore.open(url, session=self._session)
         return self._xr.open_dataset(store)
 
-    def _build_urls(self) -> List[str]:
+    def _build_urls(self) -> list[str]:
         """One URL per day in the time range."""
         urls = []
         dt = self._time_start.date()

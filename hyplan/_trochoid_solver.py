@@ -6,9 +6,10 @@ This file can be tested independently before integrating into dubins3d.py.
 
 import math
 import numpy as np
+from typing import Any
 
 
-def _mod2pi(angle: "float | np.floating | np.ndarray") -> "float | np.floating | np.ndarray":
+def _mod2pi(angle: "float | np.floating | np.ndarray[Any, np.dtype[Any]]") -> "float | np.floating | np.ndarray[Any, np.dtype[Any]]":
     return angle % (2.0 * math.pi)
 
 
@@ -17,13 +18,13 @@ _M2PI = 2 * math.pi
 
 
 def solve_trochoid(
-    qi: np.ndarray,
-    qf: np.ndarray,
+    qi: np.ndarray[Any, np.dtype[Any]],
+    qf: np.ndarray[Any, np.dtype[Any]],
     rhomin: float,
     airspeed: float,
     wind_u: float,
     wind_v: float,
-) -> dict:
+) -> dict[Any, Any]:
     """Solve for the time-optimal trochoidal BSB path.
 
     Args:
@@ -254,8 +255,8 @@ def _newton_raphson(x, k, Va, vw, w, del1, del2, phi1, phi2,
     return x
 
 
-def sample_trochoid(sol: dict, time_offset: float,
-                    airspeed: float, wind_u: float, wind_v: float) -> np.ndarray:
+def sample_trochoid(sol: dict[Any, Any], time_offset: float,
+                    airspeed: float, wind_u: float, wind_v: float) -> np.ndarray[Any, np.dtype[Any]]:
     """Sample ground-frame (x, y, heading) at a given physical time."""
     Va = airspeed
     vw = sol["vw"]
@@ -319,7 +320,7 @@ def sample_trochoid(sol: dict, time_offset: float,
         Va * math.sin(air_hdg) + wind_v,
         Va * math.cos(air_hdg) + wind_u)
 
-    result: np.ndarray = np.array([gx, gy, ground_heading], dtype=np.float64)
+    result: np.ndarray[Any, np.dtype[Any]] = np.array([gx, gy, ground_heading], dtype=np.float64)
     return result
 
 
@@ -508,8 +509,8 @@ def _try_ccc_trochoid_family(
 
 
 def solve_ccc_trochoid(
-    qi: np.ndarray,
-    qf: np.ndarray,
+    qi: np.ndarray[Any, np.dtype[Any]],
+    qf: np.ndarray[Any, np.dtype[Any]],
     rhomin: float,
     airspeed: float,
     wind_u: float,
@@ -562,12 +563,12 @@ def _arc_endpoint(x_s, y_s, alpha_s, delta, tau, A, omega, vw):
 
 
 def sample_ccc_trochoid(
-    sol: dict,
+    sol: dict[Any, Any],
     time_offset: float,
     airspeed: float,
     wind_u: float,
     wind_v: float,
-) -> np.ndarray:
+) -> np.ndarray[Any, np.dtype[Any]]:
     """Sample the ground-frame ``(x, y, ground_heading)`` of a CCC
     trochoidal path at a given physical time."""
     Va = airspeed
@@ -623,4 +624,4 @@ def sample_ccc_trochoid(
         Va * math.cos(air_hdg) + wind_u,
     )
 
-    return np.array([gx, gy, ground_heading], dtype=np.float64)  # type: ignore[no-any-return]
+    return np.array([gx, gy, ground_heading], dtype=np.float64)

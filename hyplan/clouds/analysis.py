@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
 
 import pandas as pd
 
@@ -79,7 +78,7 @@ def simulate_visits(
     rest_day_threshold: int = 6,
     exclude_weekends: bool = False,
     debug: bool = False
-) -> Tuple[pd.DataFrame, Dict[int, Dict[str, list]], Dict[int, list]]:
+) -> tuple[pd.DataFrame, dict[int, dict[str, list]], dict[int, list]]:
     """Simulate daily flight scheduling based on cloud fraction thresholds.
 
     On each visitable day, the alphabetically first unvisited polygon that

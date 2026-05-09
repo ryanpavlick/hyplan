@@ -24,7 +24,7 @@ import random
 import logging
 import warnings
 from functools import lru_cache
-from typing import Optional, Tuple, Callable, Union, List
+from collections.abc import Callable
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import triangulate, transform, unary_union
@@ -34,11 +34,12 @@ from pyproj import Transformer
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
 from .exceptions import HyPlanTypeError, HyPlanValueError, HyPlanRuntimeError
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+def wrap_to_180(lon: float | np.ndarray[Any, np.dtype[Any]]) -> float | np.ndarray[Any, np.dtype[Any]]:
     """
     Wrap angle(s) to the range [-180, 180) degrees.
 
@@ -49,10 +50,10 @@ def wrap_to_180(lon: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         numpy.ndarray or float: Angle(s) wrapped to [-180, 180).
     """
     lon = np.mod(np.array(lon) + 180.0, 360.0) - 180.0
-    return np.squeeze(lon)  # type: ignore[no-any-return]
+    return np.squeeze(lon)
 
 
-def wrap_to_360(angle: Union[float, np.ndarray]) -> np.ndarray:
+def wrap_to_360(angle: float | np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
     """
     Wrap angle(s) to the range [0, 360) degrees.
 
@@ -191,7 +192,7 @@ def get_timezone(latitude: float, longitude: float) -> str:
     return str(tz)
 
 
-def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
+def _validate_polygon(polygon: Polygon | None) -> bool | None:
     """
     Validate the input polygon and ensure it is a single, non-empty, valid Shapely Polygon.
 
@@ -240,7 +241,7 @@ def _validate_polygon(polygon: Optional[Polygon]) -> Optional[bool]:
     return True
 
 
-def calculate_geographic_mean(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Point:
+def calculate_geographic_mean(geometry: BaseGeometry | list[BaseGeometry]) -> Point:
     """
     Calculate the geographic mean of coordinates from a Shapely geometry
     or a list of Shapely geometries using pymap3d.lox.meanm.
@@ -314,7 +315,7 @@ def get_utm_crs(lon: float, lat: float) -> CRS:
 
 
 
-def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tuple[Callable, Callable]:
+def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Callable[..., Any], Callable]:
     """
     Get the UTM CRS and transformation functions to/from WGS84 for a Shapely geometry or a list of geometries.
 
@@ -322,7 +323,7 @@ def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tup
         geometry (BaseGeometry or list of BaseGeometry): A single Shapely geometry object or a list of geometries.
 
     Returns:
-        Tuple[Callable, Callable]: Transformation functions:
+        Tuple[Callable[..., Any], Callable]: Transformation functions:
             - `wgs84_to_utm`: Function to transform coordinates from WGS84 to UTM.
             - `utm_to_wgs84`: Function to transform coordinates from UTM to WGS84.
 
@@ -354,12 +355,12 @@ def get_utm_transforms(geometry: Union[BaseGeometry, List[BaseGeometry]]) -> Tup
     return wgs84_to_utm, utm_to_wgs84
 
 def haversine(
-    lat1: Union[float, np.ndarray],
-    lon1: Union[float, np.ndarray],
-    lat2: Union[float, np.ndarray],
-    lon2: Union[float, np.ndarray],
+    lat1: float | np.ndarray[Any, np.dtype[Any]],
+    lon1: float | np.ndarray[Any, np.dtype[Any]],
+    lat2: float | np.ndarray[Any, np.dtype[Any]],
+    lon2: float | np.ndarray[Any, np.dtype[Any]],
     radius: float = 6371e3,
-) -> Union[float, np.ndarray]:
+) -> float | np.ndarray[Any, np.dtype[Any]]:
     """
     Calculate the haversine (great-circle) distance between two points.
 
@@ -389,7 +390,7 @@ def haversine(
 
     return radius * c  # type: ignore[no-any-return]
 
-def random_points_in_polygon(polygon: Polygon, k: int) -> List[Point]:
+def random_points_in_polygon(polygon: Polygon, k: int) -> list[Point]:
     """
     Generate k points chosen uniformly at random inside a polygon.
 
@@ -430,7 +431,7 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
         polygon (Polygon): Input polygon in WGS84 coordinates. Must be valid.
 
     Returns:
-        tuple: A tuple containing:
+        tuple: A tuple[Any, ...] containing:
             - lat0 (float): Latitude of the rectangle's centroid.
             - lon0 (float): Longitude of the rectangle's centroid.
             - azimuth (float): Azimuth of the rectangle in degrees, wrapped to [-180, 180].
@@ -535,8 +536,8 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
 
 
 def rectangle_dimensions(
-    rectangle: Polygon, azimuth: Optional[float] = None
-) -> Tuple[float, float, float, float, float]:
+    rectangle: Polygon, azimuth: float | None = None
+) -> tuple[float, float, float, float, float]:
     """Extract centroid, length, width and orientation from a rotated rectangle.
 
     Given a 4-sided polygon (e.g. the output of :func:`minimum_rotated_rectangle`
@@ -661,7 +662,7 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
 
     return buffered_polygon_wgs84
 
-def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def process_linestring(linestring: LineString) -> tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray, np.ndarray, np.ndarray]:
     """
     Process a LineString containing WGS84 coordinates to compute latitudes, longitudes, 
     azimuths, and cumulative along-track distances.
@@ -670,7 +671,7 @@ def process_linestring(linestring: LineString) -> Tuple[np.ndarray, np.ndarray, 
         linestring (LineString): A shapely LineString containing WGS84 coordinates.
 
     Returns:
-        tuple: A tuple containing:
+        tuple: A tuple[Any, ...] containing:
             - numpy.ndarray: Latitudes of the track points.
             - numpy.ndarray: Longitudes of the track points.
             - numpy.ndarray: Azimuths between consecutive points.
@@ -773,7 +774,7 @@ def true_to_magnetic(heading: float, declination: float) -> float:
 # Coordinate formatting helpers  (MovingLines-compatible)
 # ---------------------------------------------------------------------------
 
-def dd_to_ddm(lat: float, lon: float) -> Tuple[str, str]:
+def dd_to_ddm(lat: float, lon: float) -> tuple[str, str]:
     """Decimal degrees → ``'DD MM.MM'`` (e.g. ``'37 24.21'``, ``'-122 03.45'``).
 
     This is the MovingLines ``'DD MM'`` / ``pilot_format`` style.
@@ -791,7 +792,7 @@ def dd_to_ddm(lat: float, lon: float) -> Tuple[str, str]:
     return _fmt(lat, False), _fmt(lon, True)
 
 
-def dd_to_ddms(lat: float, lon: float) -> Tuple[str, str]:
+def dd_to_ddms(lat: float, lon: float) -> tuple[str, str]:
     """Decimal degrees → ``'DD MM SS.S'`` (e.g. ``'37 24 12.5'``)."""
     def _fmt(val: float, is_lon: bool = False) -> str:
         sign = -1 if val < 0 else 1
@@ -808,7 +809,7 @@ def dd_to_ddms(lat: float, lon: float) -> Tuple[str, str]:
     return _fmt(lat, False), _fmt(lon, True)
 
 
-def dd_to_nddmm(lat: float, lon: float) -> Tuple[str, str]:
+def dd_to_nddmm(lat: float, lon: float) -> tuple[str, str]:
     """Decimal degrees → ``'N37 24.21'`` / ``'W122 03.45'`` (Honeywell FMS style)."""
     def _fmt_lat(val: float) -> str:
         hemi = "N" if val >= 0 else "S"

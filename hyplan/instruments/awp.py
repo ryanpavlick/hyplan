@@ -24,7 +24,7 @@ Campaigns."
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Iterable, Optional, Tuple
+from collections.abc import Iterable
 
 import geopandas as gpd
 import numpy as np
@@ -162,16 +162,16 @@ class AerosolWindProfiler(Sensor):
     @property
     def sample_period(self) -> Quantity:
         """ADC sample period."""
-        return (1.0 / self.digitization_rate).to("second")  # type: ignore[no-any-return]
+        return (1.0 / self.digitization_rate).to("second")
 
     def max_slant_range(self) -> Quantity:
         """Maximum recorded LOS range from pulse digitization."""
         distance_m = self.samples_per_pulse * _LIGHT_SPEED_MPS * self.sample_period.m_as("second") / 2.0
-        return distance_m * ureg.meter  # type: ignore[no-any-return]
+        return distance_m * ureg.meter
 
     def max_vertical_range(self) -> Quantity:
         """Maximum vertical profiling extent for the configured off-nadir view."""
-        return self.max_slant_range() * np.cos(np.radians(self.off_nadir_angle))  # type: ignore[return-value,no-any-return]
+        return self.max_slant_range() * np.cos(np.radians(self.off_nadir_angle))
 
     def vertical_bin_spacing(self, fft_samples: int = 256) -> Quantity:
         """Vertical bin spacing implied by an FFT window length.
@@ -185,14 +185,14 @@ class AerosolWindProfiler(Sensor):
         if fft_samples <= 0:
             raise HyPlanValueError("fft_samples must be positive")
         slant_m = fft_samples * _LIGHT_SPEED_MPS * self.sample_period.m_as("second") / 2.0
-        return slant_m * np.cos(np.radians(self.off_nadir_angle)) * ureg.meter  # type: ignore[no-any-return]
+        return slant_m * np.cos(np.radians(self.off_nadir_angle)) * ureg.meter
 
     def los_ground_distance(self, altitude_agl: Quantity) -> Quantity:
         """Ground distance from nadir to the LOS surface intercept."""
         altitude_agl = _as_quantity(altitude_agl, "meter", "altitude_agl")
-        return altitude_agl * np.tan(np.radians(self.off_nadir_angle))  # type: ignore[return-value,no-any-return]
+        return altitude_agl * np.tan(np.radians(self.off_nadir_angle))
 
-    def los_orientations(self, track_heading: float) -> Tuple[float, float]:
+    def los_orientations(self, track_heading: float) -> tuple[float, float]:
         """Return absolute LOS azimuths (degrees true) for a given track heading."""
         abs_az = wrap_to_360(np.array(self.los_azimuths_relative) + float(track_heading))
         return float(abs_az[0]), float(abs_az[1])
@@ -208,7 +208,7 @@ class AerosolWindProfiler(Sensor):
         az0, az1 = self.los_azimuths_relative
         delta = np.radians(abs(((az1 - az0) + 180.0) % 360.0 - 180.0))
         separation = np.sqrt(radius ** 2 + radius ** 2 - 2.0 * radius ** 2 * np.cos(delta))
-        return separation * ureg.meter  # type: ignore[no-any-return]
+        return separation * ureg.meter
 
     def los_ground_intercepts(
         self,
@@ -253,7 +253,7 @@ class AerosolWindProfiler(Sensor):
             "second",
             "nadir_dwell_time",
         )
-        return (2.0 * dwell + nadir).to("second")  # type: ignore[no-any-return]
+        return (2.0 * dwell + nadir).to("second")
 
     def profile_assignment_offset(
         self,
@@ -278,7 +278,7 @@ class AerosolWindProfiler(Sensor):
             "second",
             "nadir_dwell_time",
         )
-        return (speed * (dwell + nadir)).to("meter")  # type: ignore[no-any-return]
+        return (speed * (dwell + nadir)).to("meter")
 
     def vector_profile_spacing(
         self,
@@ -297,7 +297,7 @@ class AerosolWindProfiler(Sensor):
             dwell_time_per_los=dwell_time_per_los,
             nadir_dwell_time=nadir_dwell_time,
         )
-        return (speed * dt).to("meter")  # type: ignore[no-any-return]
+        return (speed * dt).to("meter")
 
     def is_stable_segment(
         self,
@@ -353,7 +353,7 @@ def _empty_profile_gdf() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(frame, geometry="geometry", crs="EPSG:4326")
 
 
-def _as_awp(sensor: Optional[AerosolWindProfiler]) -> AerosolWindProfiler:
+def _as_awp(sensor: AerosolWindProfiler | None) -> AerosolWindProfiler:
     if sensor is None:
         return AerosolWindProfiler()
     if not isinstance(sensor, AerosolWindProfiler):
@@ -363,7 +363,7 @@ def _as_awp(sensor: Optional[AerosolWindProfiler]) -> AerosolWindProfiler:
     return sensor
 
 
-def _altitude_agl_or_default(value: Optional[Quantity], fallback: Quantity) -> Quantity:
+def _altitude_agl_or_default(value: Quantity | None, fallback: Quantity) -> Quantity:
     if value is None:
         return fallback.to("meter")
     return _as_quantity(value, "meter", "altitude_agl")
@@ -418,7 +418,7 @@ def _line_length_m(linestring: LineString) -> float:
     return float(cumulative[-1])
 
 
-def _segment_groundspeed(row: pd.Series) -> Optional[Quantity]:
+def _segment_groundspeed(row: pd.Series) -> Quantity | None:
     groundspeed = row.get("groundspeed_kts")
     if pd.notna(groundspeed) and float(groundspeed) > 0:
         return ureg.Quantity(float(groundspeed), "knot")
@@ -474,9 +474,9 @@ def _resolve_platform_headings(
 ) -> np.ndarray:
     """Resolve aircraft headings from track headings and crab metadata."""
     if heading_deg is not None:
-        return np.full_like(track_headings_deg, heading_deg % 360.0)  # type: ignore[no-any-return]
+        return np.full_like(track_headings_deg, heading_deg % 360.0)
     if crab_angle_deg is not None:
-        return (track_headings_deg + crab_angle_deg) % 360.0  # type: ignore[no-any-return]
+        return (track_headings_deg + crab_angle_deg) % 360.0
     return track_headings_deg
 
 

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -29,7 +28,7 @@ def fit_schedules(
     min_points_per_bin: int = 5,
     max_schedule_points: int = 6,
     outlier_sigma: float = 2.5,
-    service_ceiling_ft: Optional[float] = None,
+    service_ceiling_ft: float | None = None,
 ) -> FitResult:
     """Fit speed schedules and vertical profiles from wind-corrected data.
 
@@ -142,11 +141,11 @@ def _fit_phase(
     min_points_per_bin: int,
     max_schedule_points: int,
     outlier_sigma: float,
-) -> Tuple[
-    Optional[TasSchedule],
-    Optional[VerticalProfile],
-    List[ScheduleFitMetrics],
-    Optional[FlightPhaseData],
+) -> tuple[
+    TasSchedule | None,
+    VerticalProfile | None,
+    list[ScheduleFitMetrics],
+    FlightPhaseData | None,
 ]:
     """Fit speed schedule and vertical profile for one phase.
 
@@ -333,9 +332,9 @@ def _rdp_core(points: np.ndarray, epsilon: float) -> np.ndarray:
     if max_dist > epsilon:
         left = _rdp_core(points[: max_idx + 1], epsilon)
         right = _rdp_core(points[max_idx:], epsilon)
-        return np.vstack([left[:-1], right])  # type: ignore[no-any-return]
+        return np.vstack([left[:-1], right])
     else:
-        return np.array([points[0], points[-1]])  # type: ignore[no-any-return]
+        return np.array([points[0], points[-1]])
 
 
 # ------------------------------------------------------------------

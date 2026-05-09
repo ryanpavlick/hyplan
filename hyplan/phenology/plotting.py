@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
 import pandas as pd
 
@@ -45,18 +47,18 @@ _MONTH_LABELS = [
 
 def plot_seasonal_profile(
     summary_df: pd.DataFrame,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     show_std: bool = True,
     ylabel: str = "NDVI",
     **kwargs,
-) -> "plt.Axes":
+) -> Axes:
     """Line plot of mean vegetation index by DOY, one line per polygon.
 
     Parameters
     ----------
     summary_df : pd.DataFrame
         Output of :func:`~hyplan.phenology.summarize_phenology_by_doy`.
-    ax : plt.Axes or None
+    ax : Axes or None
         Matplotlib Axes to plot on.  Created if ``None``.
     show_std : bool
         If ``True``, draw a shaded +/-1 std-dev band.
@@ -67,7 +69,7 @@ def plot_seasonal_profile(
 
     Returns
     -------
-    plt.Axes
+    Axes
     """
     if ax is None:
         _, ax = plt.subplots()
@@ -92,8 +94,8 @@ def plot_seasonal_profile(
 
 def plot_phenology_calendar(
     stages_df: pd.DataFrame,
-    ax: "plt.Axes | None" = None,
-) -> "plt.Axes":
+    ax: Axes | None = None,
+) -> Axes:
     """Gantt-style chart of phenological stages across months.
 
     Each polygon gets a horizontal row with colored bars spanning
@@ -103,12 +105,12 @@ def plot_phenology_calendar(
     ----------
     stages_df : pd.DataFrame
         Output of :func:`~hyplan.phenology.extract_phenology_stages`.
-    ax : plt.Axes or None
+    ax : Axes or None
         Matplotlib Axes to plot on.  Created if ``None``.
 
     Returns
     -------
-    plt.Axes
+    Axes
     """
     required_cols = {"polygon_id"}
     for stage in _STAGE_COLUMNS:
@@ -188,11 +190,11 @@ def plot_phenology_calendar(
 def plot_year_over_year_heatmap(
     df: pd.DataFrame,
     polygon_id: str | None = None,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     cmap: str = "YlGn",
     vmin: float = 0.0,
     vmax: float = 1.0,
-) -> "plt.Axes":
+) -> Axes:
     """Heatmap of vegetation index by DOY (x) and year (y).
 
     Parameters
@@ -204,7 +206,7 @@ def plot_year_over_year_heatmap(
     polygon_id : str or None
         Which polygon to plot.  Required if multiple polygons exist.
         If ``None`` and only one polygon exists, uses that one.
-    ax : plt.Axes or None
+    ax : Axes or None
         Matplotlib Axes to plot on.  Created if ``None``.
     cmap : str
         Colormap name.  Default ``"YlGn"``.
@@ -213,7 +215,7 @@ def plot_year_over_year_heatmap(
 
     Returns
     -------
-    plt.Axes
+    Axes
     """
     polygons = df["polygon_id"].unique()
     if polygon_id is None:
@@ -254,7 +256,7 @@ def plot_year_over_year_heatmap(
     ax.set_xlabel("Day of Year")
     ax.set_ylabel("Year")
     ax.set_title(f"Vegetation Index — {polygon_id}")
-    ax.figure.colorbar(im, ax=ax, label="Value", pad=0.02)  # type: ignore[union-attr]
+    ax.figure.colorbar(im, ax=ax, label="Value", pad=0.02)
     ax.invert_yaxis()
 
     return ax
@@ -263,9 +265,9 @@ def plot_year_over_year_heatmap(
 def plot_cloud_phenology_combined(
     cloud_summary_df: pd.DataFrame,
     phenology_summary_df: pd.DataFrame,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     layout: str = "overlay",
-) -> "plt.Figure | plt.Axes":
+) -> Figure | Axes:
     """Combined cloud fraction and vegetation index seasonal plot.
 
     Parameters
@@ -274,7 +276,7 @@ def plot_cloud_phenology_combined(
         Output of :func:`~hyplan.clouds.summarize_cloud_fraction_by_doy`.
     phenology_summary_df : pd.DataFrame
         Output of :func:`~hyplan.phenology.summarize_phenology_by_doy`.
-    ax : plt.Axes or None
+    ax : Axes or None
         For ``"overlay"`` mode, the Axes to use (created if ``None``).
         Ignored for ``"side_by_side"``.
     layout : str
@@ -282,8 +284,8 @@ def plot_cloud_phenology_combined(
 
     Returns
     -------
-    plt.Axes or plt.Figure
-        ``plt.Axes`` for ``"overlay"``, ``plt.Figure`` for ``"side_by_side"``.
+    Axes or Figure
+        ``Axes`` for ``"overlay"``, ``Figure`` for ``"side_by_side"``.
     """
     if layout not in ("overlay", "side_by_side"):
         raise HyPlanValueError(

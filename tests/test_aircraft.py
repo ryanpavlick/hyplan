@@ -16,8 +16,14 @@ from hyplan.aircraft import (
     NASA_GIV,
     NASA_GV,
     KingAirB200 as B200,
-    C130,
-    TwinOtter,
+    NASA_C130,
+    NOAA_TwinOtter,
+    BAS_TwinOtter,
+    FAAM_BAe146,
+    SAFIRE_ATR42,
+    NERC_DO228,
+    AWI_BaslerBT67,
+    DLR_HALO,
 )
 from hyplan.exceptions import HyPlanValueError
 
@@ -217,10 +223,14 @@ class TestLoadFactorBudget:
         the load-factor budget at level flight."""
         from hyplan.aircraft import (
             NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
-            NASA_P3, NASA_WB57, KingAirB200, C130, TwinOtter,
+            NASA_P3, NASA_WB57, KingAirB200, NASA_C130, NOAA_TwinOtter,
+            BAS_TwinOtter, FAAM_BAe146, SAFIRE_ATR42, NERC_DO228,
+            AWI_BaslerBT67, DLR_HALO,
         )
         for cls in (NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
-                    NASA_P3, NASA_WB57, KingAirB200, C130, TwinOtter):
+                    NASA_P3, NASA_WB57, KingAirB200, NASA_C130, NOAA_TwinOtter,
+                    BAS_TwinOtter, FAAM_BAe146, SAFIRE_ATR42, NERC_DO228,
+                    AWI_BaslerBT67, DLR_HALO):
             ac = cls()
             bp = ac.turn_model.bank_by_phase
             cap = ac.max_bank_under_budget(0.0)
@@ -319,13 +329,73 @@ class TestAircraftInstantiation:
         assert ac.aircraft_type == "Gulfstream V"
         assert ac.service_ceiling.m_as("feet") == pytest.approx(51000)
 
-    def test_c130(self):
-        ac = C130()
+    def test_nasa_c130(self):
+        ac = NASA_C130()
         assert ac.aircraft_type is not None
 
-    def test_twin_otter(self):
-        ac = TwinOtter()
+    def test_noaa_twin_otter(self):
+        ac = NOAA_TwinOtter()
         assert ac.cruise_speed_at(5000 * ureg.feet).magnitude > 0
+
+    def test_bas_twin_otter(self):
+        ac = BAS_TwinOtter()
+        assert ac.aircraft_type == "DHC-6 Twin Otter"
+        assert ac.operator == "BAS"
+        assert ac.calibration_status == "calibrated"
+        assert ac.cruise_speed_at(5000 * ureg.feet).magnitude > 0
+
+    def test_faam_bae146(self):
+        ac = FAAM_BAe146()
+        assert ac.aircraft_type == "BAe-146-301"
+        assert ac.operator == "FAAM"
+        assert ac.calibration_status == "calibrated"
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(34500, abs=1)
+        assert ac.cruise_speed_at(20000 * ureg.feet).magnitude > 0
+
+    def test_safire_atr42(self):
+        ac = SAFIRE_ATR42()
+        assert ac.aircraft_type == "ATR-42-320"
+        assert ac.operator == "SAFIRE"
+        assert ac.calibration_status == "calibrated"
+        assert ac.cruise_speed_at(15000 * ureg.feet).magnitude > 0
+
+    def test_nerc_do228(self):
+        ac = NERC_DO228()
+        assert ac.aircraft_type == "Dornier Do228-101"
+        assert ac.operator == "NERC ARSF"
+        assert ac.tail_number == "D-CALM"
+        assert ac.calibration_status == "calibrated"
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(22000, abs=1)
+        assert ac.cruise_speed_at(10000 * ureg.feet).m_as("knot") == pytest.approx(176)
+        assert ac.climb_profile.rate_at(5000 * ureg.feet).m_as("feet/minute") == pytest.approx(942)
+
+    def test_awi_basler_bt67(self):
+        ac = AWI_BaslerBT67()
+        assert ac.aircraft_type == "Basler BT-67"
+        assert ac.operator == "AWI"
+        assert ac.tail_number == "Polar 5 + Polar 6"
+        assert ac.calibration_status == "calibrated"
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(25000, abs=1)
+        assert ac.cruise_speed_at(10000 * ureg.feet).m_as("knot") == pytest.approx(186)
+        assert ac.climb_profile.rate_at(5000 * ureg.feet).m_as("feet/minute") == pytest.approx(755)
+
+    def test_dlr_halo(self):
+        ac = DLR_HALO()
+        assert ac.aircraft_type == "Gulfstream G550"
+        assert ac.operator == "DLR"
+        assert ac.calibration_status == "calibrated"
+        # G550 cruise at FL350 should be near M0.80 → ~460 KTAS
+        assert ac.cruise_speed_at(35000 * ureg.feet).m_as("knot") > 400
+
+    def test_noaa_giv(self):
+        from hyplan.aircraft import NOAA_GIV
+        ac = NOAA_GIV()
+        assert ac.aircraft_type == "Gulfstream IV-SP"
+        assert ac.operator == "NOAA AOC"
+        assert ac.tail_number == "N49RF"
+        assert ac.calibration_status == "calibrated"
+        # G-IV cruise at FL400 should be ~440 KTAS
+        assert ac.cruise_speed_at(40000 * ureg.feet).m_as("knot") > 400
 
 
 # ---------------------------------------------------------------------------

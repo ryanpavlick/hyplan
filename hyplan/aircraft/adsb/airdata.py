@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -119,8 +119,8 @@ def reconstruct_airdata(
 
 
 def resolve_wind_field(
-    wind_source: Union[str, WindField, None],
-    phased_dfs: List[pd.DataFrame],
+    wind_source: str | WindField | None,
+    phased_dfs: list[pd.DataFrame],
     margin_deg: float = 2.0,
     margin_hours: float = 2.0,
 ) -> WindField:

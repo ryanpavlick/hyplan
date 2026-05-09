@@ -79,7 +79,7 @@ Limitations
 from __future__ import annotations
 
 import datetime
-from typing import Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
 
 import folium
 import geopandas as gpd
@@ -135,22 +135,22 @@ _DEFAULT_MAX_ADAPTIVE_RAYS = 180
 
 def _validate_common_kwargs(
     *,
-    start: Union[Airport, Waypoint],
-    cruise_altitude: Optional[Quantity],
-    on_station_altitude: Optional[Quantity],
+    start: Airport | Waypoint,
+    cruise_altitude: Quantity | None,
+    on_station_altitude: Quantity | None,
     on_station_time: Quantity,
     reserve: Quantity,
     mode: str,
-    valid_modes: Tuple[str, ...],
+    valid_modes: tuple[str, ...],
     azimuth_resolution_deg: float,
     distance_tolerance_nmi: float,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
     ray_strategy: str = "uniform",
-    adaptive_spacing_nmi: Optional[float] = None,
+    adaptive_spacing_nmi: float | None = None,
     max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
-) -> Tuple[Waypoint, Quantity, float, float]:
+) -> tuple[Waypoint, Quantity, float, float]:
     """Validate kwargs common to ``compute_isochrone`` and
     ``compute_refuel_isochrone``.
 
@@ -267,14 +267,14 @@ def _validate_common_kwargs(
 
 def compute_isochrone(
     aircraft: Aircraft,
-    start: Union[Airport, Waypoint],
+    start: Airport | Waypoint,
     budget: Quantity,
     *,
-    cruise_altitude: Optional[Quantity] = None,
-    on_station_altitude: Optional[Quantity] = None,
-    start_time: Optional[datetime.datetime] = None,
-    wind_source: Optional[WindField] = None,
-    return_destination: Union[Airport, Waypoint, None] = None,
+    cruise_altitude: Quantity | None = None,
+    on_station_altitude: Quantity | None = None,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
+    return_destination: Airport | Waypoint | None = None,
     mode: str = "round_trip",
     on_station_time: Quantity = 0 * ureg.minute,
     reserve: Quantity = 0 * ureg.minute,
@@ -284,7 +284,7 @@ def compute_isochrone(
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
     ray_strategy: str = "uniform",
-    adaptive_spacing_nmi: Optional[float] = None,
+    adaptive_spacing_nmi: float | None = None,
     max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> gpd.GeoDataFrame:
     """Compute a wind-aware isochrone around ``start``.
@@ -389,7 +389,7 @@ def compute_isochrone(
         )
 
     # --- return destination resolution + mode-specific rules ---------------
-    return_wp: Optional[Waypoint]
+    return_wp: Waypoint | None
     return_label: str
     if mode == "one_way":
         if return_destination is not None:
@@ -491,14 +491,14 @@ def compute_isochrone(
 
 def compute_concentric_isochrones(
     aircraft: Aircraft,
-    start: Union[Airport, Waypoint],
+    start: Airport | Waypoint,
     budgets: Sequence[Quantity],
     *,
-    cruise_altitude: Optional[Quantity] = None,
-    on_station_altitude: Optional[Quantity] = None,
-    start_time: Optional[datetime.datetime] = None,
-    wind_source: Optional[WindField] = None,
-    return_destination: Union[Airport, Waypoint, None] = None,
+    cruise_altitude: Quantity | None = None,
+    on_station_altitude: Quantity | None = None,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
+    return_destination: Airport | Waypoint | None = None,
     mode: str = "round_trip",
     on_station_time: Quantity = 0 * ureg.minute,
     reserve: Quantity = 0 * ureg.minute,
@@ -508,7 +508,7 @@ def compute_concentric_isochrones(
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
     ray_strategy: str = "uniform",
-    adaptive_spacing_nmi: Optional[float] = None,
+    adaptive_spacing_nmi: float | None = None,
     max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> gpd.GeoDataFrame:
     """Compute multiple isochrone contours in one call (e.g., 1/2/3 hr).
@@ -583,7 +583,7 @@ def compute_concentric_isochrones(
                 "`return_destination` is ignored when mode='one_way'.",
                 stacklevel=2,
             )
-        return_wp: Optional[Waypoint] = None
+        return_wp: Waypoint | None = None
         return_label = "—"
     elif mode == "round_trip":
         if return_destination is None:
@@ -694,21 +694,21 @@ def compute_concentric_isochrones(
 
 def compute_refuel_isochrone(
     aircraft: Aircraft,
-    start: Union[Airport, Waypoint],
+    start: Airport | Waypoint,
     sortie_budget: Quantity,
     *,
     flight_day_budget: Quantity,
-    cruise_altitude: Optional[Quantity] = None,
-    refuel_airports: "Sequence[Union[Airport, Waypoint]]",
+    cruise_altitude: Quantity | None = None,
+    refuel_airports: Sequence[Airport | Waypoint],
     refuel_time: Quantity = 60 * ureg.minute,
-    return_destination: Union[Airport, Waypoint, None] = None,
+    return_destination: Airport | Waypoint | None = None,
     mode: str = "return_safe",
-    on_station_altitude: Optional[Quantity] = None,
+    on_station_altitude: Quantity | None = None,
     on_station_time: Quantity = 0 * ureg.minute,
     reserve: Quantity = 0 * ureg.minute,
     max_refuel_stops: int = 1,
-    start_time: Optional[datetime.datetime] = None,
-    wind_source: Optional[WindField] = None,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
     azimuth_resolution_deg: float = 5.0,
     distance_tolerance_nmi: float = 0.5,
     wind_sampling: str = "cruise_midpoint",
@@ -941,21 +941,21 @@ def compute_refuel_isochrone(
 
 def evaluate_target_reachability(
     aircraft: Aircraft,
-    start: Union[Airport, Waypoint],
-    target: Union[Airport, Waypoint],
+    start: Airport | Waypoint,
+    target: Airport | Waypoint,
     *,
     sortie_budget: Quantity,
-    flight_day_budget: Optional[Quantity] = None,
-    cruise_altitude: Optional[Quantity] = None,
-    refuel_airports: Sequence[Union[Airport, Waypoint]] = (),
+    flight_day_budget: Quantity | None = None,
+    cruise_altitude: Quantity | None = None,
+    refuel_airports: Sequence[Airport | Waypoint] = (),
     refuel_time: Quantity = 60 * ureg.minute,
-    return_destination: Union[Airport, Waypoint, None] = None,
+    return_destination: Airport | Waypoint | None = None,
     mode: str = "return_safe",
-    on_station_altitude: Optional[Quantity] = None,
+    on_station_altitude: Quantity | None = None,
     on_station_time: Quantity = 0 * ureg.minute,
     reserve: Quantity = 0 * ureg.minute,
-    start_time: Optional[datetime.datetime] = None,
-    wind_source: Optional[WindField] = None,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
@@ -1151,7 +1151,7 @@ def isochrone_polygon(gdf: gpd.GeoDataFrame) -> Polygon:
 
 def plot_isochrone(
     gdf: gpd.GeoDataFrame,
-    base_map: Optional[folium.Map] = None,
+    base_map: folium.Map | None = None,
     *,
     color: str = "steelblue",
     fill_opacity: float = 0.2,
@@ -1328,7 +1328,7 @@ def plot_isochrone(
 # ---------------------------------------------------------------------------
 
 def _airport_or_wp_to_waypoint(
-    obj: Union[Airport, Waypoint],
+    obj: Airport | Waypoint,
     *,
     require_altitude: bool = True,
 ) -> Waypoint:
@@ -1356,13 +1356,13 @@ def _airport_or_wp_to_waypoint(
 
 
 def _resolve_destination(
-    dest: Union[Airport, Waypoint],
+    dest: Airport | Waypoint,
 ) -> Waypoint:
     """Coerce a return-destination argument to a Waypoint."""
     return _airport_or_wp_to_waypoint(dest, require_altitude=True)
 
 
-def _destination_label(dest: Union[Airport, Waypoint]) -> str:
+def _destination_label(dest: Airport | Waypoint) -> str:
     if isinstance(dest, Airport):
         return str(dest.icao_code)
     return dest.name or f"({dest.latitude:.2f}, {dest.longitude:.2f})"
@@ -1442,7 +1442,7 @@ def _target_coordinates(
     return lats_arr, lons_arr
 
 
-def _same_horizontal_position(a: Waypoint, b: Optional[Waypoint]) -> bool:
+def _same_horizontal_position(a: Waypoint, b: Waypoint | None) -> bool:
     """Return True when two waypoints are horizontally indistinguishable."""
     if b is None:
         return False
@@ -1471,7 +1471,7 @@ def _ellipse_seed_azimuths(
     aircraft: Aircraft,
     start: Waypoint,
     cruise_altitude: Quantity,
-    return_wp: Optional[Waypoint],
+    return_wp: Waypoint | None,
     on_station_min: float,
     budget_min: float,
     reserve_min: float,
@@ -1538,7 +1538,7 @@ def _initial_ray_azimuths(
     aircraft: Aircraft,
     start: Waypoint,
     cruise_altitude: Quantity,
-    return_wp: Optional[Waypoint],
+    return_wp: Waypoint | None,
     mode: str,
     on_station_min: float,
     budget_min: float,
@@ -1641,14 +1641,14 @@ def _solve_rays(
     cruise_altitude: Quantity,
     start_time: datetime.datetime,
     wind_source: WindField,
-    return_wp: Optional[Waypoint],
+    return_wp: Waypoint | None,
     mode: str,
     on_station_min: float,
     budget_min: float,
     reserve_min: float,
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
-    seed_d_lo: Optional[np.ndarray] = None,
+    seed_d_lo: np.ndarray | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
@@ -1872,19 +1872,19 @@ def _solve_rays_with_strategy(
     cruise_altitude: Quantity,
     start_time: datetime.datetime,
     wind_source: WindField,
-    return_wp: Optional[Waypoint],
+    return_wp: Waypoint | None,
     mode: str,
     on_station_min: float,
     budget_min: float,
     reserve_min: float,
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
-    seed_d_lo: Optional[np.ndarray] = None,
+    seed_d_lo: np.ndarray | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
     effective_ray_strategy: str = "uniform",
-    adaptive_spacing_nmi: Optional[float] = None,
+    adaptive_spacing_nmi: float | None = None,
     max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
 ) -> list[dict]:
     """Solve rays, optionally refining boundary gaps adaptively."""
@@ -1953,7 +1953,7 @@ def _leg_time(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Compute leg time (minutes) and along-track headwind (knots).
 
     Three wind-sampling modes (``wind_sampling``):
@@ -2124,7 +2124,7 @@ def _cruise_midpoint_legacy(
     t_anchor: datetime.datetime,
     t_climb_min: float,
     t_desc_min: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """v1.5 cruise-midpoint code path, factored out unchanged.  Returns
     ``(total_leg_time_min, headwind_kt)``."""
     cruise_mid_dist_nmi = max(
@@ -2159,7 +2159,7 @@ def _cruise_midpoint_legacy(
     # Bounded fixed-point loop on cruise leg time.
     headwind_kt = 0.0
     t_cruise_min = cruise_distance_nmi / cruise_tas_kt * 60.0  # still-air seed
-    t_cruise_min_prev: Optional[float] = None
+    t_cruise_min_prev: float | None = None
 
     for _ in range(3):
         sample_time = t_anchor + datetime.timedelta(
@@ -2234,7 +2234,7 @@ def _cruise_time_segmented(
     # ConstantWindField: a single (u, v) is enough — cache it and
     # still run the segmented math (each subsegment's groundspeed
     # solve is identical, so output is degenerate but correct).
-    constant_uv: Optional[tuple] = None
+    constant_uv: tuple | None = None
     if isinstance(wind_source, ConstantWindField):
         u_q, v_q = wind_source.wind_at(
             start_wp.latitude, start_wp.longitude,
@@ -2330,7 +2330,7 @@ def _prefilter_refuel_airports(
     cruise_altitude: Quantity,
     start_time: datetime.datetime,
     wind_source: WindField,
-    refuel_airports: Sequence[Union[Airport, Waypoint]],
+    refuel_airports: Sequence[Airport | Waypoint],
     sortie_budget_min: float,
     flight_day_budget_min: float,
     reserve_min: float,
@@ -2338,7 +2338,7 @@ def _prefilter_refuel_airports(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> Tuple[list[dict], list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Coerce refuel airports and prefilter per template.
 
     Returns ``(eligibility, evaluated, unreachable)`` where ``eligibility``
@@ -2468,8 +2468,8 @@ def _evaluate_refuel_at_d(
     reserve_min: float,
     refuel_time_min: float,
     refuel_eligibility: list[dict],
-    template: Optional[str] = None,
-    refuel_label: Optional[str] = None,
+    template: str | None = None,
+    refuel_label: str | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
@@ -2750,7 +2750,7 @@ def _solve_rays_refuel(
             altitude_msl=cruise_altitude,
         )
 
-    specs: list[tuple[str, Optional[str]]] = [("direct", None)]
+    specs: list[tuple[str, str | None]] = [("direct", None)]
     for elig in refuel_eligibility:
         if elig["outbound_ok"]:
             specs.append(("outbound_refuel", elig["label"]))
@@ -2767,8 +2767,8 @@ def _solve_rays_refuel(
                 d_nmi: float,
                 *,
                 template: str = template,
-                refuel_label: Optional[str] = refuel_label,
-            ) -> Optional[dict]:
+                refuel_label: str | None = refuel_label,
+            ) -> dict | None:
                 target = _make_target(az_f, d_nmi)
                 cands = _evaluate_refuel_at_d(
                     aircraft=aircraft,

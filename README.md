@@ -33,7 +33,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Cloud cover analysis** — Estimate clear-sky probability from ERA5 reanalysis via Open-Meteo (no auth) or MODIS imagery via Google Earth Engine
 - **Wind correction** — Trochoidal Dubins arcs (Sachdev/Moon, 2023) bend ground tracks under wind; per-segment wind from MERRA-2 reanalysis, NOAA GFS forecast, or GMAO GEOS-FP analysis; also constant wind and still-air baselines
 - **Atmosphere model** — ISA standard atmosphere with CAS/TAS/Mach airspeed conversions
-- **Aircraft performance** — 12 pre-configured aircraft models (NASA ER-2, WB-57, G-III, G-V, B200, Twin Otter, and others) with climb/cruise/descent profiles; several aircraft are calibrated from IWG1 or ICARTT in-situ flight-state data, including ER-2, G-III, G-V, WB-57, C-130, P-3, B-200, and Twin Otter
+- **Aircraft performance** — 22 pre-configured research aircraft with climb/cruise/descent profiles; 19 are data-calibrated from in-situ flight-state archives (NASA ASP IWG1, NOAA AOML/CSL ICARTT, CEDA FAAM/EUFAR/MASIN/ARSF, AERIS EUREC4A, PANGAEA, DLR HALO BAHAMAS) or ADS-B globe-history archives (airplanes.live).  Calibrated fleet covers NASA (ER-2, G-III, G-V, WB-57, C-130, P-3, B-200), NOAA (Twin Otter, WP-3D, G-IV), international platforms (NCAR HIAPER, FAAM BAe-146, SAFIRE ATR-42, BAS Twin Otter, NERC Do-228, AWI Polar 5/6 BT-67, DLR HALO), and ADS-B-derived King Air calibrations (A90 fleet aggregate, 350 / UWKA-2).
 - **Airport logistics** — Search and filter airports by location, runway length, surface type, and country
 - **Satellite coordination** — Predict satellite overpasses and compute ground-track swaths for 14+ satellites
 - **Dubins path planning** — Minimum-radius turning trajectories between waypoints for realistic aircraft maneuvering
@@ -240,7 +240,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
 | `swath` | Sensor swath coverage with terrain integration |
 | | **Aircraft** |
-| `aircraft` | Aircraft performance models (12 pre-configured research aircraft) |
+| `aircraft` | Aircraft performance models (22 pre-configured research aircraft, 19 data-calibrated) |
 | `atmosphere` | ISA standard atmosphere model, airspeed conversions (CAS/TAS/Mach) |
 | `dubins3d` | 2D Dubins path planning [@dubins1957curves] with trochoidal wind support (Sachdev/Moon, 2023); used by the planner via `Aircraft._hybrid_path` (2D horizontal + integrated vertical profile). |
 | | **Environment** |
@@ -320,9 +320,9 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [aircraft_performance.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
-| [calibration/](notebooks/calibration/) | Per-aircraft calibration notebooks (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200, Twin Otter): per-altitude-bin medians, breakpoint selection, bank-angle analysis. See [docs/calibration.md](docs/calibration.md) for the methodology overview. |
-| [calibration/er2/sortie_replay.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/er2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
-| [calibration/er2/planned_vs_flown.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/er2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
+| [calibration/](notebooks/calibration/) | Per-aircraft calibration notebooks for 19 data-calibrated aircraft — NASA fleet (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200), NOAA fleet (Twin Otter, WP-3D, G-IV), international platforms (HIAPER, FAAM BAe-146, SAFIRE ATR-42, BAS Twin Otter, NERC Do-228, AWI BT-67, DLR HALO), and ADS-B-based King Air calibrations (A90 fleet aggregate, 350 / UWKA-2).  Per-altitude-bin medians, breakpoint selection, bank-angle analysis.  See [docs/calibration.md](docs/calibration.md) for the methodology overview. |
+| [calibration/NASA_ER2/sortie_replay.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/NASA_ER2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
+| [calibration/NASA_ER2/planned_vs_flown.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/NASA_ER2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
 | [satellite_coordination.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
 
 ### Export & Integration
@@ -364,7 +364,7 @@ If you use HyPlan in your research, please cite it as:
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
   license = {Apache-2.0},
-  version = {1.5.0}
+  version = {1.6.0}
 }
 ```
 

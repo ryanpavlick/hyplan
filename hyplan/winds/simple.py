@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import Tuple
 
 from pint import Quantity
 
@@ -27,7 +26,7 @@ class StillAirField(WindField):
         lon: float,
         altitude: Quantity,
         time: datetime.datetime,
-    ) -> Tuple[Quantity, Quantity]:
+    ) -> tuple[Quantity, Quantity]:
         return _ZERO_MPS, _ZERO_MPS
 
 
@@ -55,5 +54,5 @@ class ConstantWindField(WindField):
         lon: float,
         altitude: Quantity,
         time: datetime.datetime,
-    ) -> Tuple[Quantity, Quantity]:
+    ) -> tuple[Quantity, Quantity]:
         return self._u, self._v

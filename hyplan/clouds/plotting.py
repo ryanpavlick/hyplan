@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Dict
 
 import geopandas as gpd
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import pandas as pd
 
 from ..exceptions import HyPlanValueError
@@ -17,7 +18,7 @@ from ..exceptions import HyPlanValueError
 def _heatmap_matrix(
     df: pd.DataFrame,
     *,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     cmap=None,
     norm=None,
     annot: bool = False,
@@ -26,8 +27,8 @@ def _heatmap_matrix(
     linecolor: str = "gray",
     square: bool = True,
     cbar: bool = True,
-    cbar_label: "str | None" = None,
-) -> "plt.Axes":
+    cbar_label: str | None = None,
+) -> Axes:
     """Render a 2-D ``pandas.DataFrame`` as a labelled heatmap on a matplotlib
     ``Axes``.
 
@@ -77,10 +78,10 @@ def _heatmap_matrix(
 
 def plot_doy_cloud_fraction(
     summary_df: pd.DataFrame,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     show_std: bool = True,
     **kwargs,
-) -> "plt.Axes":
+) -> Axes:
     """Line plot of DOY cloud fraction for each polygon.
 
     Args:
@@ -114,10 +115,10 @@ def plot_doy_cloud_fraction(
 
 
 def plot_cloud_fraction_spatial(
-    spatial_data: "dict[str, object]",
+    spatial_data: dict[str, object],
     polygon_file: str | None = None,
     ncols: int = 2,
-) -> "plt.Figure":
+) -> Figure:
     """Plot per-pixel cloud fraction maps.
 
     Args:
@@ -145,7 +146,7 @@ def plot_cloud_fraction_spatial(
 
     for idx, (name, da) in enumerate(spatial_data.items()):
         ax = axes[idx // ncols, idx % ncols]
-        im = ax.pcolormesh(  # type: ignore[attr-defined]
+        im = ax.pcolormesh(
             da.coords["longitude"], da.coords["latitude"], da.values,  # type: ignore[attr-defined]
             cmap="viridis_r", vmin=0, vmax=1,
         )
@@ -153,13 +154,13 @@ def plot_cloud_fraction_spatial(
             row = overlay_gdf[overlay_gdf["Name"] == name]
             if not row.empty:
                 row.boundary.plot(ax=ax, edgecolor="red", linewidth=1.5)
-        ax.set_title(name)  # type: ignore[attr-defined]
-        ax.set_xlabel("Longitude")  # type: ignore[attr-defined]
-        ax.set_ylabel("Latitude")  # type: ignore[attr-defined]
+        ax.set_title(name)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
         fig.colorbar(im, ax=ax, label="Cloud Fraction")
 
     for idx in range(n, nrows * ncols):
-        axes[idx // ncols, idx % ncols].set_visible(False)  # type: ignore[attr-defined]
+        axes[idx // ncols, idx % ncols].set_visible(False)
 
     fig.tight_layout()
     return fig
@@ -168,12 +169,12 @@ def plot_cloud_fraction_spatial(
 def plot_cloud_forecast(
     forecast_df: pd.DataFrame,
     threshold: float = 0.25,
-    ax: "plt.Axes | None" = None,
+    ax: Axes | None = None,
     cmap: str = "RdYlGn_r",
     annotate: bool = True,
     figsize: tuple[float, float] = (12, 4),
     title: str = "Cloud Cover Forecast",
-) -> "plt.Axes":
+) -> Axes:
     """Heatmap of cloud cover forecast with go/no-go threshold.
 
     Args:
@@ -246,7 +247,7 @@ def plot_cloud_forecast(
 
 
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
-    cloud_data_df: pd.DataFrame, visit_tracker: Dict[int, Dict[str, list]], rest_days: Dict[int, list],
+    cloud_data_df: pd.DataFrame, visit_tracker: dict[int, dict[str, list]], rest_days: dict[int, list],
     cloud_fraction_threshold: float = 0.10, exclude_weekends: bool = False,
     day_start: int = 1, day_stop: int = 365
 ) -> None:

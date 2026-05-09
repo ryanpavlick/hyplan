@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime
 import math
 import warnings
-from typing import List
 
 import geopandas as gpd
 import pandas as pd
@@ -48,17 +47,17 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
 
     for i, row in plan.iterrows():
         alt_ft = _safe_float(row.get("start_altitude"), default=0.0, field="start_altitude")
-        alt_m = (alt_ft * ureg.foot).m_as(ureg.meter)  # type: ignore[attr-defined]
+        alt_m = (alt_ft * ureg.foot).m_as(ureg.meter)
         alt_kft = alt_ft / 1000.0
 
         dist_nm = row.get("distance", 0.0) or 0.0
-        dist_km = (dist_nm * ureg.nautical_mile).m_as(ureg.kilometer)  # type: ignore[union-attr]
+        dist_km = (dist_nm * ureg.nautical_mile).m_as(ureg.kilometer)
         leg_time = row.get("time_to_segment", 0.0) or 0.0
 
         # Derive speed from distance and time
         if leg_time > 0 and dist_nm > 0:
             speed_kt = dist_nm / (leg_time / 60.0)
-            speed_mps = (speed_kt * ureg.knot).m_as("m/s")  # type: ignore[union-attr]
+            speed_mps = (speed_kt * ureg.knot).m_as("m/s")
         else:
             speed_kt = 0.0
             speed_mps = 0.0
@@ -115,7 +114,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
 
 
 def generate_wp_names(n: int, prefix: str = "H",
-                      date: datetime.date | None = None) -> List[str]:
+                      date: datetime.date | None = None) -> list[str]:
     """Generate MovingLines-compatible 5-char waypoint names.
 
     Pattern: ``{prefix}{day:02d}{wp:02d}`` — e.g. ``'H2101'`` for prefix

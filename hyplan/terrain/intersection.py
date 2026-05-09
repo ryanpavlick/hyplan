@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 
 import numpy as np
 import pymap3d.aer
@@ -12,6 +11,7 @@ import pymap3d.los
 from ..exceptions import HyPlanValueError
 from .elevation import get_elevations, get_min_max_elevations
 from .io import generate_demfile, load_dem
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,14 @@ _M_PER_DEG_LAT = 111_320.0
 
 
 def ray_terrain_intersection(
-    lat0: np.ndarray,
-    lon0: np.ndarray,
+    lat0: np.ndarray[Any, np.dtype[Any]],
+    lon0: np.ndarray[Any, np.dtype[Any]],
     h0: float,
-    az: np.ndarray,
-    tilt: np.ndarray,
+    az: np.ndarray[Any, np.dtype[Any]],
+    tilt: np.ndarray[Any, np.dtype[Any]],
     precision: float = 10.0,
     dem_file: str | None = None
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray, np.ndarray]:
     """
     Batch computation of ray-terrain intersections using a DEM for multiple observer positions.
     Vectorized to handle multiple observers efficiently.
@@ -46,7 +46,7 @@ def ray_terrain_intersection(
         dem_file (str): Path to the DEM file. If None, one will be generated.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray]: (intersection_lats, intersection_lons,
+        Tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray, np.ndarray]: (intersection_lats, intersection_lons,
             intersection_alts). Observers with no terrain intersection have NaN in all
             three arrays.
 
@@ -164,10 +164,10 @@ def ray_terrain_intersection(
 
 
 def surface_normal_at(
-    lats: np.ndarray,
-    lons: np.ndarray,
+    lats: np.ndarray[Any, np.dtype[Any]],
+    lons: np.ndarray[Any, np.dtype[Any]],
     dem_file: str,
-) -> np.ndarray:
+) -> np.ndarray[Any, np.dtype[Any]]:
     """Compute outward surface normal unit vectors in the ENU frame.
 
     Uses central-difference gradients from the 3x3 DEM neighbourhood
@@ -230,4 +230,4 @@ def surface_normal_at(
     magnitudes = np.sqrt(np.sum(normals ** 2, axis=1, keepdims=True))
     normals /= magnitudes
 
-    return normals  # type: ignore[no-any-return]
+    return normals

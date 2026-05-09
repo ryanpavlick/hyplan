@@ -21,7 +21,7 @@ import time
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - type-checking only
     from skyfield.api import EarthSatellite
@@ -69,10 +69,10 @@ class SatelliteInfo:
     swath_width_km: float
     celestrak_group: str = "earth-observation"
     max_sza: float = 90.0
-    aliases: List[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
 
 
-SATELLITE_REGISTRY: Dict[str, SatelliteInfo] = {
+SATELLITE_REGISTRY: dict[str, SatelliteInfo] = {
     "PACE": SatelliteInfo("PACE", 58927, swath_width_km=2663, max_sza=75.0),
     "Landsat-8": SatelliteInfo("Landsat-8", 39084, swath_width_km=185, celestrak_group="resource", max_sza=75.0),
     "Landsat-9": SatelliteInfo("Landsat-9", 49260, swath_width_km=185, celestrak_group="resource", max_sza=75.0),
@@ -139,7 +139,7 @@ def _is_tle_stale(cache_path: str, max_age_hours: float = 24.0) -> bool:
 
 
 def fetch_tle(
-    satellite: Union[str, SatelliteInfo],
+    satellite: str | SatelliteInfo,
     max_age_hours: float = 24.0,
 ) -> "EarthSatellite":
     """Fetch the TLE for a satellite, using cache when available.
@@ -232,7 +232,7 @@ def clear_tle_cache(confirm: bool = True) -> None:
 # ---------------------------------------------------------------------------
 
 def compute_ground_track(
-    satellite: Union[str, SatelliteInfo],
+    satellite: str | SatelliteInfo,
     start_time: datetime,
     end_time: datetime,
     time_step_s: float = 30.0,
@@ -326,9 +326,9 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """
     n = len(lats)
     if n == 0:
-        return np.zeros(0)  # type: ignore[no-any-return]
+        return np.zeros(0)
     if n == 1:
-        return np.zeros(1)  # type: ignore[no-any-return]
+        return np.zeros(1)
     # pyproj.Geod.inv is fully vectorized; pymap3d.vincenty.vdist falls into a
     # scalar-only branch on degenerate equator-parallel pairs.
     fwd_az, _, _ = _GEOD_WGS84.inv(lons[:-1], lats[:-1], lons[1:], lats[1:])
@@ -336,10 +336,10 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     headings = np.empty(n)
     headings[:-1] = fwd_az
     headings[-1] = fwd_az[-1]
-    return headings  # type: ignore[no-any-return]
+    return headings
 
 
-def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float) -> List[Tuple[int, int]]:
+def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float) -> list[tuple[int, int]]:
     """Split a ground track into individual passes.
 
     A new pass starts when there is a time gap > 2 * time_step_s or when the
@@ -374,7 +374,7 @@ def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float
 
 def compute_swath_footprint(
     ground_track_gdf: gpd.GeoDataFrame,
-    swath_width_km: Optional[float] = None,
+    swath_width_km: float | None = None,
 ) -> gpd.GeoDataFrame:
     """Generate swath footprint polygons from a ground track GeoDataFrame.
 
@@ -472,12 +472,12 @@ def compute_swath_footprint(
 # ---------------------------------------------------------------------------
 
 def find_overpasses(
-    satellite: Union[str, SatelliteInfo],
-    region: Union[Polygon, gpd.GeoDataFrame],
+    satellite: str | SatelliteInfo,
+    region: Polygon | gpd.GeoDataFrame,
     start_time: datetime,
     end_time: datetime,
     time_step_s: float = 10.0,
-    max_sza: Optional[float] = None,
+    max_sza: float | None = None,
     include_swath: bool = True,
     max_tle_age_hours: float = 24.0,
 ) -> gpd.GeoDataFrame:
@@ -615,11 +615,11 @@ def find_overpasses(
 
 
 def find_all_overpasses(
-    satellites: Optional[List[Union[str, SatelliteInfo]]] = None,
-    region: Union[Polygon, gpd.GeoDataFrame] = None,
-    start_time: Optional[datetime] = None,
-    end_time: Optional[datetime] = None,
-    max_sza: Optional[float] = None,
+    satellites: list[str | SatelliteInfo] | None = None,
+    region: Polygon | gpd.GeoDataFrame = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    max_sza: float | None = None,
     **kwargs,
 ) -> gpd.GeoDataFrame:
     """Find overpasses for multiple satellites and concatenate results.
@@ -845,7 +845,7 @@ def _empty_overpass_gdf() -> gpd.GeoDataFrame:
     )
 
 
-def _merge_time_windows(timestamps, margin_s=120.0) -> List[Tuple[datetime, datetime]]:
+def _merge_time_windows(timestamps, margin_s=120.0) -> list[tuple[datetime, datetime]]:
     """Merge nearby timestamps into contiguous time windows.
 
     Args:

@@ -7,7 +7,6 @@ aircraft parameters.  Pre-configured sensors include NASA instruments
 :func:`create_sensor` for name-based construction.
 """
 
-from typing import Dict, Type
 
 import numpy as np
 from pint import Quantity
@@ -93,7 +92,7 @@ class LineScanner(Sensor):
     @property
     def frame_period(self) -> Quantity:
         """Calculate and return the frame period in seconds."""
-        return (1.0 / self.frame_rate).to(ureg.s)  # type: ignore[no-any-return]
+        return (1.0 / self.frame_rate).to(ureg.s)
 
     def swath_offset_angles(self) -> tuple:
         """Cross-track viewing angles for each swath edge, measured from nadir.
@@ -130,41 +129,41 @@ class LineScanner(Sensor):
         h = altitude_agl.magnitude
         d_port = h * np.tan(np.radians(port))
         d_starboard = h * np.tan(np.radians(starboard))
-        return abs(d_starboard - d_port) * ureg.meter  # type: ignore[no-any-return]
+        return abs(d_starboard - d_port) * ureg.meter
 
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
         """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
-            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))  # type: ignore[return-value,no-any-return]
+            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
         elif mode == "average":
-            return self.swath_width(altitude_agl) / self.across_track_pixels  # type: ignore[return-value,no-any-return]
+            return self.swath_width(altitude_agl) / self.across_track_pixels
 
         elif mode == "edge":
             edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
-            return 2 * altitude_agl * np.tan(np.radians(edge_ifov / 2))  # type: ignore[return-value,no-any-return]
+            return 2 * altitude_agl * np.tan(np.radians(edge_ifov / 2))
 
         else:
-            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))  # type: ignore[return-value,no-any-return]
+            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
         """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
-            return gsd / (2 * np.tan(np.radians(self.ifov / 2)))  # type: ignore[return-value,no-any-return]
+            return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
 
         elif mode == "average":
-            return (self.across_track_pixels * gsd) / (2 * np.tan(np.radians(self.fov / 2)))  # type: ignore[return-value,no-any-return]
+            return (self.across_track_pixels * gsd) / (2 * np.tan(np.radians(self.fov / 2)))
 
         elif mode == "edge":
             edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
-            return gsd / (2 * np.tan(np.radians(edge_ifov / 2)))  # type: ignore[return-value,no-any-return]
+            return gsd / (2 * np.tan(np.radians(edge_ifov / 2)))
 
         else:
-            return gsd / (2 * np.tan(np.radians(self.ifov / 2)))  # type: ignore[return-value,no-any-return]
+            return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
 
     def critical_ground_speed(self, altitude_agl: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
@@ -178,7 +177,7 @@ class LineScanner(Sensor):
             Quantity: Maximum allowable ground speed in meters per second.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return self.ground_sample_distance(altitude_agl, mode="nadir") / (self.frame_period * along_track_sampling)  # type: ignore[return-value,no-any-return]
+        return self.ground_sample_distance(altitude_agl, mode="nadir") / (self.frame_period * along_track_sampling)
 
     def along_track_pixel_size(self, aircraft_speed: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
@@ -192,7 +191,7 @@ class LineScanner(Sensor):
             Quantity: Along-track pixel size in meters.
         """
         aircraft_speed = self._validate_quantity(aircraft_speed, ureg.meter / ureg.second)
-        return aircraft_speed * self.frame_period / along_track_sampling  # type: ignore[return-value,no-any-return]
+        return aircraft_speed * self.frame_period / along_track_sampling
 
 
 # ── Sensor Specifications ─────────────────────────────────────────────────────
@@ -218,7 +217,7 @@ _SENSOR_SPECS = {
 
 def _make_sensor_class(class_name, display_name, fov, across_track_pixels, frame_rate_hz):
     """Create a LineScanner subclass from spec parameters."""
-    def __init__(self):
+    def __init__(self) -> None:
         LineScanner.__init__(
             self,
             name=display_name,
@@ -251,7 +250,7 @@ eMAS: type = globals()["eMAS"]
 PICARD: type = globals()["PICARD"]
 
 
-SENSOR_REGISTRY: Dict[str, Type[Sensor]] = {
+SENSOR_REGISTRY: dict[str, type[Sensor]] = {
     "AVIRISClassic": AVIRISClassic,
     "AVIRIS Classic": AVIRISClassic,
     "AVIRISNextGen": AVIRISNextGen,

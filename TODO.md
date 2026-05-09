@@ -1,0 +1,122 @@
+# TODO
+
+Deferred work items from prior releases.  Each item documents the
+issue, why it was deferred, and where it's discussed in code or docs.
+Roughly grouped by category and rough target release.
+
+When an item ships, move it into the relevant `## vX.Y.Z` section in
+[CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## v1.6.1 candidates
+
+### Calibration data-quality fixes
+
+* **`NERC_DO228` cruise schedule inversion above FL100** — fitted
+  cruise TAS decreases from 176 kt @ FL100 → 146 kt @ FL200, which
+  is unphysical for a turboprop.  Sample-size artifact: the
+  FL150 / FL200 cruise bins are populated by < 200 fixes from a
+  34-sortie sample across two CEDA campaigns.  Approach speed
+  110 kt is also above the brochure 80-90 kt Vref.
+  Fix: truncate cruise schedule at FL100 or add a sparse-bin
+  caveat in `notebooks/calibration/NERC_DO228/calibrate.py`.
+  Discussed in `docs/calibration.md` "Performance envelope
+  cross-check" and the `NERC_DO228` constructor.
+
+* **`DLR_HALO` flat cruise artifact FL200-FL300** — fitted cruise
+  is implausibly flat at 457 kt through FL200-FL300; a G550
+  climbing through these levels should see ~360 kt @ FL200 and
+  ~430 kt @ FL300.  18-sortie HALO-AC3 sample is heavily biased
+  toward high-altitude transit; sub-FL300 cruise bins are
+  populated by descent fixes mislabeled as cruise.  Already
+  ships with `confidence=0.7` reflecting low sample size.
+  Fix: truncate cruise schedule below FL300 or add a
+  campaign-specific caveat.
+
+* **`KingAirA90` wind-triangle TAS** — current calibration uses
+  groundspeed-as-TAS still-air baseline (`wind_source="still_air"`
+  in `notebooks/calibration/KingAirA90/calibrate.py`).  Switch to
+  MERRA-2 wind-triangle reconstruction via the existing
+  `hyplan.aircraft.adsb.airdata.reconstruct_airdata`.  Requires
+  Earthdata token; no new code beyond the wind-source argument.
+  Should tighten the cruise schedule (currently has 5-10 kt of
+  noise from neglected wind).
+
+* **`KingAirA90` broader sample** — current calibration is from a
+  30-day pull (2026-04-09 → 2026-05-08).  airplanes.live archive
+  goes back to ~2025-01.  Re-run with a 12-month window once the
+  daily-cron has been pulling for a few months.  Sample size
+  should grow from 643 sorties to a few thousand.
+
+* **`KingAir350` (UWKA-2) more sortie windows** — currently 22
+  sorties from 18 active days (2025-01 through 2026-04, single
+  tail).  As UW flies new science campaigns (CHEESEHEAD-followups,
+  etc.), pull updated airplanes.live history and re-run.
+
+### Calibration coverage gaps
+
+* **`NASA_GIV`** — NASA AFRC G-IV (N817NA) was deregistered
+  2024-07-18.  airplanes.live globe-history archive does have
+  meaningful 2023-2024 coverage (cf. May 2024 pulls of
+  ~465 KB / day).  An ADS-B-based calibration covering the final
+  18 months of NASA AFRC operation would replace the current
+  brochure values.
+
+* **`NASA_C20A`** — inferred from `NASA_GIII` (same airframe + type
+  certificate).  Still no public ICARTT/IWG1 nav data; AFRC
+  mission ops contact required for NASDAT housekeeping logs.
+
+* **`NASA_B777`** — generic placeholder for NASA experimental 777
+  ops.  No specific tail or campaign in the public record.
+
+* **USAF WC-130J Hurricane Hunters** — data on disk under
+  `data/HRD/USAF_WC130J/` from the NOAA AOML hurricane archive
+  (tail-letter `U` in HRD filenames).  Could be a future
+  `USAF_WC130J` class, distinct from `NASA_C130` (different
+  operator, different mission profile, four-engine WC-130J vs
+  NASA's H-model).
+
+### Documentation polish
+
+* **Companion `calibration.ipynb` for the ADS-B classes**
+  (`KingAirA90`, `KingAir350`).  Current state is `calibrate.py`
+  only.  `notebooks/calibration/_make_notebook.py` is currently
+  ICARTT/IWG1-shaped; would need a parallel ADS-B template.
+
+* **`NOAA_GIV` docstring** — add a sentence explaining that the
+  47,500 ft service ceiling exceeds the certificated G-IV-SP
+  brochure ceiling of 45,000 ft because op-p99 over the
+  93-sortie hurricane-surveillance sample sees the airframe at
+  light fuel state above MTOW limits.
+
+* **`NASA_WB57` / `NASA_GV` approach speed notes** — both ship
+  with calibrated approach speeds below the brochure Vref (117 kt
+  vs 130 kt for WB-57; 126 kt vs 130-140 for G-V).  Add docstring
+  notes that this reflects light science fuel state at landing.
+
+### Type system
+
+* **mypy strict overrides on `hyplan.aircraft.wind_path` and
+  `hyplan.planning.isochrone`** — both were dropped in v1.6.0
+  because the strict-mode call-graph cascade introduces ~550
+  errors across 56 files (mostly mechanical: 222 `[type-arg]`,
+  196 `[no-untyped-def]`, 131 `[no-untyped-call]`).  Plan: tackle
+  in a dedicated cleanup pass — the work parallelizes well across
+  files and is mostly pattern-matching rather than thinking.
+  See the comment block in `pyproject.toml` `[tool.mypy]` section.
+
+---
+
+## Investigated, deferred to later
+
+These were probed during v1.6.0 development and aren't blocking but
+worth tracking.
+
+* **University of Wyoming UWKA-2 ICARTT data** at
+  `flights.uwyo.edu/projects/<slug>/` (MONARK 2020, APART-LITE
+  2019, SNOWIE 2017, etc.) and at NCAR EOL (CHEESEHEAD,
+  TRANS2AM, CAESAR, WE-CAN).  Higher quality than ADS-B if
+  reachable.  Currently behind ORDER request via
+  `datahelp@eol.ucar.edu`.
+

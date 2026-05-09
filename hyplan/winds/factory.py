@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Optional
 
 from pint import Quantity
 
@@ -23,7 +22,7 @@ def wind_field_from_plan(
     takeoff_time: datetime.datetime,
     takeoff_airport=None,
     return_airport=None,
-    flight_altitude: Optional[Quantity] = None,
+    flight_altitude: Quantity | None = None,
     margin_deg: float = 2.0,
     margin_hours: float = 2.0,
 ) -> WindField:

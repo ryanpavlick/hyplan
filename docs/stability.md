@@ -61,11 +61,16 @@ continue to be refined as ADS-B calibration data becomes available.
 | `hyplan.instruments.SidelookingRadar` | SAR sensor model (UAVSAR variants) |
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |
-| `hyplan.aircraft.NCAR_GV` | NCAR HIAPER class — defined but auth-walled calibration data deferred (`calibration_status="inferred"` from `NASA_GV`) |
 | `hyplan.aircraft.NASA_C20A` | NASA C-20A class — `calibration_status="inferred"` from `NASA_GIII`; type-certificate equivalence assumed |
 | `hyplan.aircraft.NASA_GIV` | NASA G-IV — `calibration_status="uncalibrated"` (manufacturer brochure only) |
 | `hyplan.aircraft.NASA_B777` | NASA B-777 — `calibration_status="uncalibrated"` (manufacturer brochure only) |
 | `hyplan.aircraft.KingAirA90` | King Air A-90 — `calibration_status="uncalibrated"`; no public IWG1-grade A-90 data |
+| `hyplan.aircraft.KingAir350` | King Air 350 / 350i — `calibration_status="uncalibrated"`; calibration deferred pending UW UWKA-2 ICARTT data access (`flights.uwyo.edu` and NCAR EOL) |
+| `hyplan.aircraft.FAAM_BAe146` | FAAM BAe-146-301 (G-LUXE) — `calibration_status="calibrated"` from 125 CEDA core_processed sorties |
+| `hyplan.aircraft.SAFIRE_ATR42` | SAFIRE ATR-42-320 (F-HMTO) — `calibration_status="calibrated"` from 44 sorties (CEDA EUFAR + AERIS EUREC4A) |
+| `hyplan.aircraft.DLR_HALO` | DLR HALO Gulfstream G550 (D-ADLR) — `calibration_status="calibrated"` from 18 HALO-AC3 BAHAMAS sorties (single-campaign, confidence 0.7) |
+| `hyplan.aircraft.BAS_TwinOtter` | BAS DHC-6 Twin Otter (MASIN) — `calibration_status="calibrated"` from 105 sorties across 5 CEDA archives (OFCAP, ACCACIA, ORCHESTRA, IGP, ArcticCyclones) |
+| `hyplan.aircraft.NERC_DO228` | NERC ARSF Dornier 228 (D-CALM) — `calibration_status="calibrated"` from 32 sorties (CEDA ACTIVE 2005-2006 + Eyjafjallajökull 2010, TAS reconstructed via wind triangle) |
 
 ## Deprecation policy
 

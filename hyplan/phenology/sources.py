@@ -120,7 +120,7 @@ def _require_xarray():
 # Geometry helpers
 # ---------------------------------------------------------------------------
 
-def _drop_z(geom: "BaseGeometry") -> "BaseGeometry":
+def _drop_z(geom: BaseGeometry) -> BaseGeometry:
     """Strip Z coordinates from a Shapely geometry, returning 2D."""
     return wkb.loads(wkb.dumps(geom, output_dimension=2))
 
@@ -290,8 +290,8 @@ def _parse_modis_grid_bounds(grid_meta: dict) -> tuple[float, float, float, floa
 def _read_and_clip_subdataset(
     hdf_path: str,
     subdataset_name: str,
-    polygon_geom: "BaseGeometry",
-) -> tuple[np.ndarray, "rasterio.Affine"]:
+    polygon_geom: BaseGeometry,
+) -> tuple[np.ndarray, rasterio.Affine]:
     """Read a subdataset, reproject to WGS84, clip to polygon.
 
     Uses pyhdf to read HDF4-EOS files (GDAL HDF4 driver not required),
@@ -381,7 +381,7 @@ def _parse_modis_date(hdf_path: str) -> datetime:
 
 def _extract_vi_from_granule(
     hdf_path: str,
-    polygon_geom: "BaseGeometry",
+    polygon_geom: BaseGeometry,
     config: dict,
     spatial_mode: str,
 ) -> dict | None:
@@ -432,7 +432,7 @@ def _extract_vi_from_granule(
 
 def _extract_phenology_from_granule(
     hdf_path: str,
-    polygon_geom: "BaseGeometry",
+    polygon_geom: BaseGeometry,
     config: dict,
 ) -> dict | None:
     """Extract phenology transition DOYs from a single MCD12Q2 granule.
@@ -767,7 +767,7 @@ def fetch_phenology_spatial(
     year_start: int = 2003,
     year_stop: int = 2022,
     satellite: str = "terra",
-) -> dict[str, "xr.DataArray"]:
+) -> dict[str, xr.DataArray]:
     """Compute per-pixel time-averaged vegetation index for each polygon.
 
     Returns a dictionary mapping polygon name to an xarray DataArray

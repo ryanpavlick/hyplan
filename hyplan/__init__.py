@@ -74,12 +74,21 @@ from .aircraft import (  # noqa: F401
     NASA_GV,
     NASA_C20A,
     NASA_P3,
+    NOAA_WP3D,
+    NOAA_GIV,
     NASA_WB57,
     NASA_B777,
     KingAirB200,
     KingAirA90,
-    C130,
-    TwinOtter,
+    KingAir350,
+    NASA_C130,
+    NOAA_TwinOtter,
+    BAS_TwinOtter,
+    FAAM_BAe146,
+    SAFIRE_ATR42,
+    NERC_DO228,
+    AWI_BaslerBT67,
+    DLR_HALO,
 )
 
 # Airports
@@ -192,10 +201,11 @@ __all__ = [
     "FlightLine", "Pattern", "box_around_center_line", "box_around_polygon", "box_around_center_terrain", "box_around_polygon_terrain", "altitude_msl_for_pixel_size",
     # Aircraft
     "Aircraft",
-    "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3",
+    "NASA_ER2", "NASA_GIII", "NASA_GIV", "NASA_GV", "NASA_C20A", "NASA_P3", "NOAA_WP3D", "NOAA_GIV",
     "NASA_WB57", "NASA_B777",
-    "KingAirB200", "KingAirA90",
-    "C130", "TwinOtter",
+    "KingAirB200", "KingAirA90", "KingAir350",
+    "NASA_C130", "NOAA_TwinOtter",
+    "BAS_TwinOtter", "FAAM_BAe146", "SAFIRE_ATR42", "NERC_DO228", "AWI_BaslerBT67", "DLR_HALO",
     # Airports
     "Airport", "initialize_data",
     "find_nearest_airport", "find_nearest_airports", "airports_within_radius",

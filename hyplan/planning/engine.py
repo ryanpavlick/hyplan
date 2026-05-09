@@ -13,7 +13,7 @@ distance, altitude, and geometry for every segment.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING
 
 import geopandas as gpd
 import pandas as pd
@@ -44,8 +44,8 @@ __all__ = [
 
 
 def expand_sequence(
-    flight_sequence: List[Union[FlightLine, Waypoint, Pattern]],
-) -> List[Union[FlightLine, Waypoint]]:
+    flight_sequence: list[FlightLine | Waypoint | Pattern],
+) -> list[FlightLine | Waypoint]:
     """Expand any :class:`Pattern` objects into their underlying flight
     lines and waypoints.
 
@@ -59,7 +59,7 @@ def expand_sequence(
     utility so callers can preview the unwrapped sequence (useful for
     validation, plotting, or feeding into a different planner).
     """
-    expanded: List[Union[FlightLine, Waypoint]] = []
+    expanded: list[FlightLine | Waypoint] = []
     for seg in flight_sequence:
         if isinstance(seg, Pattern):
             expanded.extend(seg.elements())
@@ -70,16 +70,16 @@ def expand_sequence(
 
 def compute_flight_plan(
     aircraft: Aircraft,
-    flight_sequence: List[Union[FlightLine, Waypoint, Pattern]],
-    takeoff_airport: Optional[Airport] = None,
-    return_airport: Optional[Airport] = None,
+    flight_sequence: list[FlightLine | Waypoint | Pattern],
+    takeoff_airport: Airport | None = None,
+    return_airport: Airport | None = None,
     start_offset: float = 5,
     end_offset: float = 1,
-    wind_speed: Optional[Quantity] = None,
-    wind_direction: Optional[float] = None,
-    wind_source: Optional["WindField"] = None,
-    takeoff_time: Optional[datetime.datetime] = None,
-    climb_plan: Union["ClimbPlan", str, None] = "auto",
+    wind_speed: Quantity | None = None,
+    wind_direction: float | None = None,
+    wind_source: WindField | None = None,
+    takeoff_time: datetime.datetime | None = None,
+    climb_plan: ClimbPlan | str | None = "auto",
     wind_sampling: str = "cruise_midpoint",
     n_samples: int = 20,
 ) -> gpd.GeoDataFrame:
@@ -209,7 +209,7 @@ def compute_flight_plan(
     # Cumulative elapsed time for wind queries
     cumulative_minutes = 0.0
 
-    def _current_time() -> Optional[datetime.datetime]:
+    def _current_time() -> datetime.datetime | None:
         if takeoff_time is None:
             return None
         return takeoff_time + datetime.timedelta(minutes=cumulative_minutes)
@@ -241,7 +241,7 @@ def compute_flight_plan(
     # Apply offsets to flight lines, if applicable.  Use a fresh
     # variable name (not `flight_sequence`) so the post-expansion
     # narrower type sticks.
-    flight_seq: List[Union[FlightLine, Waypoint]] = [
+    flight_seq: list[FlightLine | Waypoint] = [
         seg.offset_along(ureg.Quantity(-start_offset, "nautical_mile"),
                            ureg.Quantity(end_offset, "nautical_mile"))
         if isinstance(seg, FlightLine) else seg
@@ -262,7 +262,7 @@ def compute_flight_plan(
             climb_plan=climb_plan,
             n_samples=n_samples,
             **_phase_wind_kwargs(
-                mid_lat, mid_lon, first_target.altitude_msl,  # type: ignore[arg-type]
+                mid_lat, mid_lon, first_target.altitude_msl,
             ),
         )
         takeoff_records = process_flight_phase(
@@ -294,8 +294,8 @@ def compute_flight_plan(
             mid_lon = longitudes[mid_idx]
 
             sol = _resolve_track_hold_solution(
-                fl_tas, track_deg,  # type: ignore[arg-type]
-                mid_lat, mid_lon,  # type: ignore[arg-type]
+                fl_tas, track_deg,
+                mid_lat, mid_lon,
                 segment.altitude_msl, _current_time(),
                 wind_source, wind_speed, wind_direction,
             )
@@ -339,10 +339,10 @@ def compute_flight_plan(
             # model). Distance is the real ground covered during the loiter,
             # not the orbit circumference. With no altitude we fall back to a
             # Point/zero distance for callers that pass minimal Waypoints.
-            if segment.altitude_msl is not None:  # type: ignore[union-attr]
+            if segment.altitude_msl is not None:
                 from .segments import loiter_orbit_geometry
                 loiter_geom = loiter_orbit_geometry(segment, aircraft)  # type: ignore[arg-type]
-                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")  # type: ignore[union-attr]
+                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")
                 distance_m = speed_mps * segment.delay.m_as(ureg.second)  # type: ignore[union-attr]
                 distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
             else:
@@ -356,8 +356,8 @@ def compute_flight_plan(
                 "start_lon": segment.longitude,  # type: ignore[union-attr]
                 "end_lat": segment.latitude,  # type: ignore[union-attr]
                 "end_lon": segment.longitude,  # type: ignore[union-attr]
-                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
-                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,  # type: ignore[union-attr]
+                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
                 "segment_type": "loiter",
                 "segment_name": segment.name,  # type: ignore[union-attr]
                 "distance": distance_nm,
@@ -404,7 +404,7 @@ def compute_flight_plan(
                 true_air_speed=speed_override,
                 n_samples=n_samples,
                 **_phase_wind_kwargs(
-                    mid_lat, mid_lon, end_wp.altitude_msl,  # type: ignore[arg-type]
+                    mid_lat, mid_lon, end_wp.altitude_msl,
                 ),
             )
             if cruise_info["total_time"].m_as(ureg.minute) > 0:
@@ -420,7 +420,7 @@ def compute_flight_plan(
                     wp_seg_type = segment.segment_type  # type: ignore[union-attr]
                 cruise_records = process_flight_phase(
                     start_wp, end_wp, cruise_info, phase_name,
-                    override_segment_type=wp_seg_type,  # type: ignore[arg-type]
+                    override_segment_type=wp_seg_type,
                 )
                 for r in cruise_records:
                     cumulative_minutes += r["time_to_segment"]
@@ -437,7 +437,7 @@ def compute_flight_plan(
             last_target, return_airport,
             n_samples=n_samples,
             **_phase_wind_kwargs(
-                mid_lat, mid_lon, last_target.altitude_msl,  # type: ignore[arg-type]
+                mid_lat, mid_lon, last_target.altitude_msl,
             ),
         )
         if return_info["total_time"].m_as(ureg.minute) > 0:

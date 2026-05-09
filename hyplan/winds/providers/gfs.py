@@ -6,7 +6,6 @@ import datetime
 import logging
 import os
 import tempfile
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -26,7 +25,7 @@ _GFS_LEVELS_HPA = np.array([
 ], dtype=float)
 
 
-def _gfs_best_cycle(target: datetime.datetime) -> Tuple[datetime.date, int]:
+def _gfs_best_cycle(target: datetime.datetime) -> tuple[datetime.date, int]:
     """Pick the most recent GFS cycle available before *target*.
 
     GFS cycles run at 00, 06, 12, 18 UTC.  Data is typically available
@@ -44,7 +43,7 @@ def _gfs_filter_url(
     dt: datetime.date,
     cycle: int,
     fhr: int,
-    variables: Tuple[str, ...],
+    variables: tuple[str, ...],
     levels_hpa: list,
     lat_min: float,
     lat_max: float,
@@ -107,9 +106,9 @@ class GFSWindField(_GriddedWindField):
     def __init__(
         self,
         *args,
-        cycle_date: Optional[datetime.date] = None,
-        cycle_hour: Optional[int] = None,
-        forecast_hour: Optional[int] = None,
+        cycle_date: datetime.date | None = None,
+        cycle_hour: int | None = None,
+        forecast_hour: int | None = None,
         **kwargs,
     ):
         self._cycle_date = cycle_date
@@ -117,7 +116,7 @@ class GFSWindField(_GriddedWindField):
         self._forecast_hour = forecast_hour
         super().__init__(*args, **kwargs)
 
-    def _build_urls(self) -> List[str]:
+    def _build_urls(self) -> list[str]:
         # Not used — _fetch_slab is fully overridden.
         return []
 
@@ -134,7 +133,7 @@ class GFSWindField(_GriddedWindField):
                 "cfgrib (with eccodes) is required for GFS GRIB2 data. "
                 "Install with: pip install cfgrib"
             )
-        import requests  # type: ignore[import-untyped]
+        import requests
 
         xr = _require_xarray()
 

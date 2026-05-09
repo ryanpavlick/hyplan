@@ -25,7 +25,6 @@ Library, ascl:1907.024.
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
-from typing import List, Optional, Union
 import matplotlib
 import matplotlib.pyplot as plt
 from .exceptions import HyPlanValueError
@@ -172,9 +171,9 @@ def solar_threshold_times(
     longitude: float,
     start_date: str,
     end_date: str,
-    thresholds: List[float],
+    thresholds: list[float],
     timezone_offset: int = 0,
-    timezone: Optional[str] = None,
+    timezone: str | None = None,
 ) -> pd.DataFrame:
     """
     Find times when the solar elevation crosses specified thresholds.
@@ -296,11 +295,11 @@ def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: fl
 def solar_position_increments(
     latitude: float,
     longitude: float,
-    date: Union[str, date, datetime],
+    date: str | date | datetime,
     min_elevation: float,
     timezone_offset: int = 0,
     increment: str = '10min',
-    timezone: Optional[str] = None,
+    timezone: str | None = None,
 ) -> pd.DataFrame:
     """
     Return the solar azimuth and solar elevation at user-specified increments for a given date and location,

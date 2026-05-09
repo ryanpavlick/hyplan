@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 import numpy as np
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -19,14 +19,14 @@ class DEMGrid:
 
     Attributes:
         array: 2-D elevation array (rows, cols) in meters.
-        geotransform: 6-element affine transform tuple.
+        geotransform: 6-element affine transform tuple[Any, ...].
         bounds: ``(west, south, east, north)`` in degrees.
         nodata: No-data sentinel value, or ``None``.
     """
 
-    array: np.ndarray
-    geotransform: Tuple[float, float, float, float, float, float]
-    bounds: Tuple[float, float, float, float]
+    array: np.ndarray[Any, np.dtype[Any]]
+    geotransform: tuple[float, float, float, float, float, float]
+    bounds: tuple[float, float, float, float]
     nodata: float | None = None
 
     @property
@@ -38,5 +38,5 @@ class DEMGrid:
         return float(np.nanmax(self.array))
 
     @property
-    def shape(self) -> Tuple[int, int]:
-        return self.array.shape  # type: ignore[return-value, no-any-return]
+    def shape(self) -> tuple[int, int]:
+        return self.array.shape  # type: ignore[no-any-return]

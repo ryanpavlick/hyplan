@@ -36,7 +36,7 @@ def apply_vi_qa_mask(
         Data with unreliable pixels masked.
     """
     bad = (pixel_reliability > max_reliability) | (pixel_reliability < 0)
-    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-any-return]
+    return np.ma.masked_array(data, mask=bad)
 
 
 def apply_lai_qa_mask(
@@ -73,7 +73,7 @@ def apply_lai_qa_mask(
     fill = data == 255
 
     bad = algo_bad | cloudy | fill
-    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-any-return]
+    return np.ma.masked_array(data, mask=bad)
 
 
 def apply_phenology_qa_mask(
@@ -141,4 +141,4 @@ def convert_mcd12q2_dates(raw_values: np.ndarray) -> np.ndarray:
         doys = np.array([d.timetuple().tm_yday for d in dates], dtype=np.float64)
         result[valid] = doys
 
-    return result  # type: ignore[no-any-return]
+    return result

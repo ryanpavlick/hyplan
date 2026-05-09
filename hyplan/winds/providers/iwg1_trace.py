@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,6 +10,7 @@ from pint import Quantity
 
 from ...units import ureg
 from ..base import WindField
+from typing import Any
 
 _M_PER_S_PER_KT = 0.514444
 
@@ -51,11 +51,11 @@ class IWG1TraceWindField(WindField):
             & (~iwg1_df["longitude"].isna())
         )
         df = iwg1_df.loc[valid]
-        self._u: np.ndarray = u[valid].to_numpy()
-        self._v: np.ndarray = v[valid].to_numpy()
-        self._lat: np.ndarray = df["latitude"].to_numpy()
-        self._lon: np.ndarray = df["longitude"].to_numpy()
-        self._alt_ft: np.ndarray = df["altitude"].to_numpy()
+        self._u: np.ndarray[Any, np.dtype[Any]] = u[valid].to_numpy()
+        self._v: np.ndarray[Any, np.dtype[Any]] = v[valid].to_numpy()
+        self._lat: np.ndarray[Any, np.dtype[Any]] = df["latitude"].to_numpy()
+        self._lon: np.ndarray[Any, np.dtype[Any]] = df["longitude"].to_numpy()
+        self._alt_ft: np.ndarray[Any, np.dtype[Any]] = df["altitude"].to_numpy()
         self._n: int = len(self._u)
         if self._n == 0:
             raise ValueError(
@@ -69,8 +69,8 @@ class IWG1TraceWindField(WindField):
         lat: float,
         lon: float,
         altitude: Quantity,
-        time: Optional[datetime.datetime] = None,
-    ) -> Tuple[Quantity, Quantity]:
+        time: datetime.datetime | None = None,
+    ) -> tuple[Quantity, Quantity]:
         alt_ft = altitude.m_as("feet")
         lat_cos = np.cos(np.radians(lat))
         d2 = ((self._lat - lat) * 60.0) ** 2

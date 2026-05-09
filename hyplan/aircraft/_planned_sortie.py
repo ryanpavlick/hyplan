@@ -23,9 +23,9 @@ column schema.
 
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from xml.etree import ElementTree as ET
 import re
 
@@ -39,12 +39,12 @@ class PlannedSortie:
     """Container for one parsed planned-sortie product.
 
     Attributes:
-        header: Metadata dict from the Green Card header (mission name,
+        header: Metadata dict[Any, Any] from the Green Card header (mission name,
             aircraft id, takeoff/land times, fuel state, sched duration).
         waypoints: One row per planned event; see
             :func:`load_planned_sortie` for the column schema.
     """
-    header: dict
+    header: dict[Any, Any]
     waypoints: pd.DataFrame
 
 
@@ -59,7 +59,7 @@ def _strip(value) -> str:
     return str(value).strip()
 
 
-def _parse_dms(value) -> Optional[float]:
+def _parse_dms(value) -> float | None:
     """Parse ``"N 38 48.35"`` / ``"W104 42.05"`` to decimal degrees.
 
     Accepts the Green Card's degrees-and-decimal-minutes format.
@@ -78,7 +78,7 @@ def _parse_dms(value) -> Optional[float]:
     return decimal
 
 
-def _parse_altitude_ft(value) -> Optional[float]:
+def _parse_altitude_ft(value) -> float | None:
     """Parse ``"65000M"`` / ``" 6187M"`` to feet.
 
     The Green Card prints altitudes with a literal ``"M"`` suffix that
@@ -94,7 +94,7 @@ def _parse_altitude_ft(value) -> Optional[float]:
         return None
 
 
-def _parse_signed_int(value) -> Optional[int]:
+def _parse_signed_int(value) -> int | None:
     """Parse ``"+8C"`` / ``"-57C"`` (temp) or stripped numerics to int."""
     s = _strip(value).rstrip("CMTG").strip()
     if not s or s == "N/A":
@@ -105,7 +105,7 @@ def _parse_signed_int(value) -> Optional[int]:
         return None
 
 
-def _parse_speed_kt(value) -> Optional[int]:
+def _parse_speed_kt(value) -> int | None:
     """Parse ``"398 T"`` / ``"220 C"`` / ``"412 G"`` to integer knots.
 
     Trailing ``T`` / ``C`` / ``G`` denote True / Calibrated / Ground.
@@ -120,7 +120,7 @@ def _parse_speed_kt(value) -> Optional[int]:
         return None
 
 
-def _parse_heading_deg(value) -> Optional[int]:
+def _parse_heading_deg(value) -> int | None:
     """Parse ``"134 T"`` / ``"127 M"`` to integer degrees, dropping the suffix."""
     s = _strip(value).rstrip("TM").strip()
     if not s or s == "N/A":
@@ -131,7 +131,7 @@ def _parse_heading_deg(value) -> Optional[int]:
         return None
 
 
-def _parse_bank_deg(value) -> Optional[int]:
+def _parse_bank_deg(value) -> int | None:
     """Parse ``"22  °"`` to integer degrees (bank angle)."""
     s = _strip(value).rstrip("°").strip()
     if not s:
@@ -142,7 +142,7 @@ def _parse_bank_deg(value) -> Optional[int]:
         return None
 
 
-def _parse_mach(value) -> Optional[float]:
+def _parse_mach(value) -> float | None:
     """Parse ``".55"`` / ``".70"`` / ``"1.2"`` to float; ``"N/A"`` → ``None``."""
     s = _strip(value)
     if not s or s == "N/A":
@@ -153,7 +153,7 @@ def _parse_mach(value) -> Optional[float]:
         return None
 
 
-def _parse_wind(value) -> tuple[Optional[int], Optional[int]]:
+def _parse_wind(value) -> tuple[int | None, int | None]:
     """Parse ``"260/004"`` to ``(direction_deg, speed_kt)``.
 
     Returns ``(None, None)`` for empty cells.
@@ -165,7 +165,7 @@ def _parse_wind(value) -> tuple[Optional[int], Optional[int]]:
     return int(m.group(1)), int(m.group(2))
 
 
-def _parse_distance_nmi(value) -> Optional[int]:
+def _parse_distance_nmi(value) -> int | None:
     """Parse ``"   10"`` / ``"  121"`` (leading-space integer) to int."""
     s = _strip(value)
     if not s:
@@ -176,7 +176,7 @@ def _parse_distance_nmi(value) -> Optional[int]:
         return None
 
 
-def _parse_leg_time_min(value) -> Optional[float]:
+def _parse_leg_time_min(value) -> float | None:
     """Parse a leg-time cell to minutes (float).
 
     Leg time is always sub-hour: ``"+07.0"``, ``"+11.2"``.
@@ -190,7 +190,7 @@ def _parse_leg_time_min(value) -> Optional[float]:
         return None
 
 
-def _parse_total_time_min(value) -> Optional[float]:
+def _parse_total_time_min(value) -> float | None:
     """Parse a cumulative-time cell to minutes (float).
 
     The Green Card switches format at 60 min: ``"+47.3"`` below the
@@ -211,13 +211,13 @@ def _parse_total_time_min(value) -> Optional[float]:
         return None
 
 
-def _parse_clock_time(value) -> Optional[str]:
+def _parse_clock_time(value) -> str | None:
     """Return the clock time string verbatim (``"15:30.0"``)."""
     s = _strip(value)
     return s or None
 
 
-def _parse_fuel_lb(value) -> Optional[int]:
+def _parse_fuel_lb(value) -> int | None:
     """Parse a fuel-cell to integer pounds; empty → ``None``."""
     s = _strip(value)
     if not s:
@@ -228,7 +228,7 @@ def _parse_fuel_lb(value) -> Optional[int]:
         return None
 
 
-def _parse_sched_duration_hours(value) -> Optional[float]:
+def _parse_sched_duration_hours(value) -> float | None:
     """Parse ``"06+33+35"`` (HH+MM+SS) to fractional hours."""
     s = _strip(value)
     parts = s.split("+")
@@ -245,7 +245,7 @@ def _parse_sched_duration_hours(value) -> Optional[float]:
 # KML
 # ---------------------------------------------------------------------------
 
-def parse_kml(path: Path | str) -> list[dict]:
+def parse_kml(path: Path | str) -> list[dict[Any, Any]]:
     """Read an ER-2 planned KML route and return ordered placemarks.
 
     Each placemark becomes ``{"name", "description", "lon", "lat", "alt_m"}``.
@@ -255,7 +255,7 @@ def parse_kml(path: Path | str) -> list[dict]:
     """
     tree = ET.parse(Path(path))
     root = tree.getroot()
-    out: list[dict] = []
+    out: list[dict[Any, Any]] = []
     for pm in root.iter(f"{{{_KML_NS['k']}}}Placemark"):
         name_el = pm.find("k:name", _KML_NS)
         coord_el = pm.find(".//k:Point/k:coordinates", _KML_NS)
@@ -327,7 +327,7 @@ def _find_data_start_row(ws, header_row: int) -> int:
     raise ValueError("Green Card XLSX has no numeric WP# rows after header")
 
 
-def _read_header(ws) -> dict:
+def _read_header(ws) -> dict[Any, Any]:
     """Extract the Green Card header block.
 
     Pulls the labeled fields above the ``WP#`` row.  Field names map
@@ -377,13 +377,13 @@ def _classify_kind(fix_name: str) -> str:
     return "waypoint"
 
 
-def _parse_waypoint_block(rows: tuple[tuple, tuple, tuple]) -> dict:
+def _parse_waypoint_block(rows: tuple[tuple[Any, ...], tuple, tuple]) -> dict[Any, Any]:
     """Parse three consecutive rows of Green Card data into one record."""
     r1, r2, r3 = rows
 
     wp_str = _strip(r1[_COL_WP])
     try:
-        wp_num: Optional[int] = int(wp_str)
+        wp_num: int | None = int(wp_str)
     except ValueError:
         wp_num = None
 
@@ -432,7 +432,7 @@ def parse_green_card_xlsx(path: Path | str) -> PlannedSortie:
         path: XLSX file path.
 
     Returns:
-        :class:`PlannedSortie` with the extracted header dict and a
+        :class:`PlannedSortie` with the extracted header dict[Any, Any] and a
         DataFrame of one row per Green Card event (numbered waypoint
         or sub-row).  See :func:`load_planned_sortie` for the column
         schema.
@@ -454,11 +454,11 @@ def parse_green_card_xlsx(path: Path | str) -> PlannedSortie:
     header = _read_header(ws)
     data_start = _find_data_start_row(ws, _find_header_row(ws))
 
-    rows: list[tuple] = list(ws.iter_rows(
+    rows: list[tuple[Any, ...]] = list(ws.iter_rows(
         min_row=data_start, max_row=ws.max_row, values_only=True,
     ))
 
-    records: list[dict] = []
+    records: list[dict[Any, Any]] = []
     for i in range(0, len(rows), 3):
         block = rows[i:i + 3]
         if len(block) < 3:
@@ -526,7 +526,7 @@ def _split_lines(cell: object) -> list[str]:
     return [ln.strip() for ln in str(cell).split("\n")]
 
 
-def _parse_pdf_fix_block(cell: str) -> dict:
+def _parse_pdf_fix_block(cell: str) -> dict[Any, Any]:
     """Parse the (WP#/Fix/VOR/Alt; Description/TAC/Lat; Lon) PDF cell.
 
     Returns a dict with keys ``wp_num``, ``fix_name``, ``description``,
@@ -543,9 +543,9 @@ def _parse_pdf_fix_block(cell: str) -> dict:
     m1 = _PDF_LINE1_RE.match(line1)
     if m1:
         wp_str, fix_name, vor_str, alt_str = m1.groups()
-        wp_num: Optional[int] = int(wp_str) if wp_str else None
-        vor_freq: Optional[str] = vor_str if vor_str else None
-        altitude_ft: Optional[float] = float(alt_str) if alt_str else None
+        wp_num: int | None = int(wp_str) if wp_str else None
+        vor_freq: str | None = vor_str if vor_str else None
+        altitude_ft: float | None = float(alt_str) if alt_str else None
     else:
         wp_num = None
         fix_name = line1
@@ -564,7 +564,7 @@ def _parse_pdf_fix_block(cell: str) -> dict:
     # Inside ``prefix``: trailing token like "072X" / "114X" / "087Y" is
     # the TAC channel.  Anything else is the description.
     description = ""
-    tac_channel: Optional[str] = None
+    tac_channel: str | None = None
     if prefix:
         tokens = prefix.split()
         if tokens and re.match(r"^\d{3}[A-Z]$", tokens[-1]):
@@ -587,7 +587,7 @@ def _parse_pdf_fix_block(cell: str) -> dict:
     }
 
 
-def _parse_pdf_waypoint_row(row: list) -> dict:
+def _parse_pdf_waypoint_row(row: list) -> dict[Any, Any]:
     """Convert one pdfplumber table row into a normalized waypoint record."""
     fix_block = _parse_pdf_fix_block(row[_PDF_COL_FIX_BLOCK])
 
@@ -639,7 +639,7 @@ def _parse_pdf_waypoint_row(row: list) -> dict:
     }
 
 
-def _read_pdf_header(text: str) -> dict:
+def _read_pdf_header(text: str) -> dict[Any, Any]:
     """Extract the Green Card header from the page-1 raw text blob."""
     aircraft_match = re.search(r"NASA\s*\d{3}", text)
     # Mission name (e.g., "GEMX") is the short token between
@@ -709,7 +709,7 @@ def parse_green_card_pdf(path: Path | str) -> PlannedSortie:
             "`pip install pdfplumber` or `pip install hyplan[planned]`."
         ) from exc
 
-    records: list[dict] = []
+    records: list[dict[Any, Any]] = []
     header_text = ""
     with pdfplumber.open(Path(path)) as pdf:
         if not pdf.pages:
@@ -768,7 +768,7 @@ def load_planned_sortie(
     Returns:
         :class:`PlannedSortie` with:
 
-        * ``header``: dict with ``aircraft_id``, ``mission_name``,
+        * ``header``: dict[Any, Any] with ``aircraft_id``, ``mission_name``,
           ``sched_takeoff_z``, ``takeoff_time_z``, ``land_time_z``,
           ``sched_duration_hours``, ``fuel_load_lb``, ``fuel_used_lb``.
         * ``waypoints``: DataFrame with columns ``order``, ``wp_num``,
@@ -804,7 +804,7 @@ def load_planned_sortie(
     df = sortie.waypoints.copy()
     df["kml_disagreement_deg"] = float("nan")
 
-    kml_queues: dict = defaultdict(deque)
+    kml_queues: dict[Any, Any] = defaultdict(deque)
     for pm in placemarks:
         kml_queues[pm["description"]].append(pm)
 

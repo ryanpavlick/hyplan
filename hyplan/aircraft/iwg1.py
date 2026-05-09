@@ -19,7 +19,6 @@ becomes a more direct read.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -57,7 +56,7 @@ _COLUMN_MAP = {
 }
 
 
-def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
+def load_iwg1(path: str | Path) -> pd.DataFrame:
     """Load one IWG1 ``.txt`` file into a normalized DataFrame.
 
     Args:
@@ -223,12 +222,12 @@ def load_iwg1(path: Union[str, Path]) -> pd.DataFrame:
 
 
 def split_iwg1_alltracks(
-    src: Union[str, Path],
-    dest_dir: Union[str, Path],
+    src: str | Path,
+    dest_dir: str | Path,
     *,
     tail_label: str,
     gap_threshold_hr: float = 6.0,
-) -> List[Path]:
+) -> list[Path]:
     """Split a concatenated multi-sortie IWG1 CSV into per-sortie files.
 
     The IWG1 "all-tracks" delivery format is a single CSV with one
@@ -320,7 +319,7 @@ def split_iwg1_alltracks(
     starts = [0, *boundaries.tolist()]
     ends = [*boundaries.tolist(), len(data_lines)]
 
-    written: List[Path] = []
+    written: list[Path] = []
     for s, e in zip(starts, ends):
         date = timestamps[s].strftime("%Y-%m-%d")
         out_path = dest / f"{tail_label}_{date}.txt"

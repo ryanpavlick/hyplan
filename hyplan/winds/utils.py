@@ -7,7 +7,7 @@ and wind-correction functions for flight planning.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 from pint import Quantity
@@ -57,7 +57,7 @@ def _earthdata_login():
 # Wind vector conversions
 # ---------------------------------------------------------------------------
 
-def wind_uv_from_speed_dir(speed_mps: float, from_deg: float) -> Tuple[float, float]:
+def wind_uv_from_speed_dir(speed_mps: float, from_deg: float) -> tuple[float, float]:
     """Convert meteorological wind (speed, direction-from) to (u, v) components.
 
     Args:
@@ -74,7 +74,7 @@ def wind_uv_from_speed_dir(speed_mps: float, from_deg: float) -> Tuple[float, fl
     return float(u), float(v)
 
 
-def wind_speed_dir_from_uv(u_mps: float, v_mps: float) -> Tuple[float, float]:
+def wind_speed_dir_from_uv(u_mps: float, v_mps: float) -> tuple[float, float]:
     """Convert (u, v) wind components to meteorological (speed, direction-from).
 
     Args:
@@ -99,8 +99,8 @@ def wind_speed_dir_from_uv(u_mps: float, v_mps: float) -> Tuple[float, float]:
 def _wind_factor(
     tas: Quantity,
     heading_deg: float,
-    wind_speed: Optional[Quantity],
-    wind_from_deg: Optional[float],
+    wind_speed: Quantity | None,
+    wind_from_deg: float | None,
 ) -> float:
     """Multiplicative wind-correction factor for a segment's no-wind time.
 
@@ -180,10 +180,10 @@ def _resolve_wind_factor(
     lat: float,
     lon: float,
     altitude: Quantity,
-    segment_time: Optional[datetime.datetime],
-    wind_source: Optional["WindField"],
-    wind_speed: Optional[Quantity],
-    wind_direction: Optional[float],
+    segment_time: datetime.datetime | None,
+    wind_source: WindField | None,
+    wind_speed: Quantity | None,
+    wind_direction: float | None,
 ) -> float:
     """Compute wind factor using wind_source (preferred) or legacy scalars."""
     if wind_source is not None:
@@ -291,10 +291,10 @@ def _resolve_track_hold_solution(
     lat: float,
     lon: float,
     altitude: Quantity,
-    segment_time: Optional[datetime.datetime],
-    wind_source: Optional["WindField"],
-    wind_speed: Optional[Quantity],
-    wind_direction: Optional[float],
+    segment_time: datetime.datetime | None,
+    wind_source: WindField | None,
+    wind_speed: Quantity | None,
+    wind_direction: float | None,
 ) -> dict:
     """Compute track-hold solution using wind_source or legacy scalars.
 
@@ -329,11 +329,11 @@ def _resolve_wind_uv(
     lat: float,
     lon: float,
     altitude: Quantity,
-    segment_time: Optional[datetime.datetime],
-    wind_source: Optional["WindField"],
-    wind_speed: Optional[Quantity],
-    wind_direction: Optional[float],
-) -> Optional[Tuple[float, float]]:
+    segment_time: datetime.datetime | None,
+    wind_source: WindField | None,
+    wind_speed: Quantity | None,
+    wind_direction: float | None,
+) -> tuple[float, float] | None:
     """Extract wind as ``(u_east, v_north)`` in m/s for trochoidal Dubins.
 
     Returns ``None`` when no wind is available (still-air path).  Used

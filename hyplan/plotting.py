@@ -17,7 +17,6 @@ import geopandas as gpd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as _pe
-from typing import List, Optional, Tuple
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
@@ -40,8 +39,8 @@ __all__ = [
 
 
 def map_flight_lines(
-    flight_lines: List[FlightLine],
-    center: Tuple[float, float] | None = None,
+    flight_lines: list[FlightLine],
+    center: tuple[float, float] | None = None,
     zoom_start: int = 6,
     line_color: str = "blue",
     line_weight: int = 3
@@ -152,7 +151,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
     plt.grid()
 
 
-def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray]:
+def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: str | None = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Sample terrain elevation along the flight plan track.
 
@@ -209,7 +208,7 @@ def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: Opt
     return times_arr, elevations_ft
 
 
-def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Optional[Aircraft] = None, dem_file: Optional[str] = None, show_terrain: bool = True) -> None:
+def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Aircraft | None = None, dem_file: str | None = None, show_terrain: bool = True) -> None:
     """
     Plot altitude vs. time trajectory with optional terrain profile.
 
@@ -1077,11 +1076,11 @@ def plot_isochrone_static(
     *,
     points=(),
     title: str = "",
-    figsize: Tuple[float, float] = (9, 9),
+    figsize: tuple[float, float] = (9, 9),
     wind_field=None,
     wind_altitude=None,
     wind_time=None,
-    wind_caption: Optional[str] = None,
+    wind_caption: str | None = None,
     basemap_scale: str = "50m",
     show_refuel_markers: bool = True,
 ):

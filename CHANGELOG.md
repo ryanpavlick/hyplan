@@ -1,5 +1,204 @@
 # Changelog
 
+## v1.6.0 — 2026-05-09
+
+Internationalization of the aircraft fleet plus aircraft-calibration
+completion.  HyPlan grows from 14 → **22 pre-configured research
+aircraft**, with calibration coverage rising from 8 → **19
+calibrated platforms**: 17 via in-situ ICARTT / IWG1 / NetCDF
+archives (NASA / NOAA fleet + six new international classes), plus
+2 via ADS-B globe-history archives (King Air A90 fleet aggregate,
+University of Wyoming UWKA-2 King Air 350).  Two **breaking
+renames** in the legacy fleet — see "Naming convention" below.
+
+### Naming convention (BREAKING — no backward-compat aliases)
+
+`C130` → `NASA_C130` and `TwinOtter` → `NOAA_TwinOtter`.  The fleet
+now consistently uses operator-prefixed names whenever the
+calibration is single-operator-specific.  Both classes were already
+calibrated against one operator's tails (NASA Wallops C-130H
+N436NA / NOAA Twin Otter N48RF + N46RF); the rename makes that
+explicit and signals that other operators (USAF / NCAR / NRL C-130,
+CIRPAS / Kenn Borek Twin Otter) would need their own calibration
+class.  `KingAirB200` is left as-is despite a similarly NASA-only
+calibration source — the airframe sees genuine multi-operator use
+across HyPlan's user base.
+
+Anything importing `from hyplan.aircraft import TwinOtter` or `C130`
+will fail loudly until updated.  The migration is a mechanical name
+change.
+
+### Six new international aircraft classes
+
+| Class | Airframe | Operator | Sorties | Source |
+|---|---|---|---|---|
+| `FAAM_BAe146` | BAe-146-301 (G-LUXE) | FAAM (UK) | 125 | CEDA FAAM Core Data Product 1 Hz, 27 ASMM-tagged campaigns 2017-2024 |
+| `SAFIRE_ATR42` | ATR-42-320 (F-HMTO) | SAFIRE (FR) | 44 | CEDA EUFAR (28, wind-triangle TAS) + AERIS EUREC4A 2020 (19, native TAS) |
+| `BAS_TwinOtter` | DHC-6-300 polar | BAS (UK) | 105 | CEDA MASIN: OFCAP 2010-2011 + ACCACIA 2013 + ORCHESTRA 2017-2018 + IGP 2018 + ArcticCyclones 2022 |
+| `NERC_DO228` | Dornier Do228-101 (D-CALM) | NERC ARSF (UK) | 34 | CEDA NERC ARSF: ACTIVE 2005-2006 + Eyjafjallajökull 2010 (wind-triangle TAS) |
+| `AWI_BaslerBT67` | Basler BT-67 (Polar 5/6) | AWI (DE) | ~78 | PANGAEA: ACLOUD 2017 + HALO-AC3 2022 |
+| `DLR_HALO` | Gulfstream G550 (D-ADLR) | DLR (DE) | 18 | DLR HALO BAHAMAS 1 Hz, HALO-AC3 2022 |
+
+Each ships with a `calibrate.py` script and a companion
+`calibration.ipynb`.  `SourceRecord` entries carry CEDA / PANGAEA /
+AERIS DOIs where available so users can cite the underlying
+archives.
+
+### Refreshed NASA + NOAA fleet calibrations
+
+* **`NCAR_GV`** (HIAPER): inferred → calibrated.  22 NSF-GV ICARTT
+  NAV sorties from DC3 2012 (NASA LaRC ASD archive); TAS
+  reconstructed via wind triangle since DC3 RAF-NAV product omits
+  TASX.  CasMachSchedule (M0.80 cruise) carried over from
+  `NASA_GV`; DC3 cruise TAS at FL300 (468 kt observed) confirmed
+  the schedule applies.
+* **`NOAA_TwinOtter`** (was `TwinOtter`): refresh from 17 → **164
+  sorties**.  Adds 6 NOAA CSL chemistry campaigns on N46RF
+  (TopDown 2014, UWFPS 2017, CalFiDE 2022, AEROMMA 2023, AMMBEC
+  2024, USOS 2024) to the FIREX-AQ N48RF baseline.  Service
+  ceiling 15 → 17.5 kft; approach 99 → 105 kt.  Per-file unit
+  detection corrects PI mislabeling between m/s and kt across
+  campaigns.
+* **`NOAA_WP3D`** (new class): Lockheed WP-3D Orion, NOAA AOC tails
+  N42RF / N43RF.  Calibrated against **96 sorties** combining 18
+  NOAA CSL chemistry sorties (ARCPAC 2008, CalNex 2010, SENEX
+  2013, SONGNEX 2015) with 78 NOAA AOML HRD hurricane-program
+  sorties.  Climb VS profile within 5 fpm of `NASA_P3` at every
+  altitude — confirms airframe equivalence.  Cruise schedule runs
+  22-28 kt slower than `NASA_P3` (chemistry mission profile favors
+  slow-cruise dwell over plumes).
+* **`NOAA_GIV`** (new class): Gulfstream IV-SP, NOAA AOC tail
+  N49RF "Gonzo".  Calibrated against 93 hurricane
+  synoptic-surveillance sorties (2021-2025).  Service ceiling
+  47,500 ft (op-p99; certified 45,000), Vapp 146 kt, cruise 443
+  KTAS @ FL400.  First calibrated G-IV variant — distinct from
+  `NASA_GIV` which remains brochure-only.
+
+### ADS-B globe-history calibrations (new path)
+
+For airframes without IWG1 / ICARTT public archives, v1.6.0 adds an
+ADS-B-based calibration path that pulls historical 24-h globe
+traces from `airplanes.live`'s `globe_history/<YYYY-MM-DD>/`
+endpoint, segments them into sorties, and runs them through the
+existing `hyplan.aircraft.adsb` pipeline (groundspeed-as-TAS
+still-air baseline; v1.6.1 will switch to MERRA-2 wind-triangle
+reconstruction).
+
+* **`KingAirA90`**: brochure → **calibrated**.  124 active US
+  65-A90 / 65-A90-1 (civilian) tails enumerated from the FAA
+  Releasable Aircraft database; a 30-day archive pull (2026-04-09
+  → 2026-05-08) yielded 643 sorties / 298k fix rows across 25
+  active tails.  A skydive-sortie filter (short duration + high
+  peak altitude + sustained > 2500 fpm descent) drops 215 of 643
+  sorties — the active US A90 fleet is heavily skydive-dominated.
+  428 retained sorties produce a calibration whose cruise schedule
+  and service ceiling track brochure values closely (cruise 222 kt
+  @ FL160 vs brochure 226 @ FL150; ceiling 25 kft op-p99 vs
+  26.4 kft POH).
+* **`KingAir350`**: brochure → **calibrated**.  University of
+  Wyoming UWKA-2 (N2UW / hex A18F28); 22 sorties pulled from 18
+  active days across 5 science-campaign windows (2025-01 through
+  2026-04, 8.7k trace rows).  Hybrid block: data-fit cruise peak
+  (318 kt @ FL330, slightly above stock B300 reflecting UWKA-2's
+  Blackhawk XP-67A engine upgrade), climb_schedule, and
+  climb_profile; brochure-retained approach_speed (110 kt) and
+  descent_profile (single-tail upper-altitude bins are too sparse
+  for the descent fitter).  Confidence 0.5-0.65.
+
+Both ship with `calibrate.py` only (no `calibration.ipynb`
+companion); see
+`notebooks/calibration/KingAirA90/_fetch_airplanes_live.py` for the
+trace fetcher.
+
+### Calibration toolchain
+
+* **Per-source archive fetchers** under `notebooks/calibration/`:
+  * `_larc_asd_fetch.py` — generic NASA LaRC Airborne Science Data
+    fetcher (decodes the ArcView `enzFile` URL token scheme).
+  * `_noaa_csl_fetch.py` — cookie-authenticated NOAA CSL
+    field-project search.
+  * `_hrd_fetch.py` + `_hrd_loader.py` — NOAA AOML HRD hurricane
+    archive (G-IV `.01.txt` and P-3 `.1sec.txt` ARWO formats).
+  * Per-aircraft fetchers: CEDA FAAM, CEDA EUFAR, CEDA BAS MASIN,
+    CEDA NERC ARSF, airplanes.live globe-history (`KingAirA90` and
+    `KingAir350`).
+* **Notebook builder** `_make_notebook.py` emits a standardized
+  13-cell `calibration.ipynb` per aircraft that delegates to the
+  per-aircraft `calibrate.py` source of truth.  All 17 in-situ
+  calibrated aircraft now ship with a notebook (was 8 of 11 in
+  v1.5.x).
+* **Calibration directory rename**: every
+  `notebooks/calibration/<short>/` directory is renamed to match
+  its aircraft class name (`giii/` → `NASA_GIII/` etc.) for
+  consistency with `data/<class>/` layout.
+
+### ICARTT loader hardening (`hyplan/aircraft/icartt.py`)
+
+Driven by older / non-spec-compliant campaign files:
+
+* **Latin-1 encoding fallback** for ARCPAC 2008 et al.
+* **Whitespace-delimited line 1 + data rows** auto-detection (some
+  ARCPAC files use spaces instead of commas).
+* **6-digit sentinels** (`-999999`, `-777777`, `-888888`) for LaRC
+  PI-merge convention.
+* **0-360°E longitude wrap** for DISCOVER-AQ merges.
+* **km altitude** unit branch (the previous `"m" in u` test was
+  matching `"km"` substring).
+* **Underscore-aware regex** for PI-merge instrument prefixes
+  (`FMS_TAS`, `IRS_HEAD`, etc.).
+* New canonical-name patterns: `GRD_SPD`, `WNS`, `WND`, and `^...^`
+  anchor stripping on heading / track / pitch / roll / AOA.
+
+### `SourceRecord` schema extension
+
+`hyplan.aircraft._base.SourceRecord` gains two optional fields:
+
+* `url: str = ""` — landing-page URL for the data archive.
+* `doi: str = ""` — DOI of the cited dataset.
+
+Existing `SourceRecord(...)` calls work unchanged.  Eleven
+calibrated classes ship with `url` populated; six ship with
+verified DOIs (CEDA UUIDs, AERIS EUREC4A
+`10.25326/162`, PANGAEA HALO-AC3 `10.1594/PANGAEA.967719`, AWI
+Polar `10.1594/PANGAEA.902849`).
+
+### Auto-generated fleet documentation
+
+New `docs/_gen_fleet_tables.py` introspects the live aircraft
+classes and rewrites two marker-delimited regions:
+
+* `docs/api/aircraft.md` — fleet overview table.
+* `docs/calibration.md` — data sources grouped by archive
+  (NASA ASP / NOAA CSL / CEDA FAAM / CEDA EUFAR / AERIS EUREC4A /
+  CEDA BAS MASIN / DLR HALO BAHAMAS / CEDA NERC ARSF / AWI PANGAEA)
+  with clickable DOIs / URLs.
+
+Re-run `python -m docs._gen_fleet_tables` after any calibration
+change.
+
+### Calibration coverage
+
+| Status | Count | Aircraft |
+|---|---|---|
+| `calibrated` | **19** | NASA: ER-2, GIII, GV, P-3, WB-57, C-130, B-200; NOAA: TwinOtter, WP-3D *(new)*, GIV *(new)*; international *(all new)*: NCAR_GV, FAAM_BAe146, SAFIRE_ATR42, BAS_TwinOtter, NERC_DO228, AWI_BaslerBT67, DLR_HALO; ADS-B *(new)*: KingAirA90, KingAir350 |
+| `inferred` | 1 | NASA_C20A (mirrors NASA_GIII) |
+| `uncalibrated` | 2 | NASA_GIV (NASA AFRC tail; NOAA G-IV is the calibrated variant), NASA_B777 |
+
+### Other housekeeping
+
+* `docs/api/aircraft.md` autoclass directives updated for renames +
+  new `NOAA_WP3D`, `NOAA_GIV`, and the six international classes.
+* `docs/stability.md` experimental tier: `NCAR_GV` removed (now
+  calibrated).
+* `docs/calibration.md` adds a "Performance envelope cross-check"
+  section comparing all 19 calibrated classes against brochure /
+  POH values, flagging known artifacts (NERC_DO228 cruise inversion
+  above FL100, DLR_HALO flat cruise FL200-FL300) for v1.6.1
+  follow-up.
+* HRD tail-letter mapping in HRD filenames (`H` = N42RF Kermit, `I`
+  = N43RF Miss Piggy, `N` = N49RF Gonzo, `U` = USAF WC-130J — the
+  USAF data on disk is unused in v1.6.0).
+
 ## v1.5.2 — 2026-05-07
 
 Maintenance + performance release.  No public-API changes.
@@ -269,7 +468,7 @@ performance with `confidence=0.7` until calibration data lands.
 * `notebooks/aircraft_performance.ipynb` — climb-rate plot now
   splits cleanly by VerticalProfile mode; the stale "analytical
   exponential" chart title is gone.
-* `notebooks/calibration/er2/calibration.ipynb` — narrative no
+* `notebooks/calibration/NASA_ER2/calibration.ipynb` — narrative no
   longer hard-codes a sortie count that drifted post-BlueFlux.
 
 ### API additions (all backward-compatible)
@@ -420,7 +619,7 @@ Pre-v1.3 the planner used `DubinsPath3D`, a constant-pitch 3D Dubins solver whos
 
 `NASA_ER2()` is calibrated against 17 NASA AFRC IWG1 in-situ sorties (~64 000 cruise fixes): distinct climb / cruise / descent TAS schedules (was a single brochure curve); 8-anchor `climb_profile` resolving the 19–21 kft step climb and 23 kft recovery (was 2-point linear); 6-anchor `descent_profile` (was 3-point); `ApproachProfile` with empirical 2.51° glideslope; calibrated `bank_by_phase` (climb 11°, cruise 20°, descent 16°, approach 9°). Modeled-vs-flown total duration: NM17 B +2.1 %, CO07v4 +7.9 %, CO06 +1.4 %; multi-sortie time-to-cruise residual ≤ 5 % across the n=17 set (vs. ~36 % pre-v1.3).
 
-New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_taxi`), `IWG1TraceWindField`, a planned-sortie parser (Green Card XLSX/PDF via `pdfplumber` + KML), and three calibration notebooks under `notebooks/calibration/er2/` (`iwg1_calibration`, `sortie_replay`, `planned_vs_flown`).
+New supporting tooling: the `hyplan.aircraft.iwg1` loader (with `trim_ground_taxi`), `IWG1TraceWindField`, a planned-sortie parser (Green Card XLSX/PDF via `pdfplumber` + KML), and three calibration notebooks under `notebooks/calibration/NASA_ER2/` (`iwg1_calibration`, `sortie_replay`, `planned_vs_flown`).
 
 ### Other additions
 

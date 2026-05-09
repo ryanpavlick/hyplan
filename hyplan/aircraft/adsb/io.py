@@ -9,7 +9,6 @@ from __future__ import annotations
 import datetime
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
 
 from ...exceptions import HyPlanRuntimeError
 
@@ -31,14 +30,14 @@ def _require_traffic():
 
 
 def load_flights(
-    source: Union[str, Path, object],
+    source: str | Path | object,
     *,
-    icao24: Optional[Union[str, List[str]]] = None,
-    callsign: Optional[Union[str, List[str]]] = None,
-    start: Optional[datetime.datetime] = None,
-    stop: Optional[datetime.datetime] = None,
+    icao24: str | list[str] | None = None,
+    callsign: str | list[str] | None = None,
+    start: datetime.datetime | None = None,
+    stop: datetime.datetime | None = None,
     resample: str = "5s",
-    filter_strategy: Optional[str] = "default",
+    filter_strategy: str | None = "default",
     min_duration_minutes: float = 10.0,
     min_altitude_ft: float = 1000.0,
     max_altitude_ft: float = 60000.0,
@@ -133,7 +132,7 @@ def _clean_flight(
     flight,
     *,
     resample: str,
-    filter_strategy: Optional[str],
+    filter_strategy: str | None,
     min_altitude_ft: float,
     max_altitude_ft: float,
     min_duration_minutes: float,
