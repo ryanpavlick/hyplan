@@ -54,21 +54,21 @@ Data source: Copernicus DEM GLO-30, European Space Agency, distributed
 via AWS Open Data (s3://copernicus-dem-30m).
 """
 
-from ._demgrid import DEMGrid  # noqa: F401
-from .elevation import (  # noqa: F401
+from ._demgrid import DEMGrid
+from .elevation import (
     get_elevations,
     get_elevations_from_grid,
     get_min_max_elevations,
     terrain_aspect_azimuth,
     terrain_elevation_along_track,
 )
-from .intersection import (  # noqa: F401
+from .intersection import (
     _COS_TILT_MIN,
     _M_PER_DEG_LAT,
     ray_terrain_intersection,
     surface_normal_at,
 )
-from .io import (  # noqa: F401
+from .io import (
     build_tile_index,
     clear_cache,
     clear_localdem_cache,

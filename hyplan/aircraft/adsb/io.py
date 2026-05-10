@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 def _require_traffic() -> Any:
     """Import and return the traffic module, raising a clear error if missing."""
     try:
-        import traffic  # noqa: F811
-        import traffic.core  # noqa: F811
+        import traffic
+        import traffic.core
 
         return traffic
     except ImportError:

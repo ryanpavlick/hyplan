@@ -272,7 +272,7 @@ NM09_PDF = Path("data/er2/NM 09 ER2 Green Card1.pdf")
 
 def _pdfplumber_available() -> bool:
     try:
-        import pdfplumber  # noqa: F401
+        import pdfplumber
         return True
     except ImportError:
         return False

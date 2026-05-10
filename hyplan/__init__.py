@@ -47,10 +47,9 @@ def setup_logging(
 
 
 # --- Core re-exports ---
-# ruff: noqa: E402
 
 # Exceptions
-from .exceptions import (  # noqa: F401
+from .exceptions import (
     HyPlanError,
     HyPlanValueError,
     HyPlanTypeError,
@@ -58,15 +57,15 @@ from .exceptions import (  # noqa: F401
 )
 
 # Units
-from .units import ureg, convert_distance, convert_speed, convert_angle, convert_time, altitude_to_flight_level  # noqa: F401
+from .units import ureg, convert_distance, convert_speed, convert_angle, convert_time, altitude_to_flight_level
 
 # Flight geometry
-from .flight_line import FlightLine  # noqa: F401
-from .pattern import Pattern  # noqa: F401
-from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size  # noqa: F401
+from .flight_line import FlightLine
+from .pattern import Pattern
+from .flight_box import box_around_center_line, box_around_polygon, box_around_center_terrain, box_around_polygon_terrain, altitude_msl_for_pixel_size
 
 # Aircraft
-from .aircraft import (  # noqa: F401
+from .aircraft import (
     Aircraft,
     NASA_ER2,
     NASA_GIII,
@@ -92,7 +91,7 @@ from .aircraft import (  # noqa: F401
 )
 
 # Airports
-from .airports import (  # noqa: F401
+from .airports import (
     Airport,
     initialize_data,
     find_nearest_airport,
@@ -101,7 +100,7 @@ from .airports import (  # noqa: F401
 )
 
 # Sensors
-from .instruments import (  # noqa: F401
+from .instruments import (
     Sensor,
     LineScanner,
     AVIRISClassic,
@@ -144,24 +143,24 @@ from .instruments import (  # noqa: F401
     UAVSAR_Kaband,
 )
 # Waypoint and Dubins path planning
-from .waypoint import Waypoint  # noqa: F401
-from .dubins3d import DubinsPath2D  # noqa: F401
+from .waypoint import Waypoint
+from .dubins3d import DubinsPath2D
 
 # Swath
-from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps  # noqa: F401
+from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath_gaps_overlaps
 
 # Flight patterns
-from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line  # noqa: F401
+from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
 
 # Flight planning and optimization
-from .planning import compute_flight_plan, compute_isochrone, compute_concentric_isochrones, compute_refuel_isochrone, evaluate_target_reachability, isochrone_polygon, plot_isochrone  # noqa: F401
+from .planning import compute_flight_plan, compute_isochrone, compute_concentric_isochrones, compute_refuel_isochrone, evaluate_target_reachability, isochrone_polygon, plot_isochrone
 
 # Wind fields
-from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan  # noqa: F401
-from .flight_optimizer import build_graph, greedy_optimize  # noqa: F401
+from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan
+from .flight_optimizer import build_graph, greedy_optimize
 
 # Plotting
-from .plotting import (  # noqa: F401
+from .plotting import (
     map_flight_lines, plot_flight_plan, plot_altitude_trajectory,
     terrain_profile_along_track,
     plot_airspace_map, plot_isochrone_static,
@@ -170,14 +169,14 @@ from .plotting import (  # noqa: F401
 )
 
 # Exports
-from .exports import (  # noqa: F401
+from .exports import (
     to_excel, to_pilot_excel, to_foreflight_csv,
     to_honeywell_fms, to_er2_csv, to_icartt,
     to_kml, to_gpx, to_txt,
 )
 
 # Airspace
-from .airspace import (  # noqa: F401
+from .airspace import (
     Airspace, AirspaceConflict, OpenAIPClient,
     check_airspace_conflicts, check_airspace_proximity,
     fetch_and_check, clear_airspace_cache,
@@ -188,7 +187,7 @@ from .airspace import (  # noqa: F401
 )
 
 # Campaign
-from .campaign import Campaign  # noqa: F401
+from .campaign import Campaign
 
 __all__ = [
     # Logging

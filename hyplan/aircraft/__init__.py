@@ -6,7 +6,7 @@ both so that ``from hyplan.aircraft import Aircraft, NASA_GV`` continues
 to work.
 """
 
-from ._base import (  # noqa: F401
+from ._base import (
     Aircraft,
     ApproachProfile,
     CasMachSchedule,
@@ -21,9 +21,9 @@ from ._base import (  # noqa: F401
     SourceRecord,
 )
 
-from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi  # noqa: F401
-from .wind_path import climb_with_wind_field, descend_with_wind_field  # noqa: F401
-from ._planned_sortie import (  # noqa: F401
+from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi
+from .wind_path import climb_with_wind_field, descend_with_wind_field
+from ._planned_sortie import (
     PlannedSortie,
     load_planned_sortie,
     parse_kml,
@@ -31,7 +31,7 @@ from ._planned_sortie import (  # noqa: F401
     parse_green_card_pdf,
 )
 
-from ._models import (  # noqa: F401
+from ._models import (
     NASA_ER2,
     NASA_GIII,
     NASA_GIV,

@@ -49,19 +49,19 @@ Usage::
     plan = compute_flight_plan(..., wind_source=wf, takeoff_time=takeoff_time)
 """
 
-from .base import WindField  # noqa: F401
-from .factory import wind_field_from_plan  # noqa: F401
-from .gridded import _GriddedWindField  # noqa: F401
-from .providers import (  # noqa: F401
+from .base import WindField
+from .factory import wind_field_from_plan
+from .gridded import _GriddedWindField
+from .providers import (
     GFSWindField,
     GMAOWindField,
     IWG1TraceWindField,
     MERRA2WindField,
 )
-from .providers.gfs import _gfs_best_cycle, _gfs_filter_url  # noqa: F401
-from .providers.merra2 import _merra2_stream, _merra2_url  # noqa: F401
-from .simple import ConstantWindField, StillAirField  # noqa: F401
-from .utils import (  # noqa: F401
+from .providers.gfs import _gfs_best_cycle, _gfs_filter_url
+from .providers.merra2 import _merra2_stream, _merra2_url
+from .simple import ConstantWindField, StillAirField
+from .utils import (
     _resolve_track_hold_solution,
     _resolve_wind_factor,
     _resolve_wind_uv,

@@ -13,7 +13,7 @@ from shapely.geometry import LineString, Polygon
 # plot_oceanic_tracks. Gate the dependent classes rather than failing the
 # whole file in environments where it isn't installed.
 try:
-    import cartopy  # noqa: F401
+    import cartopy
     HAS_CARTOPY = True
 except ImportError:  # pragma: no cover
     HAS_CARTOPY = False

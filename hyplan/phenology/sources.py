@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Product configuration
 # ---------------------------------------------------------------------------
 
-_PRODUCT_CONFIG = {
+_PRODUCT_CONFIG: dict[str, dict[str, Any]] = {
     "ndvi": {
         "short_name": "MOD13A1",
         "short_name_aqua": "MYD13A1",
@@ -590,57 +590,89 @@ def fetch_phenology(
             "supported via AppEEARS. Use source='granules'."
         )
 
-    # ── AppEEARS path (fast, server-side extraction) ──
     if source == "appeears":
-        from ._appeears import fetch_appeears_timeseries
+        return _fetch_phenology_appeears(
+            polygon_file, product, year_start, year_stop, satellite,
+        )
+    return _fetch_phenology_granules(
+        polygon_file, product, year_start, year_stop, satellite, spatial_mode,
+    )
 
-        gdf = gpd.read_file(polygon_file)
-        if "Name" not in gdf.columns:
-            raise HyPlanValueError(
-                "Polygon file must contain a 'Name' column."
-            )
 
-        # Map satellite choice to AppEEARS product key
-        appeears_product = product
-        if satellite == "aqua" and product in ("ndvi", "evi"):
-            appeears_product = f"{product}_aqua"
+def _fetch_phenology_appeears(
+    polygon_file: str,
+    product: str,
+    year_start: int,
+    year_stop: int,
+    satellite: str,
+) -> pd.DataFrame:
+    """AppEEARS server-side extraction backend for :func:`fetch_phenology`.
 
-        coords = []
-        for _, row in gdf.iterrows():
-            c = row.geometry.centroid
-            coords.append({
-                "id": row["Name"],
-                "latitude": c.y,
-                "longitude": c.x,
-            })
+    Submits a point-sample request for the polygon centroids; fast (minutes)
+    but does not provide spatial averaging.
+    """
+    from ._appeears import fetch_appeears_timeseries
 
-        df = fetch_appeears_timeseries(
+    gdf = gpd.read_file(polygon_file)
+    if "Name" not in gdf.columns:
+        raise HyPlanValueError(
+            "Polygon file must contain a 'Name' column."
+        )
+
+    # Map satellite choice to AppEEARS product key
+    appeears_product = product
+    if satellite == "aqua" and product in ("ndvi", "evi"):
+        appeears_product = f"{product}_aqua"
+
+    coords = []
+    for _, row in gdf.iterrows():
+        c = row.geometry.centroid
+        coords.append({
+            "id": row["Name"],
+            "latitude": c.y,
+            "longitude": c.x,
+        })
+
+    df = fetch_appeears_timeseries(
+        coordinates=coords,
+        product=appeears_product,
+        year_start=year_start,
+        year_stop=year_stop,
+    )
+
+    if satellite == "combined" and product in ("ndvi", "evi"):
+        # Also fetch Aqua and merge
+        df_aqua = fetch_appeears_timeseries(
             coordinates=coords,
-            product=appeears_product,
+            product=f"{product}_aqua",
             year_start=year_start,
             year_stop=year_stop,
         )
+        df = pd.concat([df, df_aqua], ignore_index=True)
+        df = (
+            df.groupby(["polygon_id", "year", "day_of_year"], as_index=False)
+            .agg(date=("date", "first"), value=("value", "mean"))
+        )
 
-        if satellite == "combined" and product in ("ndvi", "evi"):
-            # Also fetch Aqua and merge
-            df_aqua = fetch_appeears_timeseries(
-                coordinates=coords,
-                product=f"{product}_aqua",
-                year_start=year_start,
-                year_stop=year_stop,
-            )
-            df = pd.concat([df, df_aqua], ignore_index=True)
-            df = (
-                df.groupby(["polygon_id", "year", "day_of_year"], as_index=False)
-                .agg(date=("date", "first"), value=("value", "mean"))
-            )
+    return df.sort_values(
+        ["polygon_id", "year", "day_of_year"]
+    ).reset_index(drop=True)
 
-        return df.sort_values(
-            ["polygon_id", "year", "day_of_year"]
-        ).reset_index(drop=True)
 
-    # ── Granule download path (slow, full spatial processing) ──
-    # Load and validate polygons
+def _fetch_phenology_granules(
+    polygon_file: str,
+    product: str,
+    year_start: int,
+    year_stop: int,
+    satellite: str,
+    spatial_mode: str,
+) -> pd.DataFrame:
+    """Granule-download backend for :func:`fetch_phenology`.
+
+    Downloads MODIS HDF4 granules via earthaccess, clips each to the
+    polygon, and computes spatial statistics locally.  Slower but
+    supports ``pixel_stats`` mode and the MCD12Q2 phenology product.
+    """
     gdf = gpd.read_file(polygon_file)
     if "Name" not in gdf.columns:
         raise HyPlanValueError(
@@ -651,34 +683,64 @@ def fetch_phenology(
     date_start = f"{year_start}-01-01"
     date_stop = f"{year_stop}-12-31"
 
-    # Determine which short_names to query
-    if product in ("ndvi", "evi"):
-        if satellite == "terra":
-            short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
-        elif satellite == "aqua":
-            short_names = [config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
-        else:  # combined
-            short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
-    else:
-        short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
+    short_names = _resolve_granule_short_names(config, product, satellite)
 
     # Authenticate
     from .._auth import _earthdata_login
-
     _earthdata_login()
 
-    all_rows = []
+    all_rows = _collect_granule_rows(
+        gdf, short_names, date_start, date_stop, product, config, spatial_mode,
+    )
 
+    if not all_rows:
+        logger.warning("No valid data extracted for any polygon.")
+        return _empty_phenology_frame(product, spatial_mode)
+
+    df = pd.DataFrame(all_rows)
+
+    # For combined satellite, average duplicate (polygon_id, year, doy) entries
+    if product != "phenology" and satellite == "combined":
+        df = _merge_combined_satellite(df, spatial_mode)
+
+    return df.sort_values(
+        ["polygon_id", "year", "day_of_year"] if "day_of_year" in df.columns
+        else ["polygon_id", "year"]
+    ).reset_index(drop=True)
+
+
+def _resolve_granule_short_names(
+    config: dict[str, Any], product: str, satellite: str,
+) -> list[str]:
+    """Map (product, satellite) to the list of MODIS short_names to query."""
+    if product in ("ndvi", "evi"):
+        if satellite == "terra":
+            return [config["short_name"]]
+        if satellite == "aqua":
+            return [config["short_name_aqua"]]
+        return [config["short_name"], config["short_name_aqua"]]
+    return [config["short_name"]]
+
+
+def _collect_granule_rows(
+    gdf: gpd.GeoDataFrame,
+    short_names: list[str],
+    date_start: str,
+    date_stop: str,
+    product: str,
+    config: dict[str, Any],
+    spatial_mode: str,
+) -> list[dict[str, Any]]:
+    """Inner per-polygon × per-granule loop for the granule backend."""
+    all_rows: list[dict[str, Any]] = []
     for _, row in gdf.iterrows():
         polygon_name = row["Name"]
         geom = _drop_z(row.geometry)
         bbox = geom.bounds  # (minx, miny, maxx, maxy)
-        # earthaccess expects (west, south, east, north)
         bounding_box = (bbox[0], bbox[1], bbox[2], bbox[3])
 
         for short_name in short_names:
             cache_dir = _get_cache_dir(short_name)
-
             granules = _search_granules(
                 short_name, bounding_box, date_start, date_stop,
             )
@@ -690,16 +752,15 @@ def fetch_phenology(
                 continue
 
             hdf_paths = _download_granules(granules, cache_dir)
-
             for hdf_path in hdf_paths:
                 try:
                     if product == "phenology":
                         result = _extract_phenology_from_granule(
-                            hdf_path, geom, config,  # type: ignore[arg-type]  # heterogeneous config dict
+                            hdf_path, geom, config,
                         )
                     else:
                         result = _extract_vi_from_granule(
-                            hdf_path, geom, config, spatial_mode,  # type: ignore[arg-type]  # heterogeneous config dict
+                            hdf_path, geom, config, spatial_mode,
                         )
                 except Exception:
                     logger.warning(
@@ -712,52 +773,46 @@ def fetch_phenology(
                 if result is not None:
                     result["polygon_id"] = polygon_name
                     all_rows.append(result)
+    return all_rows
 
-    if not all_rows:
-        logger.warning("No valid data extracted for any polygon.")
-        if product == "phenology":
-            return pd.DataFrame(
-                columns=["polygon_id", "year"] + list(
-                    _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()  # type: ignore[index]  # heterogeneous config dict
-                )
-            )
-        if spatial_mode == "mean":
-            return pd.DataFrame(
-                columns=["polygon_id", "date", "year", "day_of_year", "value"]
-            )
+
+def _empty_phenology_frame(product: str, spatial_mode: str) -> pd.DataFrame:
+    """Return the canonical empty DataFrame for the requested schema."""
+    if product == "phenology":
         return pd.DataFrame(
-            columns=[
-                "polygon_id", "date", "year", "day_of_year",
-                "value_mean", "value_std", "value_min", "value_max",
-                "pixel_count",
-            ]
+            columns=["polygon_id", "year"] + list(
+                _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()
+            )
         )
+    if spatial_mode == "mean":
+        return pd.DataFrame(
+            columns=["polygon_id", "date", "year", "day_of_year", "value"]
+        )
+    return pd.DataFrame(
+        columns=[
+            "polygon_id", "date", "year", "day_of_year",
+            "value_mean", "value_std", "value_min", "value_max",
+            "pixel_count",
+        ]
+    )
 
-    df = pd.DataFrame(all_rows)
 
-    # For combined satellite, average duplicate (polygon_id, year, doy) entries
-    if product != "phenology" and satellite == "combined":
-        if spatial_mode == "mean":
-            group_cols = ["polygon_id", "year", "day_of_year"]
-            df = df.groupby(group_cols, as_index=False).agg(
-                date=("date", "first"),
-                value=("value", "mean"),
-            )
-        else:
-            group_cols = ["polygon_id", "year", "day_of_year"]
-            df = df.groupby(group_cols, as_index=False).agg(
-                date=("date", "first"),
-                value_mean=("value_mean", "mean"),
-                value_std=("value_std", "mean"),
-                value_min=("value_min", "min"),
-                value_max=("value_max", "max"),
-                pixel_count=("pixel_count", "sum"),
-            )
-
-    return df.sort_values(
-        ["polygon_id", "year", "day_of_year"] if "day_of_year" in df.columns
-        else ["polygon_id", "year"]
-    ).reset_index(drop=True)
+def _merge_combined_satellite(df: pd.DataFrame, spatial_mode: str) -> pd.DataFrame:
+    """Average Terra+Aqua duplicates on (polygon_id, year, day_of_year)."""
+    group_cols = ["polygon_id", "year", "day_of_year"]
+    if spatial_mode == "mean":
+        return df.groupby(group_cols, as_index=False).agg(
+            date=("date", "first"),
+            value=("value", "mean"),
+        )
+    return df.groupby(group_cols, as_index=False).agg(
+        date=("date", "first"),
+        value_mean=("value_mean", "mean"),
+        value_std=("value_std", "mean"),
+        value_min=("value_min", "min"),
+        value_max=("value_max", "max"),
+        pixel_count=("pixel_count", "sum"),
+    )
 
 
 def fetch_phenology_spatial(
@@ -809,11 +864,11 @@ def fetch_phenology_spatial(
     date_stop = f"{year_stop}-12-31"
 
     if satellite == "terra":
-        short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
+        short_names = [config["short_name"]]
     elif satellite == "aqua":
-        short_names = [config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
+        short_names = [config["short_name_aqua"]]
     else:
-        short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
+        short_names = [config["short_name"], config["short_name_aqua"]]
 
     from .._auth import _earthdata_login
 
@@ -839,18 +894,18 @@ def fetch_phenology_spatial(
             for hdf_path in hdf_paths:
                 try:
                     data, transform = _read_and_clip_subdataset(
-                        hdf_path, config["subdataset"], geom,  # type: ignore[index]  # heterogeneous config dict
+                        hdf_path, config["subdataset"], geom,
                     )
                     qa, _ = _read_and_clip_subdataset(
-                        hdf_path, config["qa_subdataset"], geom,  # type: ignore[index]  # heterogeneous config dict
+                        hdf_path, config["qa_subdataset"], geom,
                     )
 
-                    masked = config["qa_func"](data, qa)  # type: ignore[index]  # heterogeneous config dict
-                    if "valid_range" in config:  # type: ignore[operator]  # heterogeneous config dict
-                        lo, hi = config["valid_range"]  # type: ignore[index]  # heterogeneous config dict
+                    masked = config["qa_func"](data, qa)
+                    if "valid_range" in config:
+                        lo, hi = config["valid_range"]
                         masked = np.ma.masked_outside(masked, lo, hi)
 
-                    scaled = masked.astype(np.float64) * config["scale_factor"]  # type: ignore[index]  # heterogeneous config dict
+                    scaled = masked.astype(np.float64) * config["scale_factor"]
                     all_arrays.append(scaled)
                 except Exception:
                     logger.warning(

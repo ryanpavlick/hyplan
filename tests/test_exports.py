@@ -10,7 +10,7 @@ import pytest
 # require it but the rest of this file does not. Gate the dependent class
 # rather than failing collection in a base install.
 try:
-    import geomag  # noqa: F401
+    import geomag
     HAS_GEOMAG = True
 except ImportError:  # pragma: no cover
     HAS_GEOMAG = False

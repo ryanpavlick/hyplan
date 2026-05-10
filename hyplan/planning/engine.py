@@ -34,7 +34,7 @@ from ..winds.utils import (
 from .segments import _direct_segment_record, process_flight_phase
 
 if TYPE_CHECKING:
-    from ..aircraft import ClimbPlan  # noqa: F401
+    from ..aircraft import ClimbPlan
     from ..winds import WindField
 
 __all__ = [
@@ -276,96 +276,18 @@ def compute_flight_plan(
     for i, segment in enumerate(flight_seq):
         # Process FlightLine segments separately.
         if isinstance(segment, FlightLine):
-            track_geometry = segment.track()
-            latitudes, longitudes, _, distances = process_linestring(track_geometry)
-            if len(distances) == 0:
-                raise HyPlanValueError(
-                    f"Flight line {segment.site_name} produced an empty track"
-                )
-            segment_distance = distances[-1]
-
-            # Crab-aware timing: solve for heading and groundspeed
-            # given the desired track and wind at the line midpoint.
-            fl_tas = aircraft.cruise_speed_at(segment.altitude_msl)
-            track_deg = segment.waypoint1.heading  # forward azimuth = desired track
-
-            mid_idx = len(latitudes) // 2
-            mid_lat = latitudes[mid_idx]
-            mid_lon = longitudes[mid_idx]
-
-            sol = _resolve_track_hold_solution(
-                fl_tas, track_deg,
-                mid_lat, mid_lon,
-                segment.altitude_msl, _current_time(),
+            fl_record = _build_flight_line_record(
+                aircraft, segment, _current_time(),
                 wind_source, wind_speed, wind_direction,
             )
-
-            time_to_segment = (
-                ureg.Quantity(segment_distance, "meter") / sol["groundspeed"]
-            ).m_as(ureg.minute)
-
-            start_heading = sol["heading_deg"]
-            end_heading = sol["heading_deg"]
-
-            records.append({
-                "geometry": track_geometry,
-                "start_lat": latitudes[0],
-                "start_lon": longitudes[0],
-                "end_lat": latitudes[-1],
-                "end_lon": longitudes[-1],
-                "start_altitude": segment.altitude_msl.m_as(ureg.foot),
-                "end_altitude": segment.altitude_msl.m_as(ureg.foot),
-                "segment_type": "flight_line",
-                "segment_name": segment.site_name,
-                "distance": ureg.Quantity(segment_distance, "meter").m_as(ureg.nautical_mile),
-                "time_to_segment": time_to_segment,
-                "start_heading": start_heading,
-                "end_heading": end_heading,
-                "planned_track": track_deg,
-                "wind_corrected_heading": sol["heading_deg"],
-                "crab_angle_deg": sol["crab_angle_deg"],
-                "groundspeed_kts": sol["groundspeed"].m_as(ureg.knot),
-                "tailwind_kts": sol["alongtrack_wind"].m_as(ureg.knot),
-                "crosswind_kts": sol["crosstrack_wind"].m_as(ureg.knot),
-            })
-            cumulative_minutes += time_to_segment
+            records.append(fl_record)
+            cumulative_minutes += fl_record["time_to_segment"]
 
         # Insert loiter segment if the current waypoint has a delay.
         if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:
-            loiter_time = segment.delay.m_as(ureg.minute)
-
-            # Render an actual hold-orbit ground track when altitude is known
-            # (so cruise speed and bank radius are derivable from the aircraft
-            # model). Distance is the real ground covered during the loiter,
-            # not the orbit circumference. With no altitude we fall back to a
-            # Point/zero distance for callers that pass minimal Waypoints.
-            if segment.altitude_msl is not None:
-                from .segments import loiter_orbit_geometry
-                loiter_geom = loiter_orbit_geometry(segment, aircraft)
-                speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")
-                distance_m = speed_mps * segment.delay.m_as(ureg.second)
-                distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
-            else:
-                from shapely.geometry import Point as _Point
-                loiter_geom = _Point(segment.longitude, segment.latitude)
-                distance_nm = 0.0
-
-            records.append({
-                "geometry": loiter_geom,
-                "start_lat": segment.latitude,
-                "start_lon": segment.longitude,
-                "end_lat": segment.latitude,
-                "end_lon": segment.longitude,
-                "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
-                "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
-                "segment_type": "loiter",
-                "segment_name": segment.name,
-                "distance": distance_nm,
-                "time_to_segment": loiter_time,
-                "start_heading": segment.heading,
-                "end_heading": segment.heading
-            })
-            cumulative_minutes += loiter_time
+            loiter_record = _build_loiter_record(aircraft, segment)
+            records.append(loiter_record)
+            cumulative_minutes += loiter_record["time_to_segment"]
 
         # Process the connecting phase between the current and next segment.
         if i + 1 < len(flight_seq):
@@ -452,6 +374,114 @@ def compute_flight_plan(
     df = pd.DataFrame(records)
     flight_plan_gdf = gpd.GeoDataFrame(df, geometry=df["geometry"], crs="EPSG:4326")
     return flight_plan_gdf
+
+
+# ---------------------------------------------------------------------------
+# Per-segment record builders for compute_flight_plan
+# ---------------------------------------------------------------------------
+
+
+def _build_flight_line_record(
+    aircraft: Aircraft,
+    segment: FlightLine,
+    current_time: datetime.datetime | None,
+    wind_source: WindField | None,
+    wind_speed: Quantity | None,
+    wind_direction: float | None,
+) -> dict[str, Any]:
+    """Build the GeoDataFrame record for a single FlightLine segment.
+
+    Solves the crab-aware track-hold problem at the line midpoint
+    using the supplied wind field, then returns a record with the
+    line geometry plus crab/groundspeed metadata.
+    """
+    track_geometry = segment.track()
+    latitudes, longitudes, _, distances = process_linestring(track_geometry)
+    if len(distances) == 0:
+        raise HyPlanValueError(
+            f"Flight line {segment.site_name} produced an empty track"
+        )
+    segment_distance = distances[-1]
+
+    fl_tas = aircraft.cruise_speed_at(segment.altitude_msl)
+    track_deg = segment.waypoint1.heading  # forward azimuth = desired track
+
+    mid_idx = len(latitudes) // 2
+    sol = _resolve_track_hold_solution(
+        fl_tas, track_deg,
+        latitudes[mid_idx], longitudes[mid_idx],
+        segment.altitude_msl, current_time,
+        wind_source, wind_speed, wind_direction,
+    )
+
+    time_to_segment = (
+        ureg.Quantity(segment_distance, "meter") / sol["groundspeed"]
+    ).m_as(ureg.minute)
+
+    return {
+        "geometry": track_geometry,
+        "start_lat": latitudes[0],
+        "start_lon": longitudes[0],
+        "end_lat": latitudes[-1],
+        "end_lon": longitudes[-1],
+        "start_altitude": segment.altitude_msl.m_as(ureg.foot),
+        "end_altitude": segment.altitude_msl.m_as(ureg.foot),
+        "segment_type": "flight_line",
+        "segment_name": segment.site_name,
+        "distance": ureg.Quantity(segment_distance, "meter").m_as(ureg.nautical_mile),
+        "time_to_segment": time_to_segment,
+        "start_heading": sol["heading_deg"],
+        "end_heading": sol["heading_deg"],
+        "planned_track": track_deg,
+        "wind_corrected_heading": sol["heading_deg"],
+        "crab_angle_deg": sol["crab_angle_deg"],
+        "groundspeed_kts": sol["groundspeed"].m_as(ureg.knot),
+        "tailwind_kts": sol["alongtrack_wind"].m_as(ureg.knot),
+        "crosswind_kts": sol["crosstrack_wind"].m_as(ureg.knot),
+    }
+
+
+def _build_loiter_record(
+    aircraft: Aircraft,
+    segment: Waypoint,
+) -> dict[str, Any]:
+    """Build the loiter (hold-orbit) record for a Waypoint with non-zero delay.
+
+    When altitude is known we render an actual hold-orbit ground track
+    using the aircraft's cruise speed and turn radius — distance is
+    the real ground covered during the loiter, not the orbit
+    circumference.  With no altitude we fall back to a Point and zero
+    distance for callers that pass minimal Waypoints.
+    """
+    assert segment.delay is not None
+    loiter_time = segment.delay.m_as(ureg.minute)
+
+    if segment.altitude_msl is not None:
+        from .segments import loiter_orbit_geometry
+        loiter_geom = loiter_orbit_geometry(segment, aircraft)
+        speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")
+        distance_m = speed_mps * segment.delay.m_as(ureg.second)
+        distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
+    else:
+        from shapely.geometry import Point as _Point
+        loiter_geom = _Point(segment.longitude, segment.latitude)
+        distance_nm = 0.0
+
+    return {
+        "geometry": loiter_geom,
+        "start_lat": segment.latitude,
+        "start_lon": segment.longitude,
+        "end_lat": segment.latitude,
+        "end_lon": segment.longitude,
+        "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+        "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
+        "segment_type": "loiter",
+        "segment_name": segment.name,
+        "distance": distance_nm,
+        "time_to_segment": loiter_time,
+        "start_heading": segment.heading,
+        "end_heading": segment.heading,
+    }
 
 
 def flag_below_min_safe_speed(

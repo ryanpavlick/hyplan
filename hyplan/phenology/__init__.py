@@ -12,17 +12,17 @@ Supported products:
   senescence, and dormancy dates at 500 m.
 """
 
-from .analysis import (  # noqa: F401
+from .analysis import (
     extract_phenology_stages,
     summarize_phenology_by_doy,
 )
-from .plotting import (  # noqa: F401
+from .plotting import (
     plot_cloud_phenology_combined,
     plot_phenology_calendar,
     plot_seasonal_profile,
     plot_year_over_year_heatmap,
 )
-from .sources import (  # noqa: F401
+from .sources import (
     fetch_phenology,
     fetch_phenology_spatial,
 )

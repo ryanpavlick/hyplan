@@ -331,7 +331,7 @@ class TestPrintMethods:
 def _has_rasterio():
     """Check if rasterio is available for writing synthetic DEMs."""
     try:
-        import rasterio  # noqa: F401
+        import rasterio
         return True
     except ImportError:
         return False

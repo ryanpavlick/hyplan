@@ -1,5 +1,4 @@
 """Tests for hyplan.terrain (unit-testable parts, no network)."""
-# ruff: noqa: E402
 
 import os
 import pytest
@@ -16,7 +15,7 @@ from hyplan.terrain import get_cache_root, clear_cache, _COS_TILT_MIN
 
 def _has_rasterio():
     try:
-        import rasterio  # noqa: F401
+        import rasterio
         return True
     except ImportError:
         return False

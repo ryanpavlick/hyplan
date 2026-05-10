@@ -1,5 +1,4 @@
 """Tests for hyplan.winds and wind-source integration in flight_plan."""
-# ruff: noqa: E402
 
 import datetime
 
@@ -856,9 +855,9 @@ class TestWindFieldFromPlanMockedProviders:
 # IWG1TraceWindField
 # ---------------------------------------------------------------------------
 
-import pandas as pd  # noqa: E402
+import pandas as pd
 
-from hyplan.winds import IWG1TraceWindField  # noqa: E402
+from hyplan.winds import IWG1TraceWindField
 
 
 def _trace(rows):
