@@ -270,7 +270,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 
 ## Notebooks
 
-The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interactive tutorials and visualizations covering every HyPlan module:
+The [`notebooks/`](https://github.com/ryanpavlick/hyplan/tree/main/notebooks) directory contains Jupyter notebooks with interactive tutorials and visualizations covering every HyPlan module:
 
 ### Getting Started
 
@@ -325,7 +325,7 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 | Notebook | Description |
 |----------|-------------|
 | [aircraft_performance.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/aircraft_performance.ipynb) | Fleet comparison, speed profiles, climb/descent performance, range/endurance, custom aircraft |
-| [calibration/](notebooks/calibration/) | Per-aircraft calibration notebooks for 19 data-calibrated aircraft — NASA fleet (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200), NOAA fleet (Twin Otter, WP-3D, G-IV), NCAR (HIAPER), international platforms (FAAM BAe-146, SAFIRE ATR-42, BAS Twin Otter, NERC Do-228, AWI BT-67, DLR HALO), and ADS-B-based King Air calibrations (A90 fleet aggregate, 350 / UWKA-2).  Per-altitude-bin medians, breakpoint selection, bank-angle analysis.  See [docs/calibration.md](docs/calibration.md) for the methodology overview. |
+| [calibration/](https://github.com/ryanpavlick/hyplan/tree/main/notebooks/calibration) | Per-aircraft calibration notebooks for 19 data-calibrated aircraft — NASA fleet (ER-2, G-III, G-V, WB-57, C-130H, P-3, B-200), NOAA fleet (Twin Otter, WP-3D, G-IV), NCAR (HIAPER), international platforms (FAAM BAe-146, SAFIRE ATR-42, BAS Twin Otter, NERC Do-228, AWI BT-67, DLR HALO), and ADS-B-based King Air calibrations (A90 fleet aggregate, 350 / UWKA-2).  Per-altitude-bin medians, breakpoint selection, bank-angle analysis.  See [docs/calibration.md](https://github.com/ryanpavlick/hyplan/blob/main/docs/calibration.md) for the methodology overview. |
 | [calibration/NASA_ER2/sortie_replay.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/NASA_ER2/sortie_replay.ipynb) | Replay individual ER-2 sorties through the planner; modeled-vs-flown breakdown with multi-sortie scan |
 | [calibration/NASA_ER2/planned_vs_flown.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/calibration/NASA_ER2/planned_vs_flown.ipynb) | Compare planned (Green Card / KML) vs flown (IWG1) vs HyPlan-modeled timing for NM17 B / CO07v4 / CO06 |
 | [satellite_coordination.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/satellite_coordination.ipynb) | Satellite ground tracks, overpass prediction, and multi-satellite search |
@@ -350,10 +350,10 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 
 - **Usage questions** — open a [GitHub issue](https://github.com/ryanpavlick/hyplan/issues/new) with the `question` label.
 - **Bug reports / feature requests** — also via [GitHub issues](https://github.com/ryanpavlick/hyplan/issues).
-- **Security issues** — follow [SECURITY.md](SECURITY.md).
+- **Security issues** — follow [SECURITY.md](https://github.com/ryanpavlick/hyplan/blob/main/SECURITY.md).
 - **Direct contact** — <ryan.p.pavlick@nasa.gov>.
 
-Check the [documentation](https://ryanpavlick.github.io/hyplan/) and the [example notebooks](notebooks/) first; most workflow questions are covered there.
+Check the [documentation](https://ryanpavlick.github.io/hyplan/) and the [example notebooks](https://github.com/ryanpavlick/hyplan/tree/main/notebooks) first; most workflow questions are covered there.
 
 ## Contributing
 
@@ -364,7 +364,7 @@ Contributions are welcome! To get started:
 3. Run the test suite (`pytest`) and notebooks to verify your changes
 4. Submit a pull request
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow, code style, and testing guidance.
+See [CONTRIBUTING.md](https://github.com/ryanpavlick/hyplan/blob/main/CONTRIBUTING.md) for the full development workflow, code style, and testing guidance.
 
 ---
 
@@ -382,19 +382,18 @@ If you use HyPlan in your research, please cite it as:
 }
 ```
 
-Machine-readable citation metadata is also available in [`CITATION.cff`](CITATION.cff).
+Machine-readable citation metadata is also available in [`CITATION.cff`](https://github.com/ryanpavlick/hyplan/blob/main/CITATION.cff).
 
 ## License
 
-HyPlan is licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE)
-or [`LICENSE.md`](LICENSE.md) for details.
+HyPlan is licensed under the Apache License, Version 2.0. See [`LICENSE.md`](https://github.com/ryanpavlick/hyplan/blob/main/LICENSE.md) for details.
 
 ## Project Files
 
-- [`LICENSE`](LICENSE) / [`LICENSE.md`](LICENSE.md) — project license and third-party notices
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — development and pull-request workflow
-- [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — acknowledged project contributors
-- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — community expectations for collaboration
+- [`LICENSE.md`](https://github.com/ryanpavlick/hyplan/blob/main/LICENSE.md) — project license and third-party notices
+- [`CONTRIBUTING.md`](https://github.com/ryanpavlick/hyplan/blob/main/CONTRIBUTING.md) — development and pull-request workflow
+- [`CONTRIBUTORS.md`](https://github.com/ryanpavlick/hyplan/blob/main/CONTRIBUTORS.md) — acknowledged project contributors
+- [`CODE_OF_CONDUCT.md`](https://github.com/ryanpavlick/hyplan/blob/main/CODE_OF_CONDUCT.md) — community expectations for collaboration
 
 ## Bundled data and attribution
 
@@ -407,7 +406,7 @@ NASA's Jet Propulsion Laboratory and is in the public domain:
 > <https://ssd.jpl.nasa.gov/planets/eph_export.html>
 
 DE421 is read via the [Skyfield](https://rhodesmill.org/skyfield/)
-library (Rhodes 2019, ASCL:1907.024). See [`LICENSE.md`](LICENSE.md) for
+library (Rhodes 2019, ASCL:1907.024). See [`LICENSE.md`](https://github.com/ryanpavlick/hyplan/blob/main/LICENSE.md) for
 the full third-party data attribution.
 
 ## Contact
