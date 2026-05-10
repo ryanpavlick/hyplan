@@ -115,4 +115,5 @@ api/exceptions
 
 developer
 module_map
+performance
 ```
