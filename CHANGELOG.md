@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.6.1 — Unreleased
+## v1.6.1 — 2026-05-09
 
 Maintenance / quality release.  No public-API or behavioral
 changes; everything below is type-system, lint, and structural
