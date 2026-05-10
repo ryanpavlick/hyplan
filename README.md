@@ -346,16 +346,25 @@ The [`notebooks/`](notebooks/) directory contains Jupyter notebooks with interac
 
 ---
 
+## Getting help
+
+- **Usage questions** — open a [GitHub issue](https://github.com/ryanpavlick/hyplan/issues/new) with the `question` label.
+- **Bug reports / feature requests** — also via [GitHub issues](https://github.com/ryanpavlick/hyplan/issues).
+- **Security issues** — follow [SECURITY.md](SECURITY.md).
+- **Direct contact** — <ryan.p.pavlick@nasa.gov>.
+
+Check the [documentation](https://ryanpavlick.github.io/hyplan/) and the [example notebooks](notebooks/) first; most workflow questions are covered there.
+
 ## Contributing
 
 Contributions are welcome! To get started:
 
 1. Fork the repository and create a feature branch
-2. Install in development mode: `pip install -e .`
-3. Run the notebooks in `notebooks/` to verify your changes
+2. Install in development mode: `pip install -e ".[dev]"`
+3. Run the test suite (`pytest`) and notebooks to verify your changes
 4. Submit a pull request
 
-Please open an [issue](https://github.com/ryanpavlick/hyplan/issues) for bug reports, feature requests, or questions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow, code style, and testing guidance.
 
 ---
 

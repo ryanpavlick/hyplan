@@ -2,6 +2,20 @@
 
 Thank you for your interest in contributing to HyPlan! This guide will help you get started.
 
+## Getting Help
+
+Before opening an issue, check the [documentation](https://ryanpavlick.github.io/hyplan/) and the [example notebooks](notebooks/) — most "how do I do X" answers live there.
+
+If that doesn't cover your question:
+
+- **General usage questions** — open a [GitHub issue](https://github.com/ryanpavlick/hyplan/issues/new) and apply the `question` label. Maintainers and other users can respond there.
+- **Bug reports** — see [Reporting Bugs](#reporting-bugs) below.
+- **Feature requests** — see [Feature Requests](#feature-requests) below.
+- **Security disclosures** — follow the process in [SECURITY.md](SECURITY.md).
+- **Direct contact** — for things that don't fit the above (collaboration inquiries, calibration data sharing, anything sensitive), email Ryan Pavlick at <ryan.p.pavlick@nasa.gov>.
+
+We aim to respond to issues within a few working days; this is a small project so please be patient.
+
 ## Getting Started
 
 1. **Fork** the repository on GitHub.
