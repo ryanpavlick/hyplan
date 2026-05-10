@@ -1,0 +1,55 @@
+name: Publish to PyPI
+
+# Triggers:
+#   * GitHub Release published — automatic for every tagged release
+#     created by release.yml
+#   * workflow_dispatch — manual fire-once for catching up an
+#     existing tag (used for the v1.6.2 backfill).
+#
+# Authentication uses PyPI Trusted Publishing (OIDC).  No tokens
+# or secrets — PyPI verifies the GitHub OIDC identity directly.
+# Configured at https://pypi.org/manage/account/publishing/
+# with: project=hyplan, owner=ryanpavlick, repo=hyplan,
+# workflow=publish.yml, environment=pypi.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v1.6.2)"
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing OIDC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # On release events the ref is already the tag.  On
+          # workflow_dispatch we explicitly check out the tag the
+          # user passed in.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          # setuptools-scm needs the full history + tags to compute
+          # the version number.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist + wheel
+        run: |
+          pip install --upgrade build
+          python -m build
+
+      - name: Validate the artifacts
+        run: |
+          pip install --upgrade twine
+          twine check dist/*
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
