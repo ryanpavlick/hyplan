@@ -11,6 +11,7 @@ import logging
 from typing import Any, Literal
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -86,15 +87,15 @@ def label_phases(
 
 
 def _label_heuristic(
-    altitude_ft: np.ndarray,
-    vertical_rate_fpm: np.ndarray,
-    timestamps: np.ndarray,
+    altitude_ft: npt.NDArray[np.floating[Any]],
+    vertical_rate_fpm: npt.NDArray[np.floating[Any]],
+    timestamps: npt.NDArray[Any],
     climb_threshold: float,
     descent_threshold: float,
     level_band_ft: float,
     min_phase_seconds: float,
     ground_altitude_ft: float,
-) -> np.ndarray:
+) -> npt.NDArray[Any]:
     """Pure-numpy heuristic phase labeler."""
     n = len(altitude_ft)
     if n == 0:
@@ -104,7 +105,7 @@ def _label_heuristic(
     vs_smooth = _rolling_median(vertical_rate_fpm, window=5)
 
     # Step 2: initial labeling by smoothed VS
-    phases = np.full(n, "cruise", dtype=object)
+    phases: npt.NDArray[Any] = np.full(n, "cruise", dtype=object)
     phases[vs_smooth > climb_threshold] = "climb"
     phases[vs_smooth < descent_threshold] = "descent"
 
@@ -120,7 +121,9 @@ def _label_heuristic(
     return phases
 
 
-def _rolling_median(arr: np.ndarray, window: int) -> np.ndarray:
+def _rolling_median(
+    arr: npt.NDArray[np.floating[Any]], window: int
+) -> npt.NDArray[np.floating[Any]]:
     """Compute a rolling median over *arr* with edge-clamped padding."""
     n = len(arr)
     if n <= window:
@@ -135,10 +138,10 @@ def _rolling_median(arr: np.ndarray, window: int) -> np.ndarray:
 
 
 def _refine_cruise(
-    phases: np.ndarray,
-    altitude_ft: np.ndarray,
+    phases: npt.NDArray[Any],
+    altitude_ft: npt.NDArray[np.floating[Any]],
     level_band_ft: float,
-) -> np.ndarray:
+) -> npt.NDArray[Any]:
     """Reclassify cruise runs with altitude drift as level_off."""
     runs = _find_runs(phases)
     for start, end, label in runs:
@@ -151,10 +154,10 @@ def _refine_cruise(
 
 
 def _merge_short_phases(
-    phases: np.ndarray,
-    timestamps: np.ndarray,
+    phases: npt.NDArray[Any],
+    timestamps: npt.NDArray[Any],
     min_seconds: float,
-) -> np.ndarray:
+) -> npt.NDArray[Any]:
     """Merge phases shorter than *min_seconds* into their longer neighbor."""
     if len(phases) < 2:
         return phases
@@ -190,7 +193,7 @@ def _merge_short_phases(
     return phases
 
 
-def _find_runs(arr: np.ndarray) -> list[tuple[int, int, Any]]:
+def _find_runs(arr: npt.NDArray[Any]) -> list[tuple[int, int, Any]]:
     """Find consecutive runs in *arr*.
 
     Returns list of ``(start_idx, end_idx, value)`` tuples where
@@ -204,7 +207,9 @@ def _find_runs(arr: np.ndarray) -> list[tuple[int, int, Any]]:
     return [(int(s), int(e), arr[s]) for s, e in zip(starts, ends)]
 
 
-def _timestamps_to_seconds(timestamps: np.ndarray) -> np.ndarray:
+def _timestamps_to_seconds(
+    timestamps: npt.NDArray[Any],
+) -> npt.NDArray[np.floating[Any]]:
     """Convert a numpy array of timestamps to float seconds from epoch."""
     if np.issubdtype(timestamps.dtype, np.datetime64):
         epoch = np.datetime64(0, "s")

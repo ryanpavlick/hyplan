@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from .._base import TasSchedule, VerticalProfile
@@ -169,7 +171,7 @@ def _fit_phase(
 
     # --- Altitude binning ---
     alt_min, alt_max = float(alt.min()), float(alt.max())
-    bin_edges: np.ndarray = np.arange(
+    bin_edges: npt.NDArray[np.floating[Any]] = np.arange(
         alt_min, alt_max + altitude_bin_ft, altitude_bin_ft
     )
     if len(bin_edges) < 2:
@@ -268,7 +270,9 @@ def _fit_phase(
 # ------------------------------------------------------------------
 
 
-def _rdp_simplify(points: np.ndarray, max_points: int) -> np.ndarray:
+def _rdp_simplify(
+    points: npt.NDArray[np.floating[Any]], max_points: int
+) -> npt.NDArray[np.floating[Any]]:
     """Simplify a polyline to at most *max_points* vertices using RDP.
 
     Normalizes both axes to [0, 1] so altitude and speed/rate contribute
@@ -306,7 +310,9 @@ def _rdp_simplify(points: np.ndarray, max_points: int) -> np.ndarray:
     return best
 
 
-def _rdp_core(points: np.ndarray, epsilon: float) -> np.ndarray:
+def _rdp_core(
+    points: npt.NDArray[np.floating[Any]], epsilon: float
+) -> npt.NDArray[np.floating[Any]]:
     """Ramer-Douglas-Peucker algorithm."""
     if len(points) <= 2:
         return points
@@ -342,7 +348,9 @@ def _rdp_core(points: np.ndarray, epsilon: float) -> np.ndarray:
 # ------------------------------------------------------------------
 
 
-def _reject_outliers(arr: np.ndarray, sigma: float) -> np.ndarray:
+def _reject_outliers(
+    arr: npt.NDArray[np.floating[Any]], sigma: float
+) -> npt.NDArray[np.floating[Any]]:
     """Remove values beyond *sigma* standard deviations from the median."""
     if len(arr) < 3:
         return arr
@@ -355,9 +363,9 @@ def _reject_outliers(arr: np.ndarray, sigma: float) -> np.ndarray:
 
 
 def _compute_metrics(
-    bin_centers: np.ndarray,
-    bin_values: np.ndarray,
-    simplified: np.ndarray,
+    bin_centers: npt.NDArray[np.floating[Any]],
+    bin_values: npt.NDArray[np.floating[Any]],
+    simplified: npt.NDArray[np.floating[Any]],
     n_observations: int,
     alt_min: float,
     alt_max: float,

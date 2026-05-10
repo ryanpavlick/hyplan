@@ -27,6 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover - type-checking only
     from skyfield.api import EarthSatellite
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import geopandas as gpd
 import simplekml
@@ -311,7 +312,10 @@ def compute_ground_track(
 _GEOD_WGS84 = Geod(ellps="WGS84")
 
 
-def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+def _compute_headings(
+    lats: npt.NDArray[np.floating[Any]],
+    lons: npt.NDArray[np.floating[Any]],
+) -> npt.NDArray[np.float64]:
     """
     Compute forward azimuths between consecutive ground track points.
 
@@ -339,7 +343,11 @@ def _compute_headings(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     return headings
 
 
-def _segment_passes(lats: np.ndarray, timestamps: np.ndarray, time_step_s: float) -> list[tuple[int, int]]:
+def _segment_passes(
+    lats: npt.NDArray[np.floating[Any]],
+    timestamps: npt.NDArray[Any],
+    time_step_s: float,
+) -> list[tuple[int, int]]:
     """Split a ground track into individual passes.
 
     A new pass starts when there is a time gap > 2 * time_step_s or when the

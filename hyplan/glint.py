@@ -550,6 +550,7 @@ def _sample_solar_geometry(
     if n == 0:
         return np.array([]), np.array([])
     n_eff = min(n_samples, n)
+    sample_idx: np.ndarray[Any, np.dtype[Any]]
     if n_eff >= n:
         sample_idx = np.arange(n)
     else:
@@ -792,4 +793,3 @@ def fraction_exceeding_glint_threshold(
     if n == 0:
         return 0.0
     return float((glint_gdf["glint_angle"] < threshold).sum()) / n
-

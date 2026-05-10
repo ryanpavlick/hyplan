@@ -25,9 +25,11 @@ from __future__ import annotations
 
 import datetime as _dt
 from collections.abc import Iterable
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pymap3d.vincenty
 from pint import Quantity
@@ -436,7 +438,7 @@ def _profile_sampling(
     ground_speed: Quantity,
     dwell_time_per_los: Quantity | None,
     nadir_dwell_time: Quantity | None,
-) -> tuple[np.ndarray, list[dict[str, float]], float, float, float]:
+) -> tuple[npt.NDArray[np.float64], list[dict[str, float]], float, float, float]:
     """Return profile sample distances, positions, and timing metadata."""
     total_length_m = _line_length_m(geometry)
     if total_length_m <= 0:
@@ -467,11 +469,11 @@ def _profile_sampling(
 
 
 def _resolve_platform_headings(
-    track_headings_deg: np.ndarray,
+    track_headings_deg: npt.NDArray[np.floating[Any]],
     *,
     crab_angle_deg: float | None = None,
     heading_deg: float | None = None,
-) -> np.ndarray:
+) -> npt.NDArray[np.floating[Any]]:
     """Resolve aircraft headings from track headings and crab metadata."""
     if heading_deg is not None:
         return np.full_like(track_headings_deg, heading_deg % 360.0)
@@ -485,7 +487,7 @@ def _terrain_dem_for_awp_profiles(
     sensor: AerosolWindProfiler,
     altitude_msl: Quantity,
     *,
-    platform_headings_deg: np.ndarray | None = None,
+    platform_headings_deg: npt.NDArray[np.floating[Any]] | None = None,
 ) -> str:
     """Create a DEM covering the line and approximate LOS intercept envelope."""
     altitude_guess = altitude_msl.to("meter")
@@ -547,7 +549,9 @@ def _terrain_aware_profiles_for_geometry(
 
     platform_lats = np.asarray([pos["latitude"] for pos in interpolated], dtype=float)
     platform_lons = np.asarray([pos["longitude"] for pos in interpolated], dtype=float)
-    terrain_elevation_m: np.ndarray = get_elevations(platform_lats, platform_lons, dem_file).astype(float)
+    terrain_elevation_m: npt.NDArray[np.float64] = get_elevations(
+        platform_lats, platform_lons, dem_file
+    ).astype(float)
 
     altitude_msl_m = altitude_msl.m_as("meter")
     altitude_agl_m = altitude_msl_m - terrain_elevation_m

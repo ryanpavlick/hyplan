@@ -662,9 +662,14 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
 
     return buffered_polygon_wgs84
 
-def process_linestring(linestring: LineString) -> tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray, np.ndarray, np.ndarray]:
+def process_linestring(linestring: LineString) -> tuple[
+    np.ndarray[Any, np.dtype[Any]],
+    np.ndarray[Any, np.dtype[Any]],
+    np.ndarray[Any, np.dtype[Any]],
+    np.ndarray[Any, np.dtype[Any]],
+]:
     """
-    Process a LineString containing WGS84 coordinates to compute latitudes, longitudes, 
+    Process a LineString containing WGS84 coordinates to compute latitudes, longitudes,
     azimuths, and cumulative along-track distances.
 
     Parameters:

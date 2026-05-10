@@ -17,6 +17,7 @@ from typing import Any
 import folium
 import geopandas as gpd
 import numpy as np
+import numpy.typing as npt
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as _pe
 from hyplan.aircraft import Aircraft
@@ -49,7 +50,7 @@ def map_flight_lines(
 ) -> folium.Map:
     """
     Create an interactive folium map displaying a list of FlightLine objects.
-    
+
     Args:
         flight_lines (List[FlightLine]): List of FlightLine objects to display.
         center (tuple, optional): A tuple (latitude, longitude) to center the map.
@@ -57,7 +58,7 @@ def map_flight_lines(
         zoom_start (int, optional): Initial zoom level for the map (default is 6).
         line_color (str, optional): Color for the flight lines (default is "blue").
         line_weight (int, optional): Thickness of the flight lines (default is 3).
-    
+
     Returns:
         folium.Map: A folium Map object with the flight lines added.
     """
@@ -66,16 +67,16 @@ def map_flight_lines(
         lats = [fl.lat1 for fl in flight_lines]
         lons = [fl.lon1 for fl in flight_lines]
         center = (float(np.mean(lats)), float(np.mean(lons)))
-    
+
     # Create the folium map centered at the computed center.
     m = folium.Map(location=center, zoom_start=zoom_start)
-    
+
     # Add each FlightLine to the map.
     for fl in flight_lines:
         # Extract coordinates from the FlightLine geometry.
         # Shapely's LineString returns (lon, lat) coordinates; folium expects (lat, lon).
         coords = [(lat, lon) for lon, lat in list(fl.geometry.coords)]
-        
+
         # Create a popup HTML string with some properties.
         popup_html = (f"<span style=\"font-family: 'Courier New', monospace;\">"
             f"<b>{fl.site_name}</b><br>"
@@ -93,8 +94,8 @@ def map_flight_lines(
         popup = folium.Popup(iframe,
                      min_width=300,
                      max_width=500)
-    
-        
+
+
         # Add the polyline for the flight line.
         folium.PolyLine(  # type: ignore[no-untyped-call]  # folium has no stubs
             locations=coords,
@@ -153,7 +154,9 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
     plt.grid()
 
 
-def terrain_profile_along_track(flight_plan_gdf: gpd.GeoDataFrame, dem_file: str | None = None) -> tuple[np.ndarray, np.ndarray]:
+def terrain_profile_along_track(
+    flight_plan_gdf: gpd.GeoDataFrame, dem_file: str | None = None,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Sample terrain elevation along the flight plan track.
 

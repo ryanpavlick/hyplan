@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 
 
 def apply_vi_qa_mask(
-    data: np.ndarray,
-    pixel_reliability: np.ndarray,
+    data: npt.NDArray[Any],
+    pixel_reliability: npt.NDArray[np.integer[Any]],
     max_reliability: int = 1,
-) -> np.ma.MaskedArray:
+) -> np.ma.MaskedArray[Any, np.dtype[Any]]:
     """Apply QA filter for MOD13A1/MYD13A1 vegetation indices.
 
     MODIS pixel reliability band values::
@@ -36,13 +39,13 @@ def apply_vi_qa_mask(
         Data with unreliable pixels masked.
     """
     bad = (pixel_reliability > max_reliability) | (pixel_reliability < 0)
-    return np.ma.masked_array(data, mask=bad)
+    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-untyped-call]
 
 
 def apply_lai_qa_mask(
-    data: np.ndarray,
-    qa: np.ndarray,
-) -> np.ma.MaskedArray:
+    data: npt.NDArray[Any],
+    qa: npt.NDArray[np.integer[Any]],
+) -> np.ma.MaskedArray[Any, np.dtype[Any]]:
     """Apply QA filter for MOD15A2H LAI/FPAR.
 
     Uses the FparLai_QC bitfield:
@@ -73,14 +76,14 @@ def apply_lai_qa_mask(
     fill = data == 255
 
     bad = algo_bad | cloudy | fill
-    return np.ma.masked_array(data, mask=bad)
+    return np.ma.masked_array(data, mask=bad)  # type: ignore[no-untyped-call]
 
 
 def apply_phenology_qa_mask(
-    data_dict: dict[str, np.ndarray],
-    qa: np.ndarray,
+    data_dict: dict[str, npt.NDArray[Any]],
+    qa: npt.NDArray[np.integer[Any]],
     max_quality: int = 1,
-) -> dict[str, np.ma.MaskedArray]:
+) -> dict[str, np.ma.MaskedArray[Any, np.dtype[Any]]]:
     """Apply QA filter for MCD12Q2 phenology transitions.
 
     Uses the QA_Detailed bitfield:
@@ -107,12 +110,12 @@ def apply_phenology_qa_mask(
     bad = quality_bits > max_quality
 
     return {
-        name: np.ma.masked_array(arr, mask=bad)
+        name: np.ma.masked_array(arr, mask=bad)  # type: ignore[no-untyped-call]
         for name, arr in data_dict.items()
     }
 
 
-def convert_mcd12q2_dates(raw_values: np.ndarray) -> np.ndarray:
+def convert_mcd12q2_dates(raw_values: npt.NDArray[Any]) -> npt.NDArray[np.float64]:
     """Convert MCD12Q2 date values to day-of-year.
 
     MCD12Q2 stores phenological transition dates as the number of

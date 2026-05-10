@@ -7,6 +7,8 @@ accounting for cross-track field of view and altitude.
 """
 
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -29,11 +31,11 @@ __all__ = [
 
 
 def _resolve_swath_boresight_azimuths(
-    track_azimuths: np.ndarray,
+    track_azimuths: npt.NDArray[np.floating[Any]],
     heading_mode: str = "track",
     crab_angle_deg: float | None = None,
     heading_deg: float | None = None,
-) -> np.ndarray:
+) -> npt.NDArray[np.floating[Any]]:
     """Compute instrument boresight azimuths for swath edge computation.
 
     In ``"track"`` mode (default), the instrument is assumed aligned with
@@ -125,7 +127,9 @@ def generate_swath_polygon(
     # Each swath edge angle is measured from nadir.
     # Negative = port side, positive = starboard side.
     # Map each edge to (azimuth_array, tilt_from_nadir).
-    def _edge_ray(angle: float) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def _edge_ray(
+        angle: float,
+    ) -> tuple[npt.NDArray[np.floating[Any]], npt.NDArray[np.float64]]:
         tilt_arr = np.full_like(boresight, abs(angle) if angle < 0 else angle, dtype=float)
         if angle < 0:
             return az_port, tilt_arr
@@ -289,4 +293,3 @@ def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name: str =
     # Save the KML to a file
     kml.save(kml_filename)
     print(f"Polygon exported to KML file: {kml_filename}")
-

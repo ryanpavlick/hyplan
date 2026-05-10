@@ -33,6 +33,7 @@ import math
 import warnings
 
 import numpy as np
+import numpy.typing as npt
 import pymap3d.vincenty
 from pint import Quantity
 
@@ -1147,7 +1148,7 @@ class Aircraft:
         start_altitude: Quantity,
         end_altitude: Quantity,
         n_points: int = 50,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """Generate altitude-vs-time curve during a climb.
 
         Returns ``(times, altitudes)`` as numpy arrays in minutes and feet.
@@ -2262,4 +2263,3 @@ class Aircraft:
             climb_plan=climb_plan,
             n_samples=n_samples,
         )
-

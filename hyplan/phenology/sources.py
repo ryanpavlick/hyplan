@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import geopandas as gpd
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from shapely import wkb
 
@@ -220,7 +221,9 @@ def _list_subdatasets(hdf_path: str) -> list[tuple[str, str]]:
         return list(zip(src.subdatasets, src.subdatasets))
 
 
-def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarray, dict[str, Any]]:
+def _read_hdf4_subdataset(
+    hdf_path: str, subdataset_name: str,
+) -> tuple[npt.NDArray[Any], dict[str, Any]]:
     """Read a subdataset from a MODIS HDF4-EOS file using pyhdf.
 
     Returns the data array and metadata dict with grid parameters.
@@ -291,7 +294,7 @@ def _read_and_clip_subdataset(
     hdf_path: str,
     subdataset_name: str,
     polygon_geom: BaseGeometry,
-) -> tuple[np.ndarray, rasterio.Affine]:
+) -> tuple[npt.NDArray[Any], rasterio.Affine]:
     """Read a subdataset, reproject to WGS84, clip to polygon.
 
     Uses pyhdf to read HDF4-EOS files (GDAL HDF4 driver not required),
@@ -402,7 +405,7 @@ def _extract_vi_from_granule(
     # Apply valid range
     if "valid_range" in config:
         lo, hi = config["valid_range"]
-        masked = np.ma.masked_outside(masked, lo, hi)
+        masked = np.ma.masked_outside(masked, lo, hi)  # type: ignore[no-untyped-call]
 
     if masked.count() == 0:
         return None
@@ -424,8 +427,8 @@ def _extract_vi_from_granule(
         "day_of_year": dt.timetuple().tm_yday,
         "value_mean": float(np.ma.mean(scaled)),
         "value_std": float(np.ma.std(scaled)),
-        "value_min": float(np.ma.min(scaled)),
-        "value_max": float(np.ma.max(scaled)),
+        "value_min": float(np.ma.min(scaled)),  # type: ignore[no-untyped-call]
+        "value_max": float(np.ma.max(scaled)),  # type: ignore[no-untyped-call]
         "pixel_count": int(scaled.count()),
     }
 
@@ -463,9 +466,11 @@ def _extract_phenology_from_granule(
         # Convert epoch days to DOY
         doys = _qa.convert_mcd12q2_dates(masked.data)
         # Apply the QA mask to DOY values
-        doy_masked: np.ma.MaskedArray = np.ma.masked_array(doys, mask=masked.mask | np.isnan(doys))
+        doy_masked: np.ma.MaskedArray[Any, np.dtype[Any]] = np.ma.masked_array(  # type: ignore[no-untyped-call]
+            doys, mask=masked.mask | np.isnan(doys),
+        )
 
-        if doy_masked.count() > 0:
+        if doy_masked.count() > 0:  # type: ignore[no-untyped-call]
             result[stage_name] = float(np.ma.mean(doy_masked))  # type: ignore[assignment]  # heterogeneous result dict
             any_valid = True
         else:
@@ -903,7 +908,7 @@ def fetch_phenology_spatial(
                     masked = config["qa_func"](data, qa)
                     if "valid_range" in config:
                         lo, hi = config["valid_range"]
-                        masked = np.ma.masked_outside(masked, lo, hi)
+                        masked = np.ma.masked_outside(masked, lo, hi)  # type: ignore[no-untyped-call]
 
                     scaled = masked.astype(np.float64) * config["scale_factor"]
                     all_arrays.append(scaled)

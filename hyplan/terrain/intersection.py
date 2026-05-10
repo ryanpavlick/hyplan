@@ -30,7 +30,11 @@ def ray_terrain_intersection(
     tilt: np.ndarray[Any, np.dtype[Any]],
     precision: float = 10.0,
     dem_file: str | None = None
-) -> tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray[Any, np.dtype[Any]],
+    np.ndarray[Any, np.dtype[Any]],
+    np.ndarray[Any, np.dtype[Any]],
+]:
     """
     Batch computation of ray-terrain intersections using a DEM for multiple observer positions.
     Vectorized to handle multiple observers efficiently.

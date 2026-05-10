@@ -470,7 +470,7 @@ class FrameCamera(Sensor):
         cross_rad = np.radians(cross_track_offset)
         return _rz(dir_rad) @ _ry(cross_rad) @ _rx(-tilt_rad) @ _rz(-dir_rad)
 
-    def _edge_rays(self, edge_points: int) -> np.ndarray:
+    def _edge_rays(self, edge_points: int) -> npt.NDArray[np.float64]:
         """Ray directions in camera space along the sensor perimeter.
 
         Returns an ``(N, 3)`` array where ``N = 4 * edge_points``.

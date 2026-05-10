@@ -85,6 +85,7 @@ from typing import Any
 import folium
 import geopandas as gpd
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pymap3d.vincenty
 from pint import Quantity
@@ -1426,9 +1427,9 @@ def _initial_bracket_distance_nmi(
 
 def _target_coordinates(
     start: Waypoint,
-    distances_nmi: np.ndarray,
-    azimuths_deg: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
+    distances_nmi: npt.NDArray[np.floating[Any]],
+    azimuths_deg: npt.NDArray[np.floating[Any]],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Vectorized great-circle target coordinates for radial candidates."""
     lats, lons = pymap3d.vincenty.vreckon(
         start.latitude,
@@ -1453,17 +1454,19 @@ def _same_horizontal_position(a: Waypoint, b: Waypoint | None) -> bool:
     return float(np.asarray(dist_m).ravel()[0]) < 100.0
 
 
-def _unique_sorted_azimuths(azimuths_deg: np.ndarray) -> np.ndarray:
+def _unique_sorted_azimuths(
+    azimuths_deg: npt.NDArray[np.floating[Any]],
+) -> npt.NDArray[np.float64]:
     """Normalize, de-duplicate, and sort azimuths in [0, 360)."""
     wrapped = np.mod(np.asarray(azimuths_deg, dtype=float), 360.0)
     rounded = np.round(wrapped, 8)
-    out: np.ndarray = np.array(
+    out: npt.NDArray[np.float64] = np.array(
         sorted(set(float(v) for v in rounded)), dtype=float,
     )
     return out
 
 
-def _uniform_azimuths(azimuth_resolution_deg: float) -> np.ndarray:
+def _uniform_azimuths(azimuth_resolution_deg: float) -> npt.NDArray[np.float64]:
     return _unique_sorted_azimuths(np.arange(0.0, 360.0, azimuth_resolution_deg))
 
 
@@ -1477,7 +1480,7 @@ def _ellipse_seed_azimuths(
     budget_min: float,
     reserve_min: float,
     azimuth_resolution_deg: float,
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """Approximate two-focus return-safe boundary and sample its perimeter.
 
     The solved isochrone still comes from the real leg-time binary search.
@@ -1546,7 +1549,7 @@ def _initial_ray_azimuths(
     reserve_min: float,
     azimuth_resolution_deg: float,
     ray_strategy: str,
-) -> tuple[np.ndarray, str]:
+) -> tuple[npt.NDArray[np.float64], str]:
     """Choose first-pass ray azimuths and report the effective strategy."""
     two_focus = (
         mode in {"round_trip", "return_safe"}
@@ -1580,10 +1583,12 @@ def _initial_ray_azimuths(
     return azimuths, effective
 
 
-def _boundary_chord_lengths_nmi(rows: list[dict[str, Any]]) -> np.ndarray:
+def _boundary_chord_lengths_nmi(
+    rows: list[dict[str, Any]],
+) -> npt.NDArray[np.float64]:
     """Geodesic chord lengths between adjacent solved boundary vertices."""
     if len(rows) < 2:
-        empty: np.ndarray = np.array([], dtype=float)
+        empty: npt.NDArray[np.float64] = np.array([], dtype=float)
         return empty
     ordered = sorted(rows, key=lambda r: r["azimuth_deg"])
     lats = np.array([r["target_lat"] for r in ordered], dtype=float)
@@ -1591,7 +1596,7 @@ def _boundary_chord_lengths_nmi(rows: list[dict[str, Any]]) -> np.ndarray:
     dist_m, _ = pymap3d.vincenty.vdist(
         lats, lons, np.roll(lats, -1), np.roll(lons, -1)
     )
-    chords: np.ndarray = np.asarray(dist_m, dtype=float) / 1852.0
+    chords: npt.NDArray[np.float64] = np.asarray(dist_m, dtype=float) / 1852.0
     return chords
 
 
@@ -1606,10 +1611,10 @@ def _refined_azimuths_from_rows(
     *,
     spacing_nmi: float,
     max_rays: int,
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """Add midpoint rays across long boundary chords."""
     ordered = sorted(rows, key=lambda r: r["azimuth_deg"])
-    az: np.ndarray = np.array(
+    az: npt.NDArray[np.float64] = np.array(
         [r["azimuth_deg"] for r in ordered], dtype=float,
     )
     if len(az) >= max_rays:
@@ -1647,9 +1652,9 @@ def _solve_rays(
     on_station_min: float,
     budget_min: float,
     reserve_min: float,
-    azimuths_deg: np.ndarray,
+    azimuths_deg: npt.NDArray[np.floating[Any]],
     distance_tolerance_nmi: float,
-    seed_d_lo: np.ndarray | None = None,
+    seed_d_lo: npt.NDArray[np.floating[Any]] | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
@@ -1685,7 +1690,10 @@ def _solve_rays(
     active = np.ones(n_rays, dtype=bool)
     zero_unflyable = np.zeros(n_rays, dtype=bool)
 
-    def _evaluate_many(indices: np.ndarray, distances: np.ndarray) -> tuple[np.ndarray, list[dict[str, Any]]]:
+    def _evaluate_many(
+        indices: npt.NDArray[np.integer[Any]],
+        distances: npt.NDArray[np.floating[Any]],
+    ) -> tuple[npt.NDArray[np.float64], list[dict[str, Any]]]:
         """Evaluate feasibility for selected ray indices."""
         az = azimuths_deg[indices]
         target_lats, target_lons = _target_coordinates(start, distances, az)
@@ -1878,9 +1886,9 @@ def _solve_rays_with_strategy(
     on_station_min: float,
     budget_min: float,
     reserve_min: float,
-    azimuths_deg: np.ndarray,
+    azimuths_deg: npt.NDArray[np.floating[Any]],
     distance_tolerance_nmi: float,
-    seed_d_lo: np.ndarray | None = None,
+    seed_d_lo: npt.NDArray[np.floating[Any]] | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
@@ -2714,7 +2722,7 @@ def _solve_rays_refuel(
     reserve_min: float,
     refuel_time_min: float,
     refuel_eligibility: list[dict[str, Any]],
-    azimuths_deg: np.ndarray,
+    azimuths_deg: npt.NDArray[np.floating[Any]],
     distance_tolerance_nmi: float,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,

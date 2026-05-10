@@ -83,7 +83,7 @@ class _GriddedWindField(WindField):
         """Return (u_name, v_name) variable names. Override if names differ."""
         return ("U", "V")
 
-    def _decode_time(self, raw_time: np.ndarray) -> np.ndarray:
+    def _decode_time(self, raw_time: npt.NDArray[Any]) -> npt.NDArray[Any]:
         """Convert raw time coordinate to datetime64[ns].
 
         Default implementation assumes the dataset already decoded times.
@@ -91,7 +91,7 @@ class _GriddedWindField(WindField):
         """
         return raw_time
 
-    def _time_slice(self, time_coords: np.ndarray) -> slice:
+    def _time_slice(self, time_coords: npt.NDArray[Any]) -> slice:
         """Compute an integer index slice for the time dimension.
 
         Default returns all timesteps (for daily files that are already
@@ -101,7 +101,9 @@ class _GriddedWindField(WindField):
         return slice(None)
 
     @staticmethod
-    def _index_range(coords: np.ndarray, lo: float, hi: float) -> slice:
+    def _index_range(
+        coords: npt.NDArray[np.floating[Any]], lo: float, hi: float,
+    ) -> slice:
         """Compute integer index slice covering [lo, hi] with 1-cell margin."""
         ascending = len(coords) < 2 or coords[0] < coords[-1]
         if not ascending:
@@ -243,7 +245,7 @@ class _GriddedWindField(WindField):
 
     def _interp4d(
         self,
-        data: np.ndarray,
+        data: npt.NDArray[np.floating[Any]],
         t: float,
         p: float,
         lat: float,
@@ -267,7 +269,7 @@ class _GriddedWindField(WindField):
 
     @staticmethod
     def _interp_weights(
-        coords: np.ndarray, value: float
+        coords: npt.NDArray[np.floating[Any]], value: float,
     ) -> list[tuple[int, float]]:
         """Find bounding indices and weights for linear interpolation.
 
