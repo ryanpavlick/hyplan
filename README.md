@@ -1,5 +1,6 @@
 # HyPlan
 
+[![PyPI](https://img.shields.io/pypi/v/hyplan.svg)](https://pypi.org/project/hyplan/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-green.svg)](https://ryanpavlick.github.io/hyplan/)
@@ -45,24 +46,28 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 
 ## Installation
 
-### Requirements
+Requires Python 3.10+.
 
-- Python 3.10+
+### From PyPI (recommended)
 
-### Option 1: pip
+```bash
+pip install hyplan
+```
+
+### From source (for development)
 
 ```bash
 git clone https://github.com/ryanpavlick/hyplan
 cd hyplan
-pip install -e .
+pip install -e ".[dev]"
 ```
 
-### Option 2: conda/mamba
+For users who prefer conda/mamba to manage the geospatial dependency stack (`rasterio`, `pyproj`, `cfgrib`/`eccodes`, etc.):
 
 ```bash
 mamba env create --name hyplan --file environment.yml
 mamba activate hyplan
-pip install -e .
+pip install hyplan        # or pip install -e ".[dev]" from a clone
 ```
 
 ### Optional dependencies
