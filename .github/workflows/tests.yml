@@ -45,4 +45,14 @@ jobs:
         run: mypy hyplan
 
       - name: Run tests with coverage
-        run: pytest tests/ -v --cov=hyplan --cov-report=term-missing --cov-fail-under=60
+        run: pytest tests/ -v --cov=hyplan --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+
+      - name: Upload coverage to Codecov
+        # Only upload from one matrix entry to avoid noise; 3.11 is the
+        # primary development target.  fail_ci_if_error=false because
+        # a Codecov outage shouldn't block CI.
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false

@@ -3,6 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/hyplan.svg)](https://pypi.org/project/hyplan/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/ryanpavlick/hyplan/actions/workflows/tests.yml/badge.svg)](https://github.com/ryanpavlick/hyplan/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/ryanpavlick/hyplan/branch/main/graph/badge.svg)](https://codecov.io/gh/ryanpavlick/hyplan)
 [![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-green.svg)](https://ryanpavlick.github.io/hyplan/)
 
 An open-source Python library for planning airborne remote sensing campaigns.
