@@ -191,9 +191,10 @@ plans/
 # Design proposals (kept local)
 proposals/
 
-# Local data caches (IWG1 traces, ADS-B alltracks, planned-sortie cards, etc.)
-# data/er2/ already has its own .gitignore (kept tracked along with README.md);
-# this top-level rule covers any other data caches added later.
+# Local data caches (IWG1 traces, ADS-B alltracks, planned-sortie cards,
+# per-aircraft calibration source files, etc.).  Distribution policy is
+# collection-specific — calibrated constants ship in code; raw flight
+# data stays local.
 data/
 
 # JOSS paper build artifacts (inara)
