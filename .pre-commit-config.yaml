@@ -17,6 +17,10 @@ repos:
     rev: v0.15.12
     hooks:
       - id: ruff-check
+        # Match CI's invocation exactly — hyplan/ and tests/ only.
+        # Notebook cells use intentional per-cell imports that trip
+        # E402 / F811 unhelpfully; ruff doesn't lint them in CI.
+        files: ^(hyplan|tests)/.*\.py$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
