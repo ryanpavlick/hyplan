@@ -1,0 +1,29 @@
+# Pre-commit hooks.  Install once per clone with:
+#
+#     pip install pre-commit
+#     pre-commit install
+#
+# Hooks run on `git commit` and block the commit if any fail.
+# The ruff invocation matches the CI lint step in
+# .github/workflows/tests.yml so anything that lands in main has
+# already been linted locally.
+#
+# To run hooks on the whole tree (e.g. after pulling new config):
+#
+#     pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff
+        args: [check]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict

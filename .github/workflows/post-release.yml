@@ -21,7 +21,25 @@ permissions:
   contents: write
 
 jobs:
+  # Backstop: re-run the same lint check the Tests CI workflow does,
+  # so a tag pushed against a red main fails fast instead of silently
+  # bumping SECURITY.md / CITATION.cff for a broken release.
+  verify-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff==0.15.12
+      - name: Lint (ruff)
+        run: ruff check hyplan tests
+
   post-release:
+    needs: verify-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

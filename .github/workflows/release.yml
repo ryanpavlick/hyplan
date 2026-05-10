@@ -18,6 +18,17 @@ jobs:
         with:
           ref: main
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Backstop: refuse to tag a red main.  Mirrors the lint step
+      # in tests.yml; pre-commit is the primary defense locally.
+      - name: Install ruff
+        run: pip install ruff==0.15.12
+      - name: Lint (ruff)
+        run: ruff check hyplan tests
+
       - name: Update CITATION.cff version
         run: |
           VERSION=${{ github.event.inputs.version }}
