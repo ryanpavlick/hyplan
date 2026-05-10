@@ -104,6 +104,22 @@ extend-select = [
 # B904 — already fixed; keep enabled.
 ignore = ["B017", "B008", "B023", "B018", "B905"]
 
+[tool.ruff.lint.per-file-ignores]
+# Package surface re-exports use `from .x import y` patterns that ruff
+# can't distinguish from accidental unused imports.  The package surface
+# also conditionally imports optional deps after try/except blocks,
+# which trips E402 (imports not at top).  Both are intentional.
+"hyplan/__init__.py" = ["E402", "F401"]
+"hyplan/*/__init__.py" = ["F401"]
+"hyplan/*/*/__init__.py" = ["F401"]
+# Backward-compat shim that re-exports private helpers under the old
+# module path so existing callers keep working.
+"hyplan/flight_plan.py" = ["F401"]
+# Tests group imports under section-comment headers near the bottom of
+# the file (E402) and import optional deps inside try blocks to skip
+# tests when the dep is missing (F401).
+"tests/*.py" = ["E402", "F401"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true

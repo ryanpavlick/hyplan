@@ -7,7 +7,6 @@ from typing import Protocol, runtime_checkable
 from pint import Quantity, Unit
 
 from ..exceptions import HyPlanTypeError
-from ..units import ureg
 
 
 class Sensor:
