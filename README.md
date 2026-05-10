@@ -294,7 +294,7 @@ The [`notebooks/`](https://github.com/ryanpavlick/hyplan/tree/main/notebooks) di
 | [airport_selection.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/airport_selection.ipynb) | Finding, filtering, and comparing airports by location, runway, and aircraft requirements |
 | [flight_patterns.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/flight_patterns.ipynb) | Racetrack, rosette, spiral, sawtooth, polygon, and glint-arc flight patterns |
 | [airspace_check.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/airspace_check.ipynb) | Detect conflicts between flight lines and FAA / OpenAIP airspace boundaries (restricted, prohibited, controlled) |
-| [isochrone.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/isochrone.ipynb) | Wind-aware reachability boundaries: round-trip / one-way / return-safe modes, MERRA-2 winds, fleet comparison, refuel-extended reach, multi-base reach (union of multiple candidate bases), concentric multi-budget contours, single-target spot checks |
+| [isochrone.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/isochrone.ipynb) | Wind-aware reachability boundaries: round-trip / one-way / return-safe modes, MERRA-2 winds, fleet comparison, refuel-extended reach, multi-base reach (union across candidate bases), multi-refuel reach (per-refuel decomposition + sensitivity to airfield availability), concentric multi-budget contours, single-target spot checks |
 
 ### Instruments & Sensors
 
