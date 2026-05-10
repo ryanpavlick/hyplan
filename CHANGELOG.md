@@ -2,7 +2,11 @@
 
 ## v1.6.1 — Unreleased
 
-### mypy strict cleanup
+Maintenance / quality release.  No public-API or behavioral
+changes; everything below is type-system, lint, and structural
+hygiene.
+
+### Type-system hardening (mypy strict cleanup)
 
 `hyplan.aircraft.wind_path` and `hyplan.planning.isochrone` are now
 genuinely strict-mode-clean, including the entire transitive import
@@ -10,20 +14,115 @@ call graph (~50 modules).  The strict overrides on these two modules
 were retained from v1.6.0 but had cascaded ~462 errors across the
 codebase that were silently accepted; this release closes them.
 
-* 54 source files updated.  Categories addressed:
+* **462 strict-mode errors → 0**, across 56 source files:
   * 169 `[no-untyped-def]` — added function / method signatures.
   * 148 `[type-arg]` — concrete generic args
     (`dict[str, Any]`, `list[float]`, `npt.NDArray[np.float64]`, ...).
   * 120 `[no-untyped-call]` — resolved transitively as the called
     fns gained signatures.
-  * 18 `[attr-defined]` and ~7 misc — case-by-case (mostly type-
-    narrowing via `assert is not None`, lazy-import helpers
-    annotated as `-> Any`, one `_GriddedWindField` import path
-    correction).
-* No public-API changes; no behavioral changes.  The work is purely
-  type annotations + a few `# type: ignore[error-code]  # reason`
-  comments where third-party stubs are missing (folium, some
-  matplotlib re-exports).
+  * 18 `[attr-defined]` + 7 misc — case-by-case (mostly
+    `assert is not None` narrowing; lazy-import helpers annotated
+    `-> Any`; one `_GriddedWindField` import path correction).
+* The 4-agent parallel cleanup grouped files into roughly equal
+  workloads (~110-130 errors each); cross-group cascade resolved
+  naturally during merge.
+
+### `# type: ignore` documentation + reduction (149 → 66, -56%)
+
+* **All 149 pre-existing bare `# type: ignore[code]` comments now
+  carry an inline `# reason`** explaining why the suppression
+  exists — `# type: ignore[code]  # short reason`.  Three parallel
+  agents annotated 149 sites across 34 files; every site got a
+  specific reason (no fallback to defaults).
+* **Two structural fixes eliminated 43 ignores at the source**:
+  * `is_waypoint()` typed as `TypeGuard[Waypoint]` in
+    `hyplan.waypoint`.  mypy now narrows through
+    `if is_waypoint(x):` blocks, removing 17 `[union-attr]` /
+    `[arg-type]` suppressions in `planning/engine.py`.
+  * `_GriddedWindField` slab attributes (`_u_data`, `_v_data`,
+    `_times`, `_levs`, `_lats`, `_lons`, `_times_raw`) given
+    explicit class-level `npt.NDArray[...]` annotations,
+    replacing the `self._x = None` initialization pattern that
+    forced 26 suppressions across `winds/gridded.py` and
+    `winds/providers/gfs.py`.  Stale "datetime64" doc on `_times`
+    corrected — actual stored type is float Unix-epoch seconds
+    (added a separate `_times_raw` for the original datetime64).
+* **`[no-any-return]` reduced 45 → 16**: replaced 29 documented
+  suppressions with explicit Python coercion at the boundary:
+  * `q.m_as(unit)` → `float(q.m_as(unit))` for scalar Quantity.
+  * numpy reductions / arithmetic → `float(...)` (atmosphere,
+    sun, geometry, lvis, winds/utils, frame_camera).
+  * numpy bool comparisons → `bool(...)` (lvis).
+  * pandas indexing → `str(...)` / `list(...)` (airports).
+  * `ndarray.shape` → `(int(s[0]), int(s[1]))` tuple.
+  * The 16 remaining ignores are all genuine library-boundary
+    cases (earthengine / earthaccess / rasterio no stubs;
+    `requests.json()` Any returns; `np.median` ndarray returns;
+    geomag).
+
+### Lint: enable ruff bugbear
+
+* `[tool.ruff]` extends to include `B` (flake8-bugbear) and
+  `SIM115` (open-without-context-manager).  Both ship enabled in
+  `pyproject.toml`; CI catches new instances going forward.
+* **38 lint findings cleared:**
+  * **B904** (raise-without-from-inside-except) — 20 sites across
+    11 files.  Added `from err` to preserve traceback chains, or
+    `from None` for intentional reframes (ImportError →
+    HyPlanRuntimeError "library missing" messages).
+  * **B007** (unused-loop-control-variable) — 12 sites renamed
+    `for x in ...` → `for _x in ...` to flag unused loop
+    bindings.
+  * **SIM115** (file-open without context-manager) — 6 sites in
+    `tests/test_exports.py` migrated `open(path).read()` →
+    standard `Path(path).read_text()`.
+* Pyupgrade + RUF auto-fixable items (~30 mechanical fixes for
+  unused-iterable-allocations, unsorted dunder-slots, etc.)
+  applied via `ruff --fix --select UP --select RUF --ignore RUF100`.
+  RUF100 (unused-noqa-directive) explicitly excluded because its
+  auto-fix incorrectly removes legitimate `# noqa: F401`
+  directives that suppress default-on F401 errors on shim
+  re-exports.
+* **Stylistic rule sets** (full RUF / RET / SIM / UP) plus
+  **B905** (zip-strict) queued in `TODO.md` for a separate
+  gradual-opt-in pass; ~170 minor findings, none bug-grade.
+
+### Long-function refactors
+
+Two of the largest functions split into thin dispatchers + named
+helpers.  Pure extraction; identical behavior.
+
+* **`fetch_phenology`** (`phenology/sources.py`): 280 lines →
+  dispatcher + 6 helpers, longest helper 58 lines.
+  * `_fetch_phenology_appeears` — AppEEARS server-side extraction
+    (point samples; fast).
+  * `_fetch_phenology_granules` — HDF4 download + local raster
+    processing (full spatial coverage; slow).  Granule path
+    further factored into `_resolve_granule_short_names`,
+    `_collect_granule_rows`, `_empty_phenology_frame`,
+    `_merge_combined_satellite`.
+  * Annotated `_PRODUCT_CONFIG: dict[str, dict[str, Any]]` (was
+    untyped) — clears 9 surrounding `# type: ignore[index]` /
+    `[arg-type]` suppressions on heterogeneous-config dict access.
+* **`compute_flight_plan`** (`planning/engine.py`): 383 lines →
+  306 lines + 2 record builders.
+  * `_build_flight_line_record` (58 lines) — solves the crab-aware
+    track-hold problem at the line midpoint, returns the
+    GeoDataFrame record for a FlightLine with crab / groundspeed /
+    wind metadata.
+  * `_build_loiter_record` (41 lines) — renders a hold-orbit
+    ground track for a Waypoint with non-zero delay; falls back
+    to a Point geometry when altitude is unavailable.
+* **Unused-noqa cleanup**: `ruff check --select RUF100 --fix`
+  cleared 69 `# noqa` directives that became redundant after the
+  recent `__all__` declarations were added and the TypeGuard fix
+  made `[union-attr]` ignores unused.
+
+### Verification
+
+* `mypy hyplan` — Success: no issues found in 89 source files.
+* `ruff check hyplan tests` — All checks passed (default + B + SIM115).
+* `pytest tests` — 1697 passed, 1 skipped, 1 warning.
 
 ## v1.6.0 — 2026-05-09
 
