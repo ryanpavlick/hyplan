@@ -13,6 +13,7 @@ from hyplan import (
     compute_isochrone,
     compute_concentric_isochrones,
     compute_multi_base_isochrone,
+    compute_multi_refuel_isochrone,
     compute_refuel_isochrone,
     evaluate_target_reachability,
     isochrone_polygon,
@@ -2033,4 +2034,146 @@ class TestMultiBase:
                 return_destinations=[kedw_wp],  # length 1, bases length 2
                 budget=2 * ureg.hour,
                 cruise_altitude=cruise_alt,
+            )
+
+
+# ---------------------------------------------------------------------------
+# 12. Multi-refuel isochrone (compute_multi_refuel_isochrone, union mode)
+# ---------------------------------------------------------------------------
+
+class TestMultiRefuel:
+    """compute_multi_refuel_isochrone, return_mode='union'."""
+
+    def test_single_refuel_matches_compute_refuel_isochrone(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        """One refuel should produce the same polygon as compute_refuel_isochrone."""
+        single = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        single_poly = isochrone_polygon(single)
+        multi = compute_multi_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp],
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        assert np.isclose(
+            multi.geometry.iloc[0].area, single_poly.area, rtol=1e-9
+        )
+
+    def test_union_region_matches_all_refuels_at_once(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """The union region matches the all-refuels-at-once solve as a
+        set of reachable points.  Per-ray distances are identical by
+        construction (per-azimuth max over refuels); the polygon
+        *discretizations* differ because unary_union triangulates two
+        star-polygons differently than isochrone_polygon connects
+        per-azimuth boundary points."""
+        all_at_once = compute_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp, kbtr_wp],
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        all_at_once_poly = isochrone_polygon(all_at_once)
+        union = compute_multi_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp, kbtr_wp],
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        union_poly = union.geometry.iloc[0]
+        # Compare regions: symmetric difference area normalized by mean
+        # polygon area should be small.  5% threshold absorbs the
+        # different vertex sets without permitting a meaningfully
+        # different reach.
+        sym_diff = union_poly.symmetric_difference(all_at_once_poly).area
+        mean_area = 0.5 * (union_poly.area + all_at_once_poly.area)
+        assert sym_diff / mean_area < 0.05, (
+            f"union and all-at-once differ by "
+            f"{100 * sym_diff / mean_area:.1f}% region (expected < 5%)"
+        )
+
+    def test_on_station_time_shrinks_union(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """Increasing on_station_time shrinks the union polygon (less time
+        budget left for transit), forwarded through every per-refuel solve."""
+        no_dwell = compute_multi_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp, kbtr_wp],
+            on_station_time=0 * ureg.minute,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        with_dwell = compute_multi_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp, kbtr_wp],
+            on_station_time=45 * ureg.minute,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        assert with_dwell.geometry.iloc[0].area < no_dwell.geometry.iloc[0].area
+        # And on_station_minutes column reflects the input.
+        assert with_dwell.iloc[0]["on_station_minutes"] == 45.0
+        assert no_dwell.iloc[0]["on_station_minutes"] == 0.0
+
+    def test_per_refuel_gdfs_in_attrs(
+        self, b200, kefd_wp, klbb_wp, kbtr_wp, b200_cruise,
+    ):
+        """attrs['per_refuel_gdfs'] preserves input order with one GDF each."""
+        gdf = compute_multi_refuel_isochrone(
+            aircraft=b200, start=kefd_wp,
+            sortie_budget=4 * ureg.hour, flight_day_budget=12 * ureg.hour, mode="round_trip",
+            cruise_altitude=b200_cruise,
+            refuel_airports=[klbb_wp, kbtr_wp],
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0, distance_tolerance_nmi=2.0,
+        )
+        per = gdf.attrs["per_refuel_gdfs"]
+        assert len(per) == 2
+        assert gdf.iloc[0]["refuel_labels"] == ["KLBB", "KBTR"]
+        assert gdf.iloc[0]["n_refuels"] == 2
+        assert gdf.iloc[0]["n_contributing_refuels"] == 2
+
+    def test_validation_empty_refuel_airports(
+        self, b200, kefd_wp, b200_cruise,
+    ):
+        with pytest.raises(HyPlanValueError, match="non-empty"):
+            compute_multi_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=12 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[],
+            )
+
+    def test_validation_unsupported_return_mode(
+        self, b200, kefd_wp, klbb_wp, b200_cruise,
+    ):
+        with pytest.raises(HyPlanValueError, match="return_mode"):
+            compute_multi_refuel_isochrone(
+                aircraft=b200, start=kefd_wp,
+                sortie_budget=4 * ureg.hour,
+                flight_day_budget=12 * ureg.hour,
+                cruise_altitude=b200_cruise,
+                refuel_airports=[klbb_wp],
+                return_mode="best_refuel",
             )

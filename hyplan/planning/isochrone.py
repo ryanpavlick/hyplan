@@ -110,6 +110,7 @@ __all__ = [
     "compute_concentric_isochrones",
     "compute_isochrone",
     "compute_multi_base_isochrone",
+    "compute_multi_refuel_isochrone",
     "compute_refuel_isochrone",
     "evaluate_target_reachability",
     "isochrone_polygon",
@@ -1290,6 +1291,173 @@ def compute_multi_base_isochrone(
         crs="EPSG:4326",
     )
     out.attrs["per_base_gdfs"] = per_base_gdfs
+    return out
+
+
+def compute_multi_refuel_isochrone(
+    aircraft: Aircraft,
+    start: Airport | Waypoint,
+    sortie_budget: Quantity,
+    *,
+    flight_day_budget: Quantity,
+    refuel_airports: Sequence[Airport | Waypoint],
+    return_mode: str = "union",
+    cruise_altitude: Quantity | None = None,
+    refuel_time: Quantity = 60 * ureg.minute,
+    return_destination: Airport | Waypoint | None = None,
+    mode: str = "return_safe",
+    on_station_altitude: Quantity | None = None,
+    on_station_time: Quantity = 0 * ureg.minute,
+    reserve: Quantity = 0 * ureg.minute,
+    max_refuel_stops: int = 1,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
+    azimuth_resolution_deg: float = 5.0,
+    distance_tolerance_nmi: float = 0.5,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+) -> gpd.GeoDataFrame:
+    """Per-refuel reach decomposition + union polygon.
+
+    Calls :func:`compute_refuel_isochrone` once per refuel candidate
+    (each treated as the sole refuel option) and aggregates the
+    per-refuel reach polygons according to ``return_mode``.
+
+    The on-station dwell (``on_station_time``) is forwarded to every
+    underlying solve so the per-refuel polygons are directly comparable
+    — each one represents reach with the *same* science requirement,
+    differing only in which refuel airfield is available.  This is
+    distinct from the all-refuels-at-once solve done by
+    ``compute_refuel_isochrone(refuel_airports=[...])``: the union
+    *region* here matches that single-call result (per-azimuth max is
+    identical by construction), but the polygon *discretizations*
+    differ slightly because :func:`shapely.ops.unary_union`
+    triangulates two star-polygons differently than per-azimuth
+    boundary connection.  The added value is the per-refuel
+    decomposition, which enables sensitivity analysis ("what would we
+    lose if airfield X dropped out?") and contribution-by-refuel
+    visualization.
+
+    Args:
+        aircraft: Aircraft model.
+        start: Departure point (single base; mirrors
+            :func:`compute_refuel_isochrone`).
+        sortie_budget: Per-fuel-cycle endurance.
+        flight_day_budget: Total wall-clock budget across the sortie.
+        refuel_airports: One or more refuel candidates.  Each is run as
+            the only refuel for an independent solve.  Empty raises;
+            use :func:`compute_isochrone` if no refuel option applies.
+        return_mode: How to aggregate per-refuel reach polygons.  v1
+            supports ``"union"``; ``"per_refuel"`` and ``"best_refuel"``
+            are reserved for future versions and raise
+            :class:`HyPlanValueError`.
+        on_station_time: Required dwell at the target.  Charged against
+            the sortie cycle that visits the target, just as in
+            ``compute_refuel_isochrone``.  Forwarded unchanged.
+        cruise_altitude, refuel_time, return_destination, mode,
+        on_station_altitude, reserve, max_refuel_stops, start_time,
+        wind_source, azimuth_resolution_deg, distance_tolerance_nmi,
+        wind_sampling, wind_sample_spacing, max_wind_samples_per_leg:
+            Forwarded to :func:`compute_refuel_isochrone` unchanged.
+
+    Returns:
+        A single-row :class:`geopandas.GeoDataFrame` (``EPSG:4326``)
+        with columns:
+
+        * ``geometry`` — union polygon (Polygon or MultiPolygon)
+        * ``n_refuels`` — total refuel candidates passed in
+        * ``n_contributing_refuels`` — refuels that produced ≥ 3 reachable
+          rays (and therefore a polygon)
+        * ``refuel_labels`` — list of refuel labels in input order
+        * ``return_mode`` — echoed
+        * ``sortie_budget_minutes`` — echoed in minutes
+        * ``flight_day_budget_minutes`` — echoed in minutes
+        * ``on_station_minutes`` — echoed in minutes
+        * ``mode`` — single-base mode echoed
+          (``"return_safe"`` or ``"round_trip"``)
+
+        ``gdf.attrs["per_refuel_gdfs"]`` carries the per-refuel
+        :func:`compute_refuel_isochrone` GeoDataFrames in input order;
+        useful for inspection or reuse in plotting.
+
+    Raises:
+        HyPlanValueError: If ``refuel_airports`` is empty or
+            ``return_mode`` is unsupported.
+        HyPlanRuntimeError: If no refuel produced a valid reach polygon.
+
+    Notes:
+        Cost is proportional to ``len(refuel_airports)``.  For ``N``
+        candidates at ``M`` rays this is ``N`` refuel-solver calls,
+        each evaluating ~3 itinerary templates per ray.  Reuse a
+        single :class:`WindField` instance across the call so any
+        gridded slab fetch amortizes.
+    """
+    if return_mode != "union":
+        raise HyPlanValueError(
+            f"return_mode={return_mode!r} not yet supported; v1 only "
+            f"implements 'union'.  'per_refuel' and 'best_refuel' are "
+            f"planned follow-ups."
+        )
+    if not refuel_airports:
+        raise HyPlanValueError("`refuel_airports` must be non-empty.")
+
+    per_refuel_gdfs: list[gpd.GeoDataFrame] = []
+    per_refuel_polygons: list[Polygon] = []
+    for refuel in refuel_airports:
+        gdf = compute_refuel_isochrone(
+            aircraft, start, sortie_budget,
+            flight_day_budget=flight_day_budget,
+            cruise_altitude=cruise_altitude,
+            refuel_airports=[refuel],
+            refuel_time=refuel_time,
+            return_destination=return_destination,
+            mode=mode,
+            on_station_altitude=on_station_altitude,
+            on_station_time=on_station_time,
+            reserve=reserve,
+            max_refuel_stops=max_refuel_stops,
+            start_time=start_time,
+            wind_source=wind_source,
+            azimuth_resolution_deg=azimuth_resolution_deg,
+            distance_tolerance_nmi=distance_tolerance_nmi,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
+        )
+        per_refuel_gdfs.append(gdf)
+        try:
+            per_refuel_polygons.append(isochrone_polygon(gdf))
+        except HyPlanValueError:
+            # Fewer than 3 reachable rays — refuel contributes nothing.
+            continue
+
+    if not per_refuel_polygons:
+        raise HyPlanRuntimeError(
+            f"No refuel candidate produced a valid reach polygon (all "
+            f"{len(refuel_airports)} candidates had fewer than 3 "
+            f"reachable rays).  Check budgets, wind, and aircraft "
+            f"envelope."
+        )
+
+    union = unary_union(per_refuel_polygons)
+    refuel_labels = [_destination_label(r) for r in refuel_airports]
+
+    out = gpd.GeoDataFrame(
+        {
+            "geometry": [union],
+            "n_refuels": [len(refuel_airports)],
+            "n_contributing_refuels": [len(per_refuel_polygons)],
+            "refuel_labels": [refuel_labels],
+            "return_mode": [return_mode],
+            "sortie_budget_minutes": [sortie_budget.m_as(ureg.minute)],
+            "flight_day_budget_minutes": [flight_day_budget.m_as(ureg.minute)],
+            "on_station_minutes": [on_station_time.m_as(ureg.minute)],
+            "mode": [mode],
+        },
+        crs="EPSG:4326",
+    )
+    out.attrs["per_refuel_gdfs"] = per_refuel_gdfs
     return out
 
 
