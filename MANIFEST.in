@@ -1,0 +1,36 @@
+# Sdist contents.
+#
+# By default setuptools-scm includes everything git tracks.  This
+# file prunes that down to the package itself plus the metadata
+# users actually want when installing from source.
+#
+# Kept:
+#   * hyplan/             — the package
+#   * hyplan/data/*.bsp   — skyfield ephemerides (bundled at
+#     install so no first-run download is needed)
+#   * hyplan/data/*.geojson
+#   * README, CHANGELOG, LICENSE, CITATION, SECURITY,
+#     CONTRIBUTING, CONTRIBUTORS, CODE_OF_CONDUCT
+#   * pyproject.toml
+#
+# Excluded:
+#   * notebooks/  — example notebooks (~35 MB; available on GitHub)
+#   * paper/      — JOSS paper sources, figures, talks (~64 MB)
+#   * docs/       — Sphinx sources (rendered docs published separately)
+#   * bench/      — performance benchmarking scripts
+#   * data/       — calibration training data (mostly gitignored anyway)
+#   * .github/, .gitattributes, .gitignore, .pre-commit-config.yaml,
+#     PLAN.md, TODO.md — repo / dev workflow metadata
+
+prune notebooks
+prune paper
+prune docs
+prune bench
+prune data
+prune .github
+
+exclude .gitattributes
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude PLAN.md
+exclude TODO.md
