@@ -97,7 +97,7 @@ def get_binary_cloud(image: ee.Image) -> ee.Image:
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
     result = result.set("satellite", image.get("satellite"))
-    return result  # type: ignore[no-any-return]  # earthengine has no stubs
+    return result  # type: ignore[no-any-return, unused-ignore]  # earthengine has no stubs; whether mypy infers Any-return varies by py version
 
 
 def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
@@ -117,7 +117,7 @@ def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> 
         scale=1000
     )
     cloud_fraction = reduction.get('state_1km')
-    return ee.Feature(None, {  # type: ignore[no-any-return]  # earthengine has no stubs
+    return ee.Feature(None, {  # type: ignore[no-any-return, unused-ignore]  # earthengine has no stubs; whether mypy infers Any-return varies by py version
         'date_char': image.get('date_char'),
         'cloud_fraction': cloud_fraction,
         'satellite': image.get('satellite'),
