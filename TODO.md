@@ -9,7 +9,7 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
 
 ---
 
-## v1.6.1 candidates
+## Maintenance backlog (v1.6.2+)
 
 ### Calibration data-quality fixes
 
@@ -97,17 +97,38 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
 
 ### Code quality polish
 
-* **Expanded ruff rule sets** — v1.6.x baseline enabled bugbear (`B`)
-  + `SIM115` (file-open without context manager).  Additional rule
-  sets queued, each behind ~10-50 minor stylistic fixes:
+* **Long-function refactors (remaining)** — v1.6.1 split
+  `fetch_phenology` (280 lines → 7 helpers) and
+  `compute_flight_plan` (383 → 306 lines + 2 builders).
+  The other long functions remain unsplit:
+  * `Aircraft._hybrid_path` (`aircraft/_base.py`) — 505 lines.
+    Hard refactor: single math computation with tight closure on
+    phase state (climb / cruise / descent integration).
+  * `greedy_optimize` (`flight_optimizer.py`) — 276 lines.
+    Medium: graph traversal + result accounting.
+  * `compute_refuel_isochrone` (`planning/isochrone.py`) — 244
+    lines.  Hard: bisection algorithm with many parameters.
+  * `_evaluate_refuel_at_d` (`planning/isochrone.py`) — 243
+    lines.  Hard: internal isochrone evaluator.
+  * `plot_airspace_map` (`plotting.py`) — 229 lines.  Medium;
+    plotting code, low test coverage.
+  * `_solve_rays` (`planning/isochrone.py`) — 228 lines.  Hard:
+    vectorized ray-bisection inner loop.
+  * `effective_swath_on_terrain` (`instruments/lvis.py`) — 222
+    lines.  Medium: geometric computation.
+
+* **Expanded ruff rule sets** — v1.6.1 enabled `B` (bugbear) and
+  `SIM115` (file-open without context manager).  Stylistic rule
+  sets queued, each behind ~10-50 minor fixes:
   * `RUF` (ruff-specific): unused-unpacked-variable (~46 sites),
-    `[*]`-fixable simplifications (`RUF015` list-allocation, `RUF005`
-    collection-literal-concat, `RUF007` zip-pairwise, etc.).
-  * `RET` (flake8-return): RET504 unnecessary-assign (~14),
-    RET505 superfluous-else-return (~15, mostly `[*]`-fixable).
+    `[*]`-fixable simplifications (`RUF015` list-allocation,
+    `RUF005` collection-literal-concat, `RUF007` zip-pairwise).
+  * `RET` (flake8-return): RET504 unnecessary-assign (~14
+    remaining; RET505 superfluous-else-return was cleared in
+    v1.6.1).
   * `SIM` (flake8-simplify): SIM117 nested with-stmts (~11),
-    SIM108 if-else-as-expression (~9), SIM105 suppressible-exception
-    (~6), SIM102 collapsible-if (~2).
+    SIM108 if-else-as-expression (~9), SIM105 suppressible-
+    exception (~6), SIM102 collapsible-if (~2).
   * `UP` (pyupgrade): only ~2 minor sites remain.
   Pure cosmetic; no bug fixes; gradually opt in.
 
@@ -119,6 +140,13 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
 * **`tests/test_radar.py`** uses `pytest.raises(Exception)` 19
   places (B017).  Would benefit from narrowing to specific
   exception types where possible.
+
+* **Remaining `# type: ignore` (66 sites)** — all genuine
+  library-boundary cases (no stubs for earthengine /
+  earthaccess / rasterio / geomag; pint Quantity Any returns;
+  numpy ndarray returns; pandas indexing).  No further
+  reductions possible without upstream stub additions; current
+  state is fully documented (every ignore has an inline reason).
 
 ---
 
