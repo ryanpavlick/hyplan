@@ -90,6 +90,7 @@ import pandas as pd
 import pymap3d.vincenty
 from pint import Quantity
 from shapely.geometry import Point, Polygon
+from shapely.ops import unary_union
 
 from ..aircraft._base import Aircraft
 from ..aircraft.wind_path import (
@@ -108,6 +109,7 @@ from ..winds.utils import _track_hold_solution_from_uv
 __all__ = [
     "compute_concentric_isochrones",
     "compute_isochrone",
+    "compute_multi_base_isochrone",
     "compute_refuel_isochrone",
     "evaluate_target_reachability",
     "isochrone_polygon",
@@ -1134,6 +1136,161 @@ def evaluate_target_reachability(
         "target_lat": target_wp.latitude,
         "target_lon": target_wp.longitude,
     }
+
+
+def compute_multi_base_isochrone(
+    aircraft: Aircraft,
+    bases: Sequence[Airport | Waypoint],
+    budget: Quantity,
+    *,
+    return_mode: str = "union",
+    cruise_altitude: Quantity | None = None,
+    on_station_altitude: Quantity | None = None,
+    start_time: datetime.datetime | None = None,
+    wind_source: WindField | None = None,
+    return_destinations: Sequence[Airport | Waypoint] | None = None,
+    mode: str = "round_trip",
+    on_station_time: Quantity = 0 * ureg.minute,
+    reserve: Quantity = 0 * ureg.minute,
+    azimuth_resolution_deg: float = 5.0,
+    distance_tolerance_nmi: float = 0.5,
+    wind_sampling: str = "cruise_midpoint",
+    wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
+    max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
+    ray_strategy: str = "uniform",
+    adaptive_spacing_nmi: float | None = None,
+    max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
+) -> gpd.GeoDataFrame:
+    """Compute reach polygons for multiple candidate bases.
+
+    Calls :func:`compute_isochrone` once per base and aggregates the
+    per-base reach polygons according to ``return_mode``.
+
+    Args:
+        aircraft: Aircraft model used for every base.
+        bases: One or more candidate base airports / waypoints.  Each is
+            passed through ``compute_isochrone(start=base, ...)``.
+        budget: Total time available; same for every base.
+        return_mode: How to aggregate per-base reach polygons.  v1
+            supports ``"union"`` (returns a single-row GeoDataFrame whose
+            geometry is the ``shapely.ops.unary_union`` of the per-base
+            polygons).  ``"per_base"`` and ``"best_base"`` are reserved
+            for future versions and raise :class:`HyPlanValueError`.
+        return_destinations: Optional per-base recovery airfields,
+            parallel to ``bases``.  Pass ``None`` (default) to recover
+            at the same base each aircraft launches from.  Length must
+            match ``bases`` exactly when provided.
+        wind_source: A :class:`WindField` shared across all bases.
+            For gridded providers, ensure the slab covers the bounding
+            box of every base; reuse the same instance to amortize
+            slab fetches across the per-base solves.
+        cruise_altitude, on_station_altitude, start_time, mode,
+        on_station_time, reserve, azimuth_resolution_deg,
+        distance_tolerance_nmi, wind_sampling, wind_sample_spacing,
+        max_wind_samples_per_leg, ray_strategy, adaptive_spacing_nmi,
+        max_adaptive_rays:
+            Forwarded to :func:`compute_isochrone` unchanged.
+
+    Returns:
+        A single-row :class:`geopandas.GeoDataFrame` (``EPSG:4326``)
+        with columns:
+
+        * ``geometry`` — union polygon (Polygon or MultiPolygon)
+        * ``n_bases`` — total bases passed in
+        * ``n_contributing_bases`` — bases that produced ≥ 3 reachable
+          rays (and therefore a polygon)
+        * ``base_labels`` — list of base labels in input order
+        * ``return_mode`` — echoed for downstream code
+        * ``budget_minutes`` — budget echoed in minutes
+        * ``mode`` — single-base mode echoed (``"round_trip"`` etc.)
+
+        ``gdf.attrs["per_base_gdfs"]`` carries the per-base
+        :func:`compute_isochrone` GeoDataFrames in input order; useful
+        for inspection or reuse in plotting.
+
+    Raises:
+        HyPlanValueError: If ``bases`` is empty, ``return_mode`` is
+            unsupported, or ``return_destinations`` length does not
+            match ``bases``.
+        HyPlanRuntimeError: If no base produced ≥ 3 reachable rays.
+
+    Notes:
+        Cost is proportional to ``len(bases)``.  For ``N`` bases at
+        ``M`` rays this is ``N × M`` ray solves.  Performance for large
+        sweeps (gridded winds + refuel + many bases) is documented in
+        ``docs/performance.md``.
+    """
+    if return_mode != "union":
+        raise HyPlanValueError(
+            f"return_mode={return_mode!r} not yet supported; v1 only "
+            f"implements 'union'.  'per_base' and 'best_base' are "
+            f"planned follow-ups."
+        )
+    if not bases:
+        raise HyPlanValueError("`bases` must be non-empty.")
+    if return_destinations is not None and len(return_destinations) != len(bases):
+        raise HyPlanValueError(
+            f"`return_destinations` must be None or have the same "
+            f"length as `bases` ({len(bases)}); got "
+            f"{len(return_destinations)}."
+        )
+
+    per_base_gdfs: list[gpd.GeoDataFrame] = []
+    per_base_polygons: list[Polygon] = []
+    for i, base in enumerate(bases):
+        return_dest = (
+            return_destinations[i] if return_destinations is not None else None
+        )
+        gdf = compute_isochrone(
+            aircraft, base, budget,
+            cruise_altitude=cruise_altitude,
+            on_station_altitude=on_station_altitude,
+            start_time=start_time,
+            wind_source=wind_source,
+            return_destination=return_dest,
+            mode=mode,
+            on_station_time=on_station_time,
+            reserve=reserve,
+            azimuth_resolution_deg=azimuth_resolution_deg,
+            distance_tolerance_nmi=distance_tolerance_nmi,
+            wind_sampling=wind_sampling,
+            wind_sample_spacing=wind_sample_spacing,
+            max_wind_samples_per_leg=max_wind_samples_per_leg,
+            ray_strategy=ray_strategy,
+            adaptive_spacing_nmi=adaptive_spacing_nmi,
+            max_adaptive_rays=max_adaptive_rays,
+        )
+        per_base_gdfs.append(gdf)
+        try:
+            per_base_polygons.append(isochrone_polygon(gdf))
+        except HyPlanValueError:
+            # Fewer than 3 reachable rays — base contributes nothing.
+            continue
+
+    if not per_base_polygons:
+        raise HyPlanRuntimeError(
+            f"No base produced a valid reach polygon (all {len(bases)} "
+            f"bases had fewer than 3 reachable rays).  Check budget, "
+            f"wind, and aircraft envelope."
+        )
+
+    union = unary_union(per_base_polygons)
+    base_labels = [_destination_label(b) for b in bases]
+
+    out = gpd.GeoDataFrame(
+        {
+            "geometry": [union],
+            "n_bases": [len(bases)],
+            "n_contributing_bases": [len(per_base_polygons)],
+            "base_labels": [base_labels],
+            "return_mode": [return_mode],
+            "budget_minutes": [budget.m_as(ureg.minute)],
+            "mode": [mode],
+        },
+        crs="EPSG:4326",
+    )
+    out.attrs["per_base_gdfs"] = per_base_gdfs
+    return out
 
 
 def isochrone_polygon(gdf: gpd.GeoDataFrame) -> Polygon:

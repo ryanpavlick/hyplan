@@ -12,12 +12,13 @@ from hyplan import (
     Waypoint,
     compute_isochrone,
     compute_concentric_isochrones,
+    compute_multi_base_isochrone,
     compute_refuel_isochrone,
     evaluate_target_reachability,
     isochrone_polygon,
     ureg,
 )
-from hyplan.exceptions import HyPlanValueError
+from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.winds import ConstantWindField, StillAirField
 
 
@@ -1903,3 +1904,133 @@ class TestWindSampling:
         )
         assert len(gdf) == 3
         assert (gdf["distance_nmi"] > 0).all()
+
+
+# ---------------------------------------------------------------------------
+# 11. Multi-base isochrone (compute_multi_base_isochrone, union mode)
+# ---------------------------------------------------------------------------
+
+class TestMultiBase:
+    """compute_multi_base_isochrone, return_mode='union'."""
+
+    @pytest.fixture
+    def kpmd_wp(self) -> Waypoint:
+        """KPMD (Palmdale) — close enough to KEDW that polygons overlap."""
+        return Waypoint(
+            latitude=34.629, longitude=-118.085,
+            heading=0.0, altitude_msl=2540 * ureg.feet,
+            name="KPMD",
+        )
+
+    @pytest.fixture
+    def kbtr_wp(self) -> Waypoint:
+        """KBTR (Baton Rouge) — far from KEDW, polygons should not overlap."""
+        return Waypoint(
+            latitude=30.533, longitude=-91.150,
+            heading=0.0, altitude_msl=70 * ureg.feet,
+            name="KBTR",
+        )
+
+    def test_union_two_overlapping_bases_is_polygon(
+        self, giii, kedw_wp, kpmd_wp, cruise_alt,
+    ):
+        """Two close bases produce a single Polygon (overlapping reaches)."""
+        gdf = compute_multi_base_isochrone(
+            aircraft=giii,
+            bases=[kedw_wp, kpmd_wp],
+            budget=2 * ureg.hour,
+            cruise_altitude=cruise_alt,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=30.0,
+        )
+        from shapely.geometry import Polygon as ShPolygon
+        assert len(gdf) == 1
+        assert isinstance(gdf.geometry.iloc[0], ShPolygon)
+        assert gdf.iloc[0]["n_bases"] == 2
+        assert gdf.iloc[0]["n_contributing_bases"] == 2
+        assert gdf.iloc[0]["base_labels"] == ["KEDW", "KPMD"]
+        assert "per_base_gdfs" in gdf.attrs
+        assert len(gdf.attrs["per_base_gdfs"]) == 2
+
+    def test_union_two_distant_bases_is_multipolygon(
+        self, giii, kedw_wp, kbtr_wp, cruise_alt,
+    ):
+        """Two far-apart bases produce a MultiPolygon (disjoint reaches)."""
+        from shapely.geometry import MultiPolygon
+        gdf = compute_multi_base_isochrone(
+            aircraft=giii,
+            bases=[kedw_wp, kbtr_wp],
+            budget=1 * ureg.hour,
+            cruise_altitude=cruise_alt,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0,
+        )
+        assert isinstance(gdf.geometry.iloc[0], MultiPolygon)
+        assert gdf.iloc[0]["n_bases"] == 2
+
+    def test_single_base_matches_compute_isochrone(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        """One base should produce the same polygon area as compute_isochrone."""
+        single = compute_isochrone(
+            aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
+            cruise_altitude=cruise_alt,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=30.0,
+        )
+        single_poly = isochrone_polygon(single)
+        multi = compute_multi_base_isochrone(
+            aircraft=giii,
+            bases=[kedw_wp],
+            budget=2 * ureg.hour,
+            cruise_altitude=cruise_alt,
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=30.0,
+        )
+        # Areas should match within float precision (same boundary points).
+        assert np.isclose(
+            multi.geometry.iloc[0].area, single_poly.area, rtol=1e-9
+        )
+
+    def test_per_base_recovery(self, giii, kedw_wp, kpmd_wp, cruise_alt):
+        """return_destinations parallel to bases is honored."""
+        gdf = compute_multi_base_isochrone(
+            aircraft=giii,
+            bases=[kedw_wp, kpmd_wp],
+            return_destinations=[kedw_wp, kpmd_wp],
+            budget=2 * ureg.hour,
+            cruise_altitude=cruise_alt,
+            mode="return_safe",
+            wind_source=StillAirField(),
+            azimuth_resolution_deg=60.0,
+        )
+        assert gdf.iloc[0]["n_contributing_bases"] == 2
+
+    def test_validation_empty_bases(self, giii, cruise_alt):
+        with pytest.raises(HyPlanValueError, match="non-empty"):
+            compute_multi_base_isochrone(
+                aircraft=giii, bases=[], budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt,
+            )
+
+    def test_validation_unsupported_return_mode(
+        self, giii, kedw_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="return_mode"):
+            compute_multi_base_isochrone(
+                aircraft=giii, bases=[kedw_wp], budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt,
+                return_mode="best_base",
+            )
+
+    def test_validation_recovery_length_mismatch(
+        self, giii, kedw_wp, kpmd_wp, cruise_alt,
+    ):
+        with pytest.raises(HyPlanValueError, match="return_destinations"):
+            compute_multi_base_isochrone(
+                aircraft=giii,
+                bases=[kedw_wp, kpmd_wp],
+                return_destinations=[kedw_wp],  # length 1, bases length 2
+                budget=2 * ureg.hour,
+                cruise_altitude=cruise_alt,
+            )

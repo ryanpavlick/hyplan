@@ -9,6 +9,7 @@ from .engine import compute_flight_plan, expand_sequence
 from .isochrone import (
     compute_isochrone,
     compute_concentric_isochrones,
+    compute_multi_base_isochrone,
     compute_refuel_isochrone,
     evaluate_target_reachability,
     isochrone_polygon,
@@ -20,6 +21,7 @@ __all__ = [
     "compute_concentric_isochrones",
     "compute_flight_plan",
     "compute_isochrone",
+    "compute_multi_base_isochrone",
     "compute_refuel_isochrone",
     "create_flight_line_record",
     "evaluate_target_reachability",

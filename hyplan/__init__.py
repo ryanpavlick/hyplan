@@ -153,7 +153,7 @@ from .swath import generate_swath_polygon, calculate_swath_widths, analyze_swath
 from .flight_patterns import racetrack, rosette, polygon, sawtooth, spiral, flight_lines_to_waypoint_path, coordinated_line
 
 # Flight planning and optimization
-from .planning import compute_flight_plan, compute_isochrone, compute_concentric_isochrones, compute_refuel_isochrone, evaluate_target_reachability, isochrone_polygon, plot_isochrone
+from .planning import compute_flight_plan, compute_isochrone, compute_concentric_isochrones, compute_multi_base_isochrone, compute_refuel_isochrone, evaluate_target_reachability, isochrone_polygon, plot_isochrone
 
 # Wind fields
 from .winds import WindField, StillAirField, ConstantWindField, MERRA2WindField, GMAOWindField, GFSWindField, wind_field_from_plan
@@ -233,7 +233,7 @@ __all__ = [
     "WindField", "StillAirField", "ConstantWindField", "MERRA2WindField", "GMAOWindField", "GFSWindField", "wind_field_from_plan",
     # Flight planning
     "compute_flight_plan", "plot_flight_plan", "plot_altitude_trajectory",
-    "compute_isochrone", "compute_concentric_isochrones", "compute_refuel_isochrone", "evaluate_target_reachability", "isochrone_polygon", "plot_isochrone",
+    "compute_isochrone", "compute_concentric_isochrones", "compute_multi_base_isochrone", "compute_refuel_isochrone", "evaluate_target_reachability", "isochrone_polygon", "plot_isochrone",
     "build_graph", "greedy_optimize",
     # Plotting
     "map_flight_lines", "terrain_profile_along_track",
