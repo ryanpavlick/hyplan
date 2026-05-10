@@ -153,56 +153,56 @@ class Airport:
             self._elevation_ft = float(elevation_ft)
             self._elevation = (self._elevation_ft * ureg.foot).to(ureg.meter)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Airport {self._icao} - {self._name}>"
 
     @property
-    def longitude(self):
+    def longitude(self) -> float:
         """Longitude of the airport."""
-        return self._geometry.x
+        return float(self._geometry.x)
 
     @property
-    def latitude(self):
+    def latitude(self) -> float:
         """Latitude of the airport."""
-        return self._geometry.y
+        return float(self._geometry.y)
 
     @property
-    def geometry(self):
+    def geometry(self) -> Point:
         """Shapely Point geometry of the airport."""
         return self._geometry
 
     @property
-    def icao_code(self):
+    def icao_code(self) -> str:
         """ICAO code of the airport."""
-        return self._icao
+        return str(self._icao)
 
     @property
-    def iata_code(self):
+    def iata_code(self) -> str:
         """IATA code of the airport."""
-        return self._iata
+        return str(self._iata)
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Name of the airport."""
-        return self._name
+        return str(self._name)
 
     @property
-    def country(self):
+    def country(self) -> str:
         """ISO country code of the airport."""
-        return self._iso_country
+        return str(self._iso_country)
 
     @property
-    def municipality(self):
+    def municipality(self) -> str:
         """Municipality of the airport."""
-        return self._municipality
+        return str(self._municipality)
 
     @property
-    def elevation(self):
+    def elevation(self):  # type: ignore[no-untyped-def]  # pint Quantity | None
         """Elevation of the airport in meters. Returns None if not available."""
         return self._elevation
 
     @property
-    def elevation_ft(self):
+    def elevation_ft(self) -> float | None:
         """Elevation of the airport in feet. Returns None if not available."""
         return self._elevation_ft
 
@@ -390,7 +390,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     point = Point(lon, lat)
     # sindex.nearest returns (input_indices, tree_indices) arrays
     _, tree_idx = gdf_airports.sindex.nearest(point)
-    return gdf_airports.iloc[tree_idx[0]]['icao_code']  # type: ignore[no-any-return]
+    return str(gdf_airports.iloc[tree_idx[0]]['icao_code'])
 
 def find_nearest_airports(lat: float, lon: float, n: int = 5) -> list[str]:
     """Find the N nearest airports to a given latitude and longitude.
@@ -402,7 +402,7 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> list[str]:
     point = Point(lon, lat)
     distances = gdf_airports.geometry.distance(point)
     nearest_idxs = distances.nsmallest(n).index
-    return gdf_airports.loc[nearest_idxs, 'icao_code'].tolist()  # type: ignore[no-any-return]
+    return list(gdf_airports.loc[nearest_idxs, 'icao_code'])
 
 def airports_within_radius(
     lat: float, lon: float, radius: float, unit: str = "kilometers",

@@ -109,13 +109,13 @@ def check_lband_radar_exclusions(
         with open(geojson) as f:
             geojson = json.load(f)
 
-    if geojson.get("type") != "FeatureCollection":  # type: ignore[union-attr]
+    if geojson.get("type") != "FeatureCollection":  # type: ignore[union-attr]  # narrowed to dict via load above
         raise HyPlanValueError("geojson must be a GeoJSON FeatureCollection")
 
     # Parse exclusion zone polygons
     zone_names: list[str] = []
     zone_geoms: list[Polygon] = []
-    for feature in geojson.get("features", []):  # type: ignore[union-attr]
+    for feature in geojson.get("features", []):  # type: ignore[union-attr]  # narrowed to dict via load above
         geom = shape(feature["geometry"])
         if not isinstance(geom, Polygon):
             continue
@@ -311,9 +311,8 @@ class SidelookingRadar(Sensor):
         if self.look_direction == "left":
             # Swath on port side: negative angles (left of track)
             return -self.far_range_angle, -self.near_range_angle
-        else:
-            # Swath on starboard side: positive angles (right of track)
-            return self.near_range_angle, self.far_range_angle
+        # Swath on starboard side: positive angles (right of track)
+        return self.near_range_angle, self.far_range_angle
 
     def interferometric_line_spacing(self, altitude_agl: Quantity, overlap_fraction: float = 0.0) -> Quantity:
         """

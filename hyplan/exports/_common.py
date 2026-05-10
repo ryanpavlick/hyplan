@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 import math
 import warnings
+from typing import Any
 
 import geopandas as gpd
 import pandas as pd
@@ -134,7 +135,7 @@ def generate_wp_names(n: int, prefix: str = "H",
     return [f"{prefix[0]}{day:02d}{i:02d}" for i in range(n)]
 
 
-def _safe_float(val, default: float = 0.0, field: str = "") -> float:
+def _safe_float(val: Any, default: float = 0.0, field: str = "") -> float:
     """Convert a value to float, replacing None/NaN with *default*.
 
     Emits a warning when substituting a default so that missing data

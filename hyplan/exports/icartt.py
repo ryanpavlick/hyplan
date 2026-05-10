@@ -23,7 +23,7 @@ def to_icartt(
     institution: str = "",
     mission_name: str = "",
     flight_date: datetime.date | None = None,
-    aircraft=None,
+    aircraft: object = None,
     takeoff_time: datetime.datetime | None = None,
     interval_seconds: float = 60.0,
     revision: str = "RA",
@@ -61,7 +61,7 @@ def to_icartt(
                         + takeoff_time.minute * 60
                         + takeoff_time.second)
     else:
-        base_seconds = 0.0  # type: ignore[assignment]
+        base_seconds = 0.0  # type: ignore[assignment]  # int branch above narrowed type
 
     # Interpolate along the flight plan
     wps = extract_waypoints(plan)

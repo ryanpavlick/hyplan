@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from typing import Any
 
 from pint import Quantity
 
@@ -18,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 def wind_field_from_plan(
     source: str,
-    flight_sequence: list,
+    flight_sequence: list[Any],
     takeoff_time: datetime.datetime,
-    takeoff_airport=None,
-    return_airport=None,
+    takeoff_airport: Any = None,
+    return_airport: Any = None,
     flight_altitude: Quantity | None = None,
     margin_deg: float = 2.0,
     margin_hours: float = 2.0,
@@ -123,14 +124,13 @@ def wind_field_from_plan(
     if source_lower == "merra2":
         from .providers.merra2 import MERRA2WindField
         return MERRA2WindField(**bbox)
-    elif source_lower == "gmao":
+    if source_lower == "gmao":
         from .providers.gmao import GMAOWindField
         return GMAOWindField(**bbox)
-    elif source_lower == "gfs":
+    if source_lower == "gfs":
         from .providers.gfs import GFSWindField
         return GFSWindField(**bbox)
-    else:
-        raise HyPlanValueError(
-            f"Unknown wind source '{source}'. "
-            "Use 'merra2', 'gmao', 'gfs', or 'still_air'."
-        )
+    raise HyPlanValueError(
+        f"Unknown wind source '{source}'. "
+        "Use 'merra2', 'gmao', 'gfs', or 'still_air'."
+    )

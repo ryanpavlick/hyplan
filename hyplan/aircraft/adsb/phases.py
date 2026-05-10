@@ -8,7 +8,7 @@ architecture supports plugging in an LSTM model later.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -19,7 +19,7 @@ PhaseLabel = Literal["climb", "cruise", "descent", "ground", "level_off"]
 
 
 def label_phases(
-    flight,
+    flight: Any,
     *,
     backend: str = "heuristic",
     climb_vs_threshold_fpm: float = 300.0,
@@ -131,7 +131,7 @@ def _rolling_median(arr: np.ndarray, window: int) -> np.ndarray:
     shape = (n, window)
     strides = (padded.strides[0], padded.strides[0])
     windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
-    return np.median(windows, axis=1)  # type: ignore[no-any-return]
+    return np.median(windows, axis=1)  # type: ignore[no-any-return]  # numpy reduction returns Any
 
 
 def _refine_cruise(
@@ -190,7 +190,7 @@ def _merge_short_phases(
     return phases
 
 
-def _find_runs(arr: np.ndarray) -> list:
+def _find_runs(arr: np.ndarray) -> list[tuple[int, int, Any]]:
     """Find consecutive runs in *arr*.
 
     Returns list of ``(start_idx, end_idx, value)`` tuples where

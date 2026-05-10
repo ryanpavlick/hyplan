@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 import os
 import time
+from typing import Any
+
 import pandas as pd
 import requests
 
@@ -73,7 +75,7 @@ def _login() -> str:
 
 
 def fetch_appeears_timeseries(
-    coordinates: list[dict],
+    coordinates: list[dict[str, Any]],
     product: str = "ndvi",
     year_start: int = 2010,
     year_stop: int = 2022,

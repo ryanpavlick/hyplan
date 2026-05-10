@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -188,23 +188,22 @@ def resolve_wind_field(
         from ...winds import MERRA2WindField
 
         return MERRA2WindField(**kwargs)
-    elif wind_source == "gmao":
+    if wind_source == "gmao":
         from ...winds import GMAOWindField
 
         return GMAOWindField(**kwargs)
-    elif wind_source == "gfs":
+    if wind_source == "gfs":
         from ...winds import GFSWindField
 
         return GFSWindField(**kwargs)
-    else:
-        raise ValueError(
-            f"Unknown wind source: {wind_source!r}. "
-            f"Use 'still_air', 'merra2', 'gmao', 'gfs', or a WindField instance."
-        )
+    raise ValueError(
+        f"Unknown wind source: {wind_source!r}. "
+        f"Use 'still_air', 'merra2', 'gmao', 'gfs', or a WindField instance."
+    )
 
 
-def _to_datetime(ts) -> datetime.datetime:
+def _to_datetime(ts: Any) -> datetime.datetime:
     """Convert a numpy/pandas timestamp to a stdlib datetime."""
     if isinstance(ts, datetime.datetime):
         return ts
-    return pd.Timestamp(ts).to_pydatetime()  # type: ignore[no-any-return]
+    return pd.Timestamp(ts).to_pydatetime()  # type: ignore[no-any-return]  # pandas to_pydatetime returns Any

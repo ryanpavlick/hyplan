@@ -12,6 +12,8 @@ Provides Folium interactive maps (:func:`map_flight_lines`,
 
 from __future__ import annotations
 
+from typing import Any
+
 import folium
 import geopandas as gpd
 import numpy as np
@@ -94,7 +96,7 @@ def map_flight_lines(
     
         
         # Add the polyline for the flight line.
-        folium.PolyLine(
+        folium.PolyLine(  # type: ignore[no-untyped-call]  # folium has no stubs
             locations=coords,
             color=line_color,
             weight=line_weight,
@@ -106,7 +108,7 @@ def map_flight_lines(
     return m
 
 
-def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport, return_airport: Airport, flight_sequence: list) -> None:
+def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport, return_airport: Airport, flight_sequence: list[Any]) -> None:
     """
     Plot the computed flight plan on a 2D map with airports, waypoints, and flight lines.
 
@@ -298,7 +300,14 @@ _AIRSPACE_COLORS = {
 }
 
 
-def _plot_airspace_polygon(ax, airspace, color, alpha, transform, hatch=None):
+def _plot_airspace_polygon(
+    ax: Any,
+    airspace: Any,
+    color: str,
+    alpha: float,
+    transform: Any,
+    hatch: str | None = None,
+) -> None:
     """Plot a single airspace polygon on a cartopy axis."""
     polys = (
         list(airspace.geometry.geoms)
@@ -314,17 +323,17 @@ def _plot_airspace_polygon(ax, airspace, color, alpha, transform, hatch=None):
 
 
 def plot_airspace_map(
-    airspaces,
-    flight_lines=None,
-    conflicts=None,
-    near_misses=None,
-    inactive_airspaces=None,
-    title="Airspace Map",
-    figsize=(14, 10),
-    show_labels=True,
-    buffer_m=None,
-    extent=None,
-):
+    airspaces: list[Any],
+    flight_lines: list[Any] | None = None,
+    conflicts: list[Any] | None = None,
+    near_misses: list[Any] | None = None,
+    inactive_airspaces: list[Any] | None = None,
+    title: str = "Airspace Map",
+    figsize: tuple[float, float] = (14, 10),
+    show_labels: bool = True,
+    buffer_m: float | None = None,
+    extent: tuple[float, float, float, float] | None = None,
+) -> tuple[Any, Any]:
     """Plot airspaces, flight lines, conflicts, and near-misses on a cartopy map.
 
     Args:
@@ -347,7 +356,8 @@ def plot_airspace_map(
     import matplotlib.patches as mpatches
 
     transform = ccrs.PlateCarree()
-    fig, ax = plt.subplots(figsize=figsize, subplot_kw={"projection": transform})
+    fig, ax_ = plt.subplots(figsize=figsize, subplot_kw={"projection": transform})
+    ax: Any = ax_  # cartopy GeoAxes — exposes add_feature/set_extent/gridlines
 
     # Basemap
     ax.add_feature(cfeature.LAND, facecolor="#f0efe6")
@@ -363,7 +373,7 @@ def plot_airspace_map(
     near_misses = near_misses or []
 
     # Helper: check if a point is within the visible extent
-    def _in_extent(cx, cy):
+    def _in_extent(cx: float, cy: float) -> bool:
         if extent is None:
             return True
         return extent[0] <= cx <= extent[1] and extent[2] <= cy <= extent[3]
@@ -510,7 +520,8 @@ def plot_airspace_map(
     if extent is not None:
         ax.set_extent(extent, crs=transform)
     else:
-        all_lons, all_lats = [], []
+        all_lons: list[float] = []
+        all_lats: list[float] = []
         # Prefer flight lines for extent if available
         if flight_lines:
             for fl in flight_lines:
@@ -544,11 +555,11 @@ def plot_airspace_map(
 
 
 def plot_conflict_matrix(
-    flight_lines,
-    airspaces,
-    title="Conflict Matrix",
-    figsize=None,
-):
+    flight_lines: list[Any],
+    airspaces: list[Any],
+    title: str = "Conflict Matrix",
+    figsize: tuple[float, float] | None = None,
+) -> tuple[Any, Any]:
     """Plot a flight-line vs. airspace conflict matrix.
 
     Cells are colored: RED = full conflict, ORANGE = horizontal-only
@@ -592,8 +603,10 @@ def plot_conflict_matrix(
             else:
                 color = "#e0e0e0"  # gray
 
-            rect = plt.Rectangle((as_idx, fl_idx), 1, 1, facecolor=color,
-                                 edgecolor="white", linewidth=1.5)
+            rect = plt.Rectangle(  # type: ignore[attr-defined]  # mpl re-exports Rectangle
+                (as_idx, fl_idx), 1, 1, facecolor=color,
+                edgecolor="white", linewidth=1.5,
+            )
             ax.add_patch(rect)
             ax.text(as_idx + 0.5, fl_idx + 0.5,
                     f"{fl_alt_ft:,.0f}", ha="center", va="center",
@@ -619,12 +632,12 @@ def plot_conflict_matrix(
 
 
 def plot_vertical_profile(
-    flight_line,
-    airspaces,
-    dem_file=None,
-    title=None,
-    figsize=(12, 5),
-):
+    flight_line: Any,
+    airspaces: list[Any],
+    dem_file: str | None = None,
+    title: str | None = None,
+    figsize: tuple[float, float] = (12, 5),
+) -> tuple[Any, Any]:
     """Plot an altitude cross-section along a flight line showing airspace bands.
 
     X-axis is distance along the route (NM), Y-axis is altitude (ft MSL).
@@ -649,7 +662,7 @@ def plot_vertical_profile(
 
     # Compute total distance in NM
     coords = list(fl_geom.coords)
-    total_dist_nm = 0
+    total_dist_nm: float = 0.0
     for i in range(1, len(coords)):
         lon1, lat1 = coords[i - 1]
         lon2, lat2 = coords[i]
@@ -764,12 +777,12 @@ def plot_vertical_profile(
 
 
 def plot_oceanic_tracks(
-    tracks,
-    flight_lines=None,
-    title="Oceanic Tracks",
-    figsize=(16, 8),
-    projection=None,
-):
+    tracks: list[Any],
+    flight_lines: list[Any] | None = None,
+    title: str = "Oceanic Tracks",
+    figsize: tuple[float, float] = (16, 8),
+    projection: Any = None,
+) -> tuple[Any, Any]:
     """Plot NAT or PACOT oceanic tracks on a wide-projection cartopy map.
 
     Tracks are colored by direction: green=eastbound, blue=westbound.
@@ -792,7 +805,8 @@ def plot_oceanic_tracks(
         projection = ccrs.PlateCarree()
     transform = ccrs.PlateCarree()
 
-    fig, ax = plt.subplots(figsize=figsize, subplot_kw={"projection": projection})
+    fig, ax_ = plt.subplots(figsize=figsize, subplot_kw={"projection": projection})
+    ax: Any = ax_  # cartopy GeoAxes
 
     ax.add_feature(cfeature.LAND, facecolor="#f0efe6")
     ax.add_feature(cfeature.OCEAN, facecolor="#d6eaf8")
@@ -853,12 +867,12 @@ def plot_oceanic_tracks(
 
 
 def map_airspace(
-    airspaces,
-    flight_lines=None,
-    conflicts=None,
-    near_misses=None,
-    center=None,
-    zoom_start=8,
+    airspaces: list[Any],
+    flight_lines: list[Any] | None = None,
+    conflicts: list[Any] | None = None,
+    near_misses: list[Any] | None = None,
+    center: tuple[float, float] | None = None,
+    zoom_start: int = 8,
 ) -> folium.Map:
     """Create an interactive Folium map with airspace overlays.
 
@@ -967,7 +981,7 @@ def map_airspace(
             else:
                 color, dash = "green", None
 
-            folium.PolyLine(
+            folium.PolyLine(  # type: ignore[no-untyped-call]  # folium has no stubs
                 coords, color=color, weight=3,
                 dash_array=dash,
                 tooltip=fl.site_name,
@@ -1026,7 +1040,7 @@ def map_airspace(
 # Isochrone static (Cartopy) plotter
 # ---------------------------------------------------------------------------
 
-def _isochrone_add_basemap(ax, *, scale: str = "50m") -> None:
+def _isochrone_add_basemap(ax: Any, *, scale: str = "50m") -> None:
     """Vector Natural Earth basemap at the given resolution."""
     import cartopy.feature as cfeature
 
@@ -1051,8 +1065,14 @@ def _isochrone_add_basemap(ax, *, scale: str = "50m") -> None:
 
 
 def _isochrone_sample_wind_grid(
-    wind_field, *, extent, altitude, time, n_lat=9, n_lon=12,
-):
+    wind_field: Any,
+    *,
+    extent: tuple[float, float, float, float],
+    altitude: Any,
+    time: Any,
+    n_lat: int = 9,
+    n_lon: int = 12,
+) -> tuple[Any, Any, Any, Any]:
     """Sample a wind field on a regular lat/lon grid covering ``extent``."""
     minx, maxx, miny, maxy = extent
     lats = np.linspace(miny, maxy, n_lat)
@@ -1072,18 +1092,18 @@ def _isochrone_sample_wind_grid(
 
 
 def plot_isochrone_static(
-    layers,
+    layers: Any,
     *,
-    points=(),
+    points: Any = (),
     title: str = "",
     figsize: tuple[float, float] = (9, 9),
-    wind_field=None,
-    wind_altitude=None,
-    wind_time=None,
+    wind_field: Any = None,
+    wind_altitude: Any = None,
+    wind_time: Any = None,
     wind_caption: str | None = None,
     basemap_scale: str = "50m",
     show_refuel_markers: bool = True,
-):
+) -> tuple[Any, Any]:
     """Render one or more isochrones on a static Cartopy basemap.
 
     Companion to ``hyplan.plot_isochrone`` (the Folium / interactive
@@ -1132,7 +1152,7 @@ def plot_isochrone_static(
     plate = ccrs.PlateCarree()
 
     # Normalize input: gdf | sequence-of-tuples → list[(gdf, color, label)].
-    normalized: list = []
+    normalized: list[tuple[Any, Any, str]] = []
     if isinstance(layers, gpd.GeoDataFrame):
         single_gdf = layers
         if "budget_hr" in single_gdf.columns:
@@ -1183,9 +1203,9 @@ def plot_isochrone_static(
     fig, ax = plt.subplots(
         figsize=figsize, subplot_kw={"projection": plate},
     )
-    ax.set_extent(extent, crs=plate)  # type: ignore[attr-defined]
+    ax.set_extent(extent, crs=plate)  # type: ignore[attr-defined]  # cartopy GeoAxes not in matplotlib stubs
     _isochrone_add_basemap(ax, scale=basemap_scale)
-    gl = ax.gridlines(  # type: ignore[attr-defined]
+    gl = ax.gridlines(  # type: ignore[attr-defined]  # cartopy GeoAxes not in matplotlib stubs
         draw_labels=True, linewidth=0.4, color="0.4", alpha=0.35,
     )
     gl.top_labels = False

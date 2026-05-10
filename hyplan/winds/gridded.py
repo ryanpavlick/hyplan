@@ -5,8 +5,10 @@ from __future__ import annotations
 import datetime
 import logging
 from abc import abstractmethod
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from pint import Quantity
 
 from ..atmosphere import pressure_at
@@ -26,6 +28,17 @@ class _GriddedWindField(WindField):
 
     Subclasses must implement :meth:`_build_urls` and :meth:`_open_dataset`.
     """
+
+    # Slab data, populated by :meth:`_fetch_slab` from __init__.
+    # _times is Unix epoch seconds (float), converted from datetime64
+    # in _fetch_slab; _times_raw keeps the original datetime64 array.
+    _u_data: npt.NDArray[np.float64]
+    _v_data: npt.NDArray[np.float64]
+    _times: npt.NDArray[np.float64]
+    _times_raw: npt.NDArray[np.datetime64]
+    _levs: npt.NDArray[np.float64]
+    _lats: npt.NDArray[np.float64]
+    _lons: npt.NDArray[np.float64]
 
     def __init__(
         self,
@@ -49,25 +62,20 @@ class _GriddedWindField(WindField):
         self._pressure_min_hpa = pressure_min_hpa
         self._pressure_max_hpa = pressure_max_hpa
 
-        # Fetch the slab
-        self._u_data = None  # will be numpy array (time, lev, lat, lon)
-        self._v_data = None
-        self._times = None   # numpy array of datetime64
-        self._levs = None    # numpy array of pressure levels in hPa
-        self._lats = None    # numpy array
-        self._lons = None    # numpy array
-
+        # Slab attrs (_u_data, _v_data, _times, _levs, _lats, _lons)
+        # are populated by _fetch_slab; class-level annotations above
+        # tell mypy they're always-set NDArrays after construction.
         self._fetch_slab()
 
     @abstractmethod
     def _build_urls(self) -> list[str]:
         """Return one or more OPeNDAP dataset URLs covering the time range."""
 
-    def _open_dataset(self, url: str):
+    def _open_dataset(self, url: str) -> Any:
         """Open a single OPeNDAP dataset. Override for auth customization."""
         return self._xr.open_dataset(url, engine="netcdf4")
 
-    def _dim_names(self) -> dict:
+    def _dim_names(self) -> dict[str, str]:
         """Return dimension name mapping. Override if names differ."""
         return {"time": "time", "lev": "lev", "lat": "lat", "lon": "lon"}
 
@@ -185,7 +193,7 @@ class _GriddedWindField(WindField):
         self._levs = slab[lev_name].values.astype(float)
         time_vals = slab[time_name].values
         self._times_raw = time_vals
-        self._times = np.array(  # type: ignore[assignment]
+        self._times = np.array(
             [(t - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
              for t in time_vals],
             dtype=float,
@@ -194,18 +202,18 @@ class _GriddedWindField(WindField):
         self._v_data = slab[v_name].values.astype(float)
 
         # Ensure lat and lev are ascending for np.searchsorted
-        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:  # type: ignore[arg-type, index]
-            self._lats = self._lats[::-1]  # type: ignore[index]
-            self._u_data = self._u_data[:, :, ::-1, :]  # type: ignore[index]
-            self._v_data = self._v_data[:, :, ::-1, :]  # type: ignore[index]
-        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:  # type: ignore[arg-type, index]
-            self._levs = self._levs[::-1]  # type: ignore[index]
-            self._u_data = self._u_data[:, ::-1, :, :]  # type: ignore[index]
-            self._v_data = self._v_data[:, ::-1, :, :]  # type: ignore[index]
+        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:
+            self._lats = self._lats[::-1]
+            self._u_data = self._u_data[:, :, ::-1, :]
+            self._v_data = self._v_data[:, :, ::-1, :]
+        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:
+            self._levs = self._levs[::-1]
+            self._u_data = self._u_data[:, ::-1, :, :]
+            self._v_data = self._v_data[:, ::-1, :, :]
 
         logger.info(
             "Wind slab loaded: %d times, %d levels, %d lats, %d lons",
-            len(self._times), len(self._levs), len(self._lats), len(self._lons),  # type: ignore[arg-type]
+            len(self._times), len(self._levs), len(self._lats), len(self._lons),
         )
 
     def wind_at(
@@ -225,8 +233,8 @@ class _GriddedWindField(WindField):
             np.datetime64(t_naive) - np.datetime64("1970-01-01T00:00:00")
         ) / np.timedelta64(1, "s")
 
-        u = self._interp4d(self._u_data, t_epoch, p_hpa, lat, lon)  # type: ignore[arg-type]
-        v = self._interp4d(self._v_data, t_epoch, p_hpa, lat, lon)  # type: ignore[arg-type]
+        u = self._interp4d(self._u_data, t_epoch, p_hpa, lat, lon)
+        v = self._interp4d(self._v_data, t_epoch, p_hpa, lat, lon)
 
         return (
             float(u) * (ureg.meter / ureg.second),
@@ -243,10 +251,10 @@ class _GriddedWindField(WindField):
     ) -> float:
         """4-D linear interpolation on (time, level, lat, lon)."""
         # Clamp and find bounding indices for each dimension
-        ti = self._interp_weights(self._times, t)  # type: ignore[arg-type]
-        pi = self._interp_weights(self._levs, p)  # type: ignore[arg-type]
-        lai = self._interp_weights(self._lats, lat)  # type: ignore[arg-type]
-        loi = self._interp_weights(self._lons, lon)  # type: ignore[arg-type]
+        ti = self._interp_weights(self._times, t)
+        pi = self._interp_weights(self._levs, p)
+        lai = self._interp_weights(self._lats, lat)
+        loi = self._interp_weights(self._lons, lon)
 
         # Trilinear over the 16 corners of the 4D hypercube
         result = 0.0
@@ -260,7 +268,7 @@ class _GriddedWindField(WindField):
     @staticmethod
     def _interp_weights(
         coords: np.ndarray, value: float
-    ) -> list:
+    ) -> list[tuple[int, float]]:
         """Find bounding indices and weights for linear interpolation.
 
         Returns a list of (index, weight) tuples (1 or 2 entries).

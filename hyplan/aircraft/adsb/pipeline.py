@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import pandas as pd
 
@@ -167,7 +167,7 @@ def fit_aircraft_from_adsb(
     )
 
 
-def _flight_id(flight) -> str:
+def _flight_id(flight: Any) -> str:
     """Build a compact string identifier for a flight."""
     icao = getattr(flight, "icao24", "unknown")
     cs = getattr(flight, "callsign", "")
@@ -178,7 +178,7 @@ def _flight_id(flight) -> str:
     return f"{icao}_{cs}_{start}"
 
 
-def _infer_aircraft_type(flight) -> str | None:
+def _infer_aircraft_type(flight: Any) -> str | None:
     """Try to look up aircraft type from traffic's database."""
     try:
         from traffic.data import aircraft as ac_db

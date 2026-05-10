@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 import pandas as pd
+from typing import Any
 
 from ..exceptions import HyPlanValueError
 
@@ -19,8 +20,8 @@ def _heatmap_matrix(
     df: pd.DataFrame,
     *,
     ax: Axes | None = None,
-    cmap=None,
-    norm=None,
+    cmap: Any = None,
+    norm: Any = None,
     annot: bool = False,
     fmt: str = "",
     linewidths: float = 0.5,
@@ -80,7 +81,7 @@ def plot_doy_cloud_fraction(
     summary_df: pd.DataFrame,
     ax: Axes | None = None,
     show_std: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> Axes:
     """Line plot of DOY cloud fraction for each polygon.
 
@@ -147,7 +148,7 @@ def plot_cloud_fraction_spatial(
     for idx, (name, da) in enumerate(spatial_data.items()):
         ax = axes[idx // ncols, idx % ncols]
         im = ax.pcolormesh(
-            da.coords["longitude"], da.coords["latitude"], da.values,  # type: ignore[attr-defined]
+            da.coords["longitude"], da.coords["latitude"], da.values,  # type: ignore[attr-defined]  # xarray DataArray .coords typing
             cmap="viridis_r", vmin=0, vmax=1,
         )
         if overlay_gdf is not None:
@@ -247,7 +248,7 @@ def plot_cloud_forecast(
 
 
 def plot_yearly_cloud_fraction_heatmaps_with_visits(
-    cloud_data_df: pd.DataFrame, visit_tracker: dict[int, dict[str, list]], rest_days: dict[int, list],
+    cloud_data_df: pd.DataFrame, visit_tracker: dict[int, dict[str, list[int]]], rest_days: dict[int, list[int]],
     cloud_fraction_threshold: float = 0.10, exclude_weekends: bool = False,
     day_start: int = 1, day_stop: int = 365
 ) -> None:

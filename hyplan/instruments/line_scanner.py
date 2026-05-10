@@ -8,6 +8,8 @@ aircraft parameters.  Pre-configured sensors include NASA instruments
 """
 
 
+from typing import Any
+
 import numpy as np
 from pint import Quantity
 
@@ -94,7 +96,7 @@ class LineScanner(Sensor):
         """Calculate and return the frame period in seconds."""
         return (1.0 / self.frame_rate).to(ureg.s)
 
-    def swath_offset_angles(self) -> tuple:
+    def swath_offset_angles(self) -> tuple[float, float]:
         """Cross-track viewing angles for each swath edge, measured from nadir.
 
         Accounts for ``cross_track_tilt`` (rotation about the along-track axis).
@@ -138,15 +140,14 @@ class LineScanner(Sensor):
         if mode == "nadir":
             return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
-        elif mode == "average":
+        if mode == "average":
             return self.swath_width(altitude_agl) / self.across_track_pixels
 
-        elif mode == "edge":
+        if mode == "edge":
             edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
             return 2 * altitude_agl * np.tan(np.radians(edge_ifov / 2))
 
-        else:
-            return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
+        return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
         """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
@@ -155,15 +156,14 @@ class LineScanner(Sensor):
         if mode == "nadir":
             return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
 
-        elif mode == "average":
+        if mode == "average":
             return (self.across_track_pixels * gsd) / (2 * np.tan(np.radians(self.fov / 2)))
 
-        elif mode == "edge":
+        if mode == "edge":
             edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
             return gsd / (2 * np.tan(np.radians(edge_ifov / 2)))
 
-        else:
-            return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
+        return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
 
     def critical_ground_speed(self, altitude_agl: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
@@ -215,9 +215,15 @@ _SENSOR_SPECS = {
 }
 
 
-def _make_sensor_class(class_name, display_name, fov, across_track_pixels, frame_rate_hz):
+def _make_sensor_class(
+    class_name: str,
+    display_name: str,
+    fov: float,
+    across_track_pixels: int,
+    frame_rate_hz: float,
+) -> type:
     """Create a LineScanner subclass from spec parameters."""
-    def __init__(self) -> None:
+    def __init__(self: Any) -> None:
         LineScanner.__init__(
             self,
             name=display_name,
@@ -314,4 +320,4 @@ def create_sensor(sensor_type: str) -> Sensor:
 
     if sensor_type not in registry:
         raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
-    return registry[sensor_type]()  # type: ignore[no-any-return]
+    return registry[sensor_type]()  # type: ignore[no-any-return]  # registry value typed as Any

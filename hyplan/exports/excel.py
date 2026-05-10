@@ -40,7 +40,7 @@ __all__ = ["to_excel", "to_pilot_excel"]
 def to_excel(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    aircraft=None,
+    aircraft: object = None,
     takeoff_time: datetime.datetime | None = None,
     mission_name: str = "",
 ) -> None:
@@ -162,7 +162,7 @@ def to_excel(
 def to_pilot_excel(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    aircraft=None,
+    aircraft: object = None,
     takeoff_time: datetime.datetime | None = None,
     mission_name: str = "",
     coord_format: str = "DD MM",

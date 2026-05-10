@@ -95,17 +95,6 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   vs 130 kt for WB-57; 126 kt vs 130-140 for G-V).  Add docstring
   notes that this reflects light science fuel state at landing.
 
-### Type system
-
-* **mypy strict overrides on `hyplan.aircraft.wind_path` and
-  `hyplan.planning.isochrone`** — both were dropped in v1.6.0
-  because the strict-mode call-graph cascade introduces ~550
-  errors across 56 files (mostly mechanical: 222 `[type-arg]`,
-  196 `[no-untyped-def]`, 131 `[no-untyped-call]`).  Plan: tackle
-  in a dedicated cleanup pass — the work parallelizes well across
-  files and is mostly pattern-matching rather than thinking.
-  See the comment block in `pyproject.toml` `[tool.mypy]` section.
-
 ---
 
 ## Investigated, deferred to later

@@ -21,7 +21,7 @@ import time
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - type-checking only
     from skyfield.api import EarthSatellite
@@ -285,7 +285,7 @@ def compute_ground_track(
         radians=False,
     )
 
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
 
     gdf = gpd.GeoDataFrame(
         {
@@ -441,7 +441,7 @@ def compute_swath_footprint(
         star_lons = wrap_to_180(star_lons)
 
         # Build polygon: port side forward, starboard side reversed
-        poly_lons = np.concatenate([port_lons, star_lons[::-1]])  # type: ignore[index]
+        poly_lons = np.concatenate([port_lons, star_lons[::-1]])  # type: ignore[index]  # numpy slice index typing
         poly_lats = np.concatenate([port_lats, star_lats[::-1]])
 
         # Check for antimeridian crossing (large longitude jump)
@@ -620,7 +620,7 @@ def find_all_overpasses(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     max_sza: float | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> gpd.GeoDataFrame:
     """Find overpasses for multiple satellites and concatenate results.
 
@@ -644,7 +644,7 @@ def find_all_overpasses(
     for sat in satellites:
         try:
             gdf = find_overpasses(
-                sat, region, start_time, end_time,  # type: ignore[arg-type]
+                sat, region, start_time, end_time,  # type: ignore[arg-type]  # region union type vs concrete
                 max_sza=max_sza, **kwargs,
             )
             if not gdf.empty:
@@ -845,7 +845,7 @@ def _empty_overpass_gdf() -> gpd.GeoDataFrame:
     )
 
 
-def _merge_time_windows(timestamps, margin_s=120.0) -> list[tuple[datetime, datetime]]:
+def _merge_time_windows(timestamps: Any, margin_s: float = 120.0) -> list[tuple[datetime, datetime]]:
     """Merge nearby timestamps into contiguous time windows.
 
     Args:

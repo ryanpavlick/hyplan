@@ -80,6 +80,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Sequence
+from typing import Any
 
 import folium
 import geopandas as gpd
@@ -619,7 +620,7 @@ def compute_concentric_isochrones(
     )
     n_rays = len(azimuths)
 
-    all_rows: list[dict] = []
+    all_rows: list[dict[str, Any]] = []
     seed_d_lo = np.zeros(n_rays, dtype=float)
 
     for budget_min in budgets_min:
@@ -959,7 +960,7 @@ def evaluate_target_reachability(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> dict:
+) -> dict[str, Any]:
     """Evaluate reachability of a single target via direct + refuel paths.
 
     The complement of :func:`compute_refuel_isochrone`: rather than
@@ -1374,7 +1375,7 @@ def _unflyable_ray(
     start: Waypoint,
     mode: str,
     on_station_min: float,
-) -> dict:
+) -> dict[str, Any]:
     """Return a zero-distance row marking this ray as infeasible."""
     return {
         "azimuth_deg": azimuth_deg,
@@ -1579,7 +1580,7 @@ def _initial_ray_azimuths(
     return azimuths, effective
 
 
-def _boundary_chord_lengths_nmi(rows: list[dict]) -> np.ndarray:
+def _boundary_chord_lengths_nmi(rows: list[dict[str, Any]]) -> np.ndarray:
     """Geodesic chord lengths between adjacent solved boundary vertices."""
     if len(rows) < 2:
         empty: np.ndarray = np.array([], dtype=float)
@@ -1601,7 +1602,7 @@ def _mid_azimuth_deg(a: float, b: float) -> float:
 
 
 def _refined_azimuths_from_rows(
-    rows: list[dict],
+    rows: list[dict[str, Any]],
     *,
     spacing_nmi: float,
     max_rays: int,
@@ -1652,7 +1653,7 @@ def _solve_rays(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Solve all radial rays, vectorizing candidate geometry per iteration.
 
     ``seed_d_lo`` (when provided) sets the per-ray lower bound for the
@@ -1684,12 +1685,12 @@ def _solve_rays(
     active = np.ones(n_rays, dtype=bool)
     zero_unflyable = np.zeros(n_rays, dtype=bool)
 
-    def _evaluate_many(indices: np.ndarray, distances: np.ndarray) -> tuple[np.ndarray, list[dict]]:
+    def _evaluate_many(indices: np.ndarray, distances: np.ndarray) -> tuple[np.ndarray, list[dict[str, Any]]]:
         """Evaluate feasibility for selected ray indices."""
         az = azimuths_deg[indices]
         target_lats, target_lons = _target_coordinates(start, distances, az)
         totals = np.empty(len(indices), dtype=float)
-        diags: list[dict] = []
+        diags: list[dict[str, Any]] = []
 
         for j, idx in enumerate(indices):
             target = Waypoint(
@@ -1806,9 +1807,9 @@ def _solve_rays(
         d_hi[idx[~feasible_mid]] = d_mid[~feasible_mid]
 
     # Final diagnostics in original azimuth order.
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     final_indices = np.flatnonzero(active)
-    final_by_index: dict[int, dict] = {}
+    final_by_index: dict[int, dict[str, Any]] = {}
     if len(final_indices):
         _, final_diags = _evaluate_many(final_indices, d_lo[final_indices])
         final_by_index = dict(zip(final_indices.tolist(), final_diags))
@@ -1886,7 +1887,7 @@ def _solve_rays_with_strategy(
     effective_ray_strategy: str = "uniform",
     adaptive_spacing_nmi: float | None = None,
     max_adaptive_rays: int = _DEFAULT_MAX_ADAPTIVE_RAYS,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Solve rays, optionally refining boundary gaps adaptively."""
     azimuths = _unique_sorted_azimuths(azimuths_deg)
     rows = _solve_rays(
@@ -2204,7 +2205,7 @@ def _cruise_time_segmented(
     t_anchor: datetime.datetime,
     t_climb_min: float,
     n_segments: int,
-) -> dict:
+) -> dict[str, Any]:
     """Cruise-segment time + distance-weighted headwind under
     segmented or phase-midpoint sampling.
 
@@ -2234,7 +2235,7 @@ def _cruise_time_segmented(
     # ConstantWindField: a single (u, v) is enough — cache it and
     # still run the segmented math (each subsegment's groundspeed
     # solve is identical, so output is degenerate but correct).
-    constant_uv: tuple | None = None
+    constant_uv: tuple[Any, Any] | None = None
     if isinstance(wind_source, ConstantWindField):
         u_q, v_q = wind_source.wind_at(
             start_wp.latitude, start_wp.longitude,
@@ -2338,7 +2339,7 @@ def _prefilter_refuel_airports(
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> tuple[list[dict], list[dict], list[dict]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Coerce refuel airports and prefilter per template.
 
     Returns ``(eligibility, evaluated, unreachable)`` where ``eligibility``
@@ -2354,9 +2355,9 @@ def _prefilter_refuel_airports(
     """
     cycle_cap_min = sortie_budget_min - reserve_min
 
-    eligibility: list[dict] = []
-    evaluated: list[dict] = []
-    unreachable: list[dict] = []
+    eligibility: list[dict[str, Any]] = []
+    evaluated: list[dict[str, Any]] = []
+    unreachable: list[dict[str, Any]] = []
 
     later_anchor = start_time + datetime.timedelta(minutes=sortie_budget_min)
 
@@ -2467,13 +2468,13 @@ def _evaluate_refuel_at_d(
     flight_day_budget_min: float,
     reserve_min: float,
     refuel_time_min: float,
-    refuel_eligibility: list[dict],
+    refuel_eligibility: list[dict[str, Any]],
     template: str | None = None,
     refuel_label: str | None = None,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Evaluate one or more refuel itinerary templates at the given target.
 
     Returns the list of feasible itineraries sorted by extension
@@ -2486,7 +2487,7 @@ def _evaluate_refuel_at_d(
     monotonic bracket/binary-search boundary before the best route is selected.
     """
     cycle_cap_min = sortie_budget_min - reserve_min
-    candidates: list[dict] = []
+    candidates: list[dict[str, Any]] = []
 
     # --- direct: start → target → recovery -------------------------------
     t_st, hw_st = _leg_time(
@@ -2712,13 +2713,13 @@ def _solve_rays_refuel(
     flight_day_budget_min: float,
     reserve_min: float,
     refuel_time_min: float,
-    refuel_eligibility: list[dict],
+    refuel_eligibility: list[dict[str, Any]],
     azimuths_deg: np.ndarray,
     distance_tolerance_nmi: float,
     wind_sampling: str = "cruise_midpoint",
     wind_sample_spacing: Quantity = 100 * ureg.nautical_mile,
     max_wind_samples_per_leg: int = _DEFAULT_MAX_WIND_SAMPLES,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Per-ray expanding-bracket + binary-search across three itinerary
     templates.  Scalar per ray (no cross-ray vectorization) — simpler than
     the plain solver, and acceptable since each probe already calls
@@ -2757,10 +2758,10 @@ def _solve_rays_refuel(
         if elig["return_ok"]:
             specs.append(("return_refuel", elig["label"]))
 
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     for az in azimuths_deg:
         az_f = float(az)
-        solved: list[tuple[float, dict]] = []
+        solved: list[tuple[float, dict[str, Any]]] = []
 
         for template, refuel_label in specs:
             def _evaluate_spec(
@@ -2768,7 +2769,7 @@ def _solve_rays_refuel(
                 *,
                 template: str = template,
                 refuel_label: str | None = refuel_label,
-            ) -> dict | None:
+            ) -> dict[str, Any] | None:
                 target = _make_target(az_f, d_nmi)
                 cands = _evaluate_refuel_at_d(
                     aircraft=aircraft,
@@ -2872,7 +2873,7 @@ def _unflyable_refuel_row(
     azimuth_deg: float,
     start: Waypoint,
     on_station_min: float,
-) -> dict:
+) -> dict[str, Any]:
     nan = float("nan")
     return {
         "azimuth_deg": azimuth_deg,

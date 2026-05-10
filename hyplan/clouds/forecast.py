@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 
 import geopandas as gpd
 import pandas as pd
@@ -74,7 +75,7 @@ class OpenMeteoCloudForecast:
                 f"got {forecast_days}."
             )
 
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
 
         for _, row in polygons.iterrows():
             name = row["Name"]
@@ -86,7 +87,7 @@ class OpenMeteoCloudForecast:
                 name, lat, lon,
             )
 
-            params: dict = {
+            params: dict[str, Any] = {
                 "latitude": lat,
                 "longitude": lon,
                 "forecast_days": forecast_days,
@@ -156,7 +157,7 @@ def fetch_cloud_forecast(
     source: str = "openmeteo",
     forecast_days: int = 7,
     hourly: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> pd.DataFrame:
     """Fetch cloud cover forecasts for flight planning.
 
@@ -178,8 +179,7 @@ def fetch_cloud_forecast(
         return OpenMeteoCloudForecast(**kwargs).fetch(
             gdf, forecast_days=forecast_days, hourly=hourly, models=models,
         )
-    else:
-        raise HyPlanValueError(
-            f"Unknown cloud forecast source: {source!r}. "
-            f"Currently only 'openmeteo' is supported."
-        )
+    raise HyPlanValueError(
+        f"Unknown cloud forecast source: {source!r}. "
+        f"Currently only 'openmeteo' is supported."
+    )

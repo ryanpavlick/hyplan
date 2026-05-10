@@ -23,6 +23,7 @@ import datetime
 import json
 import logging
 import os
+from typing import Any
 
 from shapely.geometry import box, mapping, shape, Polygon
 
@@ -92,19 +93,19 @@ class Campaign:
             self._bounds = bounds
         else:
             self._polygon = polygon
-            self._bounds = polygon.bounds  # type: ignore[union-attr]
+            self._bounds = polygon.bounds  # type: ignore[union-attr]  # polygon non-None in this branch
 
         self._name = name
         self._country = country
 
         # Airspace data
         self._airspaces: list[Airspace] | None = None
-        self._raw_airspace_items: list[dict] | None = None
+        self._raw_airspace_items: list[dict[str, Any]] | None = None
         self._fetch_timestamp: str | None = None
 
         # Flight lines and groups
         self._flight_lines: dict[str, FlightLine] = {}  # id -> FlightLine
-        self._groups: list[dict] = []
+        self._groups: list[dict[str, Any]] = []
         self._line_counter: int = 0
         self._group_counter: int = 0
 
@@ -155,7 +156,7 @@ class Campaign:
         return list(self._flight_lines.keys())
 
     @property
-    def groups(self) -> list[dict]:
+    def groups(self) -> list[dict[str, Any]]:
         return list(self._groups)
 
     @property
@@ -211,7 +212,7 @@ class Campaign:
 
     def check_conflicts(
         self,
-        flight_lines=None,
+        flight_lines: list[FlightLine] | None = None,
     ) -> list[AirspaceConflict]:
         """Check flight lines against this campaign's airspaces.
 
@@ -239,7 +240,7 @@ class Campaign:
         lines: list[FlightLine],
         group_name: str | None = None,
         group_type: str = "manual",
-        generation_params: dict | None = None,
+        generation_params: dict[str, Any] | None = None,
     ) -> str:
         """Add flight lines to the campaign and create a group.
 
@@ -272,7 +273,7 @@ class Campaign:
             "line_ids": line_ids,
         }
         if generation_params is not None:
-            group["generation"] = generation_params  # type: ignore[assignment]
+            group["generation"] = generation_params  # type: ignore[assignment]  # heterogeneous dict value type
 
         self._groups.append(group)
         self._revision += 1
@@ -357,7 +358,7 @@ class Campaign:
         self._updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
         logger.info("Replaced flight line '%s' in campaign '%s'", line_id, self._name)
 
-    def flight_lines_to_geojson(self) -> dict:
+    def flight_lines_to_geojson(self) -> dict[str, Any]:
         """Return all campaign flight lines as a GeoJSON FeatureCollection.
 
         Each feature includes the stable ``line_id`` in both the feature
@@ -471,7 +472,7 @@ class Campaign:
             raise HyPlanValueError(f"Pattern '{pattern_id}' not found.")
         return self._patterns[pattern_id]
 
-    def patterns_to_geojson(self) -> dict:
+    def patterns_to_geojson(self) -> dict[str, Any]:
         """Return waypoint-based patterns as one GeoJSON FeatureCollection for
         display.
 
@@ -777,19 +778,19 @@ class Campaign:
 # ---------------------------------------------------------------------------
 
 
-def _write_json(filepath: str, data: dict) -> None:
+def _write_json(filepath: str, data: dict[str, Any]) -> None:
     """Write a dict to a JSON file with nice formatting."""
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2)
 
 
-def _read_json(filepath: str) -> dict:
+def _read_json(filepath: str) -> dict[str, Any]:
     """Read a JSON file and return the parsed dict."""
     with open(filepath) as f:
-        return json.load(f)  # type: ignore[no-any-return]
+        return json.load(f)  # type: ignore[no-any-return]  # json.load returns Any
 
 
-def _flight_line_from_geojson(feature: dict) -> FlightLine:
+def _flight_line_from_geojson(feature: dict[str, Any]) -> FlightLine:
     """Reconstruct a FlightLine from a GeoJSON Feature dict."""
     coords = feature["geometry"]["coordinates"]
     props = feature.get("properties", {})

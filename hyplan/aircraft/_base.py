@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Literal, TYPE_CHECKING, Union
+from typing import Any, Literal, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from ..winds.base import WindField
@@ -372,7 +372,7 @@ class ClimbPlan:
     use :meth:`Aircraft.step_climb` instead of plain :meth:`_climb`.
     """
 
-    pauses: list = field(default_factory=list)
+    pauses: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -1389,7 +1389,7 @@ class Aircraft:
         t_anchor: datetime.datetime | None = None,
         climb_plan: ClimbPlan | str | None = "auto",
         n_samples: int = 20,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate time from takeoff to the first waypoint.
 
         Builds the path via :meth:`_hybrid_path` with ``phase="climb"``
@@ -1442,7 +1442,7 @@ class Aircraft:
         wind_source: WindField | None = None,
         t_anchor: datetime.datetime | None = None,
         n_samples: int = 20,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate time from the last waypoint back to the airport.
 
         Builds the path via :meth:`_hybrid_path` with ``phase="descent"``
@@ -1726,7 +1726,7 @@ class Aircraft:
         phase: str = "cruise",
         climb_plan: ClimbPlan | None = None,
         n_samples: int = 20,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Solve a hybrid horizontal-Dubins + integrated-vertical path.
 
         The horizontal layout comes from a 2D Dubins solver.  Turn
@@ -1777,8 +1777,8 @@ class Aircraft:
         so a headwind shrinks the climb's forward distance and a
         tailwind extends it.
         """
-        start_alt = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
-        end_alt = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]
+        start_alt = start_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]  # altitude_msl Optional but required here
+        end_alt = end_waypoint.altitude_msl.to(ureg.feet)  # type: ignore[union-attr]  # altitude_msl Optional but required here
 
         if cruise_altitude is None:
             # Default: the higher of the two endpoints.
@@ -1856,7 +1856,7 @@ class Aircraft:
         # so the level-off pauses contribute hold time without forward
         # distance.  Each pause will be emitted as its own
         # ``"loiter"``-tagged phase in the phases dict below.
-        climb_pauses_in_range: list = []
+        climb_pauses_in_range: list[Any] = []
         if (
             climb_plan is not None
             and phase == "climb"
@@ -1989,7 +1989,7 @@ class Aircraft:
         total_time_min = climb_time_min + cruise_time_min + descent_time_min
 
         # Build phases dict with explicit per-phase geometry.
-        phases: dict = {}
+        phases: dict[str, Any] = {}
         cum_dist_m = 0.0
         cum_time_min = 0.0
         nmi_to_m = 1852.0
@@ -2231,7 +2231,7 @@ class Aircraft:
         phase: str = "cruise",
         climb_plan: ClimbPlan | None = None,
         n_samples: int = 20,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate time to fly between two waypoints.
 
         Hybrid 2D Dubins (horizontal layout) + integrated vertical

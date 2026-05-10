@@ -6,6 +6,7 @@ import datetime
 import logging
 import os
 import tempfile
+from typing import Any
 
 import numpy as np
 
@@ -44,7 +45,7 @@ def _gfs_filter_url(
     cycle: int,
     fhr: int,
     variables: tuple[str, ...],
-    levels_hpa: list,
+    levels_hpa: list[float],
     lat_min: float,
     lat_max: float,
     lon_min: float,
@@ -105,12 +106,12 @@ class GFSWindField(_GriddedWindField):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         cycle_date: datetime.date | None = None,
         cycle_hour: int | None = None,
         forecast_hour: int | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         self._cycle_date = cycle_date
         self._cycle_hour = cycle_hour
         self._forecast_hour = forecast_hour
@@ -236,7 +237,7 @@ class GFSWindField(_GriddedWindField):
 
             t_np = np.datetime64(valid_dt)
             self._times_raw = np.array([t_np], dtype="datetime64[ns]")
-            self._times = np.array([  # type: ignore[assignment]
+            self._times = np.array([
                 (t_np - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
             ], dtype=float)
 
@@ -246,16 +247,16 @@ class GFSWindField(_GriddedWindField):
                 os.unlink(tmpfile)
 
         # Ensure lat and lev are ascending for np.searchsorted
-        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:  # type: ignore[arg-type, index]
-            self._lats = self._lats[::-1]  # type: ignore[index]
-            self._u_data = self._u_data[:, :, ::-1, :]  # type: ignore[index]
-            self._v_data = self._v_data[:, :, ::-1, :]  # type: ignore[index]
-        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:  # type: ignore[arg-type, index]
-            self._levs = self._levs[::-1]  # type: ignore[index]
-            self._u_data = self._u_data[:, ::-1, :, :]  # type: ignore[index]
-            self._v_data = self._v_data[:, ::-1, :, :]  # type: ignore[index]
+        if len(self._lats) > 1 and self._lats[0] > self._lats[-1]:
+            self._lats = self._lats[::-1]
+            self._u_data = self._u_data[:, :, ::-1, :]
+            self._v_data = self._v_data[:, :, ::-1, :]
+        if len(self._levs) > 1 and self._levs[0] > self._levs[-1]:
+            self._levs = self._levs[::-1]
+            self._u_data = self._u_data[:, ::-1, :, :]
+            self._v_data = self._v_data[:, ::-1, :, :]
 
         logger.info(
             "GFS wind slab loaded: %d levels, %d lats, %d lons",
-            len(self._levs), len(self._lats), len(self._lons),  # type: ignore[arg-type]
+            len(self._levs), len(self._lats), len(self._lons),
         )

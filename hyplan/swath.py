@@ -8,6 +8,7 @@ accounting for cross-track field of view and altitude.
 
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import simplekml
 from shapely.geometry import Polygon
@@ -124,11 +125,11 @@ def generate_swath_polygon(
     # Each swath edge angle is measured from nadir.
     # Negative = port side, positive = starboard side.
     # Map each edge to (azimuth_array, tilt_from_nadir).
-    def _edge_ray(angle):
+    def _edge_ray(angle: float) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        tilt_arr = np.full_like(boresight, abs(angle) if angle < 0 else angle, dtype=float)
         if angle < 0:
-            return az_port, abs(angle)
-        else:
-            return az_starboard, angle
+            return az_port, tilt_arr
+        return az_starboard, tilt_arr
 
     edge1_az, edge1_tilt = _edge_ray(port_angle)
     edge2_az, edge2_tilt = _edge_ray(starboard_angle)
@@ -152,7 +153,7 @@ def generate_swath_polygon(
     swath_lons = np.concatenate([edge1_lons, edge2_lons[::-1]])
     return Polygon(zip(swath_lons, swath_lats))
 
-def calculate_swath_widths(swath_polygon: Polygon) -> dict:
+def calculate_swath_widths(swath_polygon: Polygon) -> dict[str, float]:
     """Calculate the minimum, mean, and maximum width of a swath polygon.
 
     Args:
@@ -262,7 +263,7 @@ def analyze_swath_gaps_overlaps(
     return pd.DataFrame(rows)
 
 
-def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name="Swath Polygon") -> None:
+def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name: str = "Swath Polygon") -> None:
     """
     Export a Shapely polygon to a KML file with an unfilled style using simplekml.
 

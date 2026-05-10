@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .exceptions import HyPlanRuntimeError
 
 
-def _require_earthaccess():
+def _require_earthaccess() -> Any:
     """Import and return earthaccess, raising a clear error if not installed."""
     try:
         import earthaccess
@@ -18,7 +20,7 @@ def _require_earthaccess():
         )
 
 
-def _earthdata_login():
+def _earthdata_login() -> Any:
     """Authenticate with NASA Earthdata using ``earthaccess``.
 
     Tries strategies in order: ``EARTHDATA_TOKEN`` env var, ``~/.netrc``,

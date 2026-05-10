@@ -19,6 +19,7 @@ becomes a more direct read.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -34,7 +35,7 @@ _FPM_PER_MPS = 60.0 / _M_PER_FT  # 196.85...
 # Source units: ``GPS MSL Altitude``/``WGS84 Altitude`` in m, ``Pressure
 # Altitude`` and ``Radar Altitude`` in ft, speeds in m/s, angles in deg,
 # pressures in hPa, temperatures in °C.  Lat/lon are deg.
-_COLUMN_MAP = {
+_COLUMN_MAP: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "Latitude": ("latitude", lambda x: x),
     "Longitude": ("longitude", lambda x: x),
     "Pressure Altitude": ("altitude", lambda x: x),  # ft, kept as-is

@@ -101,8 +101,13 @@ def solve_trochoid(
     return best
 
 
-def _try_analytical(Va, vw, w, t2pi, del1, del2, phi1, phi2,
-                    xt10, yt10, xt20, yt20, E, G, cos_w, sin_w, best):
+def _try_analytical(
+    Va: float, vw: float, w: float, t2pi: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, yt10: float, xt20: float, yt20: float,
+    E: float, G: float, cos_w: float, sin_w: float,
+    best: dict[str, Any],
+) -> None:
     for k in range(-3, 3):
         phi_diff = math.fmod(phi1 - phi2, _M2PI) + 2 * k * math.pi
         denom = xt20 - xt10 + vw * phi_diff / (del2 * w)
@@ -128,11 +133,16 @@ def _try_analytical(Va, vw, w, t2pi, del1, del2, phi1, phi2,
                          xt10, yt10, xt20, yt20, cos_w, sin_w, t2pi, vw)
 
 
-def _try_numerical(Va, vw, w, t2pi, del1, del2, phi1, phi2,
-                   xt10, yt10, xt20, yt20, E, G, cos_w, sin_w, best):
+def _try_numerical(
+    Va: float, vw: float, w: float, t2pi: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, yt10: float, xt20: float, yt20: float,
+    E: float, G: float, cos_w: float, sin_w: float,
+    best: dict[str, Any],
+) -> None:
     step = 2 * t2pi / 60.0  # 60 guesses instead of 360 (6x faster)
     for k in range(-2, 2):   # k range -2..1 instead of -3..2
-        roots = []
+        roots: list[float] = []
         t_guess = 0.0
         while t_guess < 2 * t2pi:
             t1_nr = _newton_raphson(
@@ -146,7 +156,7 @@ def _try_numerical(Va, vw, w, t2pi, del1, del2, phi1, phi2,
 
         # Deduplicate
         roots.sort()
-        unique = []
+        unique: list[float] = []
         for r in roots:
             if not unique or abs(r - unique[-1]) > _EPS:
                 unique.append(r)
@@ -177,8 +187,12 @@ def _try_numerical(Va, vw, w, t2pi, del1, del2, phi1, phi2,
                              xt10, yt10, xt20, yt20, cos_w, sin_w, t2pi, vw)
 
 
-def _compute_total_time(Va, vw, w, t2pi, del1, del2, phi1, phi2,
-                        xt10, yt10, xt20, yt20, t1, t2, alpha):
+def _compute_total_time(
+    Va: float, vw: float, w: float, t2pi: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, yt10: float, xt20: float, yt20: float,
+    t1: float, t2: float, alpha: float | None,
+) -> float | None:
     x1t2 = (Va / (del1 * w)) * math.sin(del1 * w * t1 + phi1) + vw * t1 + xt10
     y1t2 = -(Va / (del1 * w)) * math.cos(del1 * w * t1 + phi1) + yt10
     x2t2 = (Va / (del2 * w)) * math.sin(del2 * w * t2 + phi2) + vw * t2 + xt20
@@ -200,8 +214,12 @@ def _compute_total_time(Va, vw, w, t2pi, del1, del2, phi1, phi2,
     return tBeta + (t2pi - t2)
 
 
-def _update_best(best, T, t1, t2, del1, del2, phi1, phi2,
-                 xt10, yt10, xt20, yt20, cos_w, sin_w, t2pi, vw):
+def _update_best(
+    best: dict[str, Any], T: float, t1: float, t2: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, yt10: float, xt20: float, yt20: float,
+    cos_w: float, sin_w: float, t2pi: float, vw: float,
+) -> None:
     best["total_time"] = T
     best["t1"] = t1
     best["t2"] = t2
@@ -219,8 +237,12 @@ def _update_best(best, T, t1, t2, del1, del2, phi1, phi2,
     best["vw"] = vw
 
 
-def _func(t, k, Va, vw, w, del1, del2, phi1, phi2,
-          xt10, xt20, yt10, yt20, E, G):
+def _func(
+    t: float, k: int, Va: float, vw: float, w: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, xt20: float, yt10: float, yt20: float,
+    E: float, G: float,
+) -> float:
     phi_diff = math.fmod(phi1 - phi2, _M2PI) + 2 * k * math.pi
     F = Va * ((xt20 - xt10) + vw * (
         t * (del1 / del2 - 1) + phi_diff / (del2 * w)))
@@ -228,8 +250,12 @@ def _func(t, k, Va, vw, w, del1, del2, phi1, phi2,
     return E * math.cos(angle) + F * math.sin(angle) - G
 
 
-def _deriv_func(t, k, Va, vw, w, del1, del2, phi1, phi2,
-                xt10, xt20, yt10, yt20, E, G):
+def _deriv_func(
+    t: float, k: int, Va: float, vw: float, w: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, xt20: float, yt10: float, yt20: float,
+    E: float, G: float,
+) -> float:
     phi_diff = math.fmod(phi1 - phi2, _M2PI) + 2 * k * math.pi
     F = Va * ((xt20 - xt10) + vw * (
         t * (del1 / del2 - 1) + phi_diff / (del2 * w)))
@@ -240,8 +266,12 @@ def _deriv_func(t, k, Va, vw, w, del1, del2, phi1, phi2,
             + Va * vw * (del1 / del2 - 1) * sin_val)
 
 
-def _newton_raphson(x, k, Va, vw, w, del1, del2, phi1, phi2,
-                    xt10, xt20, yt10, yt20, E, G, max_iter=100):
+def _newton_raphson(
+    x: float, k: int, Va: float, vw: float, w: float,
+    del1: float, del2: float, phi1: float, phi2: float,
+    xt10: float, xt20: float, yt10: float, yt20: float,
+    E: float, G: float, max_iter: int = 100,
+) -> float:
     for _ in range(max_iter):
         fp = _deriv_func(x, k, Va, vw, w, del1, del2, phi1, phi2,
                          xt10, xt20, yt10, yt20, E, G)
@@ -350,7 +380,10 @@ def sample_trochoid(sol: dict[Any, Any], time_offset: float,
 # unknowns (t₁, t₂, t₃) follow by simple algebra.
 
 
-def _ccc_p_q(family, x0_w, y0_w, xf_w, yf_w, alpha1, alpha4, A, B):
+def _ccc_p_q(
+    family: str, x0_w: float, y0_w: float, xf_w: float, yf_w: float,
+    alpha1: float, alpha4: float, A: float, B: float,
+) -> tuple[float, float]:
     """Compute the (P, Q) constants of equation (*) for a CCC family.
 
     LRL has δ₁ = δ₃ = +1 (outer arcs left); RLR has δ₁ = δ₃ = -1.  The
@@ -373,7 +406,10 @@ def _ccc_p_q(family, x0_w, y0_w, xf_w, yf_w, alpha1, alpha4, A, B):
     return P, Q
 
 
-def _ccc_newton(P, Q, A, B, gamma0, max_iter=40, tol=1e-10):
+def _ccc_newton(
+    P: float, Q: float, A: float, B: float, gamma0: float,
+    max_iter: int = 40, tol: float = 1e-10,
+) -> float | None:
     """Root-find equation (*) for γ via Newton-Raphson from initial guess γ₀.
 
     Returns the converged γ, or None if Newton failed to converge or
@@ -396,8 +432,11 @@ def _ccc_newton(P, Q, A, B, gamma0, max_iter=40, tol=1e-10):
 
 
 def _try_ccc_trochoid_family(
-    qi, qf, rhomin, airspeed, wind_u, wind_v, family,
-):
+    qi: np.ndarray[Any, np.dtype[Any]],
+    qf: np.ndarray[Any, np.dtype[Any]],
+    rhomin: float, airspeed: float, wind_u: float, wind_v: float,
+    family: str,
+) -> dict[str, Any] | None:
     """Solve the trochoidal CCC path for one family (``"LRL"`` or ``"RLR"``).
 
     Returns a solution dict (see :func:`solve_ccc_trochoid`) on success,
@@ -439,7 +478,7 @@ def _try_ccc_trochoid_family(
         # +2π to β: delta1 -= 2π, delta3 += 2π.
         sign1, sign3 = -1.0, +1.0
 
-    best = None
+    best: dict[str, Any] | None = None
 
     # Enumerate 2π·k₄ wraps of α₄ to cover paths where one or both
     # arcs traverse close to a full revolution (typical when wind is
@@ -515,7 +554,7 @@ def solve_ccc_trochoid(
     airspeed: float,
     wind_u: float,
     wind_v: float,
-):
+) -> dict[str, Any] | None:
     """Solve for the time-optimal trochoidal CCC path (LRL or RLR).
 
     Args:
@@ -534,7 +573,7 @@ def solve_ccc_trochoid(
         :func:`sample_ccc_trochoid`.  Returns ``None`` when no valid
         single-revolution CCC solution exists in either family.
     """
-    best = None
+    best: dict[str, Any] | None = None
     for family in ("LRL", "RLR"):
         cand = _try_ccc_trochoid_family(
             qi, qf, rhomin, airspeed, wind_u, wind_v, family,
@@ -546,7 +585,10 @@ def solve_ccc_trochoid(
     return best
 
 
-def _arc_endpoint(x_s, y_s, alpha_s, delta, tau, A, omega, vw):
+def _arc_endpoint(
+    x_s: float, y_s: float, alpha_s: float, delta: float,
+    tau: float, A: float, omega: float, vw: float,
+) -> tuple[float, float, float]:
     """Position and heading at relative time ``tau`` along a trochoid arc.
 
     Computed in the wind-aligned frame, with wind along +x at speed

@@ -13,6 +13,7 @@ import logging
 import math
 
 import numpy as np
+import pandas as pd
 
 from .._base import TasSchedule, VerticalProfile
 from ...units import ureg
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def fit_schedules(
-    airdata_df,
+    airdata_df: pd.DataFrame,
     *,
     altitude_bin_ft: float = 2000.0,
     min_points_per_bin: int = 5,
@@ -134,7 +135,7 @@ def fit_schedules(
 
 
 def _fit_phase(
-    phase_df,
+    phase_df: pd.DataFrame,
     phase_name: str,
     *,
     altitude_bin_ft: float,
@@ -333,8 +334,7 @@ def _rdp_core(points: np.ndarray, epsilon: float) -> np.ndarray:
         left = _rdp_core(points[: max_idx + 1], epsilon)
         right = _rdp_core(points[max_idx:], epsilon)
         return np.vstack([left[:-1], right])
-    else:
-        return np.array([points[0], points[-1]])
+    return np.array([points[0], points[-1]])
 
 
 # ------------------------------------------------------------------
@@ -351,7 +351,7 @@ def _reject_outliers(arr: np.ndarray, sigma: float) -> np.ndarray:
     if std < 1e-9:
         return arr
     mask = np.abs(arr - med) <= sigma * std
-    return arr[mask]  # type: ignore[no-any-return]
+    return arr[mask]  # type: ignore[no-any-return]  # numpy fancy-indexing returns Any
 
 
 def _compute_metrics(
@@ -385,7 +385,7 @@ def _compute_metrics(
     )
 
 
-def _estimate_approach_speed(descent_df, ground_altitude_ft: float = 3000.0) -> float:
+def _estimate_approach_speed(descent_df: pd.DataFrame | None, ground_altitude_ft: float = 3000.0) -> float:
     """Estimate approach speed from low-altitude descent observations."""
     if descent_df is None or len(descent_df) == 0:
         return 130.0  # conservative default

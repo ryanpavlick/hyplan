@@ -51,7 +51,7 @@ __all__ = [
 _LIGHT_SPEED_MPS = 299_792_458.0
 
 
-def _as_quantity(value, unit: str, label: str) -> Quantity:
+def _as_quantity(value: object, unit: str, label: str) -> Quantity:
     """Normalize *value* to a quantity in *unit*."""
     if isinstance(value, Quantity):
         return value.to(unit)

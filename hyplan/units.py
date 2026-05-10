@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from pint import UnitRegistry, Quantity, set_application_registry
 from .exceptions import HyPlanValueError
 
@@ -8,7 +10,7 @@ ureg: UnitRegistry = UnitRegistry()
 set_application_registry(ureg)
 
 
-def magnitude_in(value, unit) -> float:
+def magnitude_in(value: Any, unit: str) -> float:
     """Return ``value`` as a float in ``unit``.
 
     Accepts either a :class:`pint.Quantity` (which is converted to ``unit``
@@ -22,7 +24,7 @@ def magnitude_in(value, unit) -> float:
     shorter, and doesn't need this helper.
     """
     if hasattr(value, "to"):
-        return value.m_as(unit)  # type: ignore[no-any-return]
+        return float(value.m_as(unit))
     return float(value)
 
 def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
@@ -48,7 +50,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
     
     q = distance * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
+    return float(q.m_as(units[to_unit]))
 
 def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
     """
@@ -73,7 +75,7 @@ def convert_speed(speed: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = speed * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
+    return float(q.m_as(units[to_unit]))
 
 def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
     """
@@ -97,7 +99,7 @@ def convert_angle(angle: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = angle * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
+    return float(q.m_as(units[to_unit]))
 
 def convert_time(time: float, from_unit: str, to_unit: str) -> float:
     """
@@ -121,7 +123,7 @@ def convert_time(time: float, from_unit: str, to_unit: str) -> float:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
 
     q = time * units[from_unit]
-    return q.m_as(units[to_unit])  # type: ignore[no-any-return]
+    return float(q.m_as(units[to_unit]))
 
 def altitude_to_flight_level(altitude: float | int | Quantity, pressure: float | int | Quantity = 1013.25) -> str:
     """

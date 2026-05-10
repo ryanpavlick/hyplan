@@ -10,8 +10,10 @@ planning.
 from __future__ import annotations
 
 import warnings
+from typing import Any
 from pint import Quantity, Unit
 import numpy as np
+import numpy.typing as npt
 from shapely.geometry import Polygon as ShapelyPolygon
 
 from ..terrain import ray_terrain_intersection
@@ -89,23 +91,23 @@ class FrameCamera(Sensor):
     def ifov_x(self) -> float:
         """Instantaneous field of view per pixel across-track (microradians)."""
         pixel_size = self.sensor_width / self.resolution_x
-        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6  # type: ignore[no-any-return]
+        return float((pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6)
 
     @property
     def ifov_y(self) -> float:
         """Instantaneous field of view per pixel along-track (microradians)."""
         pixel_size = self.sensor_height / self.resolution_y
-        return (pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6  # type: ignore[no-any-return]
+        return float((pixel_size / self.focal_length).to_reduced_units().magnitude * 1e6)
 
     @property
     def fov_x(self) -> float:
         """Calculate horizontal Field of View (FoV) in degrees."""
-        return 2 * np.degrees(np.arctan((self.sensor_width / (2 * self.focal_length)).magnitude))  # type: ignore[no-any-return]
+        return float(2 * np.degrees(np.arctan((self.sensor_width / (2 * self.focal_length)).magnitude)))
 
     @property
     def fov_y(self) -> float:
         """Calculate vertical Field of View (FoV) in degrees."""
-        return 2 * np.degrees(np.arctan((self.sensor_height / (2 * self.focal_length)).magnitude))  # type: ignore[no-any-return]
+        return float(2 * np.degrees(np.arctan((self.sensor_height / (2 * self.focal_length)).magnitude)))
 
     def ground_sample_distance(self, altitude_agl: Quantity) -> dict[str, Quantity]:
         """
@@ -269,7 +271,7 @@ class FrameCamera(Sensor):
             Scale denominator N such that the image scale is 1:N.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
-        return (altitude_agl / self.focal_length).to_reduced_units().magnitude  # type: ignore[no-any-return]
+        return float((altitude_agl / self.focal_length).to_reduced_units().magnitude)
 
     def altitude_for_scale(self, scale_denominator: float) -> Quantity:
         """Altitude AGL required for a given image scale (1:N).
@@ -389,7 +391,7 @@ class FrameCamera(Sensor):
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         baseline = self.trigger_distance(altitude_agl, overlap_pct)
-        return (baseline / altitude_agl).to_reduced_units().magnitude  # type: ignore[no-any-return]
+        return float((baseline / altitude_agl).to_reduced_units().magnitude)
 
     def vertical_accuracy(self, altitude_agl: Quantity, overlap_pct: float = 80.0,
                           sigma_parallax: float = 0.5) -> Quantity:
@@ -445,17 +447,21 @@ class FrameCamera(Sensor):
         return value.to(expected_unit)
 
     @staticmethod
-    def _corner_rotation(tilt_angle, tilt_direction, cross_track_offset):
+    def _corner_rotation(
+        tilt_angle: float,
+        tilt_direction: float,
+        cross_track_offset: float,
+    ) -> npt.NDArray[np.float64]:
         """Build the rotation matrix for camera corner ray projection."""
-        def _rx(a):
+        def _rx(a: float) -> npt.NDArray[np.float64]:
             c, s = np.cos(a), np.sin(a)
             return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
 
-        def _ry(a):
+        def _ry(a: float) -> npt.NDArray[np.float64]:
             c, s = np.cos(a), np.sin(a)
             return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
-        def _rz(a):
+        def _rz(a: float) -> npt.NDArray[np.float64]:
             c, s = np.cos(a), np.sin(a)
             return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
@@ -551,7 +557,7 @@ class FrameCamera(Sensor):
                 azimuth_cam = np.degrees(np.arctan2(ray[0], ray[1]))
                 azimuth_geo = (heading + azimuth_cam) % 360
                 clat, clon, celev = ray_terrain_intersection(
-                    lat, lon, altitude_msl,  # type: ignore[arg-type]
+                    lat, lon, altitude_msl,  # type: ignore[arg-type]  # pint Quantity vs concrete float
                     np.array([azimuth_geo]), np.array([90.0 - depression]),
                     dem_file=dem_file,
                 )
@@ -570,7 +576,7 @@ class FrameCamera(Sensor):
 
         return ShapelyPolygon(coords) if len(coords) >= 3 else ShapelyPolygon()
 
-    def ground_footprint_corners(self, *args, **kwargs):
+    def ground_footprint_corners(self, *args: Any, **kwargs: Any) -> ShapelyPolygon:
         """Deprecated — use :meth:`ground_footprint` instead."""
         warnings.warn(
             "ground_footprint_corners() is deprecated, use ground_footprint()",
@@ -629,7 +635,7 @@ class FrameCamera(Sensor):
             azimuth_geo = (heading + azimuth_cam) % 360
 
             clat, clon, calt = ray_terrain_intersection(
-                lat, lon, altitude_msl,  # type: ignore[arg-type]
+                lat, lon, altitude_msl,  # type: ignore[arg-type]  # pint Quantity vs concrete float
                 np.array([azimuth_geo]), np.array([90.0 - depression]),
                 dem_file=dem_file,
             )
@@ -653,7 +659,7 @@ class MultiCameraRig(Sensor):
             ``"dy"`` (Quantity, longitudinal offset, default 0 m).
     """
 
-    def __init__(self, name: str, cameras: list[dict]):
+    def __init__(self, name: str, cameras: list[dict[str, Any]]) -> None:
         super().__init__(name)
         self.cameras = []
         for entry in cameras:
@@ -665,7 +671,7 @@ class MultiCameraRig(Sensor):
             }
             self.cameras.append(cam)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.cameras)
 
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
@@ -683,7 +689,7 @@ class MultiCameraRig(Sensor):
             "y": min((g["y"] for g in gsds), key=lambda v: v.magnitude),
         }
 
-    def combined_footprints(self, altitude_agl: Quantity) -> list[dict]:
+    def combined_footprints(self, altitude_agl: Quantity) -> list[dict[str, Any]]:
         """Per-camera footprint dicts with labels."""
         result = []
         for entry in self.cameras:
@@ -702,7 +708,7 @@ class MultiCameraRig(Sensor):
         altitude_msl: float | None = None,
         heading: float = 0.0,
         dem_file: str | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Project each camera's sensor perimeter onto the ground.
 
         Uses each camera's tilt geometry and the ``dx`` cross-track
@@ -728,7 +734,7 @@ class MultiCameraRig(Sensor):
             result.append({"label": entry["label"], "polygon": poly})
         return result
 
-    def ground_footprint_corners(self, *args, **kwargs):
+    def ground_footprint_corners(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """Deprecated — use :meth:`ground_footprint` instead."""
         warnings.warn(
             "ground_footprint_corners() is deprecated, use ground_footprint()",
@@ -737,7 +743,7 @@ class MultiCameraRig(Sensor):
         )
         return self.ground_footprint(*args, **kwargs)
 
-    def stereo_pairs(self) -> list[tuple[dict, dict]]:
+    def stereo_pairs(self) -> list[tuple[dict[str, Any], dict[str, Any]]]:
         """Find camera pairs with opposing tilt directions (~180° apart).
 
         Returns a list of (forward_entry, aft_entry) tuples.
@@ -761,7 +767,7 @@ class MultiCameraRig(Sensor):
                     break
         return pairs
 
-    def composite_base_height_ratio(self, altitude_agl: Quantity) -> list[dict]:
+    def composite_base_height_ratio(self, altitude_agl: Quantity) -> list[dict[str, Any]]:
         """B/H ratio for each stereo pair.
 
         For convergent stereo, ``B/H = tan(θ_fwd) + tan(θ_aft)``

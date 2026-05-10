@@ -92,12 +92,14 @@ ignore_missing_imports = true
 module = "pint.*"
 follow_imports = "skip"
 
-# Strict mypy was previously enabled on hyplan.aircraft.wind_path and
-# hyplan.planning.isochrone, but the v1.6.0 working-tree changes broke
-# the strict-mode call-graph cleanliness those overrides depended on.
-# Deferred to v1.6.1: re-enable strict overrides + complete the type
-# cleanup (~550 errors across 56 files; type-arg, no-untyped-def,
-# no-untyped-call categories dominate).
+# Strict mypy on the two newest planner modules.
+[[tool.mypy.overrides]]
+module = "hyplan.planning.isochrone"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "hyplan.aircraft.wind_path"
+strict = true
 
 [tool.coverage.run]
 source = ["hyplan"]

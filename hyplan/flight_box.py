@@ -11,6 +11,8 @@ and ``LVIS``.  The utility :func:`altitude_msl_for_pixel_size` is provided
 for ``LineScanner`` users who need to derive flight altitude from a target GSD.
 """
 
+from typing import Any
+
 import numpy as np
 import pymap3d.vincenty
 from collections.abc import Callable
@@ -37,7 +39,7 @@ from .exceptions import HyPlanValueError
 logger = logging.getLogger(__name__)
 
 
-def _validate_inputs(**kwargs) -> None:
+def _validate_inputs(**kwargs: Any) -> None:
     """
     Validate input parameters for various operations using dynamic rules.
 
@@ -423,7 +425,7 @@ def box_around_polygon_terrain(
     safe_altitude_m   = safe_altitude.m_as("meter")
     min_line_length_m = min_line_length.m_as("meter")
     mode3             = target_agl is not None
-    target_agl_m      = target_agl.m_as("meter") if mode3 else None  # type: ignore[union-attr]
+    target_agl_m      = target_agl.m_as("meter") if mode3 else None  # type: ignore[union-attr]  # mode3 guards Optional Quantity
 
     dem_file = _generate_box_dem(lat0, lon0, azimuth, box_length_m, box_width_m)
 
@@ -551,7 +553,7 @@ def _generate_box_dem(
             corner_lons.append(lon)
 
     return terrain.generate_demfile(
-        np.array(corner_lats), wrap_to_180(np.array(corner_lons))  # type: ignore[arg-type]
+        np.array(corner_lats), wrap_to_180(np.array(corner_lons))  # type: ignore[arg-type]  # ndarray vs concrete dtype
     )
 
 
@@ -577,10 +579,10 @@ def _rectangle_polygon(
     half_len = box_length_m / 2
     half_wid = box_width_m / 2
 
-    def _corner(along_az, across_az):
+    def _corner(along_az: float, across_az: float) -> tuple[float, float]:
         lat, lon = pymap3d.vincenty.vreckon(lat0, lon0, half_len, along_az)
         lat, lon = pymap3d.vincenty.vreckon(float(lat), float(lon), half_wid, across_az)
-        return (wrap_to_180(float(lon)), float(lat))
+        return (float(wrap_to_180(float(lon))), float(lat))
 
     return Polygon([
         _corner(azimuth,       azimuth + 90),
@@ -681,7 +683,7 @@ def box_around_center_terrain(
         azimuth=azimuth,
         polygon=polygon,
     )
-    azimuth = wrap_to_180(azimuth)  # type: ignore[assignment]
+    azimuth = wrap_to_180(azimuth)  # type: ignore[assignment]  # ndarray return vs float
 
     rect = _rectangle_polygon(
         lat0, lon0, azimuth,

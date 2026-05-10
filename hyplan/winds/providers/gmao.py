@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 import numpy as np
 
@@ -36,7 +37,7 @@ class GMAOWindField(_GriddedWindField):
         url: Override the default GEOS-FP OPeNDAP URL.
     """
 
-    def __init__(self, *args, url: str | None = None, **kwargs):
+    def __init__(self, *args: Any, url: str | None = None, **kwargs: Any) -> None:
         self._base_url = url or _GMAO_FP_URL
         super().__init__(*args, **kwargs)
 
@@ -44,7 +45,7 @@ class GMAOWindField(_GriddedWindField):
         """Single URL — GEOS-FP is served as a single aggregated dataset."""
         return [self._base_url]
 
-    def _open_dataset(self, url: str):
+    def _open_dataset(self, url: str) -> Any:
         """Open via pydap engine with decode_times=False.
 
         The NCCS OPeNDAP server's time variable uses a non-standard
@@ -80,4 +81,4 @@ class GMAOWindField(_GriddedWindField):
         frac_ns = ((raw_time - 1 - np.floor(raw_time - 1)) * 86400e9).astype(
             "timedelta64[ns]"
         )
-        return _GMAO_EPOCH + days + frac_ns  # type: ignore[no-any-return]
+        return _GMAO_EPOCH + days + frac_ns  # type: ignore[no-any-return]  # numpy datetime64 arithmetic returns Any

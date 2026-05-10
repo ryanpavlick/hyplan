@@ -22,11 +22,15 @@ for planets and Earth satellites generator. Astrophysics Source Code
 Library, ascl:1907.024.
 """
 
+from typing import Any
+
 import pandas as pd
 import numpy as np
+import numpy.typing as npt
 from datetime import datetime, date, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 from .exceptions import HyPlanValueError
 
 
@@ -48,7 +52,7 @@ _SKYFIELD_SUN = None
 _SKYFIELD_EARTH = None
 
 
-def _skyfield_handles():
+def _skyfield_handles() -> tuple[Any, Any, Any]:
     """Lazily load and cache the Skyfield timescale and DE421 ephemeris."""
     global _SKYFIELD_TS, _SKYFIELD_SUN, _SKYFIELD_EARTH
     if _SKYFIELD_TS is None:
@@ -64,7 +68,7 @@ def _skyfield_handles():
     return _SKYFIELD_TS, _SKYFIELD_EARTH, _SKYFIELD_SUN
 
 
-def _to_utc_datetimes(dt):
+def _to_utc_datetimes(dt: Any) -> list[datetime]:
     """Coerce ``dt`` (scalar / list / ndarray / DatetimeIndex) to a list of
     timezone-aware UTC ``datetime`` objects suitable for ``ts.from_datetimes``.
     """
@@ -99,7 +103,13 @@ def _to_utc_datetimes(dt):
     return [dt]
 
 
-def sunpos(dt, latitude, longitude, elevation=0, radians=False):
+def sunpos(
+    dt: Any,
+    latitude: Any,
+    longitude: Any,
+    elevation: Any = 0,
+    radians: bool = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Compute solar azimuth and zenith via Skyfield.
 
     Drop-in replacement for ``sunposition.sunpos`` covering the input shapes
@@ -289,7 +299,7 @@ def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: fl
     """
     ts = pd.DatetimeIndex([dt], tz='UTC')
     azimuth, zenith, *_ = sunpos(ts, latitude, longitude, elevation=elevation)
-    return azimuth[0]  # type: ignore[no-any-return]
+    return float(azimuth[0])
 
 
 def solar_position_increments(
@@ -387,7 +397,7 @@ def plot_solar_positions(df_positions: pd.DataFrame) -> None:
 
     # Rotate x-axis labels and set the frequency of the labels
     plt.xticks(rotation=45)
-    ax1.xaxis.set_major_locator(plt.MaxNLocator(nbins=10))
+    ax1.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=10))
 
     # Create a second y-axis
     ax2 = ax1.twinx()

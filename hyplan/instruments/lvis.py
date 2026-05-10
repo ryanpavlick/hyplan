@@ -22,6 +22,8 @@ doi:10.1016/S0924-2716(99)00002-7
 """
 
 
+from typing import Any
+
 import numpy as np
 import pymap3d.vincenty
 from dataclasses import dataclass
@@ -148,7 +150,7 @@ class LVIS(Sensor):
         """Half-scan angle in degrees (default ≈5.71 deg)."""
         return self._scan_half_angle_deg
 
-    def swath_offset_angles(self) -> tuple:
+    def swath_offset_angles(self) -> tuple[float, float]:
         """Cross-track viewing angles for each swath edge (nadir-looking).
 
         Returns:
@@ -194,7 +196,7 @@ class LVIS(Sensor):
         """
         esw = self.effective_swath_width(altitude_agl, speed).magnitude
         alt_m = altitude_agl.m_as(ureg.meter)
-        return 2 * np.degrees(np.arctan(esw / (2 * alt_m)))  # type: ignore[no-any-return]
+        return float(2 * np.degrees(np.arctan(esw / (2 * alt_m))))
 
     def footprint_diameter(self, altitude_agl: Quantity) -> Quantity:
         """Laser footprint diameter on the ground for the configured lens.
@@ -275,7 +277,7 @@ class LVIS(Sensor):
         """
         ms = self.swath_width(altitude_agl).magnitude
         esw = self.effective_swath_width(altitude_agl, speed).magnitude
-        return esw >= ms * self._CONTIGUITY_TOLERANCE  # type: ignore[no-any-return]
+        return bool(esw >= ms * self._CONTIGUITY_TOLERANCE)
 
     # ------------------------------------------------------------------
     # Along-track sampling
@@ -306,7 +308,7 @@ class LVIS(Sensor):
         """
         spacing = self.along_track_spacing(speed).magnitude
         fp = self.footprint_diameter(altitude_agl).magnitude
-        return spacing <= fp * (1.0 + 1e-9)  # type: ignore[no-any-return]
+        return bool(spacing <= fp * (1.0 + 1e-9))
 
     # ------------------------------------------------------------------
     # Point density
@@ -445,7 +447,7 @@ class LVIS(Sensor):
 
         return alt_m * ureg.meter
 
-    def summary(self, altitude_agl: Quantity, speed: Quantity) -> dict:
+    def summary(self, altitude_agl: Quantity, speed: Quantity) -> dict[str, Any]:
         """Compute all LVIS coverage parameters for a given flight configuration.
 
         Args:
@@ -527,7 +529,7 @@ class LVIS(Sensor):
         heading: float,
         scan_angle_deg: float = 0.0,
         dem_file: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Compute laser footprint on terrain at a single scan position.
 
         Uses :func:`~hyplan.terrain.ray_terrain_intersection` to find the
@@ -551,7 +553,7 @@ class LVIS(Sensor):
 
         # Auto-generate DEM once for both ray intersection and normal lookup
         if dem_file is None:
-            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]
+            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]  # pint Quantity vs concrete float
 
         # --- Ray direction ---
         if scan_angle_deg == 0.0:
@@ -651,7 +653,7 @@ class LVIS(Sensor):
         speed: Quantity,
         dem_file: str | None = None,
         n_scan_positions: int = 21,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Compute effective swath across the scan, accounting for terrain.
 
         Discretises the scan into *n_scan_positions* angles from port to
@@ -702,7 +704,7 @@ class LVIS(Sensor):
 
         # Auto-generate DEM if needed
         if dem_file is None:
-            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]
+            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]  # pint Quantity vs concrete float
 
         gnd_lats, gnd_lons, gnd_alts = ray_terrain_intersection(
             lat0, lon0, altitude_msl, az=azimuths, tilt=tilts,
@@ -874,7 +876,7 @@ class LVIS(Sensor):
         heading: float,
         speed: Quantity,
         dem_file: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Coverage summary with terrain correction at a specific position.
 
         Combines the flat-earth :meth:`summary` output with terrain-aware
@@ -895,7 +897,7 @@ class LVIS(Sensor):
         from ..terrain import get_elevations, generate_demfile
 
         if dem_file is None:
-            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]
+            dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]  # pint Quantity vs concrete float
 
         # Ground elevation at nadir
         gnd_elev = float(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeGuard
 import logging
 import warnings
 
@@ -119,7 +119,7 @@ class Waypoint:
         )
         return Waypoint(
             latitude=round(new_lat, 6),
-            longitude=round(wrap_to_180(new_lon), 6),  # type: ignore[arg-type]
+            longitude=round(wrap_to_180(new_lon), 6),  # type: ignore[arg-type]  # pymap3d returns ndarray, round expects float
             heading=self.heading,
             altitude_msl=self.altitude_msl,
             name=self.name,
@@ -181,7 +181,7 @@ class Waypoint:
         )
 
 
-def is_waypoint(obj) -> bool:
+def is_waypoint(obj: Any) -> TypeGuard[Waypoint]:
     """Check if an object is a Waypoint (duck-type safe for notebook reloads)."""
     return (
         hasattr(obj, 'latitude') and hasattr(obj, 'longitude')
@@ -190,15 +190,19 @@ def is_waypoint(obj) -> bool:
     )
 
 
-def _validate_quantity(value, dimensionality, default_unit, field_name):
+def _validate_quantity(
+    value: Quantity | float | None,
+    dimensionality: str,
+    default_unit: Any,
+    field_name: str,
+) -> Quantity | None:
     """Validate and convert an optional pint Quantity field."""
     if value is None:
         return None
-    elif isinstance(value, (int, float)):
+    if isinstance(value, (int, float)):
         return float(value) * default_unit
-    elif hasattr(value, 'units') and value.check(dimensionality):
+    if hasattr(value, 'units') and value.check(dimensionality):
         return value.to(default_unit)
-    else:
-        raise HyPlanTypeError(
-            f"{field_name} must be None, a float ({default_unit}), or a pint Quantity with {dimensionality} units"
-        )
+    raise HyPlanTypeError(
+        f"{field_name} must be None, a float ({default_unit}), or a pint Quantity with {dimensionality} units"
+    )

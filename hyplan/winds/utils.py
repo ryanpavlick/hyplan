@@ -7,7 +7,7 @@ and wind-correction functions for flight planning.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from pint import Quantity
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 # Lazy import helpers
 # ---------------------------------------------------------------------------
 
-def _require_xarray():
+def _require_xarray() -> Any:
     """Import and return xarray, raising a clear error if not installed."""
     try:
         import xarray as xr
@@ -35,7 +35,7 @@ def _require_xarray():
         )
 
 
-def _earthdata_login():
+def _earthdata_login() -> Any:
     """Authenticate with NASA Earthdata using ``earthaccess``.
 
     Tries strategies in order: ``EARTHDATA_TOKEN`` env var, ``~/.netrc``,
@@ -171,7 +171,7 @@ def _wind_factor_from_uv(
             f"Headwind {headwind_mps:.1f} m/s exceeds TAS "
             f"{tas_mps:.1f} m/s on heading {heading_deg:.0f}°; unflyable."
         )
-    return tas_mps / ground_speed_mps  # type: ignore[no-any-return]
+    return float(tas_mps / ground_speed_mps)
 
 
 def _resolve_wind_factor(
@@ -187,13 +187,13 @@ def _resolve_wind_factor(
 ) -> float:
     """Compute wind factor using wind_source (preferred) or legacy scalars."""
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]  # segment_time may be None; provider handles it
         return _wind_factor_from_uv(tas, heading_deg, u, v)
     return _wind_factor(tas, heading_deg, wind_speed, wind_direction)
 
 
 _MPS = ureg.meter / ureg.second
-_TRACK_HOLD_CACHE: dict[tuple[float, float, float, float], dict] = {}
+_TRACK_HOLD_CACHE: dict[tuple[float, float, float, float], dict[str, Any]] = {}
 _TRACK_HOLD_CACHE_MAX = 4096
 
 
@@ -202,7 +202,7 @@ def _track_hold_solution_from_uv(
     track_deg: float,
     u: Quantity,
     v: Quantity,
-) -> dict:
+) -> dict[str, Any]:
     """Solve for crab angle and groundspeed when holding a desired ground track.
 
     Given TAS, desired track, and wind (u, v), computes the heading the
@@ -295,7 +295,7 @@ def _resolve_track_hold_solution(
     wind_source: WindField | None,
     wind_speed: Quantity | None,
     wind_direction: float | None,
-) -> dict:
+) -> dict[str, Any]:
     """Compute track-hold solution using wind_source or legacy scalars.
 
     Returns a no-wind identity solution when no wind is provided.
@@ -304,7 +304,7 @@ def _resolve_track_hold_solution(
     v = None
 
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]  # segment_time may be None; provider handles it
     elif wind_speed is not None and wind_speed.magnitude != 0 and wind_direction is not None:
         ws = wind_speed.m_as(ureg.meter / ureg.second)
         wind_from_rad = np.radians(wind_direction)
@@ -343,7 +343,7 @@ def _resolve_wind_uv(
     flight-line crab-angle solver.
     """
     if wind_source is not None:
-        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]
+        u, v = wind_source.wind_at(lat, lon, altitude, segment_time)  # type: ignore[arg-type]  # segment_time may be None; provider handles it
         u_mps = u.m_as(ureg.meter / ureg.second)
         v_mps = v.m_as(ureg.meter / ureg.second)
         if abs(u_mps) < 1e-10 and abs(v_mps) < 1e-10:

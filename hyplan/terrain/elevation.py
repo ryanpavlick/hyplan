@@ -48,7 +48,7 @@ def get_elevations_from_grid(
     xs = np.clip(xs, 0, raster.shape[1] - 1)
     ys = np.clip(ys, 0, raster.shape[0] - 1)
 
-    return raster[ys, xs]  # type: ignore[no-any-return]
+    return raster[ys, xs]  # type: ignore[no-any-return]  # numpy fancy-indexing returns Any
 
 
 def get_min_max_elevations(dem_file: str) -> tuple[float, float]:
@@ -65,7 +65,7 @@ def get_min_max_elevations(dem_file: str) -> tuple[float, float]:
     return dem.raster_min, dem.raster_max
 
 
-def terrain_elevation_along_track(flight_line, dem_file: str,
+def terrain_elevation_along_track(flight_line: Any, dem_file: str,
                                    precision: float = 100.0) -> dict[Any, Any]:
     """Min, mean, and max terrain elevation (m MSL) along a flight line's nadir track.
 
@@ -89,7 +89,7 @@ def terrain_elevation_along_track(flight_line, dem_file: str,
     }
 
 
-def terrain_aspect_azimuth(polygon, dem_file: str | None = None) -> float:
+def terrain_aspect_azimuth(polygon: Any, dem_file: str | None = None) -> float:
     """Dominant terrain gradient direction (degrees from north) for a polygon.
 
     Computes the dominant downslope azimuth from the DEM gradient over the

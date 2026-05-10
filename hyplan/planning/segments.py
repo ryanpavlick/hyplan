@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+import datetime
 
 import numpy as np
 from pint import Quantity
@@ -16,6 +17,8 @@ from ..flight_line import FlightLine
 from ..winds.utils import _resolve_wind_factor
 
 if TYPE_CHECKING:
+    from shapely.geometry import LineString
+
     from ..winds import WindField
 
 
@@ -33,8 +36,8 @@ def _direct_segment_record(
     wind_speed: Quantity | None = None,
     wind_direction: float | None = None,
     wind_source: WindField | None = None,
-    segment_time=None,
-) -> dict:
+    segment_time: "datetime.datetime | None" = None,
+) -> dict[str, Any]:
     """Create a direct great-circle segment between two pattern waypoints.
 
     Used for densely-spaced pattern waypoints (spiral, polygon, etc.) where
@@ -103,7 +106,7 @@ def loiter_orbit_geometry(
     n_points: int = 72,
     *,
     phase: str = "cruise",
-):
+) -> "LineString":
     """Closed ground-track polygon for a Waypoint loiter (right-hand orbit).
 
     Computes the turn radius from the aircraft's per-phase bank angle
@@ -197,7 +200,7 @@ def loiter_orbit_geometry(
     return LineString([(p.x, p.y) for p in pts_wgs])
 
 
-def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> dict:
+def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> dict[str, Any]:
     """
     Create a flight line record dictionary for inclusion in a flight plan DataFrame.
 
@@ -229,10 +232,10 @@ def create_flight_line_record(flight_line: FlightLine, aircraft: Aircraft) -> di
 def process_flight_phase(
     start: Airport | Waypoint,
     end: Airport | Waypoint,
-    phase_info: dict,
+    phase_info: dict[str, Any],
     segment_name: str,
     override_segment_type: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Process a flight phase using the detailed ``phase_info``.
 
     For each sub-phase in ``phase_info["phases"]``, this function determines

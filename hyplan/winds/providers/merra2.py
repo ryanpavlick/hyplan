@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 import numpy as np
 
@@ -70,11 +71,11 @@ class MERRA2WindField(_GriddedWindField):
         pressure_max_hpa: Bottom pressure level to fetch (hPa). Default 1000.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._session = _earthdata_login()
         super().__init__(*args, **kwargs)
 
-    def _open_dataset(self, url: str):
+    def _open_dataset(self, url: str) -> Any:
         """Open OPeNDAP dataset with Earthdata-authenticated session."""
         store = self._xr.backends.PydapDataStore.open(url, session=self._session)
         return self._xr.open_dataset(store)

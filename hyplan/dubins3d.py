@@ -97,7 +97,7 @@ class _Dubins2D:
         self.maneuver: _DubinsSegment = _DubinsSegment(0, 0, 0, math.inf, "")
         self._solve(disable_ccc)
 
-    def _solve(self, disable_ccc: bool):
+    def _solve(self, disable_ccc: bool) -> None:
         dx = self.qf[0] - self.qi[0]
         dy = self.qf[1] - self.qi[1]
         D = math.sqrt(dx * dx + dy * dy)
@@ -131,21 +131,21 @@ class _Dubins2D:
 
     # --- CSC path types ---
 
-    def _LSL(self, a, b, d, sa, ca, sb, cb):
+    def _LSL(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux = math.atan2(cb - ca, d + sa - sb)
         t = _mod2pi(-a + aux)
         p = math.sqrt(2 + d * d - 2 * math.cos(a - b) + 2 * d * (sa - sb))
         q = _mod2pi(b - aux)
         return _DubinsSegment(t, p, q, (t + p + q) * self.rhomin, "LSL")
 
-    def _RSR(self, a, b, d, sa, ca, sb, cb):
+    def _RSR(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux = math.atan2(ca - cb, d - sa + sb)
         t = _mod2pi(a - aux)
         p = math.sqrt(2 + d * d - 2 * math.cos(a - b) + 2 * d * (sb - sa))
         q = _mod2pi(_mod2pi(-b) + aux)
         return _DubinsSegment(t, p, q, (t + p + q) * self.rhomin, "RSR")
 
-    def _LSR(self, a, b, d, sa, ca, sb, cb):
+    def _LSR(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux1 = -2 + d * d + 2 * math.cos(a - b) + 2 * d * (sa + sb)
         if aux1 > 0:
             p = math.sqrt(aux1)
@@ -156,7 +156,7 @@ class _Dubins2D:
             t = p = q = math.inf
         return _DubinsSegment(t, p, q, (t + p + q) * self.rhomin, "LSR")
 
-    def _RSL(self, a, b, d, sa, ca, sb, cb):
+    def _RSL(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux1 = d * d - 2 + 2 * math.cos(a - b) - 2 * d * (sa + sb)
         if aux1 > 0:
             p = math.sqrt(aux1)
@@ -169,7 +169,7 @@ class _Dubins2D:
 
     # --- CCC path types ---
 
-    def _RLR(self, a, b, d, sa, ca, sb, cb):
+    def _RLR(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux = (6 - d * d + 2 * math.cos(a - b) + 2 * d * (sa - sb)) / 8
         if abs(aux) <= 1:
             p = _mod2pi(-math.acos(aux))
@@ -179,7 +179,7 @@ class _Dubins2D:
             t = p = q = math.inf
         return _DubinsSegment(t, p, q, (t + p + q) * self.rhomin, "RLR")
 
-    def _LRL(self, a, b, d, sa, ca, sb, cb):
+    def _LRL(self, a: float, b: float, d: float, sa: float, ca: float, sb: float, cb: float) -> _DubinsSegment:
         aux = (6 - d * d + 2 * math.cos(a - b) + 2 * d * (-sa + sb)) / 8
         if abs(aux) <= 1:
             p = _mod2pi(-math.acos(aux))
@@ -236,8 +236,12 @@ def _position_in_segment(offset: float, qi: np.ndarray[Any, np.dtype[Any]], case
 # Wind-aware 2D Dubins solver (trochoidal ground tracks)
 # ---------------------------------------------------------------------------
 
-def _try_ccc_with_drift(qi, qf, rhomin, airspeed, wind_u, wind_v,
-                        max_iter: int = 6, tol_s: float = 1e-3):
+def _try_ccc_with_drift(
+    qi: np.ndarray[Any, np.dtype[Any]],
+    qf: np.ndarray[Any, np.dtype[Any]],
+    rhomin: float, airspeed: float, wind_u: float, wind_v: float,
+    max_iter: int = 6, tol_s: float = 1e-3,
+) -> tuple[_Dubins2D | None, float]:
     """Iteratively solve still-air Dubins against a wind-drift-corrected goal.
 
     The aircraft moves at ``airspeed`` in the air frame and the air
@@ -327,8 +331,13 @@ class _TrochoidDubins2D:
     _EPS = 1e-6
     _M2PI = 2 * math.pi
 
-    def __init__(self, qi, qf, rhomin, airspeed, wind_u, wind_v,
-                 disable_ccc=False):
+    def __init__(
+        self,
+        qi: np.ndarray[Any, np.dtype[Any]],
+        qf: np.ndarray[Any, np.dtype[Any]],
+        rhomin: float, airspeed: float, wind_u: float, wind_v: float,
+        disable_ccc: bool = False,
+    ) -> None:
         self.qi = qi.copy()
         self.qf = qf.copy()
         self.rhomin = rhomin
@@ -391,7 +400,7 @@ class _TrochoidDubins2D:
         # cases — where the proper trochoid and air-drift converge to
         # numerically equivalent paths — pick the rigorous solver.
         _MODE_RANK = {"ccc_trochoid": 0, "ccc_air_drift": 1, "bsb": 2}
-        candidates = [(bsb_total_time, "bsb", None)]
+        candidates: list[tuple[float, str, Any]] = [(bsb_total_time, "bsb", None)]
         if ccc_tro_sol is not None:
             candidates.append(
                 (ccc_tro_sol["total_time"], "ccc_trochoid", ccc_tro_sol),
@@ -410,12 +419,14 @@ class _TrochoidDubins2D:
         if best_mode == "bsb":
             self._maneuver = _DubinsSegment(0, 0, 0, air_len, "TRO")
         elif best_mode == "ccc_trochoid":
-            self._ccc_tro_sol = best_data
+            assert best_data is not None
+            self._ccc_tro_sol: dict[str, Any] = best_data
             self._maneuver = _DubinsSegment(
                 0, 0, 0, air_len, best_data["family"],
             )
         else:  # ccc_air_drift
-            self._air_solver = best_data
+            assert best_data is not None
+            self._air_solver: _Dubins2D = best_data
             self._maneuver = _DubinsSegment(
                 0, 0, 0, air_len, best_data.maneuver.case,
             )

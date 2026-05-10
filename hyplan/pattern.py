@@ -56,7 +56,7 @@ class Pattern:
 
     kind: str
     name: str
-    params: dict
+    params: dict[str, Any]
     pattern_id: str = ""
     lines: dict[str, FlightLine] = field(default_factory=dict)
     waypoints: list[Waypoint] = field(default_factory=list)
@@ -88,7 +88,7 @@ class Pattern:
     def line_ids(self) -> list[str]:
         return list(self.lines.keys())
 
-    def elements(self):
+    def elements(self) -> list[FlightLine] | list[Waypoint]:
         """Return the ordered flight lines or waypoints for this pattern."""
         if self.is_line_based:
             return list(self.lines.values())
@@ -168,9 +168,9 @@ class Pattern:
             raise HyPlanValueError("line must be a FlightLine instance.")
         self.lines[line_id] = line
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize the pattern to a plain JSON-compatible dict."""
-        out: dict = {
+        out: dict[str, Any] = {
             "pattern_id": self.pattern_id,
             "kind": self.kind,
             "name": self.name,
@@ -186,7 +186,7 @@ class Pattern:
         return out
 
     @classmethod
-    def from_dict(cls, data: dict) -> Pattern:
+    def from_dict(cls, data: dict[str, Any]) -> Pattern:
         """Reconstruct a Pattern from a dict produced by :meth:`to_dict`."""
         kind = data["kind"]
         pattern = cls(
@@ -209,7 +209,7 @@ class Pattern:
                 pattern.waypoints.append(_waypoint_from_dict(wd))
         return pattern
 
-    def to_geojson(self) -> dict:
+    def to_geojson(self) -> dict[str, Any]:
         """Return a GeoJSON FeatureCollection of this pattern's elements.
 
         Line-based patterns yield one LineString feature per leg (with
@@ -217,7 +217,7 @@ class Pattern:
         patterns yield one Point feature per waypoint plus one LineString
         for the connecting track.
         """
-        features: list = []
+        features: list[dict[str, Any]] = []
         if self.is_line_based:
             for line_id, fl in self.lines.items():
                 feat = fl.to_geojson()
@@ -264,7 +264,7 @@ class Pattern:
                 })
         return {"type": "FeatureCollection", "features": features}
 
-    def regenerate(self, **overrides) -> Pattern:
+    def regenerate(self, **overrides: Any) -> Pattern:
         """Return a new Pattern by re-invoking the generator with params.
 
         Any keyword overrides are merged into :attr:`params` for the
@@ -281,7 +281,7 @@ class Pattern:
         return new_pattern
 
 
-def _waypoint_to_dict(wp: Waypoint) -> dict:
+def _waypoint_to_dict(wp: Waypoint) -> dict[str, Any]:
     return {
         "latitude": wp.latitude,
         "longitude": wp.longitude,
@@ -294,7 +294,7 @@ def _waypoint_to_dict(wp: Waypoint) -> dict:
     }
 
 
-def _waypoint_from_dict(d: dict) -> Waypoint:
+def _waypoint_from_dict(d: dict[str, Any]) -> Waypoint:
     alt = d.get("altitude_msl_m")
     return Waypoint(
         latitude=d["latitude"],
@@ -306,7 +306,7 @@ def _waypoint_from_dict(d: dict) -> Waypoint:
     )
 
 
-def _invoke_generator(generator: Any, kind: str, params: dict) -> Pattern:
+def _invoke_generator(generator: Any, kind: str, params: dict[str, Any]) -> Pattern:
     """Re-invoke a generator from a stored params dict (meters/degrees only)."""
     center = (params["center_lat"], params["center_lon"])
     heading = params.get("heading", 0.0)

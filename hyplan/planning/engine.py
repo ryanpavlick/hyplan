@@ -13,7 +13,7 @@ distance, altitude, and geometry for every segment.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import geopandas as gpd
 import pandas as pd
@@ -199,7 +199,7 @@ def compute_flight_plan(
         )
     # Gridded wind fields need takeoff_time; simple fields do not
     if wind_source is not None and takeoff_time is None:
-        from ..winds import _GriddedWindField
+        from ..winds.gridded import _GriddedWindField
         if isinstance(wind_source, _GriddedWindField):
             raise HyPlanValueError(
                 "takeoff_time is required when using a gridded wind field "
@@ -216,7 +216,7 @@ def compute_flight_plan(
 
     def _phase_wind_kwargs(
         mid_lat: float, mid_lon: float, alt: Quantity,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Pick the wind kwargs to forward to time_to_* methods.
 
         For ``wind_sampling="phase_midpoint"`` (and a wind_source
@@ -331,8 +331,8 @@ def compute_flight_plan(
             cumulative_minutes += time_to_segment
 
         # Insert loiter segment if the current waypoint has a delay.
-        if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:  # type: ignore[union-attr]
-            loiter_time = segment.delay.m_as(ureg.minute)  # type: ignore[union-attr]
+        if is_waypoint(segment) and segment.delay is not None and segment.delay.magnitude > 0:
+            loiter_time = segment.delay.m_as(ureg.minute)
 
             # Render an actual hold-orbit ground track when altitude is known
             # (so cruise speed and bank radius are derivable from the aircraft
@@ -341,29 +341,29 @@ def compute_flight_plan(
             # Point/zero distance for callers that pass minimal Waypoints.
             if segment.altitude_msl is not None:
                 from .segments import loiter_orbit_geometry
-                loiter_geom = loiter_orbit_geometry(segment, aircraft)  # type: ignore[arg-type]
+                loiter_geom = loiter_orbit_geometry(segment, aircraft)
                 speed_mps = aircraft.cruise_speed_at(segment.altitude_msl).m_as("meter/second")
-                distance_m = speed_mps * segment.delay.m_as(ureg.second)  # type: ignore[union-attr]
+                distance_m = speed_mps * segment.delay.m_as(ureg.second)
                 distance_nm = ureg.Quantity(distance_m, "meter").m_as(ureg.nautical_mile)
             else:
                 from shapely.geometry import Point as _Point
-                loiter_geom = _Point(segment.longitude, segment.latitude)  # type: ignore[union-attr]
+                loiter_geom = _Point(segment.longitude, segment.latitude)
                 distance_nm = 0.0
 
             records.append({
                 "geometry": loiter_geom,
-                "start_lat": segment.latitude,  # type: ignore[union-attr]
-                "start_lon": segment.longitude,  # type: ignore[union-attr]
-                "end_lat": segment.latitude,  # type: ignore[union-attr]
-                "end_lon": segment.longitude,  # type: ignore[union-attr]
+                "start_lat": segment.latitude,
+                "start_lon": segment.longitude,
+                "end_lat": segment.latitude,
+                "end_lon": segment.longitude,
                 "start_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
                 "end_altitude": segment.altitude_msl.m_as(ureg.foot) if segment.altitude_msl else None,
                 "segment_type": "loiter",
-                "segment_name": segment.name,  # type: ignore[union-attr]
+                "segment_name": segment.name,
                 "distance": distance_nm,
                 "time_to_segment": loiter_time,
-                "start_heading": segment.heading,  # type: ignore[union-attr]
-                "end_heading": segment.heading  # type: ignore[union-attr]
+                "start_heading": segment.heading,
+                "end_heading": segment.heading
             })
             cumulative_minutes += loiter_time
 
@@ -379,12 +379,12 @@ def compute_flight_plan(
             # Dubins so the aircraft gets a realistic turn.
             departing_is_pattern = (
                 is_waypoint(segment) and is_waypoint(end)
-                and segment.segment_type == "pattern"  # type: ignore[union-attr]
-                and end.segment_type in ("pattern", "pattern_turn")  # type: ignore[union-attr,operator]
+                and segment.segment_type == "pattern"
+                and end.segment_type in ("pattern", "pattern_turn")
             )
             if departing_is_pattern:
                 rec = _direct_segment_record(
-                    start_wp, end_wp, aircraft, segment.segment_type,  # type: ignore[union-attr,arg-type]
+                    start_wp, end_wp, aircraft, segment.segment_type,  # type: ignore[union-attr,arg-type]  # is_waypoint not a TypeGuard
                     wind_speed=wind_speed, wind_direction=wind_direction,
                     wind_source=wind_source, segment_time=_current_time(),
                 )
@@ -394,8 +394,8 @@ def compute_flight_plan(
 
             # Use per-waypoint speed override if set on the departing waypoint.
             speed_override = None
-            if is_waypoint(segment) and segment.speed is not None:  # type: ignore[union-attr]
-                speed_override = segment.speed  # type: ignore[union-attr]
+            if is_waypoint(segment) and segment.speed is not None:
+                speed_override = segment.speed
 
             mid_lat = (start_wp.latitude + end_wp.latitude) / 2
             mid_lon = (start_wp.longitude + end_wp.longitude) / 2
@@ -417,7 +417,7 @@ def compute_flight_plan(
                 # otherwise process_flight_phase determines the type from altitude.
                 wp_seg_type = None
                 if is_waypoint(segment):
-                    wp_seg_type = segment.segment_type  # type: ignore[union-attr]
+                    wp_seg_type = segment.segment_type
                 cruise_records = process_flight_phase(
                     start_wp, end_wp, cruise_info, phase_name,
                     override_segment_type=wp_seg_type,

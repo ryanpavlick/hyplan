@@ -78,7 +78,7 @@ def simulate_visits(
     rest_day_threshold: int = 6,
     exclude_weekends: bool = False,
     debug: bool = False
-) -> tuple[pd.DataFrame, dict[int, dict[str, list]], dict[int, list]]:
+) -> tuple[pd.DataFrame, dict[int, dict[str, list[int]]], dict[int, list[int]]]:
     """Simulate daily flight scheduling based on cloud fraction thresholds.
 
     On each visitable day, the alphabetically first unvisited polygon that
@@ -109,8 +109,8 @@ def simulate_visits(
     crosses_year = day_start > day_stop
 
     visit_days = []
-    visit_tracker: dict[int, dict] = {}
-    rest_days: dict[int, list] = {}
+    visit_tracker: dict[int, dict[str, list[int]]] = {}
+    rest_days: dict[int, list[int]] = {}
 
     for year in range(year_start, year_stop + 1):
         visited_polygons: set[str] = set()

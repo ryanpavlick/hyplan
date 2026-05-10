@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import geopandas as gpd
 import pandas as pd
@@ -33,7 +33,7 @@ _ee_initialized = False
 _ee = None  # Populated by _get_ee()
 
 
-def _get_ee():
+def _get_ee() -> Any:
     """Return the ``ee`` module, importing and initializing on first call.
 
     Raises:
@@ -97,7 +97,7 @@ def get_binary_cloud(image: ee.Image) -> ee.Image:
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
     result = result.set("satellite", image.get("satellite"))
-    return result  # type: ignore[no-any-return]
+    return result  # type: ignore[no-any-return]  # earthengine has no stubs
 
 
 def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
@@ -117,14 +117,14 @@ def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> 
         scale=1000
     )
     cloud_fraction = reduction.get('state_1km')
-    return ee.Feature(None, {  # type: ignore[no-any-return]
+    return ee.Feature(None, {  # type: ignore[no-any-return]  # earthengine has no stubs
         'date_char': image.get('date_char'),
         'cloud_fraction': cloud_fraction,
         'satellite': image.get('satellite'),
     })
 
 
-def create_date_ranges(day_start: int, day_stop: int, year_start: int, year_stop: int) -> list:
+def create_date_ranges(day_start: int, day_stop: int, year_start: int, year_stop: int) -> list[Any]:
     """Create date ranges for filtering Earth Engine image collections.
 
     Supports year-boundary crossings (e.g., day_start=335, day_stop=60 for a
@@ -324,7 +324,7 @@ class OpenMeteoCloudFraction:
         else:
             end_date = f"{year_stop}-12-31"
 
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
 
         for _, row in polygons.iterrows():
             name = row["Name"]
@@ -403,7 +403,7 @@ def fetch_cloud_fraction(
     day_start: int,
     day_stop: int,
     source: str = "openmeteo",
-    **kwargs,
+    **kwargs: Any,
 ) -> pd.DataFrame:
     """Fetch historical cloud fraction data for flight planning.
 
@@ -438,16 +438,15 @@ def fetch_cloud_fraction(
         return OpenMeteoCloudFraction(**kwargs).fetch(
             gdf, year_start, year_stop, day_start, day_stop,
         )
-    elif source == "gee":
+    if source == "gee":
         return create_cloud_data_array_with_limit(
             polygon_file, year_start, year_stop, day_start, day_stop,
             **kwargs,
         )
-    else:
-        raise HyPlanValueError(
-            f"Unknown cloud fraction source: {source!r}. "
-            f"Use 'openmeteo' or 'gee'."
-        )
+    raise HyPlanValueError(
+        f"Unknown cloud fraction source: {source!r}. "
+        f"Use 'openmeteo' or 'gee'."
+    )
 
 
 # ---------------------------------------------------------------------------

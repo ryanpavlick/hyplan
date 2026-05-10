@@ -33,7 +33,10 @@ doi:10.1016/j.solener.2003.12.003
 """
 
 import logging
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 import geopandas as gpd
 
 from datetime import datetime
@@ -94,13 +97,13 @@ class GlintArc:
         target_lat: float,
         target_lon: float,
         observation_datetime: datetime,
-        altitude_msl,
-        speed,
+        altitude_msl: Any,
+        speed: Any,
         bank_angle: float | None = None,
         site_name: str | None = None,
         bank_direction: str = "right",
-        collection_length=None,
-    ):
+        collection_length: Any = None,
+    ) -> None:
         if bank_direction not in ("left", "right"):
             raise HyPlanValueError("bank_direction must be 'left' or 'right'")
         if bank_angle is not None and not (0.0 < bank_angle < 90.0):
@@ -231,21 +234,21 @@ class GlintArc:
     # -------------------------------------------------------------------------
 
     @property
-    def turn_radius(self):
+    def turn_radius(self) -> Any:
         return ureg.Quantity(self._turn_radius_m, "meter")
 
     @property
-    def length(self):
+    def length(self) -> Any:
         return ureg.Quantity(
             self._turn_radius_m * np.radians(self.arc_extent), "meter"
         )
 
     @property
-    def duration(self):
+    def duration(self) -> Any:
         return (self.length / self.speed).to(ureg.second)
 
     @property
-    def waypoint1(self):
+    def waypoint1(self) -> Waypoint:
         coords = self.geometry.coords
         lat, lon = coords[0][1], coords[0][0]
         lat2, lon2 = coords[1][1], coords[1][0]
@@ -260,7 +263,7 @@ class GlintArc:
         )
 
     @property
-    def waypoint2(self):
+    def waypoint2(self) -> Waypoint:
         coords = self.geometry.coords
         lat, lon = coords[-1][1], coords[-1][0]
         lat2, lon2 = coords[-2][1], coords[-2][0]
@@ -274,7 +277,7 @@ class GlintArc:
             name="arc_end",
         )
 
-    def approach_line(self, length) -> FlightLine:
+    def approach_line(self, length: Any) -> FlightLine:
         """Straight FlightLine leading tangentially into the arc start.
 
         Args:
@@ -299,7 +302,7 @@ class GlintArc:
             site_name=self.site_name,
         )
 
-    def exit_line(self, length) -> FlightLine:
+    def exit_line(self, length: Any) -> FlightLine:
         """Straight FlightLine departing tangentially from the arc end.
 
         Args:
@@ -320,7 +323,7 @@ class GlintArc:
             site_name=self.site_name,
         )
 
-    def track(self, precision=100.0) -> LineString:
+    def track(self, precision: Any = 100.0) -> LineString:
         """Return the arc as a densified LineString.
 
         Args:
@@ -399,7 +402,7 @@ class GlintArc:
         ring_lat = np.concatenate([near_lat, far_lat[::-1], near_lat[:1]])
         return Polygon(np.column_stack([ring_lon, ring_lat]))
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the glint arc to a dictionary representation."""
         return {
             "geometry": list(self.geometry.coords),
@@ -425,7 +428,7 @@ class GlintArc:
             "site_name": self.site_name,
         }
 
-    def to_geojson(self) -> dict:
+    def to_geojson(self) -> dict[str, Any]:
         """Convert the glint arc to a GeoJSON Feature dictionary."""
         coords = list(self.geometry.coords)
         return {
@@ -459,7 +462,12 @@ class GlintArc:
 # GLINT CALCULATIONS
 # -----------------------------------------------------------------------------
 
-def glint_angle(solar_azimuth, solar_zenith, view_azimuth, view_zenith):
+def glint_angle(
+    solar_azimuth: npt.NDArray[np.float64] | float,
+    solar_zenith: npt.NDArray[np.float64] | float,
+    view_azimuth: npt.NDArray[np.float64] | float,
+    view_zenith: npt.NDArray[np.float64] | float,
+) -> npt.NDArray[np.float64]:
     solar_zenith_rad = np.deg2rad(solar_zenith)
     solar_azimuth_rad = np.deg2rad(solar_azimuth)
     view_zenith_rad = np.deg2rad(view_zenith)
@@ -473,19 +481,19 @@ def glint_angle(solar_azimuth, solar_zenith, view_azimuth, view_zenith):
     )
 
     glint_cos = np.clip(glint_cos, -1, 1)
-    return np.degrees(np.arccos(glint_cos))
+    return np.asarray(np.degrees(np.arccos(glint_cos)), dtype=np.float64)
 
 
 def calculate_target_and_glint_vectorized(
-    sensor_lat,
-    sensor_lon,
-    sensor_alt,
-    viewing_azimuth,
-    tilt_angle,
-    observation_datetime=None,
-    solar_azimuth=None,
-    solar_zenith=None,
-):
+    sensor_lat: npt.NDArray[np.float64],
+    sensor_lon: npt.NDArray[np.float64],
+    sensor_alt: npt.NDArray[np.float64],
+    viewing_azimuth: npt.NDArray[np.float64],
+    tilt_angle: npt.NDArray[np.float64],
+    observation_datetime: datetime | None = None,
+    solar_azimuth: npt.NDArray[np.float64] | None = None,
+    solar_zenith: npt.NDArray[np.float64] | None = None,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Compute target intersection and glint angle for sensor samples.
 
     If ``solar_azimuth`` and ``solar_zenith`` are provided, the per-sample
@@ -520,7 +528,13 @@ def calculate_target_and_glint_vectorized(
     return target_lat, target_lon, glint_angles
 
 
-def _sample_solar_geometry(latitudes, longitudes, altitude_m, observation_datetime, n_samples=100):
+def _sample_solar_geometry(
+    latitudes: npt.NDArray[np.float64],
+    longitudes: npt.NDArray[np.float64],
+    altitude_m: float,
+    observation_datetime: datetime,
+    n_samples: int = 100,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Sample solar geometry along a track and interpolate to all track points.
 
     ``sunpos`` is the dominant cost in glint computation. Solar azimuth and

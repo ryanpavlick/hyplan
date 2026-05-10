@@ -51,8 +51,9 @@ import json
 import logging
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import requests
 from shapely.geometry import Polygon, MultiPolygon, box as box_geom, shape
@@ -187,7 +188,7 @@ def summarize_airspaces(airspaces: list[Airspace], header: str = "") -> str:
 
 
 def check_airspace_conflicts(
-    flight_lines,
+    flight_lines: Sequence[Any],
     airspaces: list[Airspace],
 ) -> list[AirspaceConflict]:
     """Check flight lines for airspace conflicts.
@@ -294,7 +295,7 @@ def _extract_entry_exit(
 
 
 def check_airspace_proximity(
-    flight_lines,
+    flight_lines: Sequence[Any],
     airspaces: list[Airspace],
     buffer_m: float = 1000.0,
 ) -> list[AirspaceConflict]:
@@ -613,7 +614,7 @@ def classify_severity(airspace_type: int) -> str:
 
 def _resolve_type_filter(
     type_filter: int | str | list[int | str] | None,
-) -> set | None:
+) -> set[int] | None:
     """Resolve a type filter specification to a set of integer type codes.
 
     Accepts a single type code (int), a type name (str), a list of
@@ -628,7 +629,7 @@ def _resolve_type_filter(
     if isinstance(type_filter, (int, str)):
         type_filter = [type_filter]
 
-    codes: set = set()
+    codes: set[int] = set()
     for item in type_filter:
         if isinstance(item, int):
             codes.add(item)
@@ -677,17 +678,17 @@ def clear_airspace_cache() -> None:
 
 def _cache_key(
     bounds: tuple[float, float, float, float],
-    country: str | list | None,
+    country: str | Sequence[str | None] | None,
 ) -> str:
     """Compute a deterministic cache filename from query parameters."""
     # Round bounds to 1 decimal degree so nearby queries share cache
     rounded = tuple(round(b, 1) for b in bounds)
-    if isinstance(country, list):
+    if isinstance(country, str) or country is None:
+        country_str = country or "all"
+    else:
         country_str = ",".join(sorted(str(c) for c in country if c))
         if not country_str:
             country_str = "all"
-    else:
-        country_str = country or "all"
     raw = f"{rounded}_{country_str}"
     return hashlib.md5(raw.encode()).hexdigest() + ".json"
 
@@ -700,7 +701,7 @@ def _is_cache_stale(cache_path: str, max_age_hours: float) -> bool:
     return age_hours > max_age_hours
 
 
-def _parse_airspace_item(item: dict) -> Airspace | None:
+def _parse_airspace_item(item: dict[str, Any]) -> Airspace | None:
     """Parse a single OpenAIP airspace JSON object into an Airspace."""
     try:
         geojson = item.get("geometry")
@@ -718,7 +719,7 @@ def _parse_airspace_item(item: dict) -> Airspace | None:
         # Altitude limits — stored in feet MSL
         # OpenAIP unit codes: 0=meters, 1=feet, 6=flight level (FL)
         # referenceDatum: 0=GND, 1=MSL, 2=STD
-        def _parse_alt_ft(alt_obj: dict, default: float) -> float:
+        def _parse_alt_ft(alt_obj: dict[str, Any], default: float) -> float:
             if not alt_obj:
                 return default
             value = alt_obj.get("value", default)
@@ -766,7 +767,7 @@ def _parse_airspace_item(item: dict) -> Airspace | None:
         return None
 
 
-def parse_airspace_items(items: list[dict]) -> list[Airspace]:
+def parse_airspace_items(items: list[dict[str, Any]]) -> list[Airspace]:
     """Parse a list of raw OpenAIP JSON items into Airspace objects.
 
     Items that cannot be parsed (missing geometry, non-polygon geometry,
@@ -838,7 +839,7 @@ class OpenAIPClient:
         bounds: tuple[float, float, float, float],
         country: str | list[str] | None = None,
         max_age_hours: float = 24.0,
-    ) -> tuple[list[Airspace], list[dict]]:
+    ) -> tuple[list[Airspace], list[dict[str, Any]]]:
         """Fetch airspaces and return both parsed objects and raw JSON items.
 
         Same as :meth:`fetch_airspaces` but also returns the raw API
@@ -855,9 +856,9 @@ class OpenAIPClient:
         if country is None:
             countries = [None]
         elif isinstance(country, str):
-            countries = [country]  # type: ignore[list-item]
+            countries = [country]  # type: ignore[list-item]  # countries var typed as list[None]
         else:
-            countries = list(country)  # type: ignore[arg-type]
+            countries = list(country)  # type: ignore[arg-type]  # countries var typed as list[None]
 
         cache_dir = _get_airspace_cache_dir()
         cache_key_str = _cache_key(bounds, countries)
@@ -871,8 +872,8 @@ class OpenAIPClient:
 
         min_lon, min_lat, max_lon, max_lat = bounds
 
-        seen_ids: set = set()
-        items: list[dict] = []  # type: ignore[no-redef]
+        seen_ids: set[str] = set()
+        items: list[dict[str, Any]] = []  # type: ignore[no-redef]  # intentional rebind with widened type
         for c in countries:
             page_items = self._fetch_all_pages(bounds, c)
             for it in page_items:
@@ -905,10 +906,10 @@ class OpenAIPClient:
         self,
         bounds: tuple[float, float, float, float],
         country: str | None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch all pages of airspace results from the API."""
         min_lon, min_lat, max_lon, max_lat = bounds
-        all_items: list[dict] = []
+        all_items: list[dict[str, Any]] = []
         page = 1
         limit = 100
 
@@ -949,7 +950,7 @@ class OpenAIPClient:
         return all_items
 
     @staticmethod
-    def _parse_items(items: list[dict]) -> list[Airspace]:
+    def _parse_items(items: list[dict[str, Any]]) -> list[Airspace]:
         """Parse a list of raw JSON items into Airspace objects."""
         return parse_airspace_items(items)
 
@@ -970,7 +971,7 @@ def _bounds_within_us(bounds: tuple[float, float, float, float]) -> bool:
 
 
 def fetch_and_check(
-    flight_lines,
+    flight_lines: Sequence[Any],
     api_key: str | None = None,
     buffer_m: float = 1000.0,
     country: str | list[str] | None = None,
@@ -1166,7 +1167,7 @@ class FAATFRClient:
             features = wfs_data.get("features", [])
 
             # Fetch metadata from tfrapi for enrichment
-            meta_map: dict = {}
+            meta_map: dict[str, Any] = {}
             try:
                 meta_resp = requests.get(self.TFR_LIST_URL, timeout=30)
                 meta_resp.raise_for_status()
@@ -1194,12 +1195,12 @@ class FAATFRClient:
 
         if bounds is not None:
             bbox = box_geom(*bounds)
-            airspaces = [a for a in airspaces if a.geometry.intersects(bbox)]  # type: ignore[union-attr]
+            airspaces = [a for a in airspaces if a.geometry.intersects(bbox)]  # type: ignore[union-attr]  # geometry may be None at type level
 
         if effective_only:
-            airspaces = self._filter_effective(airspaces)  # type: ignore[assignment, arg-type]
+            airspaces = self._filter_effective(airspaces)  # type: ignore[assignment, arg-type]  # list[Subclass] passed where list[Base] expected
 
-        return airspaces  # type: ignore[return-value]
+        return airspaces  # type: ignore[return-value]  # variance mismatch on list of subclass
 
     @staticmethod
     def _parse_date_from_description(description: str) -> str | None:
@@ -1252,8 +1253,8 @@ class FAATFRClient:
 
     @staticmethod
     def _parse_wfs_feature(
-        feature: dict,
-        meta_map: dict,
+        feature: dict[str, Any],
+        meta_map: dict[str, Any],
     ) -> Airspace | None:
         """Convert a WFS GeoJSON feature + tfrapi metadata to an Airspace."""
         try:
@@ -1301,7 +1302,7 @@ class FAATFRClient:
             return None
 
     @staticmethod
-    def _airspace_to_dict(a: Airspace) -> dict:
+    def _airspace_to_dict(a: Airspace) -> dict[str, Any]:
         """Serialise an Airspace to a JSON-compatible dict for caching."""
         from shapely.geometry import mapping
         return {
@@ -1319,7 +1320,7 @@ class FAATFRClient:
         }
 
     @staticmethod
-    def _dict_to_airspace(d: dict) -> Airspace | None:
+    def _dict_to_airspace(d: dict[str, Any]) -> Airspace | None:
         """Deserialise a cached dict back to an Airspace."""
         try:
             geom = shape(d["geometry"])
@@ -1461,7 +1462,7 @@ class NASRAirspaceSource:
     def _fetch_arcgis(
         self,
         bounds: tuple[float, float, float, float],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Query the ArcGIS Feature Server for airspace features."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1484,10 +1485,10 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])  # type: ignore[no-any-return]
+        return data.get("features", [])  # type: ignore[no-any-return]  # requests.json() returns Any
 
     @staticmethod
-    def _feature_to_airspace(feature: dict) -> Airspace | None:
+    def _feature_to_airspace(feature: dict[str, Any]) -> Airspace | None:
         """Convert a GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1623,7 +1624,7 @@ class NASRAirspaceSource:
     def _fetch_sfra_arcgis(
         self,
         bounds: tuple[float, float, float, float],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Query the ArcGIS Airspace layer for SFRA features."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1648,10 +1649,10 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])  # type: ignore[no-any-return]
+        return data.get("features", [])  # type: ignore[no-any-return]  # requests.json() returns Any
 
     @staticmethod
-    def _sfra_feature_to_airspace(feature: dict) -> Airspace | None:
+    def _sfra_feature_to_airspace(feature: dict[str, Any]) -> Airspace | None:
         """Convert an Airspace-layer GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")
@@ -1759,7 +1760,7 @@ class NASRAirspaceSource:
         self,
         bounds: tuple[float, float, float, float],
         classes: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Query the ArcGIS Class_Airspace layer."""
         min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -1788,10 +1789,10 @@ class NASRAirspaceSource:
             ) from exc
 
         data = resp.json()
-        return data.get("features", [])  # type: ignore[no-any-return]
+        return data.get("features", [])  # type: ignore[no-any-return]  # requests.json() returns Any
 
     @staticmethod
-    def _class_feature_to_airspace(feature: dict) -> Airspace | None:
+    def _class_feature_to_airspace(feature: dict[str, Any]) -> Airspace | None:
         """Convert a Class_Airspace GeoJSON feature to an Airspace."""
         try:
             geom_data = feature.get("geometry")

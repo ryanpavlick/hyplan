@@ -9,13 +9,14 @@ from __future__ import annotations
 import datetime
 import logging
 from pathlib import Path
+from typing import Any
 
 from ...exceptions import HyPlanRuntimeError
 
 logger = logging.getLogger(__name__)
 
 
-def _require_traffic():
+def _require_traffic() -> Any:
     """Import and return the traffic module, raising a clear error if missing."""
     try:
         import traffic  # noqa: F811
@@ -41,7 +42,7 @@ def load_flights(
     min_duration_minutes: float = 10.0,
     min_altitude_ft: float = 1000.0,
     max_altitude_ft: float = 60000.0,
-) -> list:
+) -> list[Any]:
     """Load and clean ADS-B flights from file or Traffic object.
 
     Args:
@@ -129,14 +130,14 @@ def load_flights(
 
 
 def _clean_flight(
-    flight,
+    flight: Any,
     *,
     resample: str,
     filter_strategy: str | None,
     min_altitude_ft: float,
     max_altitude_ft: float,
     min_duration_minutes: float,
-):
+) -> Any | None:
     """Apply quality filters to a single Flight. Returns None if dropped."""
     df = flight.data
 
@@ -191,7 +192,7 @@ def _clean_flight(
     return flight
 
 
-def _add_vertical_rate(flight) -> None:
+def _add_vertical_rate(flight: Any) -> None:
     """Compute vertical_rate from altitude differences if missing."""
     df = flight.data
     if "altitude" not in df.columns or "timestamp" not in df.columns:

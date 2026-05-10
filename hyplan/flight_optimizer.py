@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+from typing import Any
 
 import networkx as nx
 
@@ -67,7 +68,7 @@ def _transit_time(aircraft: Aircraft, start_wp: Waypoint, end_wp: Waypoint) -> f
         Transit time in hours.
     """
     info = aircraft.time_to_cruise(start_wp, end_wp)
-    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
+    return float(info["total_time"].m_as(ureg.hour))
 
 
 def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float:
@@ -82,7 +83,7 @@ def _departure_time(aircraft: Aircraft, airport: Airport, wp: Waypoint) -> float
         Total departure time in hours.
     """
     info = aircraft.time_to_takeoff(airport, wp)
-    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
+    return float(info["total_time"].m_as(ureg.hour))
 
 
 def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
@@ -97,10 +98,10 @@ def _return_time(aircraft: Aircraft, wp: Waypoint, airport: Airport) -> float:
         Total return time in hours.
     """
     info = aircraft.time_to_return(wp, airport)
-    return info["total_time"].m_as(ureg.hour)  # type: ignore[no-any-return]
+    return float(info["total_time"].m_as(ureg.hour))
 
 
-def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=None) -> float:
+def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed: Any = None) -> float:
     """Compute time in hours to fly along a flight line at cruise speed.
 
     Args:
@@ -115,7 +116,7 @@ def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed=
     """
     if cruise_speed is None:
         cruise_speed = aircraft.cruise_speed_at(flight_line.altitude_msl)
-    return (flight_line.length / cruise_speed).m_as(ureg.hour)  # type: ignore[no-any-return]
+    return float((flight_line.length / cruise_speed).m_as(ureg.hour))
 
 
 def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
@@ -164,7 +165,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     return total
 
 
-def _item_endpoints(item) -> tuple[Waypoint, Waypoint]:
+def _item_endpoints(item: FlightLine | Pattern | Waypoint) -> tuple[Waypoint, Waypoint]:
     """Return (entry, exit) Waypoints for a visit item.
 
     Visit items are FlightLine, Pattern, or bare Waypoint. A bare Waypoint
@@ -177,7 +178,7 @@ def _item_endpoints(item) -> tuple[Waypoint, Waypoint]:
     return item.waypoint1, item.waypoint2
 
 
-def _item_internal_time(aircraft: Aircraft, item, cruise_speed=None) -> float:
+def _item_internal_time(aircraft: Aircraft, item: FlightLine | Pattern | Waypoint, cruise_speed: Any = None) -> float:
     """Internal traversal time in hours for a visit item.
 
     For a bare Waypoint this is the loiter ``delay`` (or 0.0 if unset);
@@ -190,11 +191,11 @@ def _item_internal_time(aircraft: Aircraft, item, cruise_speed=None) -> float:
     if isinstance(item, Waypoint):
         if item.delay is None:
             return 0.0
-        return item.delay.m_as(ureg.hour)  # type: ignore[no-any-return]
+        return float(item.delay.m_as(ureg.hour))
     return _flight_line_time(aircraft, item, cruise_speed=cruise_speed)
 
 
-def _item_supports_reverse(item) -> bool:
+def _item_supports_reverse(item: FlightLine | Pattern | Waypoint) -> bool:
     """Whether this visit item can be traversed exit -> entry as well as forward.
 
     FlightLines can be flown in either direction; Patterns are atomic and
@@ -205,7 +206,7 @@ def _item_supports_reverse(item) -> bool:
     return isinstance(item, FlightLine)
 
 
-def _item_line_count(item) -> int:
+def _item_line_count(item: FlightLine | Pattern | Waypoint) -> int:
     """Number of actual flight-line legs contributed by a visit item.
 
     Used for the backward-compatible ``lines_covered`` summary in
@@ -222,7 +223,7 @@ def _item_line_count(item) -> int:
     return 1
 
 
-def _item_skipped_line_keys(item, key: str) -> list:
+def _item_skipped_line_keys(item: FlightLine | Pattern | Waypoint, key: str) -> list[str]:
     """Stable line-leg identifiers for an item that the optimizer skipped.
 
     Used to expand the per-item ``skipped_items`` set into the line-leg
@@ -244,7 +245,7 @@ def _item_skipped_line_keys(item, key: str) -> list:
     return [key]
 
 
-def _item_base_key(item, fallback_index: int) -> str:
+def _item_base_key(item: FlightLine | Pattern | Waypoint, fallback_index: int) -> str:
     """Derive a stable graph-node base key for a visit item.
 
     FlightLine -> ``site_name``; Pattern -> ``pattern_id`` or ``name``;
@@ -260,8 +261,8 @@ def _item_base_key(item, fallback_index: int) -> str:
 
 def build_graph(
     aircraft: Aircraft,
-    flight_lines: list,
-    airports: list,
+    flight_lines: list[FlightLine | Pattern | Waypoint],
+    airports: list[Airport],
 ) -> nx.DiGraph:
     """
     Build a directed graph connecting airports and visit-item endpoints.
@@ -315,9 +316,9 @@ def build_graph(
     # a list[(item, key)] rather than dict[item, key] because Pattern is
     # a default-mutable @dataclass and therefore unhashable; FlightLine is
     # hashable by identity but we use a list uniformly for both kinds.
-    item_keys: list = []
-    seen_keys: set = set()
-    collision_counter: dict = {}
+    item_keys: list[tuple[FlightLine | Pattern | Waypoint, str]] = []
+    seen_keys: set[str] = set()
+    collision_counter: dict[str, int] = {}
     for item in flight_lines:
         base = _item_base_key(item, fallback_index=len(item_keys))
         key = base
@@ -328,8 +329,8 @@ def build_graph(
         item_keys.append((item, key))
 
     # Cache cruise speed per altitude — most missions reuse a small set of MSLs.
-    cruise_speed_cache: dict = {}
-    def _cruise_speed_for(alt):
+    cruise_speed_cache: dict[float, Any] = {}
+    def _cruise_speed_for(alt: Any) -> Any:
         key_alt = round(alt.m_as(ureg.feet), 3)
         if key_alt not in cruise_speed_cache:
             cruise_speed_cache[key_alt] = aircraft.cruise_speed_at(alt)
@@ -338,7 +339,7 @@ def build_graph(
     # Memoize transit time for repeated waypoint pairs (airports reused N times
     # against every flight-line endpoint). Key on rounded coords + altitude +
     # heading; use a simple dict closed over locals.
-    def _wp_key(wp):
+    def _wp_key(wp: Waypoint) -> tuple[float, float, float, float]:
         alt_m = wp.altitude_msl.m_as(ureg.meter) if wp.altitude_msl is not None else 0.0
         return (
             round(wp.latitude, 6),
@@ -347,8 +348,8 @@ def build_graph(
             round(wp.heading, 3),
         )
 
-    transit_cache: dict = {}
-    def _cached_transit(wp_a, wp_b):
+    transit_cache: dict[tuple[tuple[float, float, float, float], tuple[float, float, float, float]], float] = {}
+    def _cached_transit(wp_a: Waypoint, wp_b: Waypoint) -> float:
         k = (_wp_key(wp_a), _wp_key(wp_b))
         if k not in transit_cache:
             transit_cache[k] = _transit_time(aircraft, wp_a, wp_b)
@@ -466,10 +467,16 @@ def build_graph(
 
 
 def _find_closest_unvisited_item(
-    G, current_node, visited_items, item_keys,
-    airports=None, time_since_refuel=0.0, time_elapsed=0.0,
-    max_endurance=float("inf"), max_daily_flight_time=float("inf"),
-    takeoff_landing_overhead=0.0,
+    G: nx.DiGraph,
+    current_node: str,
+    visited_items: set[str],
+    item_keys: list[tuple[FlightLine | Pattern | Waypoint, str]],
+    airports: list[Airport] | None = None,
+    time_since_refuel: float = 0.0,
+    time_elapsed: float = 0.0,
+    max_endurance: float = float("inf"),
+    max_daily_flight_time: float = float("inf"),
+    takeoff_landing_overhead: float = 0.0,
 ) -> tuple[str | None, str | None, float | None]:
     """
     Find the closest unvisited visit item (FlightLine, Pattern, or bare
@@ -534,7 +541,7 @@ def _find_closest_unvisited_item(
     return best_key, best_node, best_time
 
 
-def _find_closest_airport(G, current_node, airports) -> tuple[str | None, float]:
+def _find_closest_airport(G: nx.DiGraph, current_node: str, airports: list[Airport]) -> tuple[str | None, float]:
     """
     Find the closest airport from the current node.
 
@@ -556,9 +563,17 @@ def _find_closest_airport(G, current_node, airports) -> tuple[str | None, float]
 
 
 def _find_best_refuel_airport(
-    G, current_node, airports, visited_items, item_keys,
-    time_since_refuel, time_elapsed, max_endurance, max_daily_flight_time,
-    refuel_time, takeoff_landing_overhead,
+    G: nx.DiGraph,
+    current_node: str,
+    airports: list[Airport],
+    visited_items: set[str],
+    item_keys: list[tuple[FlightLine | Pattern | Waypoint, str]],
+    time_since_refuel: float,
+    time_elapsed: float,
+    max_endurance: float,
+    max_daily_flight_time: float,
+    refuel_time: float,
+    takeoff_landing_overhead: float,
 ) -> tuple[str | None, float]:
     """
     Find the best airport to refuel at, ensuring that refueling there
@@ -632,15 +647,15 @@ def _opposite_endpoint(node: str) -> str:
     """
     if node.endswith("_start"):
         return node[:-6] + "_end"
-    elif node.endswith("_end"):
+    if node.endswith("_end"):
         return node[:-4] + "_start"
     raise HyPlanValueError(f"Node {node} is not a flight line endpoint")
 
 
 def greedy_optimize(
     aircraft: Aircraft,
-    flight_lines: list,
-    airports: list,
+    flight_lines: list[FlightLine | Pattern | Waypoint],
+    airports: list[Airport],
     takeoff_airport: Airport,
     return_airport: Airport | None = None,
     max_endurance: float | None = None,
@@ -648,7 +663,7 @@ def greedy_optimize(
     max_daily_flight_time: float | None = None,
     takeoff_landing_overhead: float = 0.25,
     max_days: int = 1,
-) -> dict:
+) -> dict[str, Any]:
     """
     Greedy nearest-neighbor optimization of visit-item ordering.
 
@@ -733,10 +748,10 @@ def greedy_optimize(
     visited_items: set[str] = set()
     skipped_items: set[str] = set()
 
-    route = []
-    flight_sequence = []
-    refuel_stops = []
-    daily_times = []
+    route: list[str] = []
+    flight_sequence: list[FlightLine | Pattern | Waypoint] = []
+    refuel_stops: list[str] = []
+    daily_times: list[float] = []
     total_time = 0.0
 
     logger.info(f"Starting greedy optimization from {takeoff_airport.icao_code}")
@@ -769,11 +784,13 @@ def greedy_optimize(
                 # enforced by the graph topology: only the forward along-edge
                 # exists for Pattern items, so the optimizer cannot enter
                 # from `_end` or split the pattern apart.
-                exit_node = _opposite_endpoint(entry_node)  # type: ignore[arg-type]
+                assert entry_node is not None
+                assert time_to_entry is not None
+                exit_node = _opposite_endpoint(entry_node)
                 time_along_line = G[entry_node][exit_node]["weight"]
 
-                daily_time += time_to_entry  # type: ignore[operator]
-                time_since_refuel += time_to_entry  # type: ignore[operator]
+                daily_time += time_to_entry
+                time_since_refuel += time_to_entry
                 route.append(entry_node)
 
                 daily_time += time_along_line
@@ -786,7 +803,7 @@ def greedy_optimize(
                 item = key_to_item[item_key]
                 if isinstance(item, (Pattern, Waypoint)):
                     flight_sequence.append(item)
-                elif entry_node.endswith("_end"):  # type: ignore[union-attr]
+                elif entry_node.endswith("_end"):
                     flight_sequence.append(item.reverse())
                 else:
                     flight_sequence.append(item)
@@ -802,7 +819,7 @@ def greedy_optimize(
                 # No feasible item from current position — try refueling
                 is_at_airport = G.nodes[current_node].get("nodetype") == "airport"
                 if is_at_airport:
-                    refuel_icao = current_node
+                    refuel_icao: str | None = current_node
                     time_to_refuel_airport = 0.0
                     # Check if refueling here enables any further items
                     _, _ = _find_best_refuel_airport(

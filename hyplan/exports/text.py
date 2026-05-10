@@ -10,6 +10,7 @@ Two formats:
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -96,7 +97,7 @@ def to_txt(
 def to_trackair(
     plan: gpd.GeoDataFrame,
     filepath: str,
-    sensor=None,
+    sensor: Any = None,
     terrain_elevation_m: float = 0.0,
     author: str = "",
     mission_name: str = "",

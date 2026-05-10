@@ -44,10 +44,12 @@ def _pressure_pa(altitude_m: float) -> float:
     """ISA pressure in Pascals at geometric altitude in metres."""
     if altitude_m <= _TROPOPAUSE_M:
         t = _temperature_k(altitude_m)
-        return _P0 * (t / _T0) ** (-_G / (_L * _R))  # type: ignore[no-any-return]
+        return float(_P0 * (t / _T0) ** (-_G / (_L * _R)))
     # Isothermal layer above tropopause
-    return _P_TROPOPAUSE * np.exp(  # type: ignore[no-any-return]
-        -_G / (_R * _T_TROPOPAUSE) * (altitude_m - _TROPOPAUSE_M)
+    return float(
+        _P_TROPOPAUSE * np.exp(
+            -_G / (_R * _T_TROPOPAUSE) * (altitude_m - _TROPOPAUSE_M)
+        )
     )
 
 
@@ -58,7 +60,7 @@ def _density_kgm3(altitude_m: float) -> float:
 
 def _speed_of_sound_ms(altitude_m: float) -> float:
     """Speed of sound in m/s at geometric altitude in metres."""
-    return np.sqrt(_GAMMA * _R * _temperature_k(altitude_m))  # type: ignore[no-any-return]
+    return float(np.sqrt(_GAMMA * _R * _temperature_k(altitude_m)))
 
 
 # ---------------------------------------------------------------------------
@@ -165,4 +167,4 @@ def tas_to_mach(tas: Quantity, altitude: Quantity) -> float:
     tas_ms = tas.m_as(ureg.meter / ureg.second)
     alt_m = altitude.m_as(ureg.meter)
     a = _speed_of_sound_ms(alt_m)
-    return tas_ms / a  # type: ignore[no-any-return]
+    return float(tas_ms / a)

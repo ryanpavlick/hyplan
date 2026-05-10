@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
@@ -50,7 +52,7 @@ def plot_seasonal_profile(
     ax: Axes | None = None,
     show_std: bool = True,
     ylabel: str = "NDVI",
-    **kwargs,
+    **kwargs: Any,
 ) -> Axes:
     """Line plot of mean vegetation index by DOY, one line per polygon.
 
@@ -343,47 +345,47 @@ def plot_cloud_phenology_combined(
 
         return ax
 
-    else:  # side_by_side
-        fig, (ax_cloud, ax_vi) = plt.subplots(
-            2, 1, figsize=(12, 8), sharex=True,
+    # side_by_side
+    fig, (ax_cloud, ax_vi) = plt.subplots(
+        2, 1, figsize=(12, 8), sharex=True,
+    )
+
+    # Top panel: cloud fraction
+    for name, grp in cloud_summary_df.groupby("polygon_id"):
+        grp = grp.sort_values("day_of_year")
+        ax_cloud.plot(
+            grp["day_of_year"], grp["cloud_fraction_mean"],
+            label=name,
         )
-
-        # Top panel: cloud fraction
-        for name, grp in cloud_summary_df.groupby("polygon_id"):
-            grp = grp.sort_values("day_of_year")
-            ax_cloud.plot(
-                grp["day_of_year"], grp["cloud_fraction_mean"],
-                label=name,
+        if "cloud_fraction_std" in grp.columns:
+            ax_cloud.fill_between(
+                grp["day_of_year"],
+                grp["cloud_fraction_mean"] - grp["cloud_fraction_std"],
+                grp["cloud_fraction_mean"] + grp["cloud_fraction_std"],
+                alpha=0.2,
             )
-            if "cloud_fraction_std" in grp.columns:
-                ax_cloud.fill_between(
-                    grp["day_of_year"],
-                    grp["cloud_fraction_mean"] - grp["cloud_fraction_std"],
-                    grp["cloud_fraction_mean"] + grp["cloud_fraction_std"],
-                    alpha=0.2,
-                )
-        ax_cloud.set_ylabel("Cloud Fraction")
-        ax_cloud.set_xlim(1, 365)
-        ax_cloud.legend(fontsize="small")
-        ax_cloud.set_title("Cloud Fraction & Vegetation Index Seasonality")
+    ax_cloud.set_ylabel("Cloud Fraction")
+    ax_cloud.set_xlim(1, 365)
+    ax_cloud.legend(fontsize="small")
+    ax_cloud.set_title("Cloud Fraction & Vegetation Index Seasonality")
 
-        # Bottom panel: vegetation index
-        for name, grp in phenology_summary_df.groupby("polygon_id"):
-            grp = grp.sort_values("day_of_year")
-            ax_vi.plot(
-                grp["day_of_year"], grp["value_mean"],
-                label=name,
+    # Bottom panel: vegetation index
+    for name, grp in phenology_summary_df.groupby("polygon_id"):
+        grp = grp.sort_values("day_of_year")
+        ax_vi.plot(
+            grp["day_of_year"], grp["value_mean"],
+            label=name,
+        )
+        if "value_std" in grp.columns:
+            ax_vi.fill_between(
+                grp["day_of_year"],
+                grp["value_mean"] - grp["value_std"],
+                grp["value_mean"] + grp["value_std"],
+                alpha=0.2,
             )
-            if "value_std" in grp.columns:
-                ax_vi.fill_between(
-                    grp["day_of_year"],
-                    grp["value_mean"] - grp["value_std"],
-                    grp["value_mean"] + grp["value_std"],
-                    alpha=0.2,
-                )
-        ax_vi.set_xlabel("Day of Year")
-        ax_vi.set_ylabel("Vegetation Index")
-        ax_vi.legend(fontsize="small")
+    ax_vi.set_xlabel("Day of Year")
+    ax_vi.set_ylabel("Vegetation Index")
+    ax_vi.legend(fontsize="small")
 
-        fig.tight_layout()
-        return fig
+    fig.tight_layout()
+    return fig

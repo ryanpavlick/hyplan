@@ -10,7 +10,7 @@ connecting legs accordingly.  ``compute_flight_plan`` accepts
 :class:`Pattern` in its flight sequence and expands it inline.
 """
 
-from typing import Union
+from typing import Any, Union
 
 import numpy as np
 import pymap3d.vincenty
@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 
-def _to_length_quantity(value, label="value"):
+def _to_length_quantity(value: Quantity | float, label: str = "value") -> Quantity:
     """Convert a length value to a pint Quantity."""
     if isinstance(value, (int, float)):
         return ureg.Quantity(float(value), "meter")
@@ -46,24 +46,24 @@ def _to_length_quantity(value, label="value"):
     raise HyPlanTypeError(f"{label} must be a float (meters) or a pint Quantity with length units")
 
 
-def _length_m(value, label="value") -> float:
+def _length_m(value: Quantity | float, label: str = "value") -> float:
     return float(_to_length_quantity(value, label).m_as(ureg.meter))
 
 
-def _lines_dict(lines: list[FlightLine]) -> dict:
+def _lines_dict(lines: list[FlightLine]) -> dict[str, FlightLine]:
     """Key a list of FlightLines with sequential leg_N ids."""
     return {f"leg_{i+1}": fl for i, fl in enumerate(lines)}
 
 
 def racetrack(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     altitude: Union[float, "Quantity"],
     leg_length: Union[float, "Quantity"],
     n_legs: int = 1,
-    offset: Union[float, "Quantity", list] = 0,
-    altitudes: list | None = None,
-    stack_altitudes: list | None = None,
+    offset: Union[float, "Quantity", list[float], list["Quantity"]] = 0,
+    altitudes: list[Union[float, "Quantity"]] | None = None,
+    stack_altitudes: list[Union[float, "Quantity"]] | None = None,
     name: str | None = None,
 ) -> Pattern:
     """Generate parallel out-and-back flight lines.
@@ -177,7 +177,7 @@ def racetrack(
 
 
 def rosette(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     altitude: Union[float, "Quantity"],
     radius: Union[float, "Quantity"],
@@ -254,7 +254,7 @@ def rosette(
 
 
 def polygon(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     altitude: Union[float, "Quantity"],
     radius: Union[float, "Quantity"],
@@ -320,7 +320,7 @@ def polygon(
         waypoints.append(Waypoint(
             latitude=lat_i,
             longitude=lon_i,
-            heading=tangent_heading,  # type: ignore[arg-type]
+            heading=tangent_heading,  # type: ignore[arg-type]  # float vs pint Quantity heading
             altitude_msl=alt,
             name=f"V{i+1}",
             segment_type="pattern",
@@ -355,7 +355,7 @@ def polygon(
 
 
 def sawtooth(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     altitude_min: Union[float, "Quantity"],
     altitude_max: Union[float, "Quantity"],
@@ -407,14 +407,14 @@ def sawtooth(
             lat, lon = pymap3d.vincenty.vreckon(
                 start_lat, start_lon, dist_from_start, heading
             )
-            lon = wrap_to_180(lon)  # type: ignore[assignment]
+            lon = wrap_to_180(lon)  # type: ignore[assignment]  # ndarray vs float from vreckon
 
         alt = alt_max if i % 2 == 0 else alt_min
 
         waypoints.append(Waypoint(
             latitude=float(lat),
             longitude=float(lon),
-            heading=wp_heading,  # type: ignore[arg-type]
+            heading=wp_heading,  # type: ignore[arg-type]  # float vs pint Quantity heading
             altitude_msl=alt,
             name=f"ST{i+1}",
             segment_type="pattern_turn",
@@ -438,7 +438,7 @@ def sawtooth(
 
 
 def spiral(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     altitude_start: Union[float, "Quantity"],
     altitude_end: Union[float, "Quantity"],
@@ -522,7 +522,7 @@ def spiral(
         waypoints.append(Waypoint(
             latitude=float(lat),
             longitude=float(lon),
-            heading=tangent,  # type: ignore[arg-type]
+            heading=tangent,  # type: ignore[arg-type]  # float vs pint Quantity heading
             altitude_msl=alt,
             name=f"SP{i+1}",
             segment_type="pattern",
@@ -548,8 +548,8 @@ def spiral(
 
 
 def glint_arc(
-    center: tuple,
-    observation_datetime,
+    center: tuple[float, float],
+    observation_datetime: Any,
     altitude: Union[float, "Quantity"],
     speed: Union[float, "Quantity"],
     bank_angle: float | None = None,
@@ -700,7 +700,7 @@ def flight_lines_to_waypoint_path(
 
 
 def coordinated_line(
-    center: tuple,
+    center: tuple[float, float],
     heading: float,
     primary_leg_length: Union[float, "Quantity"],
     primary_aircraft: Aircraft,
@@ -710,7 +710,7 @@ def coordinated_line(
     ground_speed_ratio: float | list[float] | None = None,
     primary_name: str = "P3",
     secondary_name: str = "ER2",
-) -> dict:
+) -> dict[str, Any]:
     """Generate a coordinated dual-aircraft line pattern (five-point line).
 
     Two aircraft fly vertically stacked legs centered on a coordination
@@ -771,7 +771,7 @@ def coordinated_line(
                  name=f"{primary_name}_end", segment_type="pattern_turn"),
     ]
 
-    center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,  # type: ignore[arg-type]
+    center_wp = Waypoint(center_lat, center_lon, fwd_az, sec_alt,  # type: ignore[arg-type]  # float vs pint Quantity heading
                          name="C1", segment_type="pattern")
 
     secondary_pairs = []

@@ -11,7 +11,7 @@ import logging
 import os
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import geopandas as gpd
 import numpy as np
@@ -90,7 +90,7 @@ _VALID_PRODUCTS = set(_PRODUCT_CONFIG.keys())
 # Lazy import helpers
 # ---------------------------------------------------------------------------
 
-def _require_rasterio():
+def _require_rasterio() -> Any:
     """Import and return rasterio, raising a clear error if missing."""
     try:
         import rasterio as _rio
@@ -103,7 +103,7 @@ def _require_rasterio():
         )
 
 
-def _require_xarray():
+def _require_xarray() -> Any:
     """Import and return xarray, raising a clear error if missing."""
     try:
         import xarray as _xr
@@ -147,7 +147,7 @@ def _search_granules(
     bounding_box: tuple[float, float, float, float],
     date_start: str,
     date_stop: str,
-) -> list:
+) -> list[Any]:
     """Search NASA CMR for MODIS granules.
 
     Parameters
@@ -177,10 +177,10 @@ def _search_granules(
         "CMR search for %s (%s to %s): %d granules",
         short_name, date_start, date_stop, len(results),
     )
-    return results  # type: ignore[no-any-return]
+    return results  # type: ignore[no-any-return]  # earthaccess has no stubs
 
 
-def _download_granules(granules: list, cache_dir: str) -> list[str]:
+def _download_granules(granules: list[Any], cache_dir: str) -> list[str]:
     """Download granules to *cache_dir*, skipping cached files.
 
     Returns list of local file paths (HDF).
@@ -208,7 +208,7 @@ def _find_subdataset(hdf_path: str, name_fragment: str) -> str | None:
     with rio.open(hdf_path) as src:
         for sds_name, _sds_desc in src.subdatasets:
             if name_fragment in sds_name:
-                return sds_name  # type: ignore[no-any-return]
+                return sds_name  # type: ignore[no-any-return]  # rasterio subdatasets are Any
     return None
 
 
@@ -220,7 +220,7 @@ def _list_subdatasets(hdf_path: str) -> list[tuple[str, str]]:
         return list(zip(src.subdatasets, src.subdatasets))
 
 
-def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarray, dict]:
+def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarray, dict[str, Any]]:
     """Read a subdataset from a MODIS HDF4-EOS file using pyhdf.
 
     Returns the data array and metadata dict with grid parameters.
@@ -264,7 +264,7 @@ def _read_hdf4_subdataset(hdf_path: str, subdataset_name: str) -> tuple[np.ndarr
     return data, grid_meta
 
 
-def _parse_modis_grid_bounds(grid_meta: dict) -> tuple[float, float, float, float]:
+def _parse_modis_grid_bounds(grid_meta: dict[str, Any]) -> tuple[float, float, float, float]:
     """Extract MODIS sinusoidal grid bounds from StructMetadata.0.
 
     Returns (ulx, uly, lrx, lry) in sinusoidal meters.
@@ -382,9 +382,9 @@ def _parse_modis_date(hdf_path: str) -> datetime:
 def _extract_vi_from_granule(
     hdf_path: str,
     polygon_geom: BaseGeometry,
-    config: dict,
+    config: dict[str, Any],
     spatial_mode: str,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Extract vegetation index values from a single granule.
 
     Returns a dict of column values, or None if no valid pixels.
@@ -416,25 +416,25 @@ def _extract_vi_from_granule(
             "day_of_year": dt.timetuple().tm_yday,
             "value": float(np.ma.mean(masked)) * config["scale_factor"],
         }
-    else:  # pixel_stats
-        scaled = masked.astype(np.float64) * config["scale_factor"]
-        return {
-            "date": dt,
-            "year": dt.year,
-            "day_of_year": dt.timetuple().tm_yday,
-            "value_mean": float(np.ma.mean(scaled)),
-            "value_std": float(np.ma.std(scaled)),
-            "value_min": float(np.ma.min(scaled)),
-            "value_max": float(np.ma.max(scaled)),
-            "pixel_count": int(scaled.count()),
-        }
+    # pixel_stats
+    scaled = masked.astype(np.float64) * config["scale_factor"]
+    return {
+        "date": dt,
+        "year": dt.year,
+        "day_of_year": dt.timetuple().tm_yday,
+        "value_mean": float(np.ma.mean(scaled)),
+        "value_std": float(np.ma.std(scaled)),
+        "value_min": float(np.ma.min(scaled)),
+        "value_max": float(np.ma.max(scaled)),
+        "pixel_count": int(scaled.count()),
+    }
 
 
 def _extract_phenology_from_granule(
     hdf_path: str,
     polygon_geom: BaseGeometry,
-    config: dict,
-) -> dict | None:
+    config: dict[str, Any],
+) -> dict[str, Any] | None:
     """Extract phenology transition DOYs from a single MCD12Q2 granule.
 
     Returns a dict of column values, or None if no valid pixels.
@@ -466,10 +466,10 @@ def _extract_phenology_from_granule(
         doy_masked: np.ma.MaskedArray = np.ma.masked_array(doys, mask=masked.mask | np.isnan(doys))
 
         if doy_masked.count() > 0:
-            result[stage_name] = float(np.ma.mean(doy_masked))  # type: ignore[assignment]
+            result[stage_name] = float(np.ma.mean(doy_masked))  # type: ignore[assignment]  # heterogeneous result dict
             any_valid = True
         else:
-            result[stage_name] = np.nan  # type: ignore[assignment]
+            result[stage_name] = np.nan  # type: ignore[assignment]  # heterogeneous result dict
 
     return result if any_valid else None
 
@@ -654,13 +654,13 @@ def fetch_phenology(
     # Determine which short_names to query
     if product in ("ndvi", "evi"):
         if satellite == "terra":
-            short_names = [config["short_name"]]  # type: ignore[index]
+            short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
         elif satellite == "aqua":
-            short_names = [config["short_name_aqua"]]  # type: ignore[index]
+            short_names = [config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
         else:  # combined
-            short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]
+            short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
     else:
-        short_names = [config["short_name"]]  # type: ignore[index]
+        short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
 
     # Authenticate
     from .._auth import _earthdata_login
@@ -695,11 +695,11 @@ def fetch_phenology(
                 try:
                     if product == "phenology":
                         result = _extract_phenology_from_granule(
-                            hdf_path, geom, config,  # type: ignore[arg-type]
+                            hdf_path, geom, config,  # type: ignore[arg-type]  # heterogeneous config dict
                         )
                     else:
                         result = _extract_vi_from_granule(
-                            hdf_path, geom, config, spatial_mode,  # type: ignore[arg-type]
+                            hdf_path, geom, config, spatial_mode,  # type: ignore[arg-type]  # heterogeneous config dict
                         )
                 except Exception:
                     logger.warning(
@@ -718,21 +718,20 @@ def fetch_phenology(
         if product == "phenology":
             return pd.DataFrame(
                 columns=["polygon_id", "year"] + list(
-                    _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()  # type: ignore[index]
+                    _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()  # type: ignore[index]  # heterogeneous config dict
                 )
             )
-        elif spatial_mode == "mean":
+        if spatial_mode == "mean":
             return pd.DataFrame(
                 columns=["polygon_id", "date", "year", "day_of_year", "value"]
             )
-        else:
-            return pd.DataFrame(
-                columns=[
-                    "polygon_id", "date", "year", "day_of_year",
-                    "value_mean", "value_std", "value_min", "value_max",
-                    "pixel_count",
-                ]
-            )
+        return pd.DataFrame(
+            columns=[
+                "polygon_id", "date", "year", "day_of_year",
+                "value_mean", "value_std", "value_min", "value_max",
+                "pixel_count",
+            ]
+        )
 
     df = pd.DataFrame(all_rows)
 
@@ -810,11 +809,11 @@ def fetch_phenology_spatial(
     date_stop = f"{year_stop}-12-31"
 
     if satellite == "terra":
-        short_names = [config["short_name"]]  # type: ignore[index]
+        short_names = [config["short_name"]]  # type: ignore[index]  # heterogeneous config dict
     elif satellite == "aqua":
-        short_names = [config["short_name_aqua"]]  # type: ignore[index]
+        short_names = [config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
     else:
-        short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]
+        short_names = [config["short_name"], config["short_name_aqua"]]  # type: ignore[index]  # heterogeneous config dict
 
     from .._auth import _earthdata_login
 
@@ -840,18 +839,18 @@ def fetch_phenology_spatial(
             for hdf_path in hdf_paths:
                 try:
                     data, transform = _read_and_clip_subdataset(
-                        hdf_path, config["subdataset"], geom,  # type: ignore[index]
+                        hdf_path, config["subdataset"], geom,  # type: ignore[index]  # heterogeneous config dict
                     )
                     qa, _ = _read_and_clip_subdataset(
-                        hdf_path, config["qa_subdataset"], geom,  # type: ignore[index]
+                        hdf_path, config["qa_subdataset"], geom,  # type: ignore[index]  # heterogeneous config dict
                     )
 
-                    masked = config["qa_func"](data, qa)  # type: ignore[index]
-                    if "valid_range" in config:  # type: ignore[operator]
-                        lo, hi = config["valid_range"]  # type: ignore[index]
+                    masked = config["qa_func"](data, qa)  # type: ignore[index]  # heterogeneous config dict
+                    if "valid_range" in config:  # type: ignore[operator]  # heterogeneous config dict
+                        lo, hi = config["valid_range"]  # type: ignore[index]  # heterogeneous config dict
                         masked = np.ma.masked_outside(masked, lo, hi)
 
-                    scaled = masked.astype(np.float64) * config["scale_factor"]  # type: ignore[index]
+                    scaled = masked.astype(np.float64) * config["scale_factor"]  # type: ignore[index]  # heterogeneous config dict
                     all_arrays.append(scaled)
                 except Exception:
                     logger.warning(

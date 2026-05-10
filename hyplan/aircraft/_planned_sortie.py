@@ -52,14 +52,14 @@ class PlannedSortie:
 # Field-level parsers
 # ---------------------------------------------------------------------------
 
-def _strip(value) -> str:
+def _strip(value: Any) -> str:
     """Return ``value`` as a stripped string, or empty string if ``None``."""
     if value is None:
         return ""
     return str(value).strip()
 
 
-def _parse_dms(value) -> float | None:
+def _parse_dms(value: Any) -> float | None:
     """Parse ``"N 38 48.35"`` / ``"W104 42.05"`` to decimal degrees.
 
     Accepts the Green Card's degrees-and-decimal-minutes format.
@@ -78,7 +78,7 @@ def _parse_dms(value) -> float | None:
     return decimal
 
 
-def _parse_altitude_ft(value) -> float | None:
+def _parse_altitude_ft(value: Any) -> float | None:
     """Parse ``"65000M"`` / ``" 6187M"`` to feet.
 
     The Green Card prints altitudes with a literal ``"M"`` suffix that
@@ -94,7 +94,7 @@ def _parse_altitude_ft(value) -> float | None:
         return None
 
 
-def _parse_signed_int(value) -> int | None:
+def _parse_signed_int(value: Any) -> int | None:
     """Parse ``"+8C"`` / ``"-57C"`` (temp) or stripped numerics to int."""
     s = _strip(value).rstrip("CMTG").strip()
     if not s or s == "N/A":
@@ -105,7 +105,7 @@ def _parse_signed_int(value) -> int | None:
         return None
 
 
-def _parse_speed_kt(value) -> int | None:
+def _parse_speed_kt(value: Any) -> int | None:
     """Parse ``"398 T"`` / ``"220 C"`` / ``"412 G"`` to integer knots.
 
     Trailing ``T`` / ``C`` / ``G`` denote True / Calibrated / Ground.
@@ -120,7 +120,7 @@ def _parse_speed_kt(value) -> int | None:
         return None
 
 
-def _parse_heading_deg(value) -> int | None:
+def _parse_heading_deg(value: Any) -> int | None:
     """Parse ``"134 T"`` / ``"127 M"`` to integer degrees, dropping the suffix."""
     s = _strip(value).rstrip("TM").strip()
     if not s or s == "N/A":
@@ -131,7 +131,7 @@ def _parse_heading_deg(value) -> int | None:
         return None
 
 
-def _parse_bank_deg(value) -> int | None:
+def _parse_bank_deg(value: Any) -> int | None:
     """Parse ``"22  °"`` to integer degrees (bank angle)."""
     s = _strip(value).rstrip("°").strip()
     if not s:
@@ -142,7 +142,7 @@ def _parse_bank_deg(value) -> int | None:
         return None
 
 
-def _parse_mach(value) -> float | None:
+def _parse_mach(value: Any) -> float | None:
     """Parse ``".55"`` / ``".70"`` / ``"1.2"`` to float; ``"N/A"`` → ``None``."""
     s = _strip(value)
     if not s or s == "N/A":
@@ -153,7 +153,7 @@ def _parse_mach(value) -> float | None:
         return None
 
 
-def _parse_wind(value) -> tuple[int | None, int | None]:
+def _parse_wind(value: Any) -> tuple[int | None, int | None]:
     """Parse ``"260/004"`` to ``(direction_deg, speed_kt)``.
 
     Returns ``(None, None)`` for empty cells.
@@ -165,7 +165,7 @@ def _parse_wind(value) -> tuple[int | None, int | None]:
     return int(m.group(1)), int(m.group(2))
 
 
-def _parse_distance_nmi(value) -> int | None:
+def _parse_distance_nmi(value: Any) -> int | None:
     """Parse ``"   10"`` / ``"  121"`` (leading-space integer) to int."""
     s = _strip(value)
     if not s:
@@ -176,7 +176,7 @@ def _parse_distance_nmi(value) -> int | None:
         return None
 
 
-def _parse_leg_time_min(value) -> float | None:
+def _parse_leg_time_min(value: Any) -> float | None:
     """Parse a leg-time cell to minutes (float).
 
     Leg time is always sub-hour: ``"+07.0"``, ``"+11.2"``.
@@ -190,7 +190,7 @@ def _parse_leg_time_min(value) -> float | None:
         return None
 
 
-def _parse_total_time_min(value) -> float | None:
+def _parse_total_time_min(value: Any) -> float | None:
     """Parse a cumulative-time cell to minutes (float).
 
     The Green Card switches format at 60 min: ``"+47.3"`` below the
@@ -211,13 +211,13 @@ def _parse_total_time_min(value) -> float | None:
         return None
 
 
-def _parse_clock_time(value) -> str | None:
+def _parse_clock_time(value: Any) -> str | None:
     """Return the clock time string verbatim (``"15:30.0"``)."""
     s = _strip(value)
     return s or None
 
 
-def _parse_fuel_lb(value) -> int | None:
+def _parse_fuel_lb(value: Any) -> int | None:
     """Parse a fuel-cell to integer pounds; empty → ``None``."""
     s = _strip(value)
     if not s:
@@ -228,7 +228,7 @@ def _parse_fuel_lb(value) -> int | None:
         return None
 
 
-def _parse_sched_duration_hours(value) -> float | None:
+def _parse_sched_duration_hours(value: Any) -> float | None:
     """Parse ``"06+33+35"`` (HH+MM+SS) to fractional hours."""
     s = _strip(value)
     parts = s.split("+")
@@ -301,7 +301,7 @@ _COL_FUEL = 9         # J (leg row 1, total row 2, FF row 3)
 _COL_REMARKS = 12     # M (row 1)
 
 
-def _find_header_row(ws) -> int:
+def _find_header_row(ws: Any) -> int:
     """Return the 1-indexed row containing ``"WP#"`` in column A."""
     for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
         if row and _strip(row[_COL_WP]) == "WP#":
@@ -309,7 +309,7 @@ def _find_header_row(ws) -> int:
     raise ValueError("Green Card XLSX is missing the 'WP#' header row")
 
 
-def _find_data_start_row(ws, header_row: int) -> int:
+def _find_data_start_row(ws: Any, header_row: int) -> int:
     """Return the 1-indexed row of the first waypoint block.
 
     The header spans 4 rows ("WP# / DTD#" / "Fix/Point Description" /
@@ -327,7 +327,7 @@ def _find_data_start_row(ws, header_row: int) -> int:
     raise ValueError("Green Card XLSX has no numeric WP# rows after header")
 
 
-def _read_header(ws) -> dict[Any, Any]:
+def _read_header(ws: Any) -> dict[Any, Any]:
     """Extract the Green Card header block.
 
     Pulls the labeled fields above the ``WP#`` row.  Field names map
@@ -377,7 +377,7 @@ def _classify_kind(fix_name: str) -> str:
     return "waypoint"
 
 
-def _parse_waypoint_block(rows: tuple[tuple[Any, ...], tuple, tuple]) -> dict[Any, Any]:
+def _parse_waypoint_block(rows: tuple[tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]]) -> dict[Any, Any]:
     """Parse three consecutive rows of Green Card data into one record."""
     r1, r2, r3 = rows
 
@@ -501,7 +501,7 @@ _PDF_COL_ATA = 7
 _PDF_COL_REMARKS = 8
 
 
-def _normalize_pdf_row(row: list) -> list:
+def _normalize_pdf_row(row: list[Any]) -> list[Any]:
     """Strip the empty placeholder col 1 used by page-1's merged-header layout."""
     if len(row) == 10 and row[1] is None:
         return [row[0]] + list(row[2:])
@@ -587,7 +587,7 @@ def _parse_pdf_fix_block(cell: str) -> dict[Any, Any]:
     }
 
 
-def _parse_pdf_waypoint_row(row: list) -> dict[Any, Any]:
+def _parse_pdf_waypoint_row(row: list[Any]) -> dict[Any, Any]:
     """Convert one pdfplumber table row into a normalized waypoint record."""
     fix_block = _parse_pdf_fix_block(row[_PDF_COL_FIX_BLOCK])
 

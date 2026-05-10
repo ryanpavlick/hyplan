@@ -44,7 +44,7 @@ from ._base import Sensor
 __all__ = ["ProfilingLidar", "HSRL2", "HALO", "CPL"]
 
 
-def _as_quantity(value, unit: str, label: str) -> Quantity:
+def _as_quantity(value: object, unit: str, label: str) -> Quantity:
     """Normalize *value* to a quantity in *unit*."""
     if isinstance(value, Quantity):
         return value.to(unit)

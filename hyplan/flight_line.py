@@ -134,7 +134,7 @@ class FlightLine:
         return self._waypoint1.altitude_msl
 
     @altitude_msl.setter
-    def altitude_msl(self, value: Quantity):
+    def altitude_msl(self, value: Quantity) -> None:
         """Set altitude on both waypoints."""
         validated = self._validate_altitude(value)
         self._waypoint1.altitude_msl = validated
@@ -225,7 +225,7 @@ class FlightLine:
         site_name: str | None = None,
         site_description: str | None = None,
         investigator: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> FlightLine:
         """Create a flight line from a start point, length, and azimuth.
 
@@ -321,7 +321,7 @@ class FlightLine:
         site_name: str | None = None,
         site_description: str | None = None,
         investigator: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> FlightLine:
         """Create a flight line centered on a point, extending equally in both directions.
 
@@ -467,9 +467,8 @@ class FlightLine:
             if clipped_geometry.equals(self.geometry):
                 logger.info(f"FlightLine {self.site_name or '<Unnamed>'} is entirely within the polygon.")
                 return [self]
-            else:
-                logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was clipped into a single segment.")
-                return [self._from_geometry(clipped_geometry)]
+            logger.info(f"FlightLine {self.site_name or '<Unnamed>'} was clipped into a single segment.")
+            return [self._from_geometry(clipped_geometry)]
 
         if isinstance(clipped_geometry, MultiLineString):
             segments = list(clipped_geometry.geoms)
@@ -536,7 +535,7 @@ class FlightLine:
         )
 
         track_lon = wrap_to_180(track_lon)
-        return LineString(zip(track_lon, track_lat))  # type: ignore[arg-type]
+        return LineString(zip(track_lon, track_lat))  # type: ignore[arg-type]  # shapely LineString accepts zip iterable
 
     def reverse(self) -> FlightLine:
         """
@@ -567,11 +566,11 @@ class FlightLine:
         offset_north_m = offset_north.m_as("meter")
         offset_east_m = offset_east.m_as("meter")
 
-        def compute_offset(lat, lon, north, east):
+        def compute_offset(lat: float, lon: float, north: float, east: float) -> tuple[float, float]:
             new_lat, new_lon, _ = pymap3d.ned2geodetic(
                 north, east, 0, lat, lon, self.altitude_msl.magnitude
             )
-            return new_lat, wrap_to_180(new_lon)
+            return float(new_lat), float(wrap_to_180(float(new_lon)))
 
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_north_m, offset_east_m)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_north_m, offset_east_m)
@@ -598,15 +597,16 @@ class FlightLine:
 
         perpendicular_az = (self.az12.magnitude + 90) % 360 if offset_distance.magnitude >= 0 else (self.az12.magnitude - 90) % 360
 
-        def compute_offset(lat, lon, distance, azimuth):
-            return pymap3d.vincenty.vreckon(lat, lon, distance.m_as("meter"), azimuth)
+        def compute_offset(lat: float, lon: float, distance: Quantity, azimuth: float) -> tuple[Any, Any]:
+            new_lat, new_lon = pymap3d.vincenty.vreckon(lat, lon, distance.m_as("meter"), azimuth)
+            return new_lat, new_lon
 
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, abs(offset_distance), perpendicular_az)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, abs(offset_distance), perpendicular_az)
 
         new_lon1, new_lon2 = wrap_to_180(new_lon1), wrap_to_180(new_lon2)
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]  # ndarray vs SupportsRound
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]  # ndarray vs SupportsRound
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
@@ -629,18 +629,19 @@ class FlightLine:
         if not isinstance(offset_end, Quantity):
             offset_end = ureg.Quantity(offset_end, "meter")
 
-        def compute_offset(lat, lon, offset, azimuth):
+        def compute_offset(lat: float, lon: float, offset: Quantity, azimuth: float) -> tuple[Any, Any]:
             if offset < 0:
                 azimuth = (azimuth + 180) % 360
                 offset = abs(offset)
-            return pymap3d.vincenty.vreckon(lat, lon, offset.m_as("meter"), azimuth)
+            new_lat, new_lon = pymap3d.vincenty.vreckon(lat, lon, offset.m_as("meter"), azimuth)
+            return new_lat, new_lon
 
         new_lat1, new_lon1 = compute_offset(self.lat1, self.lon1, offset_start, self.az12.magnitude)
         new_lat2, new_lon2 = compute_offset(self.lat2, self.lon2, offset_end, (self.az21.magnitude + 180.0) % 360.0)
 
         new_lon1, new_lon2 = wrap_to_180(new_lon1), wrap_to_180(new_lon2)
-        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]
-        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]
+        new_lat1, new_lon1 = round(new_lat1, 6), round(new_lon1, 6)  # type: ignore[arg-type]  # ndarray vs SupportsRound
+        new_lat2, new_lon2 = round(new_lat2, 6), round(new_lon2, 6)  # type: ignore[arg-type]  # ndarray vs SupportsRound
 
         offset_geometry = LineString([(new_lon1, new_lat1), (new_lon2, new_lat2)])
         return self._from_geometry(offset_geometry)
@@ -661,7 +662,7 @@ class FlightLine:
         angle_rad = np.radians(angle)
         midpoint = self.geometry.interpolate(0.5, normalized=True)
 
-        def rotate_point(x, y, center_x, center_y, angle_radians):
+        def rotate_point(x: float, y: float, center_x: float, center_y: float, angle_radians: float) -> tuple[float, float]:
             delta_x = x - center_x
             delta_y = y - center_y
             rotated_x = delta_x * np.cos(angle_radians) - delta_y * np.sin(angle_radians) + center_x
@@ -777,7 +778,7 @@ class FlightLine:
         }
 
 
-def _validate_linestring(geometry: LineString):
+def _validate_linestring(geometry: LineString) -> None:
     """Validate a LineString for use as FlightLine geometry."""
     if not isinstance(geometry, LineString):
         raise HyPlanValueError("Geometry must be a Shapely LineString.")

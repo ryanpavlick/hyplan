@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.6.1 — Unreleased
+
+### mypy strict cleanup
+
+`hyplan.aircraft.wind_path` and `hyplan.planning.isochrone` are now
+genuinely strict-mode-clean, including the entire transitive import
+call graph (~50 modules).  The strict overrides on these two modules
+were retained from v1.6.0 but had cascaded ~462 errors across the
+codebase that were silently accepted; this release closes them.
+
+* 54 source files updated.  Categories addressed:
+  * 169 `[no-untyped-def]` — added function / method signatures.
+  * 148 `[type-arg]` — concrete generic args
+    (`dict[str, Any]`, `list[float]`, `npt.NDArray[np.float64]`, ...).
+  * 120 `[no-untyped-call]` — resolved transitively as the called
+    fns gained signatures.
+  * 18 `[attr-defined]` and ~7 misc — case-by-case (mostly type-
+    narrowing via `assert is not None`, lazy-import helpers
+    annotated as `-> Any`, one `_GriddedWindField` import path
+    correction).
+* No public-API changes; no behavioral changes.  The work is purely
+  type annotations + a few `# type: ignore[error-code]  # reason`
+  comments where third-party stubs are missing (folium, some
+  matplotlib re-exports).
+
 ## v1.6.0 — 2026-05-09
 
 Internationalization of the aircraft fleet plus aircraft-calibration

@@ -63,13 +63,13 @@ def wrap_to_360(angle: float | np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any
     Returns:
         numpy.ndarray: Angle(s) wrapped to [0, 360).
     """
-    return np.squeeze(np.mod(np.array(angle), 360.0))  # type: ignore[no-any-return]
+    return np.squeeze(np.mod(np.array(angle), 360.0))  # type: ignore[no-any-return]  # numpy reduction returns Any
 
 
 _timezone_finder = None
 
 
-def _import_timezonefinder():
+def _import_timezonefinder() -> Any:
     """Import ``timezonefinder.TimezoneFinder`` or raise a clear error."""
     try:
         from timezonefinder import TimezoneFinder
@@ -99,7 +99,7 @@ def _is_numba_locator_failure(exc: BaseException) -> bool:
     return "no locator available" in msg and "cache" in msg
 
 
-def _disable_numba_and_reimport_timezonefinder():
+def _disable_numba_and_reimport_timezonefinder() -> Any:
     """Force ``timezonefinder`` to use its pure-Python fallback path.
 
     Sets ``NUMBA_DISABLE_JIT=1`` and evicts ``timezonefinder`` and ``numba``
@@ -118,7 +118,7 @@ def _disable_numba_and_reimport_timezonefinder():
     return _import_timezonefinder()
 
 
-def _get_timezone_finder():
+def _get_timezone_finder() -> Any:
     """Lazily instantiate a single ``TimezoneFinder``.
 
     ``TimezoneFinder()`` loads tens of MB of polygon data on first use, so
@@ -315,7 +315,7 @@ def get_utm_crs(lon: float, lat: float) -> CRS:
 
 
 
-def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Callable[..., Any], Callable]:
+def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Callable[..., Any], Callable[..., Any]]:
     """
     Get the UTM CRS and transformation functions to/from WGS84 for a Shapely geometry or a list of geometries.
 
@@ -388,7 +388,7 @@ def haversine(
     a = np.sin(delta_phi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(delta_lambda / 2) ** 2
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-    return radius * c  # type: ignore[no-any-return]
+    return radius * c  # type: ignore[no-any-return]  # numpy arithmetic returns Any (haversine returns scalar OR ndarray depending on input shape)
 
 def random_points_in_polygon(polygon: Polygon, k: int) -> list[Point]:
     """
@@ -709,7 +709,7 @@ def process_linestring(linestring: LineString) -> tuple[np.ndarray[Any, np.dtype
         azimuths.append(0.0)  # Single point, azimuth is undefined
 
     # Compute cumulative along-track distances
-    distances = np.array(distances)  # type: ignore[assignment]
+    distances = np.array(distances)  # type: ignore[assignment]  # list reassigned as ndarray
     along_track_distance = np.insert(np.cumsum(distances), 0, 0)
 
     return (
@@ -752,7 +752,7 @@ def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
         ) from e
     if date is None:
         date = datetime.date.today()
-    return geomag.declination(lat, lon, alt_m / 1000.0, date)  # type: ignore[no-any-return]
+    return float(geomag.declination(lat, lon, alt_m / 1000.0, date))
 
 
 def true_to_magnetic(heading: float, declination: float) -> float:
