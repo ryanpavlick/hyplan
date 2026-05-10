@@ -1,5 +1,90 @@
 # Changelog
 
+## v1.6.2 — 2026-05-10
+
+CI-recovery release.  No public-API or behavioral changes; main
+had been silently red on lint and mypy since v1.6.1 was tagged.
+This release closes both, plus adds defenses so neither slips
+again.
+
+### Lint cleanup
+
+The CI lint step (`ruff check hyplan tests`) was tripping 68
+violations — 39 `E402` (module-level import not at top) and 29
+`F401` (unused import) — that had accumulated since the test
+reorganization.  Most were intentional patterns ruff couldn't
+distinguish, addressed via per-file-ignores in `pyproject.toml`:
+
+* **`hyplan/__init__.py`** — public re-exports via
+  `from .x import y` (F401), with optional-dep blocks gated
+  behind `try/except` (E402).
+* **`hyplan/*/__init__.py` and `hyplan/*/*/__init__.py`** —
+  sub-package re-exports (F401).
+* **`hyplan/flight_plan.py`** — backward-compat shim that
+  re-exports private helpers under the old module path (F401).
+* **`tests/*.py`** — section-grouped imports under comment
+  headers (E402) and optional-dep `try/except` blocks for
+  test-skip plumbing (F401).
+
+Two genuine fixes alongside:
+
+* `hyplan/instruments/_base.py` — drop unused `ureg` import.
+* `hyplan/winds/providers/gfs.py` — explicit `# noqa: F401`
+  on `import cfgrib` (kept for xarray-engine registration
+  side effect).
+
+### Type-system regression on the Python 3.10 matrix entry
+
+The v1.6.1 type-system cleanup was validated locally on
+numpy 2.4 and missed numpy 2.2's stricter generic stubs.
+On the CI 3.10 matrix entry (numpy 2.2 is the last version
+supporting Python 3.10; numpy 2.3+ requires 3.11+), bare
+`np.ndarray` annotations triggered 74 `[type-arg]` errors
+plus 9 `[no-untyped-call]` errors on `np.ma.MaskedArray`
+constructor calls.
+
+* **84 errors → 0** across 16 files (`hyplan/aircraft/_base.py`,
+  `hyplan/aircraft/adsb/{fitting,phases}.py`, `hyplan/geometry.py`,
+  `hyplan/glint.py`, `hyplan/instruments/{awp,frame_camera}.py`,
+  `hyplan/phenology/{_qa,sources}.py`,
+  `hyplan/planning/isochrone.py`, `hyplan/plotting.py`,
+  `hyplan/satellites.py`, `hyplan/swath.py`,
+  `hyplan/terrain/intersection.py`, `hyplan/winds/gridded.py`,
+  `hyplan/winds/providers/gmao.py`).
+* Replaced bare `np.ndarray` with `npt.NDArray[T]` annotations
+  with per-site dtype judgment from surrounding code:
+  `np.float64` for numeric arrays (most common), `np.integer[Any]`
+  for index / mask arrays, `np.datetime64` for time arrays,
+  `Any` for genuinely polymorphic helpers.
+* `np.ma.MaskedArray` constructor calls switched to
+  `np.ma.masked_array(...)` factory or `# type: ignore[no-untyped-call]`
+  where the explicit class was load-bearing.
+* `hyplan/clouds/sources.py` — earthengine `Any`-return ignores
+  switched to `# type: ignore[no-any-return, unused-ignore]`
+  to absorb a Python-version-dependent inference difference.
+
+### Defense in depth
+
+Two-layer guard against the same incident pattern (red main +
+release tag slipping through):
+
+* **`.pre-commit-config.yaml`** — local `ruff-check` hook (pinned
+  to ruff 0.15.12 to match CI exactly), plus standard
+  whitespace / yaml / toml hygiene hooks.  Activate per clone
+  with `pip install pre-commit && pre-commit install`.
+* **`release.yml` and `post-release.yml`** — both gain a lint
+  step / `verify-lint` job before the tag-bumping side effects
+  run.  A tag pushed against a red main now fails fast at the
+  workflow level instead of silently bumping bookkeeping.
+
+### Verification
+
+* `mypy hyplan` — Success: no issues found in 89 source files
+  (Python 3.10 + numpy 2.2; Python 3.11 + numpy 2.4).
+* `ruff check hyplan tests` — All checks passed.
+* `pytest tests` — 1697 passed, 1 skipped, 1 warning.
+* CI matrix (Python 3.10 / 3.11 / 3.12) green.
+
 ## v1.6.1 — 2026-05-09
 
 Maintenance / quality release.  No public-API or behavioral
@@ -381,7 +466,7 @@ unannotated `np.empty/zeros` assignments.
 ### Other housekeeping
 
 * `paper/paper.pdf` rebuilt against the current source.
-* `notebooks/isochrone.ipynb` re-executed on v1.5.2 
+* `notebooks/isochrone.ipynb` re-executed on v1.5.2
 
 ## v1.5.1 — 2026-05-07
 
