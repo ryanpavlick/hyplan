@@ -1,11 +1,18 @@
-"""NASA WB-57 (NASA 926 + 927, JSC) calibration from IWG1 sorties.
+"""NASA WB-57 (NASA 926 + 927, JSC) calibration from IWG1 + ICARTT sorties.
 
 High-altitude reconnaissance twin-jet operating from NASA Johnson
 Space Center.  Typical cruise FL500-FL620; brochure ceiling FL650.
 
-Source: per-sortie IWG1 files split from the local
-``n92[67]NA_alltracks.csv`` deliveries.  Both tails land in
-``data/NASA_WB57/`` (prefix ``n926_*.txt`` / ``n927_*.txt``).
+Sources (both land in ``data/NASA_WB57/``):
+
+* IWG1 per-sortie .txt files split from local in-house
+  ``n92[67]NA_alltracks.csv`` deliveries (prefix ``n926_*.txt`` /
+  ``n927_*.txt``).
+* ICARTT MMS-1HZ .ICT files from the ACCLIP 2022 campaign archive at
+  NASA LaRC ASDC, fetched via ``_fetch_acclip.py``
+  (``n926_*_acclip-mms.ICT``).  Both formats produce DataFrames with
+  the same canonical schema, so the calibration pipeline treats them
+  uniformly after load + ``trim_ground_taxi``.
 
 Per-phase TAS schedule targets — climb anchored at SL with rotation
 TAS, cruise restricted to FL500-FL620 (the typical operating band;
@@ -22,7 +29,6 @@ import sys
 import warnings
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 warnings.filterwarnings("ignore")
@@ -34,10 +40,12 @@ from _common import (  # noqa: E402
 )
 
 from hyplan.aircraft import load_iwg1, trim_ground_taxi  # noqa: E402
+from hyplan.aircraft.icartt import load_icartt  # noqa: E402
 
 
-# ---- glob -----------------------------------------------------------
-WB57_GLOB = "data/NASA_WB57/n92[67]_*.txt"
+# ---- globs ----------------------------------------------------------
+WB57_IWG1_GLOB = "data/NASA_WB57/n92[67]_*.txt"
+WB57_ICT_GLOB = "data/NASA_WB57/n926_*_acclip-mms.ICT"
 
 # ---- calibration parameters ----------------------------------------
 ACTIVE_VS_THR_FPM = 1500.0
@@ -60,14 +68,30 @@ CEILING_VS_FPM = 500.0
 
 
 def load_sorties() -> dict[str, pd.DataFrame]:
-    paths = sorted(Path(".").glob(WB57_GLOB))
-    print(f"  scanning {len(paths)} IWG1 files (n926 + n927)")
+    iwg1_paths = sorted(Path(".").glob(WB57_IWG1_GLOB))
+    ict_paths = sorted(Path(".").glob(WB57_ICT_GLOB))
+    print(f"  scanning {len(iwg1_paths)} IWG1 files (n926 + n927) "
+          f"+ {len(ict_paths)} ACCLIP MMS-1HZ ICARTT files")
 
     sorties: dict[str, pd.DataFrame] = {}
     skipped: list[tuple[str, str]] = []
-    for p in paths:
+    # Dispatch on suffix: .txt → IWG1, .ICT/.ict → ICARTT.  Both
+    # produce canonical-schema DataFrames consumable by
+    # trim_ground_taxi / apply_sortie_filters / label_phases.  ACCLIP
+    # MMS-1HZ files ship TAS but not groundspeed; backfill GS from TAS
+    # so trim_ground_taxi's >25 kt airborne gate fires.  (Wind effect
+    # on WB-57 cruise is ≲10% of TAS at FL550+; the gate's job is
+    # "definitely airborne or not" not precise GS, so this proxy is
+    # fine for the trim step.)
+    for p in iwg1_paths + ict_paths:
         try:
-            raw = load_iwg1(p)
+            if p.suffix.lower() == ".ict":
+                raw = load_icartt(p)
+                if "groundspeed" not in raw.columns or raw["groundspeed"].isna().all():
+                    raw = raw.copy()
+                    raw["groundspeed"] = raw["tas_kt"]
+            else:
+                raw = load_iwg1(p)
             a = trim_ground_taxi(raw)
         except Exception as e:
             skipped.append((p.stem, f"load fail: {e}"))
@@ -84,7 +108,10 @@ def load_sorties() -> dict[str, pd.DataFrame]:
 
     summary_table(
         sorties, skipped,
-        source_label="NASA WB-57 (NASA 926 + 927): n92[67]NA_alltracks delivery",
+        source_label=(
+            "NASA WB-57 (NASA 926 + 927): n92[67]NA_alltracks IWG1 delivery "
+            "+ ACCLIP 2022 MMS-1HZ ICARTT (LaRC ASDC)"
+        ),
         print_it=False,
         manifest_path="data/NASA_WB57/calibration_manifest.csv",
     )
@@ -173,8 +200,9 @@ def main() -> None:
     print("=" * 70)
     print("PASTE-READY NASA_WB57() PERFORMANCE BLOCK")
     print("=" * 70)
-    print(f"# Calibrated against {len(sorties)} IWG1 sorties from NASA 926 + 927")
-    print(f"# (n92[67]NA_alltracks delivery split into per-sortie files).")
+    print(f"# Calibrated against {len(sorties)} sorties from NASA 926 + 927")
+    print("# (n92[67]NA_alltracks IWG1 + ACCLIP 2022 MMS-1HZ ICARTT,")
+    print("# combined cache 2018-2026).")
     print(f"service_ceiling={int(round(ceiling/1000)*1000)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={climb_pts!r}),")
