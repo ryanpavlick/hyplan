@@ -141,7 +141,7 @@ def main() -> None:
         )
 
     DEST.mkdir(parents=True, exist_ok=True)
-    print(f"querying CMR for ACCLIP WB-57 MMS-1HZ granules…")
+    print("querying CMR for ACCLIP WB-57 MMS-1HZ granules…")
     granules = _list_acclip_mms_1hz()
     print(f"found {len(granules)} MMS-1HZ files")
 
