@@ -42,7 +42,7 @@ def fit_schedules(
         altitude_bin_ft: Altitude bin width for aggregation.
         min_points_per_bin: Minimum observations per bin to include.
         max_schedule_points: Maximum breakpoints in fitted schedules.
-        outlier_sigma: Remove points beyond this many standard deviations
+        outlier_sigma: Remove points beyond this many robust (MAD-based) standard deviations
             from the bin median before computing the final value.
         service_ceiling_ft: Override service ceiling.  If *None*,
             inferred as max observed altitude rounded up to the nearest
@@ -241,14 +241,14 @@ def _fit_phase(
     metrics_list = []
 
     spd_metric = _compute_metrics(
-        centers, tas_meds, spd_simplified, sum(bin_counts),
+        centers, tas_meds, spd_simplified, bin_counts,
         alt_min, alt_max, altitude_bin_ft,
     )
     metrics_list.append(spd_metric)
 
     if profile is not None:
         vs_metric = _compute_metrics(
-            centers, vs_meds, vs_simplified, sum(bin_counts),
+            centers, vs_meds, vs_simplified, bin_counts,
             alt_min, alt_max, altitude_bin_ft,
         )
         metrics_list.append(vs_metric)
@@ -351,14 +351,21 @@ def _rdp_core(
 def _reject_outliers(
     arr: npt.NDArray[np.floating[Any]], sigma: float
 ) -> npt.NDArray[np.floating[Any]]:
-    """Remove values beyond *sigma* standard deviations from the median."""
+    """Remove values beyond *sigma* robust standard deviations from the median.
+
+    Uses MAD-based scale (``1.4826 · median(|x − median(x)|)``), which is
+    calibrated to match σ for Gaussian data but is not inflated by a few
+    extreme outliers — so the threshold survives the very contamination
+    it is meant to remove.
+    """
     if len(arr) < 3:
         return arr
     med = np.median(arr)
-    std = np.std(arr)
-    if std < 1e-9:
+    mad = np.median(np.abs(arr - med))
+    scale = 1.4826 * mad
+    if scale < 1e-9:
         return arr
-    mask = np.abs(arr - med) <= sigma * std
+    mask = np.abs(arr - med) <= sigma * scale
     return arr[mask]  # type: ignore[no-any-return]  # numpy fancy-indexing returns Any
 
 
@@ -366,19 +373,39 @@ def _compute_metrics(
     bin_centers: npt.NDArray[np.floating[Any]],
     bin_values: npt.NDArray[np.floating[Any]],
     simplified: npt.NDArray[np.floating[Any]],
-    n_observations: int,
+    bin_counts: list[int] | npt.NDArray[np.integer[Any]],
     alt_min: float,
     alt_max: float,
     altitude_bin_ft: float,
 ) -> ScheduleFitMetrics:
-    """Compute fit quality metrics for a piecewise-linear schedule."""
-    # Interpolate the simplified polyline at the bin centers
+    """Compute fit quality metrics for a piecewise-linear schedule.
+
+    R²/RMSE are computed against the *bin medians* (already
+    robust-aggregated within each altitude bin), not against the raw
+    observations.  Each bin is weighted by its raw-observation count
+    so that bins with more data points contribute proportionally to
+    their epistemic weight, but within-bin variance does not enter the
+    metric.  Interpret the reported R² as "fraction of variance in the
+    binned schedule explained by the RDP simplification," not as a
+    classical regression R² against the raw ADS-B time series.
+    """
+    weights = np.asarray(bin_counts, dtype=float)
+    # Interpolate the simplified polyline at the bin centers.
     predicted = np.interp(bin_centers, simplified[:, 0], simplified[:, 1])
     residuals = bin_values - predicted
-    ss_res = float(np.sum(residuals ** 2))
-    ss_tot = float(np.sum((bin_values - np.mean(bin_values)) ** 2))
+
+    w_sum = float(weights.sum())
+    if w_sum > 0:
+        weighted_mean = float(np.sum(weights * bin_values) / w_sum)
+        ss_res = float(np.sum(weights * residuals ** 2))
+        ss_tot = float(np.sum(weights * (bin_values - weighted_mean) ** 2))
+        rmse = float(np.sqrt(np.sum(weights * residuals ** 2) / w_sum))
+    else:
+        ss_res = float(np.sum(residuals ** 2))
+        ss_tot = float(np.sum((bin_values - np.mean(bin_values)) ** 2))
+        rmse = float(np.sqrt(np.mean(residuals ** 2)))
+
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 1e-9 else 1.0
-    rmse = float(np.sqrt(np.mean(residuals ** 2)))
 
     alt_range = alt_max - alt_min
     n_possible_bins = max(1, int(alt_range / altitude_bin_ft))
@@ -387,7 +414,7 @@ def _compute_metrics(
     return ScheduleFitMetrics(
         r_squared=max(0.0, r_squared),
         rmse=rmse,
-        n_observations=n_observations,
+        n_observations=int(w_sum),
         altitude_coverage_pct=coverage,
         n_breakpoints=len(simplified),
     )

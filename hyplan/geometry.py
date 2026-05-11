@@ -390,6 +390,38 @@ def haversine(
 
     return radius * c  # type: ignore[no-any-return]  # numpy arithmetic returns Any (haversine returns scalar OR ndarray depending on input shape)
 
+
+def geodesic_midpoint(
+    lat1: float, lon1: float, lat2: float, lon2: float,
+) -> tuple[float, float]:
+    """Geodesic midpoint of two points on the WGS-84 ellipsoid.
+
+    Computes the point at half the geodesic distance from (lat1, lon1)
+    along the initial bearing toward (lat2, lon2), via Vincenty.  This
+    is the correct midpoint for any pair of points — unlike the naïve
+    ``((lat1+lat2)/2, (lon1+lon2)/2)`` arithmetic mean, which fails
+    across the antimeridian, near the poles, and accumulates error on
+    long legs at high latitude.
+
+    Args:
+        lat1, lon1: First endpoint in decimal degrees.
+        lat2, lon2: Second endpoint in decimal degrees.
+
+    Returns:
+        ``(mid_lat, mid_lon)`` in decimal degrees; longitude in [-180, 180].
+    """
+    import pymap3d.vincenty
+
+    if lat1 == lat2 and lon1 == lon2:
+        return float(lat1), float(lon1)
+
+    dist_m, az_deg = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
+    mid_lat, mid_lon = pymap3d.vincenty.vreckon(
+        lat1, lon1, float(dist_m) / 2.0, float(az_deg),
+    )
+    return float(mid_lat), float(wrap_to_180(float(mid_lon)))
+
+
 def random_points_in_polygon(polygon: Polygon, k: int) -> list[Point]:
     """
     Generate k points chosen uniformly at random inside a polygon.
@@ -583,15 +615,26 @@ def rectangle_dimensions(
 
 def translate_polygon(polygon: Polygon, distance: float, azimuth: float) -> Polygon:
     """
-    Translate a Shapely polygon by a specified distance in a given rotational direction.
+    Translate a Shapely polygon by ``distance`` along the given compass azimuth.
+
+    Operates in the polygon's native coordinate frame — the offset is applied
+    as ``(dx, dy) = (distance·sin(az), distance·cos(az))`` where ``+y`` is
+    interpreted as grid-north and ``+x`` as grid-east.  This is only
+    meaningful for polygons in a **projected CRS** (e.g. UTM) where coordinate
+    axes are nominally aligned with north/east and units match ``distance``.
+    The caller is responsible for projection; passing a WGS84 polygon will
+    translate it by ``distance`` *degrees of lat/lon*, not metres, which is
+    almost never what you want.
 
     Args:
-        polygon (Polygon): The input Shapely polygon to be translated
-        distance (float): Distance to translate the polygon (in the same units as the polygon's coordinates).
-        azimuth (float): Angle of translation in degrees, measured clockwise from north.
+        polygon (Polygon): The input Shapely polygon, in a projected CRS.
+        distance (float): Translation distance in the polygon's coordinate
+            units (typically metres).
+        azimuth (float): Translation direction in degrees, measured clockwise
+            from grid-north.
 
     Returns:
-        Polygon: The translated Shapely polygon.
+        Polygon: The translated Shapely polygon in the same CRS as the input.
     """
 
     # Convert the angle to radians

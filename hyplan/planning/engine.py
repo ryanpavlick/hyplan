@@ -25,7 +25,7 @@ from ..airports import Airport
 from ..waypoint import Waypoint, is_waypoint
 from ..flight_line import FlightLine
 from ..pattern import Pattern
-from ..geometry import process_linestring
+from ..geometry import geodesic_midpoint, process_linestring
 from ..exceptions import HyPlanValueError
 from ..winds.utils import (
     _resolve_track_hold_solution,
@@ -255,8 +255,10 @@ def compute_flight_plan(
         first_target = flight_seq[0]
         if isinstance(first_target, FlightLine):
             first_target = first_target.waypoint1
-        mid_lat = (takeoff_airport.latitude + first_target.latitude) / 2
-        mid_lon = (takeoff_airport.longitude + first_target.longitude) / 2
+        mid_lat, mid_lon = geodesic_midpoint(
+            takeoff_airport.latitude, takeoff_airport.longitude,
+            first_target.latitude, first_target.longitude,
+        )
         takeoff_info = aircraft.time_to_takeoff(
             takeoff_airport, first_target,
             climb_plan=climb_plan,
@@ -319,8 +321,10 @@ def compute_flight_plan(
             if is_waypoint(segment) and segment.speed is not None:
                 speed_override = segment.speed
 
-            mid_lat = (start_wp.latitude + end_wp.latitude) / 2
-            mid_lon = (start_wp.longitude + end_wp.longitude) / 2
+            mid_lat, mid_lon = geodesic_midpoint(
+                start_wp.latitude, start_wp.longitude,
+                end_wp.latitude, end_wp.longitude,
+            )
             cruise_info = aircraft.time_to_cruise(
                 start_wp, end_wp,
                 true_air_speed=speed_override,
@@ -353,8 +357,10 @@ def compute_flight_plan(
         last_target = flight_seq[-1]
         if isinstance(last_target, FlightLine):
             last_target = last_target.waypoint2
-        mid_lat = (last_target.latitude + return_airport.latitude) / 2
-        mid_lon = (last_target.longitude + return_airport.longitude) / 2
+        mid_lat, mid_lon = geodesic_midpoint(
+            last_target.latitude, last_target.longitude,
+            return_airport.latitude, return_airport.longitude,
+        )
         return_info = aircraft.time_to_return(
             last_target, return_airport,
             n_samples=n_samples,

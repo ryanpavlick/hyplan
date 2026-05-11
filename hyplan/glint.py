@@ -86,7 +86,14 @@ class GlintArc:
         target_lon: Longitude of the target in decimal degrees.
         observation_datetime: UTC datetime for solar position computation.
         altitude_msl: Aircraft altitude above mean sea level (pint Quantity).
-        speed: Aircraft speed (pint Quantity).
+        speed: Aircraft true airspeed (pint Quantity).  The turn radius is
+            computed in the air frame via ``R = v² / (g·tan φ)`` for a
+            coordinated level turn, so the geometry below assumes still air.
+            In a wind field the actual *ground-track* radius differs and the
+            traced path is a trochoid rather than a circle; treat the planned
+            arc as a centerline that the autopilot will crab/wind-correct
+            against.  Pass ground speed only when you specifically want the
+            ground-track radius and the still-air assumption holds.
         bank_angle: Bank angle in degrees.  Defaults to SZA when SZA <= 60.
         site_name: Optional name for the target site.
         bank_direction: ``"left"`` or ``"right"`` (default ``"right"``).

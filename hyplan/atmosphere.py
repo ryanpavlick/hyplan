@@ -4,6 +4,26 @@ Provides the 1976 US Standard Atmosphere (identical to ICAO ISA below 32 km)
 and compressible-flow airspeed conversions accurate through FL510+.
 
 All public functions accept and return :class:`pint.Quantity` objects.
+
+Altitude convention
+-------------------
+The ISA temperature and pressure profiles in this module are defined on
+**geopotential altitude** H, not geometric altitude z.  The barotropic
+relation ``P(H) = P₀·(T(H)/T₀)^(-g₀/(L·R))`` follows from hydrostatic
+equilibrium under the standard-gravity assumption ``g(H) ≡ g₀``, which
+holds by definition for geopotential altitude.  In aviation practice
+pressure altitude — what altimeters report when set to 29.92 inHg /
+1013.25 hPa — is operationally equivalent to geopotential altitude, so
+mission-planning altitudes (FL, indicated MSL above the transition
+altitude) can be passed directly.
+
+If you have a *geometric* altitude z (e.g. from GPS / WGS-84), convert
+first via ``H = R_E · z / (R_E + z)`` with ``R_E ≈ 6 356 766 m`` (the
+ICAO/US-1976 reference value).  At z = 15.5 km (≈ FL510) the
+geopotential correction is roughly ``-0.24 %`` in altitude, which
+propagates to about ``-0.5 %`` in pressure — small but non-negligible
+for high-altitude work that mixes GPS altitudes with pressure-altitude
+formulas.
 """
 
 from __future__ import annotations
@@ -34,14 +54,14 @@ _A0 = np.sqrt(_GAMMA * _R * _T0)  # sea-level speed of sound [m/s] ≈ 340.29
 # ---------------------------------------------------------------------------
 
 def _temperature_k(altitude_m: float) -> float:
-    """ISA temperature in Kelvin at geometric altitude in metres."""
+    """ISA temperature in Kelvin at geopotential altitude in metres."""
     if altitude_m <= _TROPOPAUSE_M:
         return _T0 + _L * altitude_m
     return _T_TROPOPAUSE  # isothermal above tropopause
 
 
 def _pressure_pa(altitude_m: float) -> float:
-    """ISA pressure in Pascals at geometric altitude in metres."""
+    """ISA pressure in Pascals at geopotential altitude in metres."""
     if altitude_m <= _TROPOPAUSE_M:
         t = _temperature_k(altitude_m)
         return float(_P0 * (t / _T0) ** (-_G / (_L * _R)))
@@ -54,12 +74,12 @@ def _pressure_pa(altitude_m: float) -> float:
 
 
 def _density_kgm3(altitude_m: float) -> float:
-    """ISA air density in kg/m³ at geometric altitude in metres."""
+    """ISA air density in kg/m³ at geopotential altitude in metres."""
     return _pressure_pa(altitude_m) / (_R * _temperature_k(altitude_m))
 
 
 def _speed_of_sound_ms(altitude_m: float) -> float:
-    """Speed of sound in m/s at geometric altitude in metres."""
+    """Speed of sound in m/s at geopotential altitude in metres."""
     return float(np.sqrt(_GAMMA * _R * _temperature_k(altitude_m)))
 
 

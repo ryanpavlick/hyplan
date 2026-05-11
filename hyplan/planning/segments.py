@@ -14,6 +14,7 @@ from ..aircraft import Aircraft
 from ..airports import Airport
 from ..waypoint import Waypoint
 from ..flight_line import FlightLine
+from ..geometry import geodesic_midpoint
 from ..winds.utils import _resolve_wind_factor
 
 if TYPE_CHECKING:
@@ -66,9 +67,13 @@ def _direct_segment_record(
     heading = _bearing_between(
         start_wp.latitude, start_wp.longitude, end_wp.latitude, end_wp.longitude,
     )
+    mid_lat, mid_lon = geodesic_midpoint(
+        start_wp.latitude, start_wp.longitude,
+        end_wp.latitude, end_wp.longitude,
+    )
     factor = _resolve_wind_factor(
         speed, heading,
-        start_wp.latitude, start_wp.longitude, avg_alt, segment_time,
+        mid_lat, mid_lon, avg_alt, segment_time,
         wind_source, wind_speed, wind_direction,
     )
     time_min = (ureg.Quantity(dist_m, "meter") / speed).m_as(ureg.minute) * factor
@@ -259,26 +264,44 @@ def process_flight_phase(
     full_geom = dubins_path.geometry
     total_geom_length = full_geom.length  # in geometry units (degrees)
 
-    # Split geometry proportionally by time (which aligns with the plot x-axis).
-    # Phase distances can exceed the Dubins path length (e.g. IFR approach extends
-    # beyond the horizontal track), so time is a more reliable splitting key.
+    # Slice the Dubins arc per phase.  Prefer distance fractions when every
+    # Dubins-backed phase carries a ``distance`` field, because climb/cruise/
+    # descent fly at different ground speeds — slicing by time would put the
+    # climb-top several nm short of where it actually occurs along the arc.
+    # Fall back to time fractions when any phase lacks an explicit distance
+    # (the legacy assumption of uniform groundspeed).
+    #
+    # Phases with explicit ``geometry`` entries (e.g., the terminal approach
+    # segment from ``Aircraft.time_to_return``) use that geometry verbatim and
+    # are excluded from the Dubins-slicing pool — otherwise the IFR-style
+    # over-length of those phases would distort the fractions for the others.
     phase_items = list(phase_info["phases"].items())
     phase_times = []
     for _phase, details in phase_items:
         dt = (details["end_time"] - details["start_time"]).m_as(ureg.minute)
         phase_times.append(dt)
 
-    # Phases with explicit "geometry" entries (e.g., the terminal approach
-    # segment from Aircraft.time_to_return) use that geometry verbatim and
-    # don't share the Dubins path.  The Dubins-slicing math has to normalize
-    # against the *non-explicit* phase total only — otherwise the Dubins-
-    # backed phases get truncated and the descent ends short of its real
-    # endpoint.
-    dubins_total_time = sum(
-        dt for dt, (phase, details) in zip(phase_times, phase_items)
+    dubins_phase_indices = [
+        i for i, (_phase, details) in enumerate(phase_items)
         if details.get("geometry") is None
+    ]
+    dubins_phase_distances_nm: list[float | None] = []
+    for i in dubins_phase_indices:
+        dist_q = phase_items[i][1].get("distance")
+        if dist_q is None:
+            dubins_phase_distances_nm.append(None)
+        else:
+            dubins_phase_distances_nm.append(dist_q.m_as(ureg.nautical_mile))
+    use_distance_fractions = (
+        len(dubins_phase_distances_nm) > 0
+        and all(d is not None and d > 0 for d in dubins_phase_distances_nm)
     )
-    can_split = dubins_total_time > 0
+
+    if use_distance_fractions:
+        dubins_total = float(sum(d for d in dubins_phase_distances_nm if d is not None))
+    else:
+        dubins_total = float(sum(phase_times[i] for i in dubins_phase_indices))
+    can_split = dubins_total > 0
 
     cumulative_frac = 0.0
     for i, (phase, details) in enumerate(phase_items):
@@ -318,21 +341,32 @@ def process_flight_phase(
         # Dubins-only total.
         if details.get("geometry") is not None:
             phase_geom = details["geometry"]
-        elif can_split and phase_times[i] > 0:
-            from shapely.geometry import LineString as _LineString
-            frac_start = cumulative_frac
-            frac_end = min(1.0, cumulative_frac + phase_times[i] / dubins_total_time)
+        elif can_split:
+            if use_distance_fractions:
+                dist_q = details.get("distance")
+                phase_metric = (
+                    dist_q.m_as(ureg.nautical_mile) if dist_q is not None else 0.0
+                )
+            else:
+                phase_metric = phase_times[i]
 
-            start_dist = frac_start * total_geom_length
-            end_dist = frac_end * total_geom_length
+            if phase_metric > 0:
+                from shapely.geometry import LineString as _LineString
+                frac_start = cumulative_frac
+                frac_end = min(1.0, cumulative_frac + phase_metric / dubins_total)
 
-            # Extract sub-linestring using interpolation
-            n_sample = max(2, int((frac_end - frac_start) * len(full_geom.coords)))
-            dists = np.linspace(start_dist, end_dist, n_sample)
-            points = [full_geom.interpolate(d) for d in dists]
-            phase_geom = _LineString(points)
+                start_dist = frac_start * total_geom_length
+                end_dist = frac_end * total_geom_length
 
-            cumulative_frac = frac_end
+                # Extract sub-linestring using interpolation
+                n_sample = max(2, int((frac_end - frac_start) * len(full_geom.coords)))
+                dists = np.linspace(start_dist, end_dist, n_sample)
+                points = [full_geom.interpolate(d) for d in dists]
+                phase_geom = _LineString(points)
+
+                cumulative_frac = frac_end
+            else:
+                phase_geom = full_geom
         else:
             phase_geom = full_geom
 

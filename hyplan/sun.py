@@ -125,26 +125,32 @@ def sunpos(
         radians: If True, return values in radians; otherwise degrees.
 
     Returns:
-        Tuple ``(azimuth, zenith, ra, dec, h)`` to mirror ``sunposition.sunpos``.
-        Only ``azimuth`` and ``zenith`` are populated; the remaining slots are
-        arrays of NaN of matching shape, kept so that existing call sites can
-        unpack with ``*_``.
+        Tuple ``(azimuth, zenith, ra, dec, h)``. Only ``azimuth`` and ``zenith``
+        are populated; the remaining slots are arrays of NaN, maintained for
+        compatibility with legacy ``sunposition`` call sites.
     """
     ts, earth, sun = _skyfield_handles()
 
     dts = _to_utc_datetimes(dt)
-    lat_arr = np.atleast_1d(np.asarray(latitude, dtype=float))
-    lon_arr = np.atleast_1d(np.asarray(longitude, dtype=float))
-    elev_arr = np.atleast_1d(np.asarray(elevation, dtype=float))
 
-    n = max(len(dts), lat_arr.size, lon_arr.size, elev_arr.size)
+    # Broadcast lat / lon / elev among themselves, then size-match against dts.
+    lat_arr, lon_arr, elev_arr = np.broadcast_arrays(
+        np.atleast_1d(np.asarray(latitude, dtype=float)),
+        np.atleast_1d(np.asarray(longitude, dtype=float)),
+        np.atleast_1d(np.asarray(elevation, dtype=float)),
+    )
+    # broadcast_arrays returns read-only views; copies make them writeable and
+    # contiguous for Skyfield.
+    lat_arr = np.array(lat_arr, dtype=float)
+    lon_arr = np.array(lon_arr, dtype=float)
+    elev_arr = np.array(elev_arr, dtype=float)
+
+    n = max(len(dts), lat_arr.size)
     if len(dts) == 1 and n > 1:
         dts = dts * n
     if lat_arr.size == 1 and n > 1:
         lat_arr = np.broadcast_to(lat_arr, (n,)).copy()
-    if lon_arr.size == 1 and n > 1:
         lon_arr = np.broadcast_to(lon_arr, (n,)).copy()
-    if elev_arr.size == 1 and n > 1:
         elev_arr = np.broadcast_to(elev_arr, (n,)).copy()
 
     if not (len(dts) == lat_arr.size == lon_arr.size == elev_arr.size):
@@ -205,6 +211,17 @@ def solar_threshold_times(
 
     Returns:
         pandas.DataFrame: DataFrame with reordered columns: ['Date', 'Rise_<lower>', 'Rise_<upper>', 'Set_<upper>', 'Set_<lower>'].
+
+    Note:
+        The solar elevation is sampled on a 1-minute grid in UTC and the
+        reported rise / set times are the first / last samples *strictly
+        above* the threshold.  This quantizes the result to the sampling
+        cadence: rise times are biased late and set times biased early by
+        up to ~60 s (mean ~30 s).  For mission-planning thresholds in the
+        tens of degrees this is well within the natural variability of the
+        atmospheric conditions that motivate the threshold.  Callers that
+        need sub-minute accuracy should bracket-and-interpolate themselves
+        using :func:`sunpos` directly.
     """
     # Ensure thresholds is a list of 1 or 2 elements
     if not (1 <= len(thresholds) <= 2):
@@ -287,13 +304,13 @@ def solar_threshold_times(
 def solar_azimuth(latitude: float, longitude: float, dt: datetime, elevation: float = 0) -> float:
     """
     Return the solar azimuth (in degrees) at a given latitude, longitude, and datetime.
-    
+
     Args:
         latitude (float): Latitude of the location.
         longitude (float): Longitude of the location.
         dt (datetime): The datetime for which to calculate the solar azimuth. This should be in UTC.
         elevation (float, optional): Elevation to use in the sunpos calculation (default 0).
-    
+
     Returns:
         float: Solar azimuth in degrees.
     """
@@ -344,45 +361,45 @@ def solar_position_increments(
     else:
         # Assume it's a datetime.date
         date_dt = datetime.combine(date, datetime.min.time())
-    
+
     # Define the start and end of the day in UTC.
     start_datetime = datetime.combine(date_dt.date(), datetime.min.time())
     end_datetime = start_datetime + timedelta(days=1)
-    
+
     # Create a DateTimeIndex in UTC at the specified increments.
     # Subtract one increment from the end to avoid including the next day's midnight.
     timestamps_utc = pd.date_range(start=start_datetime,
                                    end=end_datetime - pd.Timedelta(increment),
                                    freq=increment,
                                    tz='UTC')
-    
+
     # Convert to local time. Prefer the IANA timezone (DST-aware) when given;
     # fall back to the legacy fixed-offset behavior otherwise.
     if timezone is not None:
         local_timestamps = timestamps_utc.tz_convert(timezone)
     else:
         local_timestamps = timestamps_utc + pd.Timedelta(hours=timezone_offset)
-    
+
     # Compute solar positions using the UTC timestamps.
     # The sunpos function returns (azimuth, zenith, ...). Solar elevation = 90 - zenith.
     azimuth, zenith, *_ = sunpos(timestamps_utc, latitude, longitude, elevation=0)
     solar_elevation = 90 - zenith
-    
+
     # Only keep times when the solar elevation exceeds the specified threshold.
     valid = solar_elevation > min_elevation
-    
+
     df = pd.DataFrame({
         'Time': local_timestamps[valid].strftime('%H:%M:%S'),
         'Azimuth': azimuth[valid],
         'Elevation': solar_elevation[valid]
     })
-    
+
     return df
 
 def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     """
     Plot the solar azimuth and elevation for a given day.
-    
+
     Args:
         df_positions (pd.DataFrame): DataFrame containing the 'Solar Azimuth', 'Time', and 'Elevation' columns.
     """
@@ -409,4 +426,3 @@ def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     plt.title('Solar Azimuth and Elevation Plot')
     if matplotlib.get_backend().lower() != "agg":
         plt.show()
-

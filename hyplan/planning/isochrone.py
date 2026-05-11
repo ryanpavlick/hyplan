@@ -2085,6 +2085,16 @@ def _solve_rays(
     # Expanding bracket.  Work on all still-feasible rays at once.  First
     # verify that the zero-distance target is itself feasible; otherwise
     # binary search would converge to d=0 and report an over-budget "boundary".
+    #
+    # Note: this d=0 probe is intentionally *liberal* — _leg_time short-
+    # circuits at distance < 1e-6 nmi and returns (0, 0), so zero_totals
+    # captures only on_station_min and ignores climb/descent overhead.
+    # That's fine here: rays whose climb+descent alone exceed the budget
+    # cannot expand the bracket (d_hi is infeasible → expanding stays
+    # False → binary search keeps d_lo = 0), and the post-convergence
+    # probe at distance_tolerance_nmi below (`if final_diag["distance_nmi"]
+    # == 0.0: ...`) catches them and marks them unflyable.  Do not
+    # remove that probe without also tightening this one.
     active_indices = np.flatnonzero(active)
     totals, _ = _evaluate_many(active_indices, d_hi[active_indices])
     zero_totals, _ = _evaluate_many(
@@ -2160,6 +2170,12 @@ def _solve_rays(
         final_diag = final_by_index[i]
         final_total = final_diag["total_time_min"]
         if final_diag["distance_nmi"] == 0.0:
+            # Safety net for the liberal d=0 probe above: if the search
+            # converged to zero distance, re-evaluate at a distance just
+            # large enough to incur climb/descent overhead.  This is what
+            # actually catches rays whose phase overhead alone exceeds the
+            # budget (the d=0 probe wouldn't flag them since _leg_time
+            # short-circuits at distance < 1e-6 nmi).
             probe_totals, _ = _evaluate_many(
                 np.array([i]), np.array([distance_tolerance_nmi])
             )

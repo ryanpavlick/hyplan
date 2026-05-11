@@ -66,6 +66,7 @@ def solve_trochoid(
         "xt20": 0.0, "yt20": 0.0,
         "cos_w": cos_w, "sin_w": sin_w,
         "t2pi": t2pi, "vw": vw, "psi_w": psi_w,
+        "w": w,
     }
 
     for del1, del2 in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
@@ -74,8 +75,10 @@ def solve_trochoid(
 
         xt10 = x0 - (Va / (del1 * w)) * math.sin(phi1)
         yt10 = y0 + (Va / (del1 * w)) * math.cos(phi1)
-        xt20 = xf - (Va / (del2 * w)) * math.sin(phi2 + del2 * _M2PI) - vw * t2pi
-        yt20 = yf + (Va / (del2 * w)) * math.cos(phi2 + del2 * _M2PI)
+        # sin/cos are 2π-periodic, so the `+ del2 * _M2PI` shift in phi2 cancels
+        # inside trig — only the `-vw * t2pi` drift correction on xt20 is live.
+        xt20 = xf - (Va / (del2 * w)) * math.sin(phi2) - vw * t2pi
+        yt20 = yf + (Va / (del2 * w)) * math.cos(phi2)
 
         E = Va * (vw * (del1 - del2) / (del1 * del2 * w) - (yt20 - yt10))
         G = vw * (yt20 - yt10) + Va**2 * (del2 - del1) / (del1 * del2 * w)
@@ -164,6 +167,11 @@ def _try_numerical(
         for t1 in unique:
             phi_diff = math.fmod(phi1 - phi2, _M2PI) + 2 * k * math.pi
             t2 = (del1 / del2) * t1 + phi_diff / (del2 * w)
+            # Accept t2 ∈ (-t2pi, t2pi].  A negative t2 is a parametric
+            # phasing offset for the second arc (the residual arc time
+            # `t2pi - t2` then exceeds t2pi), not a multi-loop ground
+            # track — the BSB construction always produces a single-arc
+            # second turn.  Outside this range is genuinely unphysical.
             if t2 <= -t2pi or t2 > t2pi:
                 continue
 
@@ -290,10 +298,7 @@ def sample_trochoid(sol: dict[Any, Any], time_offset: float,
     """Sample ground-frame (x, y, heading) at a given physical time."""
     Va = airspeed
     vw = sol["vw"]
-    w = Va / (Va / (Va / 1.0))  # need rhomin... pass via sol
-    # Actually compute w from t2pi: w = 2π / t2pi
-    t2pi = sol["t2pi"]
-    w = _M2PI / t2pi
+    w = sol["w"]
 
     del1 = sol["del1"]
     del2 = sol["del2"]
@@ -315,8 +320,8 @@ def sample_trochoid(sol: dict[Any, Any], time_offset: float,
     # Straight segment physical time
     xt2dot = Va * math.cos(del2 * w * t2 + phi2) + vw
     yt2dot = Va * math.sin(del2 * w * t2 + phi2)
-    gs = math.sqrt(xt2dot**2 + yt2dot**2)
-    sd = math.sqrt((x2t2 - x1t2)**2 + (y2t2 - y1t2)**2)
+    gs = math.hypot(xt2dot, yt2dot)
+    sd = math.hypot(x2t2 - x1t2, y2t2 - y1t2)
     straight_time = sd / gs if gs > _EPS else 0.0
     tBeta = t1 + straight_time
 
@@ -344,7 +349,7 @@ def sample_trochoid(sol: dict[Any, Any], time_offset: float,
     gx: float = xw * cos_w - yw * sin_w
     gy: float = xw * sin_w + yw * cos_w
 
-    psi_w = math.atan2(wind_v, wind_u)
+    psi_w: float = sol["psi_w"]
     air_hdg = air_hdg_w + psi_w
     ground_heading: float = math.atan2(
         Va * math.sin(air_hdg) + wind_v,
