@@ -51,9 +51,18 @@ jobs:
         id: notes
         run: |
           VERSION=${{ github.event.inputs.version }}
-          # Extract the section for this version (between ## vX.Y.Z and the next ## or EOF)
-          awk "/^## v${VERSION}\$/{found=1; next} /^## /{if(found) exit} found{print}" CHANGELOG.md > /tmp/release_notes.md
-          echo "Extracted $(wc -l < /tmp/release_notes.md) lines of release notes"
+          # Extract the section for this version (between ## vX.Y.Z [...]
+          # and the next ## or EOF).  The header line typically carries a
+          # trailing em-dash + date, e.g. ``## v1.6.3 — 2026-05-11``, so
+          # the match anchor is "start of line + ## vX.Y.Z" followed by
+          # any of: end-of-line, space, or tab.
+          awk "/^## v${VERSION}([ \\t]|\$)/{found=1; next} /^## /{if(found) exit} found{print}" CHANGELOG.md > /tmp/release_notes.md
+          n=$(wc -l < /tmp/release_notes.md)
+          echo "Extracted ${n} lines of release notes"
+          if [ "${n}" -lt 5 ]; then
+            echo "::error::Release notes for v${VERSION} are suspiciously short (${n} lines).  Check the CHANGELOG header format."
+            exit 1
+          fi
 
       - name: Create GitHub Release
         env:
