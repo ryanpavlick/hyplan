@@ -1,5 +1,274 @@
 # Changelog
 
+## v1.6.3 — 2026-05-11
+
+Math review + calibration expansion release.  A multi-agent review of
+the math-heavy modules surfaced a mix of real bugs, numerical
+improvements, and documentation gaps.  In parallel the four ADS-B /
+IWG1 / ICARTT-derived aircraft calibrations — KingAir 350, KingAir A90,
+NASA ER-2, NASA WB-57 — were refreshed against the new code paths and,
+where applicable, against significantly expanded data caches pulled
+from public NASA archives.  No public-API breakage.
+
+### Bug fixes
+
+* **`hyplan.sun.sunpos` was crashing on every call** — an in-progress
+  refactor of the broadcast block left
+  `wgs84.latlon(latitude_degrees=lat_arr, ...)` referencing variables
+  (`lat_arr`, `lon_arr`, `elev_arr`) that were never assigned, so
+  every caller — `glint`, `satellites`, `exports/_common`, and three
+  other helpers in `sun` itself — raised `NameError`.  Replaced the
+  manual size-1-broadcast block with a single `np.broadcast_arrays`
+  call that also handles non-uniform input shapes (e.g. scalar
+  latitude with array longitude).  14 `tests/test_sun.py` cases now
+  pass; 135 sun / glint / satellite / clouds / phenology /
+  flight-patterns tests green.
+
+* **`hyplan.aircraft.adsb._reject_outliers` mixed median centre with
+  std-based scale** — the function centred on the median but compared
+  deviations against `np.std`, which is mean-based and inflated by
+  the very outliers it was meant to reject.  Switched to MAD scale
+  (`1.4826 · median(|x − median(x)|)`), calibrated to match σ for
+  Gaussian data but uncontaminated by outliers.  `outlier_sigma` keeps
+  its usual interpretation; no caller change required.
+
+* **`hyplan.planning` wind sampling used a naïve arithmetic-mean
+  midpoint** — `(lat1+lat2)/2, (lon1+lon2)/2` is geometrically wrong
+  across the antimeridian (`170 + −170 → 0` instead of `±180`), near
+  the poles, and accumulates curvature error on long legs at high
+  latitude.  The Arctic refuel-isochrone work currently in this
+  codebase routinely exercises those conditions.  Added a new public
+  helper `geometry.geodesic_midpoint` (Vincenty-based: distance and
+  initial bearing via `vdist`, then `vreckon` at half-distance) and
+  switched all four wind-sample sites in `planning/engine.py` (3) and
+  `planning/segments.py` (1) to use it.  Anchorage → Reykjavik shifts
+  by ~1 600 km between the two methods — a meaningful difference in
+  the wrong wind regime for high-latitude planning.
+
+* **`planning.segments.process_flight_phase` sliced the Dubins arc by
+  phase time, not distance** — the time-fraction split silently
+  assumed uniform ground speed across the Dubins-backed phases, so
+  for a typical climb (slow GS) + cruise (fast GS) + descent leg the
+  reported climb-top coordinate fell several nautical miles short of
+  where the climb actually ended.  When every Dubins-backed phase
+  carries an explicit `distance` field — the standard climb / cruise
+  / descent / transit case — slice by distance fraction instead.
+  Phases with their own `geometry` (terminal IFR approach, etc.)
+  remain excluded from the slicing pool so their over-length doesn't
+  distort the others' fractions.  Mixed sets fall back to the legacy
+  time-fraction behaviour.
+
+* **`_trochoid_solver.sample_trochoid` recovered angular velocity
+  through a placeholder identity** — the function computed
+  `w = Va / (Va / (Va / 1.0))` (which collapses to `Va`, the wrong
+  units) followed by `w = _M2PI / t2pi` (the actual recovery) because
+  `solve_trochoid` did not expose `w` on the solution dict.  Stored
+  `w` directly in `sol`; dropped the recovery dance.  Also dropped a
+  dead `+ del2 * _M2PI` term inside the `sin` / `cos` arguments of
+  `xt20` / `yt20` (a 2π-periodic identity that produced no numerical
+  effect but invited the reader to assume the trig branch was
+  meaningful).  Behaviourally a no-op (parity to 3 × 10⁻¹² m position,
+  7 × 10⁻¹⁵ rad heading across 5 000 random samples) and roughly 8 %
+  faster per call by dropping a redundant `atan2` and division.
+
+* **`hyplan.aircraft.icartt.load_icartt` silently dropped data on
+  files with non-trivial scale factors** — the ICARTT FFI 1001 spec
+  reserves header line 11 for per-column scale factors and line 12
+  for per-column missing-value markers (one entry per dependent
+  variable).  The parser was ignoring both lines, which produced
+  NaN-everywhere DataFrames for high-rate instrument files that store
+  values as scaled integers — notably NASA's MMS (Meteorological
+  Measurement System) on the WB-57, where TAS is stored as integer
+  cm/s with scale 0.01, lat/lon as integer micro-degrees with scale
+  1e-5, and per-column missing markers ranging from -999 to
+  -99999999 depending on the column's dynamic range.  Without scale-
+  factor application a raw TAS value of 8 916 was interpreted as
+  8 916 m/s → 17 329 kt → filtered as out-of-range → NaN.  An ACCLIP
+  2022 sortie loaded 13 999 rows with **zero** valid TAS / altitude /
+  lat / lon fixes before this fix; 13 848 valid after.  New
+  `_parse_n_floats` helper for line-11 / line-12 parsing; per-column
+  meta dict carrying `(scale, missing)`; extended global fallback
+  sentinel set with -999 / -9999999 / -99999999; added MMS-style
+  column patterns (`G_LAT_MMS` / `G_LONG_MMS` / `G_ALT_MMS`).
+
+### Numerical and reporting improvements
+
+* **`hyplan.aircraft.adsb._compute_metrics`: weighted R² and RMSE** —
+  previously every altitude bin contributed equally to the fit quality
+  metric regardless of how many raw observations fed into the bin
+  median, so a bin with 2 observations and one with 1 000 weighed the
+  same.  Pass the per-bin counts (already collected upstream) into
+  `_compute_metrics` and weight residuals accordingly.  `n_observations`
+  is now derived from `sum(weights)`.  The metric still measures fit to
+  the bin medians, not to raw observations — added a docstring paragraph
+  spelling that out so future readers don't mistake it for a classical
+  regression R².
+
+* **Paste-ready `__repr__` for `TasSchedule` and `VerticalProfile`** —
+  the ADS-B calibration scripts in `notebooks/calibration/<aircraft>/`
+  print a PASTE-READY PERFORMANCE BLOCK whose schedule lines come from
+  `repr()` of the fitted objects.  With the auto-generated dataclass
+  repr, each breakpoint came out as `<Quantity(4000.0, 'foot')>` —
+  accurate but unusable as a direct paste into
+  `hyplan/aircraft/_models.py`.  Override `__repr__` on both classes to
+  emit the canonical `(4000 * ureg.feet, 165 * ureg.knot)` form,
+  rounding magnitudes to int to match the style used throughout
+  `_models.py`.  `VerticalProfile` includes `source=...` only when
+  non-empty.
+
+* **`PerformanceConfidence.summary`** — added a `summary` property
+  returning the mean of `climb` / `cruise` / `descent`, excluding
+  `turns` (a different epistemic class — bank-angle envelope vs.
+  schedule fit).  The calibration scripts already attempted to read
+  `.summary` via `getattr` and fell through to NaN; this provides it
+  properly, so paste-ready blocks now end with a real value like
+  `# overall_confidence=0.71`.
+
+### Calibration data expansion
+
+Two new fetcher scripts pull substantial additional IWG1 / ICARTT
+data from public NASA archives, closing temporal gaps that previously
+limited the per-aircraft empirical baselines.  The data directories
+themselves remain gitignored; the scripts are the canonical
+artefacts.
+
+* **`notebooks/calibration/NASA_ER2/_fetch_asp.py`** — wraps the
+  shared `_asp_fetch.fetch_tail` helper to pull every available
+  fiscal-year IWG1 sortie for NASA 806 (FY2017 / 2018 / 2022) and
+  NASA 809 (FY2019 / 2020 / 2021 / 2022) from the public NASA ASP
+  archive at `asp-archive.arc.nasa.gov`.  Closes the 2017-2022 gap
+  in `data/er2/` — the cache previously held only 2012-2016 +
+  2023-2026.  Adds 232 sorties (411 → ~643 raw, 618 successfully
+  loaded), giving continuous fiscal-year coverage 2012-2026.
+* **`notebooks/calibration/NASA_WB57/_fetch_acclip.py`** — CMR-driven
+  fetcher for the 27 daily MMS-1HZ ICARTT files from the ACCLIP 2022
+  deployment at NASA LaRC ASDC (collection
+  `ACCLIP_MetNav_AircraftInSitu_WB57_Data`).  ACCLIP is exactly the
+  campaign Lait's GSFC flight planner tuned its WB-57 ascent
+  characteristics against (his ChangeLog 2022-08-02 /
+  2022-08-16: "improved wb57 tuning to acclip 2022").  Uses CMR for
+  granule discovery (no auth) and `EARTHDATA_TOKEN` from `.env` for
+  download Bearer auth.  Handles the 2022-07-21 sortie which is
+  split into two ICARTT parts (preserves `-part1` / `-part2`
+  suffixes so files don't collide on disk).
+
+### Aircraft model refresh
+
+Re-ran all four ADS-B / IWG1 / ICARTT-derived calibrations against
+the post-MAD-outlier / geodesic-midpoint / weighted-R² code paths and
+— for ER-2 and WB-57 — against the expanded data caches from the new
+fetchers.  The calibration pipeline already separates fetch from
+compute (`calibrate.py` reads from `data/<aircraft>/` and never
+reaches out to the network), so refreshes are a single `python -m
+notebooks.calibration.<aircraft>.calibrate` away.
+
+* **KingAir 350** (UWKA-2, n = 22 sorties): climb-schedule RDP knee
+  moved 18 000 → 22 000 ft; top-of-climb TAS 299 → 303 kt;
+  climb-profile 8 000 ft VS −32 fpm.  Cruise peak (33 000 ft / 318 kt)
+  unchanged.  The MAD refit also surfaced a 188 kt level-off dip at
+  12 000 ft that reflects a brief step-climb pause rather than the
+  underlying schedule — dropped so the schedule stays monotone.
+* **King Air A90** (n = 428 sorties, 25 tails): descent-schedule
+  16 000 ft TAS 174 → 170 kt; descent-profile 22 000 ft VS 896 → 960
+  fpm.  All other points within sub-kt / sub-fpm rounding of the
+  prior fit.  POH cross-checks still hold (max cruise 222 kt @ FL160
+  vs. POH 226; service ceiling op-p99 25 000 ft vs. POH 26 400 ft).
+* **NASA ER-2** (n = 618 sorties, 2012-2026 continuous IWG1 cache —
+  up from 199):  small ±10 kt shifts at every TAS-schedule
+  breakpoint; 70 kft extrapolation 410 → 400 kt.  climb_profile
+  FL050 4 301 → 3 553 fpm (the expanded sample including 2017-2022
+  routine ops pulls the low-altitude active-climb median down;
+  DCOTSS test flights Lait tuned against were envelope-chasing
+  climbs).  descent_profile: 14-point per-altitude-bin median → 3-
+  anchor TOC / mid-descent / ceiling construction with bottom anchor
+  keyed to top_of_approach_msl.  approach_profile touchdown 65 → 72
+  kt (n=89 sorties, was n=6).  turn_model.bank_by_phase: climb 11° →
+  14°, descent 16° → 13°, approach 9° → 11°.  typical_climb_out
+  rederived from IWG1 alone — the historical FL356 12-min weight-
+  management hold appears in only 0.8 % of post-2016 sorties;
+  replaced with a single 13-min FL550 representative pause where the
+  climb-out overhead actually concentrates in the modern sample.
+* **NASA WB-57F** (n = 127 sorties combined IWG1 + ACCLIP 2022
+  ICARTT — up from 100):  service_ceiling 63 000 → 64 000 ft;
+  climb_schedule gains an FL600 anchor (402 kt) that was sparse in
+  the IWG1-only fit; cruise_schedule shifts +5-17 kt across FL450-
+  600 (the new ACCLIP data is dominated by high-altitude cruise
+  legs).  climb_profile FL050 2 137 → 2 274 fpm; FL500 anchor added
+  at 1 616 fpm.  approach speed 117 → 120 kt (n=111 vs. n=84).
+  max_bank 33 → 32°.
+
+### Documentation tightenings (no behaviour change)
+
+* **`atmosphere`** — clarified that the ISA pressure formula is
+  derived under geopotential altitude `H`, not geometric `z`.  For
+  aviation altitudes (pressure altitude / flight levels) the two are
+  operationally equivalent so no numerical change is needed, but a
+  caller passing WGS-84 / GPS altitude at FL510+ would see a ~0.5 %
+  pressure bias.  Module docstring now includes the geometric →
+  geopotential conversion (`H = R⊕·z / (R⊕+z)`) for callers who need
+  it.
+* **`sun.solar_threshold_times`** — flagged that rise / set times are
+  quantized to the 1-minute sampling grid (mean bias ~30 s) so
+  callers needing sub-minute accuracy bracket-interpolate via `sunpos`.
+* **`glint.GlintArc`** — the turn-radius computation `R = v² / (g · tan φ)`
+  is a still-air coordinated-turn result, so the input `speed` should
+  be true airspeed; in wind the actual ground-track radius differs
+  and the planned arc is a centreline that the autopilot will
+  crab/wind-correct against.
+* **`geometry.translate_polygon`** — only meaningful in a projected
+  CRS (e.g. UTM) where `+y` is grid-north and `+x` is grid-east.
+  Passing a WGS-84 polygon translates it by `distance` degrees of
+  lat/lon, almost never what you want; spelled this out.
+* **`_trochoid_solver`** — clarified the `t2 ∈ (-t2pi, t2pi]` gate in
+  the BSB solver: a negative `t2` is a parametric phasing offset, not
+  a multi-loop ground track.
+* **`planning/isochrone._solve_rays`** — the d = 0 feasibility probe
+  is intentionally liberal (ignores climb/descent overhead) and is
+  paired with a post-convergence probe at `distance_tolerance_nmi`
+  that catches rays whose phase overhead alone exceeds the budget.
+  Added comments at both sites so a future refactor doesn't remove
+  the second guard without also tightening the first.
+
+### Tooling and test coverage
+
+* **Test coverage push** — three targeted gaps surfaced by
+  `pytest --cov` got dedicated tests this release.
+  `hyplan/aircraft/icartt.py` 0 % → 92 % (new `tests/test_icartt.py`,
+  including regression tests for the scale-factor / per-column-missing-
+  value / MMS-column-name handling).  `hyplan/aircraft/iwg1.py` 63 %
+  → 95 % (new `TestSplitIwg1Alltracks` covering the multi-sortie
+  splitter).  `hyplan/aircraft/adsb/io.py` 12 % → 17 % (new
+  `TestRequireTraffic` confirming the shim raises HyPlanRuntimeError
+  when the optional `traffic` library is missing).  Total test count
+  1 710 → 1 757; overall package coverage 82 % → 83 %.
+* **Notebooks ruff cleanup** — ran `ruff check --fix` across
+  `notebooks/` (226 violations resolved automatically), then manually
+  fixed 14 residual issues in `notebooks/calibration/**/*.py` (B007
+  unused loop variables renamed to `_tail` / `_date`; E701/E702
+  one-liners split; E741 ambiguous `l` renamed to `link`).  Added two
+  targeted per-file-ignores in `pyproject.toml`:
+  `notebooks/calibration/**/*.py = ["E402"]` (intentional
+  sys.path-insert-then-import pattern) and
+  `notebooks/**/*.ipynb = ["E402", "E701", "E702", "B007", "F811",
+  "F841"]` (notebook style legitimately keeps cells self-contained).
+  `ruff check hyplan tests notebooks` is now fully clean.
+
+### Verification
+
+* Full test suite: 1 757 passed, 1 skipped (pytest), up from 1 710
+  at v1.6.2.
+* `mypy` strict: 0 issues across 89 source files.
+* `ruff check hyplan tests notebooks`: all checks passed.
+* End-to-end notebook execution (no failures): 28 of 29 non-GEE
+  notebooks pass.  The one failure (`winds.ipynb`) is environmental
+  (NASA Earthdata login required), not a regression.
+* All four refreshed aircraft calibrations re-run end-to-end against
+  their local data caches.  KingAir 350, KingAir A90, NASA ER-2 used
+  cached data only; NASA WB-57 calibration pulled 27 new ACCLIP
+  MMS-1HZ files (~60 MB) via `_fetch_acclip.py`.  Pre-vs.-post diffs
+  match expected magnitudes from the math-review code changes and
+  the expanded data samples.
+
 ## v1.6.2 — 2026-05-10
 
 CI-recovery release.  No public-API or behavioral changes; main
