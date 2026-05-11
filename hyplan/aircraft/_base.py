@@ -90,6 +90,16 @@ class PerformanceConfidence:
     descent: float = 0.5
     turns: float = 0.5
 
+    @property
+    def summary(self) -> float:
+        """Mean of the three flight-phase confidences (excludes ``turns``).
+
+        Turns confidence reflects bank-angle envelope, which is a
+        different epistemic class from the climb/cruise/descent
+        schedule fits, so it's excluded from the headline number.
+        """
+        return (self.climb + self.cruise + self.descent) / 3.0
+
 
 # ---------------------------------------------------------------------------
 # Speed schedule types
@@ -160,6 +170,13 @@ class TasSchedule:
         alt_ft = altitude.m_as(ureg.feet)
         return float(np.interp(alt_ft, self._alts_ft, self._tas_kt)) * ureg.knot
 
+    def __repr__(self) -> str:
+        items = ", ".join(
+            f"({int(round(a))} * ureg.feet, {int(round(s))} * ureg.knot)"
+            for a, s in zip(self._alts_ft, self._tas_kt)
+        )
+        return f"TasSchedule(points=[{items}])"
+
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
 SpeedSchedule = Union[CasMachSchedule, TasSchedule]
@@ -222,6 +239,14 @@ class VerticalProfile:
     def sea_level_rate(self) -> Quantity:
         """Rate at the lowest altitude breakpoint (first row)."""
         return self._rates_fpm[0] * ureg.feet / ureg.minute
+
+    def __repr__(self) -> str:
+        items = ", ".join(
+            f"({int(round(a))} * ureg.feet, {int(round(r))} * ureg.feet / ureg.minute)"
+            for a, r in zip(self._alts_ft, self._rates_fpm)
+        )
+        src = f", source={self.source!r}" if self.source else ""
+        return f"VerticalProfile(points=[{items}]{src})"
 
     @property
     def ceiling_rate(self) -> Quantity:
