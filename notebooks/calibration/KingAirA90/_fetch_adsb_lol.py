@@ -103,7 +103,7 @@ def main() -> None:
     no_data = 0
     total_rows = 0
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        for tail, status, n in ex.map(_one, rows):
+        for _tail, status, n in ex.map(_one, rows):
             if status == "written":
                 written += 1
                 total_rows += n

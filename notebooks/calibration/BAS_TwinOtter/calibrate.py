@@ -41,7 +41,6 @@ from _common import (  # noqa: E402
     smooth_diff,
     summary_table,
     tas_per_bin,
-    vertical_rate_fpm,
     wind_triangle_tas_kt,
 )
 
@@ -245,7 +244,7 @@ def main() -> None:
     if rolls:
         print(f"Bank angle p90 (|roll|>5°): {roll_p90:.1f}°")
     else:
-        print(f"Bank angle: not available in ArcticCyclones; using AFM default 30°")
+        print("Bank angle: not available in ArcticCyclones; using AFM default 30°")
 
     print()
     print("=" * 70)
@@ -256,8 +255,8 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} sorties (OFCAP 2010-11 + ArcticCyclones 2022).")
-    print(f"# OFCAP files ship native TAS/roll/VS; ArcticCyclones asc-qc reconstructs")
-    print(f"# TAS via wind triangle and VS from gps_alt finite difference.")
+    print("# OFCAP files ship native TAS/roll/VS; ArcticCyclones asc-qc reconstructs")
+    print("# TAS via wind triangle and VS from gps_alt finite difference.")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

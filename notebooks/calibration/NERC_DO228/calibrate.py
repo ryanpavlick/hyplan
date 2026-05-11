@@ -159,7 +159,7 @@ def load_sorties() -> dict[str, pd.DataFrame]:
         date = next((q for q in parts if q.isdigit() and len(q) == 8), None)
         if date and (date not in by_date or p.stem > by_date[date].stem):
             by_date[date] = p
-    for date, p in sorted(by_date.items()):
+    for _date, p in sorted(by_date.items()):
         key = f"eyjaf/{p.stem}"
         df = _load_eyjaf_csv(p)
         if df is None:
@@ -222,7 +222,7 @@ def main() -> None:
 
     print(f"\nApproach TAS median: {approach_kt:.0f} kt")
     print(f"Service ceiling (op-p99): {ceiling:.0f} ft")
-    print(f"Bank angle: not available; using AFM default 30°")
+    print("Bank angle: not available; using AFM default 30°")
 
     print()
     print("=" * 70)
@@ -233,7 +233,7 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} sorties (ACTIVE + Eyjafjallajökull).")
-    print(f"# TAS reconstructed via wind triangle (no native TAS in either archive).")
+    print("# TAS reconstructed via wind triangle (no native TAS in either archive).")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

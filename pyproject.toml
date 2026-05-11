@@ -123,6 +123,17 @@ ignore = ["B017", "B008", "B023", "B018", "B905"]
 # the file (E402) and import optional deps inside try blocks to skip
 # tests when the dep is missing (F401).
 "tests/*.py" = ["E402", "F401"]
+# Calibration helpers in notebooks/ insert their parent dir on sys.path
+# before importing the shared `_common` module, which trips E402.  Same
+# intentional pattern as the package-surface __init__.py files above.
+"notebooks/calibration/**/*.py" = ["E402"]
+# Jupyter notebooks legitimately keep cells self-contained — imports
+# appear next to the code that uses them (E402), one-line `if x: ...`
+# conditionals are common (E701/E702), unused loop variables in
+# exploration cells aren't worth chasing (B007), and re-imports across
+# cells produce false-positive F811s.  Also tolerate F841 unused-var
+# leftovers in cell scopes.
+"notebooks/**/*.ipynb" = ["E402", "E701", "E702", "B007", "F811", "F841"]
 
 [tool.mypy]
 python_version = "3.10"

@@ -207,7 +207,7 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} FAAM core_processed 1 Hz")
-    print(f"# sorties from CEDA (2017–2024, 27 ASMM-tagged campaigns).")
+    print("# sorties from CEDA (2017–2024, 27 ASMM-tagged campaigns).")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

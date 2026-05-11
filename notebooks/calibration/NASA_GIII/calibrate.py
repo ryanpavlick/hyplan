@@ -21,7 +21,6 @@ import sys
 import warnings
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 warnings.filterwarnings("ignore")
@@ -182,8 +181,8 @@ def main() -> None:
     print("PASTE-READY NASA_GIII() PERFORMANCE BLOCK")
     print("=" * 70)
     print(f"# Calibrated against {len(sorties)} IWG1 sorties from NASA 520,")
-    print(f"# combining the local n520NA_g3_alltracks delivery with the")
-    print(f"# NASA ASP archive (asp-archive.arc.nasa.gov/N520NA).")
+    print("# combining the local n520NA_g3_alltracks delivery with the")
+    print("# NASA ASP archive (asp-archive.arc.nasa.gov/N520NA).")
     print(f"service_ceiling={int(round(ceiling/1000)*1000)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={climb_pts!r}),")

@@ -99,7 +99,8 @@ def main() -> None:
 
     final_rows = []
     for a in sorties.values():
-        if a.empty: continue
+        if a.empty:
+            continue
         t_end = a["timestamp"].iloc[-1]
         sub = a[a["timestamp"] >= t_end - pd.Timedelta(seconds=60)]
         sub = sub[sub["vertical_rate"] < -200]
@@ -130,7 +131,7 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} HRD AOML G-IV-SP ARWO sorties")
-    print(f"# (NOAA hurricane synoptic-surveillance, 2021-2025).")
+    print("# (NOAA hurricane synoptic-surveillance, 2021-2025).")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

@@ -181,8 +181,8 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} HALO-AC3 BAHAMAS sorties")
-    print(f"# (DLR, March-April 2022, Arctic).  Single-campaign dataset;")
-    print(f"# confidence 0.7 reflects narrower envelope sample.")
+    print("# (DLR, March-April 2022, Arctic).  Single-campaign dataset;")
+    print("# confidence 0.7 reflects narrower envelope sample.")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

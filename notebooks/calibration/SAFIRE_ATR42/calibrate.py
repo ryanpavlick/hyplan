@@ -100,9 +100,12 @@ def _load_ceda(path: Path) -> pd.DataFrame | None:
 
     df = pd.DataFrame({"timestamp": timestamp})
     df["altitude"] = alt_m * M_TO_FT
-    if roll is not None: df["roll_deg"] = roll
-    if pitch is not None: df["pitch_deg"] = pitch
-    if hdg is not None: df["heading_deg"] = hdg
+    if roll is not None:
+        df["roll_deg"] = roll
+    if pitch is not None:
+        df["pitch_deg"] = pitch
+    if hdg is not None:
+        df["heading_deg"] = hdg
 
     # Groundspeed from position derivatives.  Use 5-second window for
     # smoothing (1 Hz data is noisy at single-step diff).
@@ -141,10 +144,14 @@ def _load_aeris(path: Path) -> pd.DataFrame | None:
     t_raw = (df["timestamp"] - df["timestamp"].iloc[0]).dt.total_seconds().to_numpy()
     df["altitude"] = ds["ALTITUDE"].values * M_TO_FT
     df["tas_kt"] = ds["TAS"].values * M_PER_S_TO_KT
-    if "GS" in ds.variables: df["groundspeed"] = ds["GS"].values * M_PER_S_TO_KT
-    if "ROLL" in ds.variables: df["roll_deg"] = ds["ROLL"].values
-    if "PITCH" in ds.variables: df["pitch_deg"] = ds["PITCH"].values
-    if "HEADING" in ds.variables: df["heading_deg"] = ds["HEADING"].values
+    if "GS" in ds.variables:
+        df["groundspeed"] = ds["GS"].values * M_PER_S_TO_KT
+    if "ROLL" in ds.variables:
+        df["roll_deg"] = ds["ROLL"].values
+    if "PITCH" in ds.variables:
+        df["pitch_deg"] = ds["PITCH"].values
+    if "HEADING" in ds.variables:
+        df["heading_deg"] = ds["HEADING"].values
     ds.close()
 
     df["vertical_rate"] = vertical_rate_fpm(t_raw, df["altitude"].to_numpy(dtype=float))
@@ -253,7 +260,7 @@ def main() -> None:
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} sorties (CEDA EUFAR + AERIS EUREC4A).")
-    print(f"# CEDA EUFAR TAS reconstructed via wind triangle from position+wind.")
+    print("# CEDA EUFAR TAS reconstructed via wind triangle from position+wind.")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

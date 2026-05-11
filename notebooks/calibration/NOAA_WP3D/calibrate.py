@@ -122,11 +122,14 @@ def _group_sortie_files(paths: list[Path]) -> dict[str, dict[str, Path]]:
         # Some have _L1/_L2 suffix; treat each (date, rev, segment) as a sortie.
         name = p.stem
         if name.startswith("AircraftMet_"):
-            kind = "met"; key = name.removeprefix("AircraftMet_")
+            kind = "met"
+            key = name.removeprefix("AircraftMet_")
         elif name.startswith("AircraftPos_"):
-            kind = "pos"; key = name.removeprefix("AircraftPos_")
+            kind = "pos"
+            key = name.removeprefix("AircraftPos_")
         elif name.startswith("AircraftMis_"):
-            kind = "mis"; key = name.removeprefix("AircraftMis_")
+            kind = "mis"
+            key = name.removeprefix("AircraftMis_")
         else:
             continue
         # Include the parent-campaign in the key so re-flown dates across
@@ -284,7 +287,7 @@ def main():
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {len(sorties)} merged ICARTT sorties from")
-    print(f"# NOAA CSL archive: ARCPAC 2008, CalNex 2010, SENEX 2013, SONGNEX 2015")
+    print("# NOAA CSL archive: ARCPAC 2008, CalNex 2010, SENEX 2013, SONGNEX 2015")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")

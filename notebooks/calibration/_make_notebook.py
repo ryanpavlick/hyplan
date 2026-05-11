@@ -479,21 +479,21 @@ else:
 The block below mirrors what `python -m {module}` prints — keep them in
 sync.  Paste into `hyplan/aircraft/_models.py` for the
 `{aircraft}` class."""))
-    cells.append(_code(f"""
+    cells.append(_code("""
 def _vs_pts(bins):
     return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
             for _, r in bins.iterrows()]
 
-print(f"# Calibrated against {{len(sorties)}} sorties.")
-print(f"service_ceiling={{int(round(ceiling/100)*100)}} * ureg.feet,")
-print(f"approach_speed={{int(round(approach_kt))}} * ureg.knot,")
-print(f"climb_schedule=TasSchedule(points={{klms!r}}),")
-print(f"cruise_schedule=TasSchedule(points={{cs!r}}),")
-print(f"descent_schedule=TasSchedule(points={{ds!r}}),")
-print(f"climb_profile=VerticalProfile(points={{_vs_pts(climb_bins)!r}}),")
-print(f"descent_profile=VerticalProfile(points={{_vs_pts(desc_bins)!r}}),")
+print(f"# Calibrated against {len(sorties)} sorties.")
+print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
+print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
+print(f"climb_schedule=TasSchedule(points={klms!r}),")
+print(f"cruise_schedule=TasSchedule(points={cs!r}),")
+print(f"descent_schedule=TasSchedule(points={ds!r}),")
+print(f"climb_profile=VerticalProfile(points={_vs_pts(climb_bins)!r}),")
+print(f"descent_profile=VerticalProfile(points={_vs_pts(desc_bins)!r}),")
 if rolls:
-    print(f"max_bank_deg={{max(30.0, round(roll_p90))}},")
+    print(f"max_bank_deg={max(30.0, round(roll_p90))},")
 else:
     print(f"max_bank_deg=30.0,  # AFM default; no roll data in source")
 """))

@@ -88,8 +88,8 @@ def discover(years: list[int], tails: tuple[str, ...]) -> list[dict]:
     entries: list[dict] = []
     for yr in years:
         storms = [
-            l.rstrip("/") for l in _list(f"{LISTING_BASE}/{yr}/")
-            if l.endswith("/") and not l.startswith("?") and not l.startswith("/")
+            link.rstrip("/") for link in _list(f"{LISTING_BASE}/{yr}/")
+            if link.endswith("/") and not link.startswith("?") and not link.startswith("/")
         ]
         for storm in storms:
             files = _list(f"{LISTING_BASE}/{yr}/{storm}/")

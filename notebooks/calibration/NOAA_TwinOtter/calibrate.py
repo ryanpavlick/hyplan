@@ -205,8 +205,8 @@ def _print_block(cs, klms, ds, climb_bins, desc_bins, *,
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
     print(f"# Calibrated against {n_sorties} ICARTT sorties: FIREX-AQ N48RF +")
-    print(f"# NOAA CSL N46RF (TopDown, UWFPS, CalFiDE, AEROMMA, AMMBEC, USOS).")
-    print(f"# Per-file unit detection handles inconsistent m/s vs kt labeling.")
+    print("# NOAA CSL N46RF (TopDown, UWFPS, CalFiDE, AEROMMA, AMMBEC, USOS).")
+    print("# Per-file unit detection handles inconsistent m/s vs kt labeling.")
     print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
     print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
     print(f"climb_schedule=TasSchedule(points={klms!r}),")
