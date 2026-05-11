@@ -40,13 +40,16 @@ _COLUMN_PATTERNS = [
     # / ICARTT conventions.
     # NCAR/RAF NSF-GV files use ``GGLAT``/``GGLON`` (GPS-Reference);
     # NASA Ames-style files use ``GLAT``/``GLON`` or ``LATITUDE``.
+    # NASA WB-57 MMS files use ``G_LAT_MMS``/``G_LONG_MMS``/``G_ALT_MMS``
+    # (underscore-replaced to spaces before regex match).
     ("latitude",         [r"\blatitude\b",      r"\blat[_\s-]*deg\b", r"\bgpslat\b",
-                          r"^gg?lat$"],                                                 "deg"),
+                          r"^gg?lat$",          r"\bg[_\s-]+lat\b"],                    "deg"),
     ("longitude",        [r"\blongitude\b",     r"\blon[_\s-]*deg\b", r"\bgpslon\b",
-                          r"^gg?lon$"],                                                 "deg"),
+                          r"^gg?lon$",          r"\bg[_\s-]+long?\b"],                  "deg"),
     ("altitude",         [r"^pressure[_\s-]*altitude", r"^press[_\s-]*alt",
                           r"^paltf?$"],                                                 "ft"),
-    ("altitude_gps_ft",  [r"\bgps[_\s-]*alt", r"^gps[_\s-]*altitude\b", r"^ggalt$"],    "m"),
+    ("altitude_gps_ft",  [r"\bgps[_\s-]*alt", r"^gps[_\s-]*altitude\b", r"^ggalt$",
+                          r"\bg[_\s-]+alt\b"],                                          "m"),
     ("altitude_radar_ft",[r"\bradar[_\s-]*altitude", r"\bradar[_\s-]*alt"],             "ft"),
     # ``GGSPD`` = NCAR/RAF GPS reference groundspeed; ``GSF`` =
     # generic; ``GRD_SPD`` (or "FMS_GRD_SPD" with an instrument
@@ -120,6 +123,26 @@ def _convert_to_canonical(name: str, unit_str: str, x: pd.Series) -> pd.Series:
     return x
 
 
+def _parse_n_floats(line: str, n: int, default: float) -> list[float]:
+    """Parse ``n`` comma- or whitespace-separated floats from ``line``.
+
+    Pads with ``default`` if the line is short and silently drops extras
+    if the line is long.  Returns a list of length exactly ``n``.
+    """
+    tokens = re.split(r"[,\s]+", line.strip())
+    values: list[float] = []
+    for tok in tokens:
+        if not tok:
+            continue
+        try:
+            values.append(float(tok))
+        except ValueError:
+            values.append(default)
+    if len(values) < n:
+        values = values + [default] * (n - len(values))
+    return values[:n]
+
+
 def load_icartt(path: str | Path) -> pd.DataFrame:
     """Load one ICARTT ``.ict`` file into a DataFrame matching the
     :func:`load_iwg1` schema.
@@ -169,6 +192,20 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
     base_date = datetime(date_parts[0], date_parts[1], date_parts[2])
     # Line 10: number of dependent variables
     n_vars = int(lines[9].strip())
+    # Line 11: scale factors (one per dep var) — many older ICARTT
+    # campaigns ship scale_factor = 1.0 for every column and the line
+    # is effectively decorative, but newer high-rate instrument files
+    # (e.g. NASA MMS on the WB-57) use integer storage with scale
+    # factors like 0.01 / 0.00001 to fit dynamic range into 4-byte
+    # ints.  Parse and apply per-column or values come out 100x to
+    # 100 000x too large and get caught by the out-of-range filters.
+    scale_factors = _parse_n_floats(lines[10], n_vars, default=1.0)
+    # Line 12: per-column missing values — ICARTT campaigns vary
+    # (NCAR/RAF uses -99999; LaRC merges use -999999; MMS uses a
+    # mix of -999, -9999, -99999, -9999999, -99999999 depending on
+    # the column's dynamic range).  Read the per-column list and
+    # apply it per-column rather than relying on a global set.
+    missing_values = _parse_n_floats(lines[11], n_vars, default=-9999.0)
     # Lines 13..12+n_vars: dependent variable name+unit
     var_lines = lines[12:12 + n_vars]
     # Build (name, unit) tuples
@@ -209,18 +246,40 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
     if raw.empty:
         raise HyPlanValueError(f"ICARTT file has no data rows: {p}")
 
-    # Replace sentinel values with NaN.  Per-column missing markers are
-    # in line 12 (NV values), but using a global sentinel set covers
-    # the typical conventions: 4-, 5-, and 6-digit MISSING + LLOD/ULOD.
-    # ICARTT campaigns vary: NCAR/RAF uses -99999; ASP/LaRC merges use
-    # -999999; some older ICARTTs use -7777 / -8888 for LOD flags.
-    SENTINELS = {-9999, -99999, -999999, -7777, -8888,
-                 -77777, -88888, -777777, -888888}
-    raw = raw.replace(list(SENTINELS), np.nan)
+    # Per-column missing-value replacement + scale-factor application.
+    # The ICARTT spec puts these on lines 11 and 12 respectively, one
+    # entry per dependent variable, in the same order as the columns
+    # following the independent variable.  Older campaigns ship trivial
+    # values (all 1.0 / all -9999) but high-rate instrument files use
+    # them properly — see MMS on the WB-57 for an example.
+    indep_col = columns[0]
+    col_meta = {
+        col: (scale_factors[i] if i < len(scale_factors) else 1.0,
+              missing_values[i] if i < len(missing_values) else -9999.0)
+        for i, col in enumerate(columns[1:])  # skip indep var
+    }
+    # Add a global-sentinel fallback for older campaigns whose missing-
+    # value line declares one sentinel but the data also contains other
+    # canonical NaN markers (LLOD/ULOD flags etc.).
+    _GLOBAL_FALLBACK_SENTINELS = (-9999, -99999, -999999, -7777, -8888,
+                                  -77777, -88888, -777777, -888888,
+                                  -999, -9999999, -99999999)
+    for col in columns[1:]:
+        scale, missing = col_meta.get(col, (1.0, -9999.0))
+        s = pd.to_numeric(raw[col], errors="coerce")
+        # Per-column declared missing first.
+        if not (missing != missing):  # not NaN
+            s = s.where(s != missing)
+        # Then the broader fallback set — only replace exact matches to
+        # avoid clobbering legitimate small-magnitude data.
+        s = s.where(~s.isin(_GLOBAL_FALLBACK_SENTINELS))
+        # Scale-factor.
+        if scale != 1.0:
+            s = s * scale
+        raw[col] = s
 
     out = pd.DataFrame()
     # Independent variable: seconds past midnight on base_date.
-    indep_col = columns[0]
     seconds = pd.to_numeric(raw[indep_col], errors="coerce")
     out["timestamp"] = base_date + pd.to_timedelta(seconds, unit="s")
 
@@ -244,8 +303,9 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
             for pat in patterns:
                 if re.search(pat, ucol, re.IGNORECASE):
                     unit = name_to_unit.get(col, unit_hint)
-                    series = pd.to_numeric(raw[col], errors="coerce")
-                    out[canonical] = _convert_to_canonical(canonical, unit, series)
+                    # raw[col] was already scale-adjusted and
+                    # missing-replaced above.
+                    out[canonical] = _convert_to_canonical(canonical, unit, raw[col])
                     used_columns.add(col)
                     break
             if canonical in out.columns:
