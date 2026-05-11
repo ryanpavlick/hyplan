@@ -585,3 +585,45 @@ class TestPriors:
         fit = TestFitResult()._make_fit_result()
         result = score_fit(fit)
         assert result == {}
+
+
+# ===================================================================
+# TestRequireTraffic — error path when optional [adsb] extra is missing
+# ===================================================================
+
+
+class TestRequireTraffic:
+    """The traffic library is an optional dep; when it is not installed
+    the io / pipeline shims should raise a clear HyPlanRuntimeError
+    rather than letting a bare ImportError leak."""
+
+    def _traffic_unavailable(self) -> bool:
+        try:
+            import traffic  # noqa: F401
+            return False
+        except ImportError:
+            return True
+
+    def test_require_traffic_raises_when_missing(self):
+        from hyplan.aircraft.adsb.io import _require_traffic
+        from hyplan.exceptions import HyPlanRuntimeError
+
+        if not self._traffic_unavailable():
+            pytest.skip("traffic library is installed; cannot test missing-dep path")
+
+        with pytest.raises(HyPlanRuntimeError, match="traffic.*hyplan\\[adsb\\]"):
+            _require_traffic()
+
+    def test_load_flights_raises_when_traffic_missing(self, tmp_path):
+        from hyplan.aircraft.adsb.io import load_flights
+        from hyplan.exceptions import HyPlanRuntimeError
+
+        if not self._traffic_unavailable():
+            pytest.skip("traffic library is installed; cannot test missing-dep path")
+
+        # Create a dummy file so the path-existence check doesn't fire
+        # before the dependency check.
+        path = tmp_path / "dummy.parquet"
+        path.write_bytes(b"")
+        with pytest.raises(HyPlanRuntimeError, match="traffic"):
+            load_flights(path)

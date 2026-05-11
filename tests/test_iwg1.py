@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from hyplan.aircraft import load_iwg1, trim_ground_taxi
+from hyplan.aircraft.iwg1 import split_iwg1_alltracks
 from hyplan.exceptions import HyPlanValueError
 
 
@@ -336,6 +337,191 @@ class TestTrimGroundTaxi:
         df = load_iwg1(p)
         trimmed = trim_ground_taxi(df)
         assert len(trimmed) == 0
+
+
+_IWG1_HEADER_LINE = (
+    "HEADER,TimeStamp,Latitude,Longitude,GPS MSL Altitude,"
+    "WGS84 Altitude,Pressure Altitude,Radar Altitude,Ground Speed,"
+    "True Airspeed,Indicated Airspeed,Mach Number,Vertical Velocity,"
+    "True Heading,Track,Drift,Pitch,Roll,Side Slip,Angle of Attack,"
+    "Ambient Temp,Dew Point,Total Air Temp,Static Press,"
+    "Dynamic Press,Cabin Press,Wind Speed,Wind Direction,"
+    "Vertical Wind Speed,Solar Zenith Angle,Sun Elevation Aircraft,"
+    "Sun Azimuth Ground,Sun Azimuth Aircraft\n"
+)
+
+
+def _alltracks_record(ts: str) -> str:
+    """A single IWG1 record line.  Most fields are empty — split only
+    inspects the timestamp column."""
+    fields = ["IWG1", ts] + [""] * 31
+    return ",".join(fields) + "\n"
+
+
+class TestSplitIwg1Alltracks:
+    """Tests for split_iwg1_alltracks: chunk a multi-sortie all-tracks
+    CSV into per-sortie files at time gaps."""
+
+    def _two_sortie_file(
+        self, tmp_path: Path, *, include_header: bool = True,
+    ) -> Path:
+        # Day 1: 4 rows at 10:00, 10:01, 10:02, 11:00 (single sortie)
+        # Day 2: 3 rows at 09:00, 09:01, 09:02     (next-day sortie)
+        records = [
+            _alltracks_record("2024-06-01T10:00:00"),
+            _alltracks_record("2024-06-01T10:01:00"),
+            _alltracks_record("2024-06-01T10:02:00"),
+            _alltracks_record("2024-06-01T11:00:00"),
+            _alltracks_record("2024-06-02T09:00:00"),
+            _alltracks_record("2024-06-02T09:01:00"),
+            _alltracks_record("2024-06-02T09:02:00"),
+        ]
+        text = ("".join(records)
+                if not include_header
+                else _IWG1_HEADER_LINE + "".join(records))
+        path = tmp_path / "alltracks.csv"
+        path.write_text(text)
+        return path
+
+    def test_split_into_two_sorties_by_day_gap(self, tmp_path):
+        src = self._two_sortie_file(tmp_path)
+        written = split_iwg1_alltracks(
+            src, tmp_path / "out", tail_label="n520",
+        )
+        assert len(written) == 2
+        assert (tmp_path / "out" / "n520_2024-06-01.txt").exists()
+        assert (tmp_path / "out" / "n520_2024-06-02.txt").exists()
+
+    def test_per_sortie_file_is_loadable_by_load_iwg1(self, tmp_path):
+        src = self._two_sortie_file(tmp_path)
+        written = split_iwg1_alltracks(
+            src, tmp_path / "out", tail_label="n520",
+        )
+        df = load_iwg1(written[0])
+        # Day 1 had 4 rows; load_iwg1 keeps them all (no dedup since
+        # timestamps are 60 s apart).
+        assert len(df) == 4
+
+    def test_each_output_starts_with_canonical_header(self, tmp_path):
+        src = self._two_sortie_file(tmp_path, include_header=False)
+        written = split_iwg1_alltracks(
+            src, tmp_path / "out", tail_label="n520",
+        )
+        for p in written:
+            first_line = p.read_text().split("\n", 1)[0]
+            assert first_line.startswith("HEADER,TimeStamp")
+
+    def test_explicit_header_in_source_is_preserved(self, tmp_path):
+        src = self._two_sortie_file(tmp_path, include_header=True)
+        written = split_iwg1_alltracks(
+            src, tmp_path / "out", tail_label="n520",
+        )
+        # The source's HEADER line should propagate verbatim.
+        first_line = written[0].read_text().split("\n", 1)[0]
+        assert first_line == _IWG1_HEADER_LINE.rstrip()
+
+    def test_single_sortie_produces_one_file(self, tmp_path):
+        records = [
+            _alltracks_record(f"2024-06-01T10:{m:02d}:00")
+            for m in range(5)
+        ]
+        path = tmp_path / "single.csv"
+        path.write_text(_IWG1_HEADER_LINE + "".join(records))
+        written = split_iwg1_alltracks(
+            path, tmp_path / "out", tail_label="n520",
+        )
+        assert len(written) == 1
+
+    def test_short_gap_under_threshold_does_not_split(self, tmp_path):
+        # Two clusters 2 hours apart — same sortie under default 6 hr.
+        records = [
+            _alltracks_record("2024-06-01T08:00:00"),
+            _alltracks_record("2024-06-01T08:01:00"),
+            _alltracks_record("2024-06-01T10:00:00"),
+            _alltracks_record("2024-06-01T10:01:00"),
+        ]
+        path = tmp_path / "short_gap.csv"
+        path.write_text(_IWG1_HEADER_LINE + "".join(records))
+        written = split_iwg1_alltracks(
+            path, tmp_path / "out", tail_label="n520",
+        )
+        assert len(written) == 1
+
+    def test_custom_gap_threshold_splits_more_aggressively(self, tmp_path):
+        records = [
+            _alltracks_record("2024-06-01T08:00:00"),
+            _alltracks_record("2024-06-01T08:01:00"),
+            _alltracks_record("2024-06-01T10:00:00"),
+            _alltracks_record("2024-06-01T10:01:00"),
+        ]
+        path = tmp_path / "short_gap.csv"
+        path.write_text(_IWG1_HEADER_LINE + "".join(records))
+        # A 1 hr threshold should split the 2 hr gap.
+        written = split_iwg1_alltracks(
+            path, tmp_path / "out", tail_label="n520",
+            gap_threshold_hr=1.0,
+        )
+        assert len(written) == 2
+
+    def test_out_of_order_rows_are_sorted_into_correct_sortie(self, tmp_path):
+        # Day-2 row appears physically first in the file; split should
+        # still group correctly.
+        records = [
+            _alltracks_record("2024-06-02T09:00:00"),
+            _alltracks_record("2024-06-01T10:00:00"),
+            _alltracks_record("2024-06-01T10:01:00"),
+            _alltracks_record("2024-06-02T09:01:00"),
+        ]
+        path = tmp_path / "shuffled.csv"
+        path.write_text(_IWG1_HEADER_LINE + "".join(records))
+        written = split_iwg1_alltracks(
+            path, tmp_path / "out", tail_label="n520",
+        )
+        assert len(written) == 2
+        # Each file should have 2 data rows
+        for p in written:
+            df = load_iwg1(p)
+            assert len(df) == 2
+
+    def test_glued_records_without_newline_are_separated(self, tmp_path):
+        # Some ASP deliveries glue records without a newline separator,
+        # producing e.g. "...,IWG1,2025-07-21T...".  The splitter
+        # restores breaks before each IWG1 marker.
+        record_str = (
+            _alltracks_record("2024-06-01T10:00:00").rstrip("\n")
+            + _alltracks_record("2024-06-01T10:01:00").rstrip("\n")
+            + _alltracks_record("2024-06-02T09:00:00")
+        )
+        path = tmp_path / "glued.csv"
+        path.write_text(_IWG1_HEADER_LINE + record_str)
+        written = split_iwg1_alltracks(
+            path, tmp_path / "out", tail_label="n520",
+        )
+        assert len(written) == 2
+
+    def test_empty_file_raises(self, tmp_path):
+        path = tmp_path / "empty.csv"
+        path.write_text("")
+        with pytest.raises(HyPlanValueError):
+            split_iwg1_alltracks(
+                path, tmp_path / "out", tail_label="n520",
+            )
+
+    def test_header_only_file_raises(self, tmp_path):
+        path = tmp_path / "header_only.csv"
+        path.write_text(_IWG1_HEADER_LINE)
+        with pytest.raises(HyPlanValueError):
+            split_iwg1_alltracks(
+                path, tmp_path / "out", tail_label="n520",
+            )
+
+    def test_creates_dest_dir_if_missing(self, tmp_path):
+        src = self._two_sortie_file(tmp_path)
+        dest = tmp_path / "fresh_subdir" / "deep" / "out"
+        assert not dest.exists()
+        written = split_iwg1_alltracks(src, dest, tail_label="n520")
+        assert dest.is_dir()
+        assert len(written) == 2
 
 
 @pytest.mark.skipif(
