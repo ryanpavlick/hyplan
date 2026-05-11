@@ -999,20 +999,25 @@ class TestER2Performance:
             )
 
     def test_climb_profile_matches_active_iwg1_medians(self):
-        """ER-2 climb_profile uses hold-band-excluded active-climb medians."""
+        """ER-2 climb_profile uses hold-band-excluded active-climb medians.
+
+        Values from the 618-sortie 2012-2026 IWG1 cache; see
+        ``notebooks/calibration/NASA_ER2/calibration.ipynb`` and
+        ``_fetch_asp.py`` for derivation and source data.
+        """
         ac = NASA_ER2()
         expected = {
-            5000: 4301,
-            10000: 4330,
-            15000: 3876,
-            20000: 3934,
-            25000: 3588,
-            30000: 3113,
-            35000: 2447,
-            40000: 2083,
-            45000: 1746,
-            50000: 1618,
-            55000: 1565,
+            5000: 3553,
+            10000: 3876,
+            15000: 3851,
+            20000: 3526,
+            25000: 3423,
+            30000: 3121,
+            35000: 2338,
+            40000: 2035,
+            45000: 1761,
+            50000: 1668,
+            55000: 1612,
             66000: 200,
         }
         for alt_ft, expected_fpm in expected.items():
@@ -1117,14 +1122,17 @@ class TestER2Performance:
     # --- Item 2: bank_by_phase metadata -----------------------------------
 
     def test_bank_by_phase_calibrated(self):
-        """NASA_ER2.turn_model carries the IWG1-calibrated per-phase medians."""
+        """NASA_ER2.turn_model carries the IWG1-calibrated per-phase medians.
+
+        Values from the 618-sortie 2012-2026 IWG1 cache (~762 k turn fixes).
+        """
         ac = NASA_ER2()
         bp = ac.turn_model.bank_by_phase
-        assert bp.climb_deg == pytest.approx(11.0)
+        assert bp.climb_deg == pytest.approx(14.0)
         assert bp.cruise_deg == pytest.approx(20.0)
-        assert bp.descent_deg == pytest.approx(16.0)
-        assert bp.approach_deg == pytest.approx(9.0)
-        # Brochure max-bank envelope unchanged (p90 < 30° in every band).
+        assert bp.descent_deg == pytest.approx(13.0)
+        assert bp.approach_deg == pytest.approx(11.0)
+        # Brochure max-bank envelope unchanged (p99 < 30° in every band).
         assert ac.turn_model.max_bank_deg == pytest.approx(30.0)
 
     def test_climb_plan_auto_sentinel_resolves_to_explicit_plan(self):
@@ -1133,16 +1141,18 @@ class TestER2Performance:
         whose total time grows by the hold duration relative to
         climb_plan=None.
 
-        NASA_ER2 ships with a 12-min FL356 hold; the "auto"
-        sentinel resolves to that ClimbPlan, which is distinct
-        from `climb_plan=None` (no holds — pure active-climb).
+        NASA_ER2 ships with a 13-min FL550 representative pause (the
+        empirical observed-vs-active-climb gap derived from the
+        618-sortie IWG1 cache); the "auto" sentinel resolves to that
+        ClimbPlan, which is distinct from `climb_plan=None` (no holds
+        — pure active-climb).
         """
         from hyplan.airports import Airport
         from hyplan.flight_line import FlightLine
         from hyplan.flight_plan import compute_flight_plan
         ac = NASA_ER2()
         # Long leg so the climb fits horizontally and the staged
-        # branch emits an explicit "loiter" row for the FL356 pause
+        # branch emits an explicit "loiter" row for the FL550 pause
         # (rather than spiral-up at departure absorbing it).
         line = FlightLine.center_length_azimuth(
             lat=36.0, lon=-100.0, length=ureg.Quantity(120, "km"),
@@ -1158,16 +1168,14 @@ class TestER2Performance:
             ac, [line], takeoff_airport=kcos, return_airport=kcos,
             climb_plan=None,
         )
-        # "auto" resolves to ER-2's 12-min FL356 hold; total time
-        # exceeds the no-hold version by ~12 min (single-pause delta,
-        # invariant across geometry — the spiral-up branch absorbs
-        # the time differently but the budget is the same).
+        # "auto" resolves to ER-2's 13-min FL550 representative pause;
+        # total time exceeds the no-hold version by ~13 min.
         delta_min = (
             plan_auto["time_to_segment"].sum()
             - plan_none["time_to_segment"].sum()
         )
-        assert delta_min == pytest.approx(12.0, abs=1.0), (
-            f"auto-sentinel + 12-min FL356 hold should add ~12 min; "
+        assert delta_min == pytest.approx(13.0, abs=1.0), (
+            f"auto-sentinel + 13-min FL550 pause should add ~13 min; "
             f"got {delta_min:+.1f} min"
         )
         # Long enough leg that the climb fits horizontally and the
@@ -1201,8 +1209,11 @@ class TestER2Performance:
         assert p.absorbed_in_climb_profile is False
         assert isinstance(p.explicit_climb_plan, ClimbPlan)
         assert len(p.explicit_climb_plan.pauses) >= 1
-        # At least the FL356 .delay-orbit hold should be listed.
-        assert len(p.typical_holds) >= 1
+        # typical_holds may be empty for aircraft where no discretionary
+        # altitude-band hold concentrates in the calibration sample (this
+        # is the case for NASA_ER2 in the 618-sortie 2012-2026 cache —
+        # see typical_climb_out.notes).
+        assert isinstance(p.typical_holds, list)
         # Total overhead should be a plausible double-digit minute count.
         assert 5.0 <= p.typical_overhead_min <= 30.0
         # Notes surface the calibration story.

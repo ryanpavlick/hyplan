@@ -79,9 +79,13 @@ class NASA_ER2(Aircraft):
 
     Speed schedules, vertical-rate profile, and approach behavior calibrated
     from cached NASA AFRC IWG1 in-situ flight logs covering NASA 806 and
-    NASA 809.  See [notebooks/calibration/NASA_ER2/calibration.ipynb] for the
-    full derivation: per-altitude-bin |VS| medians, breakpoint selection
-    rules, and validation against per-sortie observed timing.
+    NASA 809, with continuous fiscal-year coverage 2012-2026 (618 sorties
+    loaded from a 629-file cache pulled from the public NASA ASP archive
+    plus a local in-house delivery; see
+    ``notebooks/calibration/NASA_ER2/_fetch_asp.py`` for the fetcher).
+    See [notebooks/calibration/NASA_ER2/calibration.ipynb] for the full
+    derivation: per-altitude-bin |VS| medians, breakpoint selection rules,
+    and validation against per-sortie observed timing.
 
     Vertical-rate highlights from the calibration:
 
@@ -101,32 +105,33 @@ class NASA_ER2(Aircraft):
     """
 
     def __init__(self) -> None:
-        # Distinct climb / cruise / descent TAS schedules from IWG1 per-altitude-bin
-        # medians (cached NASA 806 + 809 sorties, bins with n >= 30 fixes).
-        # Pre-Item-4 these were aliased to a single brochure 2-point linear curve;
-        # the IWG1 data shows climb / descent are within ~5 kt of each other at
-        # any given altitude (both reflect pitched flight) but cruise sits ~10-20
-        # kt higher in the 40-60 kft band.
+        # Distinct climb / cruise / descent TAS schedules from IWG1 per-
+        # altitude-bin medians across 618 NASA 806 + 809 sorties (2012-2026
+        # continuous fiscal-year coverage; bins with n >= 30 fixes).  The
+        # IWG1 data shows climb / descent are within ~5 kt of each other at
+        # any given altitude (both reflect pitched flight); cruise sits ~5 kt
+        # higher in the 60-65 kft band.  Endpoints at 0 and 70 kft are
+        # extrapolations beyond the bins where data is dense.
         climb_schedule = TasSchedule(points=[
-            (    0 * ureg.feet, 120 * ureg.knot),  # extrapolated; 3 kft = 134 kt
-            (20000 * ureg.feet, 224 * ureg.knot),  # IWG1 19 kft median
-            (40000 * ureg.feet, 308 * ureg.knot),  # IWG1 41 kft median
-            (60000 * ureg.feet, 397 * ureg.knot),  # IWG1 61 kft median
-            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
+            (    0 * ureg.feet, 130 * ureg.knot),  # extrapolated; 2.5 kft bin median = 141
+            (20000 * ureg.feet, 230 * ureg.knot),  # IWG1 17.5-22.5 kft band (220-235)
+            (40000 * ureg.feet, 306 * ureg.knot),  # IWG1 37.5-42.5 kft band (291-321)
+            (60000 * ureg.feet, 393 * ureg.knot),  # IWG1 57.5-62.5 kft band (390-396)
+            (70000 * ureg.feet, 400 * ureg.knot),  # extrapolated; 67.5 kft bin median = 398
         ])
         cruise_schedule = TasSchedule(points=[
-            (    0 * ureg.feet, 130 * ureg.knot),  # brochure-equivalent low-alt
-            (50000 * ureg.feet, 374 * ureg.knot),  # IWG1 51 kft median
-            (60000 * ureg.feet, 388 * ureg.knot),  # IWG1 59 kft median
-            (65000 * ureg.feet, 401 * ureg.knot),  # IWG1 65 kft median (n=51383)
-            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
+            (    0 * ureg.feet, 130 * ureg.knot),  # brochure-equivalent low-alt anchor
+            (50000 * ureg.feet, 375 * ureg.knot),  # IWG1 47.5-52.5 kft band (361-390)
+            (60000 * ureg.feet, 397 * ureg.knot),  # IWG1 57.5-62.5 kft band (395-399)
+            (65000 * ureg.feet, 400 * ureg.knot),  # IWG1 62.5-67.5 kft band (399-401)
+            (70000 * ureg.feet, 401 * ureg.knot),  # extrapolated above 67 kft
         ])
         descent_schedule = TasSchedule(points=[
-            (    0 * ureg.feet,  90 * ureg.knot),  # IWG1 1 kft median (touchdown)
-            (20000 * ureg.feet, 221 * ureg.knot),  # IWG1 19 kft median
-            (40000 * ureg.feet, 318 * ureg.knot),  # IWG1 41 kft median
-            (60000 * ureg.feet, 399 * ureg.knot),  # IWG1 59 kft median
-            (70000 * ureg.feet, 410 * ureg.knot),  # extrapolated above 67 kft
+            (    0 * ureg.feet,  95 * ureg.knot),  # touchdown extrapolation; 2.5 kft = 117
+            (20000 * ureg.feet, 224 * ureg.knot),  # IWG1 17.5-22.5 kft band (215-234)
+            (40000 * ureg.feet, 312 * ureg.knot),  # IWG1 37.5-42.5 kft band (297-327)
+            (60000 * ureg.feet, 394 * ureg.knot),  # IWG1 57.5-62.5 kft band (392-396)
+            (70000 * ureg.feet, 400 * ureg.knot),  # extrapolated above 67 kft
         ])
         super().__init__(
             aircraft_type="ER-2",
@@ -148,78 +153,67 @@ class NASA_ER2(Aircraft):
             # for the active-only derivation and §6b for the IQR fit
             # validation.
             climb_profile=VerticalProfile(points=[
-                ( 5000 * ureg.feet, 4301 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 4330 * ureg.feet / ureg.minute),
-                (15000 * ureg.feet, 3876 * ureg.feet / ureg.minute),
-                (20000 * ureg.feet, 3934 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 3588 * ureg.feet / ureg.minute),
-                (30000 * ureg.feet, 3113 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 2447 * ureg.feet / ureg.minute),
-                (40000 * ureg.feet, 2083 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 1746 * ureg.feet / ureg.minute),
-                (50000 * ureg.feet, 1618 * ureg.feet / ureg.minute),
-                (55000 * ureg.feet, 1565 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 3553 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 3876 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 3851 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 3526 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 3423 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 3121 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2338 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2035 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 1761 * ureg.feet / ureg.minute),
+                (50000 * ureg.feet, 1668 * ureg.feet / ureg.minute),
+                (55000 * ureg.feet, 1612 * ureg.feet / ureg.minute),
                 # Operational ceiling residual; FL600+ active-climb bins
                 # are too sparse (n<30) for a reliable empirical fit.
                 (66000 * ureg.feet,  200 * ureg.feet / ureg.minute),
             ]),
-            # Active-descent median (|VS| >= 1500 fpm), 5-kft bins
-            # across 199 sorties.  Replaces the earlier sparse 3-anchor
-            # construction whose bottom anchor (735 fpm) was driven by
-            # approach-speed fixes (low-VS gentle final descent), not
-            # active descent — predictions for any FL030-FL250 transit
-            # were systematically too slow by 800-1500 fpm.  The new
-            # bin-median profile sits inside every IQR for FL000-FL550
-            # where data is dense; FL600+ has sparser coverage and
-            # natural steepening in the data is preserved here.  See
-            # ``notebooks/calibration/NASA_ER2/calibration.ipynb`` §6b
-            # for the IQR + median visualization.
+            # Three-anchor descent profile derived from the 618-sortie
+            # 2012-2026 IWG1 cache: gentle |VS| at top-of-approach
+            # (just-begun descent), peak |VS| mid-descent, and the
+            # high-altitude initial-descent rate near the operating
+            # ceiling.  Bottom anchor is keyed to top_of_approach_msl
+            # (representative airport elevation + 3 kft AGL = ~5265 ft)
+            # so the descent-vs-approach handoff has a clean meaning.
+            # See ``notebooks/calibration/NASA_ER2/calibration.ipynb``
+            # for the derivation.
             descent_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 1630 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 1871 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 2042 * ureg.feet / ureg.minute),
-                (15000 * ureg.feet, 2312 * ureg.feet / ureg.minute),
-                (20000 * ureg.feet, 2477 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 2632 * ureg.feet / ureg.minute),
-                (30000 * ureg.feet, 2720 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 2770 * ureg.feet / ureg.minute),
-                (40000 * ureg.feet, 2755 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 2783 * ureg.feet / ureg.minute),
-                (50000 * ureg.feet, 3051 * ureg.feet / ureg.minute),
-                (55000 * ureg.feet, 2928 * ureg.feet / ureg.minute),
-                (60000 * ureg.feet, 2194 * ureg.feet / ureg.minute),
-                (65000 * ureg.feet, 1849 * ureg.feet / ureg.minute),
+                ( 5265 * ureg.feet,  473 * ureg.feet / ureg.minute),
+                (37500 * ureg.feet, 2570 * ureg.feet / ureg.minute),
+                (66000 * ureg.feet, 1502 * ureg.feet / ureg.minute),
             ]),
             # Calibrated terminal-arrival profile (3 kft AGL -> touchdown).
-            # 2.5° glideslope is the empirical median over 846 IWG1
-            # approach-phase fixes; touchdown 65 kt is the per-sortie
-            # median TAS in the lowest 50 ft AGL band, n=6 sorties
-            # contributing.  Plausible for ER-2's flare regime — the
-            # airframe has no conventional flaps, so it decelerates
-            # close to stall in ground effect before touchdown.
+            # 2.53° glideslope is the empirical median over 66 499 IWG1
+            # approach-phase fixes from the expanded 618-sortie cache;
+            # touchdown 72 kt is the per-sortie median TAS in the lowest
+            # 50 ft AGL band, n=89 sorties contributing.  The 65→72 kt
+            # bump versus the prior 199-sortie fit reflects the larger
+            # operational sample (the small earlier sample skewed light /
+            # below typical ER-2 flare).  Top-of-approach 157 kt is the
+            # median at the 2.5-3.5 kft AGL band (n=8499 fixes).
             approach_profile=ApproachProfile(
                 speed_schedule=TasSchedule(points=[
-                    (   0 * ureg.feet,  65 * ureg.knot),  # touchdown
-                    ( 200 * ureg.feet,  71 * ureg.knot),  # interpolated
-                    (1000 * ureg.feet,  94 * ureg.knot),  # interpolated
-                    (3000 * ureg.feet, 151 * ureg.knot),  # top-of-approach
+                    (   0 * ureg.feet,  72 * ureg.knot),  # touchdown (n=89 sorties)
+                    ( 200 * ureg.feet,  78 * ureg.knot),  # interpolated
+                    (1000 * ureg.feet, 100 * ureg.knot),  # interpolated
+                    (3000 * ureg.feet, 157 * ureg.knot),  # top-of-approach band median
                 ]),
                 top_of_approach_agl=3000 * ureg.feet,
-                glideslope_deg=2.51,
+                glideslope_deg=2.53,
             ),
-            # max_bank_deg=30 is the brochure / envelope ceiling — well-
-            # supported by IWG1 (p90 < 30° in every altitude band).
-            # bank_by_phase carries the calibrated *typical-operations*
-            # medians from the IWG1 sortie set (n=12 686 turn fixes) and
-            # is consumed by Aircraft._hybrid_path (per-phase turn radius)
-            # and loiter_orbit_geometry (phase-aware orbit radius).
+            # max_bank_deg=30 is the brochure / envelope ceiling — still
+            # well-supported by the expanded IWG1 cache (p99 < 30° in every
+            # altitude band).  bank_by_phase carries the calibrated
+            # *typical-operations* medians from the 618-sortie set and is
+            # consumed by Aircraft._hybrid_path (per-phase turn radius) and
+            # loiter_orbit_geometry (phase-aware orbit radius).
             turn_model=TurnModel(
                 max_bank_deg=30.0,
                 bank_by_phase=PhaseBankAngles(
-                    climb_deg=11.0,     # 10-30 kft band p50 (climb regime)
-                    cruise_deg=20.0,    # 50-70 kft band p50 (n=9782 fixes)
-                    descent_deg=16.0,   # 30-50 kft band p50 (descent transit)
-                    approach_deg=9.0,   # 0-10 kft band p50 (terminal area)
+                    climb_deg=14.0,     # climb-phase p50 (n=93 412 fixes)
+                    cruise_deg=20.0,    # cruise-phase p50 (n=549 320 fixes)
+                    descent_deg=13.0,   # descent-phase p50 (n=119 513 fixes)
+                    approach_deg=11.0,  # 0-10 kft band p50 (terminal area)
                 ),
             ),
             engine_type="jet",
@@ -248,39 +242,53 @@ class NASA_ER2(Aircraft):
             # injected explicitly via the typical_climb_out below.
             climb_path_angle_max_deg=6.0,
             typical_climb_out=ClimbOutPolicy(
-                # climb_profile is active-only and the planner reads
-                # `explicit_climb_plan` via
-                # `compute_flight_plan(climb_plan="auto")` (the
-                # default).  This recovers empirical-typical
-                # wall-clock TOC honestly: the holds appear as
-                # explicit `loiter` segments in the plan dataframe,
-                # not absorbed into the climb_profile values.
+                # climb_profile is active-only (|VS| >= 1500 fpm) and
+                # the planner reads `explicit_climb_plan` via
+                # `compute_flight_plan(climb_plan="auto")` to add the
+                # typical climb-out overhead the active-only model
+                # doesn't capture.
                 absorbed_in_climb_profile=False,
                 typical_holds=[
-                    (24_000 * ureg.feet,  1 * ureg.minute),  # FL240 brief level-off
-                    (26_000 * ureg.feet,  1 * ureg.minute),  # FL260 brief level-off
-                    (35_600 * ureg.feet, 12 * ureg.minute),  # FL356 weight-band .delay (median)
+                    # No discretionary altitude-band hold concentrates
+                    # in the modern 618-sortie sample.  Brief level-offs
+                    # at FL240/FL260 occur in 10-20% of sorties (median
+                    # 2-3 min when present) but aren't typical.  The
+                    # historical FL356 12-min weight-management hold
+                    # characteristic of HS3 / ATTREX (2012-2015) appears
+                    # in only 0.8% of sorties post-2016.
                 ],
-                typical_overhead_min=14.0,
+                typical_overhead_min=13.0,
                 notes=(
-                    "climb_profile is active-climb-only (cached NASA 806 + 809 IWG1 "
-                    "median per 5-kft bin, VS >= 1500 fpm filter, hold "
-                    "bands excluded). Pre-cruise mission overhead is "
-                    "injected via explicit_climb_plan when the caller "
-                    "uses climb_plan='auto' (the default).  The 12-min "
-                    "FL356 hold is the median of the cached sortie set; "
-                    "individual sorties range 0-25+ min.  Power users "
-                    "wanting pure aircraft physics pass climb_plan=None "
-                    "to bypass the typical-mission absorption.  See "
-                    "notebooks/calibration/NASA_ER2/planned_vs_flown.ipynb §16."
+                    "Per-sortie climb-out overhead derived from the "
+                    "618-sortie 2012-2026 IWG1 cache (355 with a clear "
+                    "top-of-climb level-off).  Total inactive-climb "
+                    "(|VS| < 1500 fpm) time from takeoff to TOC has "
+                    "median 19.8 min; the active-only climb_profile "
+                    "integration accounts for ~7 min via its 200 fpm "
+                    "anchor at FL660, leaving ~13 min of marginal "
+                    "overhead.  This overhead concentrates in the "
+                    "FL500-FL650 approach-to-ceiling slowdown band "
+                    "(98.9% of sorties spend ≥1 min between FL550-"
+                    "FL600 with |VS| < 1500 fpm; median 5.83 min "
+                    "there alone) — airframe physics rather than "
+                    "pilot procedure.  explicit_climb_plan places a "
+                    "single representative pause at FL550 so consumers "
+                    "of climb_plan='auto' get the right total time "
+                    "with a sensible loiter-row location.  Power users "
+                    "wanting pure active-climb physics pass "
+                    "climb_plan=None.  See _fetch_asp.py for the "
+                    "data source and calibration.ipynb for the full "
+                    "active-climb derivation."
                 ),
                 explicit_climb_plan=ClimbPlan(pauses=[
-                    # Median weight-band .delay duration across the
-                    # cached sortie set.  Single representative pause
-                    # at FL356 — brief FL240/FL260 level-offs are
-                    # too short to be worth modelling explicitly and
-                    # contribute <2 min combined.
-                    (35_600 * ureg.feet, 12 * ureg.minute),
+                    # FL550 is the lowest band of the FL500-FL650
+                    # approach-to-ceiling slowdown.  Duration matches
+                    # the observed-vs-active-climb gap (~13 min) at
+                    # the total-time level.  Single anchor; the actual
+                    # in-flight slowdown is diffuse across FL500-FL650
+                    # but a single loiter-row keeps the flight-plan
+                    # dataframe tractable for downstream consumers.
+                    (55_000 * ureg.feet, 13 * ureg.minute),
                 ]),
             ),
             sources=[
@@ -1161,99 +1169,126 @@ class NOAA_GIV(Aircraft):
 
 
 class NASA_WB57(Aircraft):
-    """NASA WB-57 (NASA 927) high-altitude research aircraft.
+    """NASA WB-57F (NASA 926 / 927) high-altitude research aircraft.
 
     Based at NASA Johnson Space Center (JSC), Ellington Field.
-    Operates up to 60,000 ft with 8,800 lbs useful payload.
+    Operates up to 60 000 ft with 8 800 lbs useful payload.
+
+    Calibrated against 127 sorties combining in-house IWG1 deliveries
+    (NASA 926 + 927, 2018-2026) with the ACCLIP 2022 deployment's
+    MMS-1HZ ICARTT data from NASA LaRC ASDC (collection
+    ``ACCLIP_MetNav_AircraftInSitu_WB57_Data``; covers Lait's GSFC
+    flight-planner WB-57 tuning window).  See
+    ``notebooks/calibration/NASA_WB57/`` for ``_fetch_acclip.py`` (the
+    LaRC ASDC fetcher), ``calibrate.py`` (the IWG1 + ICARTT-aware
+    fitter), and ``calibration.ipynb`` (per-bin diagnostics).
 
     See also:
         `https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC <https://airbornescience.nasa.gov/aircraft/WB-57_-_JSC>`_
     """
 
     def __init__(self) -> None:
-        # Calibrated against 100 IWG1 sorties combined from NASA 926
-        # (data/n926na_alltracks.csv) and NASA 927
-        # (data/n927na_alltracks.csv), 2018-11 through 2024.  See
-        # ``notebooks/calibration/NASA_WB57/calibration.ipynb`` for the
-        # active-only fits and per-phase TAS / bank derivations.
+        # Calibrated against 127 sorties combined from:
+        #   * IWG1 in-house delivery: NASA 926 + 927, 2018-2026
+        #     (data/n926na_alltracks.csv + data/n927na_alltracks.csv,
+        #     split into per-sortie n92[67]_*.txt files).
+        #   * ACCLIP 2022 MMS-1HZ ICARTT: 27 daily files from NASA 926
+        #     at NASA LaRC ASDC (collection
+        #     ACCLIP_MetNav_AircraftInSitu_WB57_Data); covers Lait's
+        #     GSFC-flight-planner WB-57 tuning window (ChangeLog
+        #     2022-08-02 / 2022-08-16: "improved wb57 tuning to
+        #     acclip 2022").  See
+        #     ``notebooks/calibration/NASA_WB57/_fetch_acclip.py``.
+        # The two formats produce canonical-schema DataFrames and are
+        # combined into a single calibration sample (see
+        # ``notebooks/calibration/NASA_WB57/calibrate.py``).
         super().__init__(
             aircraft_type="WB-57",
             tail_number="NASA 926/927",
             operator="NASA JSC",
-            # p99 of per-sortie peak altitude across 100 sorties.
-            service_ceiling=63000 * ureg.feet,
-            approach_speed=117 * ureg.knot,
+            # p99 of per-sortie peak altitude across 127 sorties.
+            service_ceiling=64000 * ureg.feet,
+            approach_speed=120 * ureg.knot,
             # Climb-phase TAS medians.  SL anchor at typical jet
             # rotation TAS (150 kt) since the SL climb-phase bin is
             # contaminated by takeoff-roll fixes still accelerating.
-            # FL600 bin (n=257) is sparse and dips relative to FL500;
-            # interpolation handles the gap cleanly.
+            # ACCLIP 2022 added an FL600 anchor (n>200 fixes) that
+            # was sparse in the IWG1-only fit.
             climb_schedule=TasSchedule(points=[
                 (    0 * ureg.feet, 150 * ureg.knot),
-                (10000 * ureg.feet, 200 * ureg.knot),
-                (20000 * ureg.feet, 234 * ureg.knot),
-                (30000 * ureg.feet, 276 * ureg.knot),
-                (40000 * ureg.feet, 330 * ureg.knot),
-                (50000 * ureg.feet, 374 * ureg.knot),
+                (10000 * ureg.feet, 203 * ureg.knot),
+                (20000 * ureg.feet, 236 * ureg.knot),
+                (30000 * ureg.feet, 280 * ureg.knot),
+                (40000 * ureg.feet, 334 * ureg.knot),
+                (50000 * ureg.feet, 382 * ureg.knot),
+                (60000 * ureg.feet, 402 * ureg.knot),
             ]),
             # Cruise-phase TAS medians at the typical cruise band.
-            # FL450 is the dominant cruise altitude (n=349,982 cruise
-            # fixes vs n=51,103 at FL500); only ~22% of sorties peak
-            # above FL500 and only ~5% reach FL600.  The schedule
-            # anchors on FL400 onward to match the actual operational
-            # envelope.
+            # FL450 is the dominant cruise altitude (n=420 498 cruise
+            # fixes vs n=113 354 at FL500 in the expanded sample);
+            # the schedule anchors on FL400 onward to match the actual
+            # operational envelope.
             cruise_schedule=TasSchedule(points=[
                 (40000 * ureg.feet, 337 * ureg.knot),
-                (45000 * ureg.feet, 348 * ureg.knot),
-                (50000 * ureg.feet, 366 * ureg.knot),
-                (55000 * ureg.feet, 382 * ureg.knot),
-                (60000 * ureg.feet, 381 * ureg.knot),
-                (62000 * ureg.feet, 381 * ureg.knot),
+                (45000 * ureg.feet, 353 * ureg.knot),
+                (50000 * ureg.feet, 383 * ureg.knot),
+                (55000 * ureg.feet, 384 * ureg.knot),
+                (60000 * ureg.feet, 389 * ureg.knot),
+                (62000 * ureg.feet, 389 * ureg.knot),
             ]),
             # Descent-phase TAS medians; SL anchor at observed
             # final-approach TAS (140 kt).
             descent_schedule=TasSchedule(points=[
                 (    0 * ureg.feet, 140 * ureg.knot),
-                (10000 * ureg.feet, 205 * ureg.knot),
-                (20000 * ureg.feet, 241 * ureg.knot),
-                (30000 * ureg.feet, 278 * ureg.knot),
-                (40000 * ureg.feet, 326 * ureg.knot),
-                (50000 * ureg.feet, 372 * ureg.knot),
+                (10000 * ureg.feet, 207 * ureg.knot),
+                (20000 * ureg.feet, 243 * ureg.knot),
+                (30000 * ureg.feet, 281 * ureg.knot),
+                (40000 * ureg.feet, 330 * ureg.knot),
+                (50000 * ureg.feet, 389 * ureg.knot),
             ]),
             # Active-climb median (VS >= 1500 fpm), 5-kft bins,
-            # n>=30/bin.  Peak ROC near FL050-100 (~2900 fpm),
-            # declining through the cruise band.
+            # n>=30/bin.  Peak ROC near FL050-100 (~2775 fpm),
+            # declining through the cruise band.  The ACCLIP data
+            # added an FL500 bin (~1616 fpm) that was below n=30 in
+            # the IWG1-only sample.
             climb_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 2137 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 2889 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 2843 * ureg.feet / ureg.minute),
-                (15000 * ureg.feet, 2788 * ureg.feet / ureg.minute),
-                (20000 * ureg.feet, 2680 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 2514 * ureg.feet / ureg.minute),
-                (30000 * ureg.feet, 2194 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 1790 * ureg.feet / ureg.minute),
-                (40000 * ureg.feet, 1614 * ureg.feet / ureg.minute),
-                (45000 * ureg.feet, 1674 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 2274 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 2775 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 2794 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 2771 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2688 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2468 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2133 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 1751 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 1605 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 1641 * ureg.feet / ureg.minute),
+                (50000 * ureg.feet, 1616 * ureg.feet / ureg.minute),
                 # Residual rate at the certified ceiling so the
                 # integrator terminates cleanly.
                 (65000 * ureg.feet,  500 * ureg.feet / ureg.minute),
             ]),
             # Active-descent median (|VS| >= 1500 fpm), 5-kft bins.
+            # ACCLIP added FL500 / FL550 / FL600 bins from the high-
+            # altitude descent legs.
             descent_profile=VerticalProfile(points=[
-                (    0 * ureg.feet, 1638 * ureg.feet / ureg.minute),
-                ( 5000 * ureg.feet, 1864 * ureg.feet / ureg.minute),
-                (10000 * ureg.feet, 1949 * ureg.feet / ureg.minute),
-                (15000 * ureg.feet, 2004 * ureg.feet / ureg.minute),
-                (20000 * ureg.feet, 1996 * ureg.feet / ureg.minute),
-                (25000 * ureg.feet, 2196 * ureg.feet / ureg.minute),
-                (30000 * ureg.feet, 2396 * ureg.feet / ureg.minute),
-                (35000 * ureg.feet, 2463 * ureg.feet / ureg.minute),
-                (40000 * ureg.feet, 2191 * ureg.feet / ureg.minute),
+                (    0 * ureg.feet, 1651 * ureg.feet / ureg.minute),
+                ( 5000 * ureg.feet, 1829 * ureg.feet / ureg.minute),
+                (10000 * ureg.feet, 1918 * ureg.feet / ureg.minute),
+                (15000 * ureg.feet, 1968 * ureg.feet / ureg.minute),
+                (20000 * ureg.feet, 2021 * ureg.feet / ureg.minute),
+                (25000 * ureg.feet, 2194 * ureg.feet / ureg.minute),
+                (30000 * ureg.feet, 2299 * ureg.feet / ureg.minute),
+                (35000 * ureg.feet, 2266 * ureg.feet / ureg.minute),
+                (40000 * ureg.feet, 2140 * ureg.feet / ureg.minute),
+                (45000 * ureg.feet, 1946 * ureg.feet / ureg.minute),
+                (50000 * ureg.feet, 1670 * ureg.feet / ureg.minute),
+                (55000 * ureg.feet, 1613 * ureg.feet / ureg.minute),
+                (60000 * ureg.feet, 1643 * ureg.feet / ureg.minute),
             ]),
             # p90 |Roll| during turn-state fixes (gate >5°,
-            # n=156,946): 33°.  Median (19°) is dragged down by
-            # small in-cruise course corrections.
-            turn_model=TurnModel(max_bank_deg=33.0),
+            # n=187 410): 31.7° in the expanded sample.  Median (19°)
+            # is dragged down by small in-cruise course corrections.
+            turn_model=TurnModel(max_bank_deg=32.0),
             engine_type="jet",
             range=2500 * ureg.nautical_mile,
             calibration_status="calibrated",
@@ -1407,7 +1442,7 @@ class KingAirA90(Aircraft):
                 ( 4000 * ureg.feet, 148 * ureg.knot),
                 (10000 * ureg.feet, 190 * ureg.knot),
                 (14000 * ureg.feet, 190 * ureg.knot),
-                (16000 * ureg.feet, 174 * ureg.knot),
+                (16000 * ureg.feet, 170 * ureg.knot),
                 (22000 * ureg.feet, 179 * ureg.knot),
             ]),
             climb_profile=VerticalProfile(points=[
@@ -1425,7 +1460,7 @@ class KingAirA90(Aircraft):
                 ( 6000 * ureg.feet,  704 * ureg.feet / ureg.minute),
                 (12000 * ureg.feet,  576 * ureg.feet / ureg.minute),
                 (16000 * ureg.feet,  960 * ureg.feet / ureg.minute),
-                (22000 * ureg.feet,  896 * ureg.feet / ureg.minute),
+                (22000 * ureg.feet,  960 * ureg.feet / ureg.minute),
             ]),
             turn_model=TurnModel(max_bank_deg=30.0),
             engine_type="turboprop",
@@ -1611,11 +1646,15 @@ class KingAir350(Aircraft):
             approach_speed=110 * ureg.knot,  # brochure (calibrated 162 is science-leg)
             climb_schedule=TasSchedule(points=[
                 ( 4000 * ureg.feet, 165 * ureg.knot),
-                (10000 * ureg.feet, 198 * ureg.knot),
-                (18000 * ureg.feet, 229 * ureg.knot),
+                (10000 * ureg.feet, 199 * ureg.knot),
+                (22000 * ureg.feet, 245 * ureg.knot),
                 (28000 * ureg.feet, 245 * ureg.knot),
-                (34000 * ureg.feet, 299 * ureg.knot),
+                (34000 * ureg.feet, 303 * ureg.knot),
             ]),
+            # The MAD-based fit also surfaces a 188 kt dip at 12 000 ft that
+            # reflects a brief level-off during a step climb in the sample,
+            # not the underlying climb schedule.  Dropped here so the
+            # schedule stays monotonically rising.
             cruise_schedule=TasSchedule(points=[
                 ( 5000 * ureg.feet, 220 * ureg.knot),  # brochure low-alt anchor
                 (10000 * ureg.feet, 245 * ureg.knot),
@@ -1633,7 +1672,7 @@ class KingAir350(Aircraft):
             climb_profile=VerticalProfile(points=[
                 ( 4000 * ureg.feet, 1088 * ureg.feet / ureg.minute),
                 ( 6000 * ureg.feet, 1856 * ureg.feet / ureg.minute),
-                ( 8000 * ureg.feet, 1376 * ureg.feet / ureg.minute),
+                ( 8000 * ureg.feet, 1344 * ureg.feet / ureg.minute),
                 (18000 * ureg.feet, 1344 * ureg.feet / ureg.minute),
                 (34000 * ureg.feet,  384 * ureg.feet / ureg.minute),
                 (35000 * ureg.feet,  100 * ureg.feet / ureg.minute),  # Part 23 ceiling
