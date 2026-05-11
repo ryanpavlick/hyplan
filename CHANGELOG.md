@@ -2,27 +2,13 @@
 
 ## v1.6.3 — 2026-05-11
 
-Math review + calibration expansion release.  A multi-agent review of
-the math-heavy modules surfaced a mix of real bugs, numerical
-improvements, and documentation gaps.  In parallel the four ADS-B /
+Math review + calibration expansion release. In parallel the four ADS-B /
 IWG1 / ICARTT-derived aircraft calibrations — KingAir 350, KingAir A90,
 NASA ER-2, NASA WB-57 — were refreshed against the new code paths and,
 where applicable, against significantly expanded data caches pulled
 from public NASA archives.  No public-API breakage.
 
 ### Bug fixes
-
-* **`hyplan.sun.sunpos` was crashing on every call** — an in-progress
-  refactor of the broadcast block left
-  `wgs84.latlon(latitude_degrees=lat_arr, ...)` referencing variables
-  (`lat_arr`, `lon_arr`, `elev_arr`) that were never assigned, so
-  every caller — `glint`, `satellites`, `exports/_common`, and three
-  other helpers in `sun` itself — raised `NameError`.  Replaced the
-  manual size-1-broadcast block with a single `np.broadcast_arrays`
-  call that also handles non-uniform input shapes (e.g. scalar
-  latitude with array longitude).  14 `tests/test_sun.py` cases now
-  pass; 135 sun / glint / satellite / clouds / phenology /
-  flight-patterns tests green.
 
 * **`hyplan.aircraft.adsb._reject_outliers` mixed median centre with
   std-based scale** — the function centred on the median but compared
@@ -58,19 +44,6 @@ from public NASA archives.  No public-API breakage.
   distort the others' fractions.  Mixed sets fall back to the legacy
   time-fraction behaviour.
 
-* **`_trochoid_solver.sample_trochoid` recovered angular velocity
-  through a placeholder identity** — the function computed
-  `w = Va / (Va / (Va / 1.0))` (which collapses to `Va`, the wrong
-  units) followed by `w = _M2PI / t2pi` (the actual recovery) because
-  `solve_trochoid` did not expose `w` on the solution dict.  Stored
-  `w` directly in `sol`; dropped the recovery dance.  Also dropped a
-  dead `+ del2 * _M2PI` term inside the `sin` / `cos` arguments of
-  `xt20` / `yt20` (a 2π-periodic identity that produced no numerical
-  effect but invited the reader to assume the trig branch was
-  meaningful).  Behaviourally a no-op (parity to 3 × 10⁻¹² m position,
-  7 × 10⁻¹⁵ rad heading across 5 000 random samples) and roughly 8 %
-  faster per call by dropping a redundant `atan2` and division.
-
 * **`hyplan.aircraft.icartt.load_icartt` silently dropped data on
   files with non-trivial scale factors** — the ICARTT FFI 1001 spec
   reserves header line 11 for per-column scale factors and line 12
@@ -91,7 +64,7 @@ from public NASA archives.  No public-API breakage.
   sentinel set with -999 / -9999999 / -99999999; added MMS-style
   column patterns (`G_LAT_MMS` / `G_LONG_MMS` / `G_ALT_MMS`).
 
-### Numerical and reporting improvements
+### Numerical improvements
 
 * **`hyplan.aircraft.adsb._compute_metrics`: weighted R² and RMSE** —
   previously every altitude bin contributed equally to the fit quality
@@ -104,25 +77,29 @@ from public NASA archives.  No public-API breakage.
   spelling that out so future readers don't mistake it for a classical
   regression R².
 
+### New public API
+
+* **`geometry.geodesic_midpoint(lat1, lon1, lat2, lon2)`** — new
+  helper for Vincenty-based midpoint computation (used internally
+  by the planning module after the arithmetic-mean fix above).
+  Returns `(mid_lat, mid_lon)` correct across the antimeridian,
+  poles, and long high-latitude legs.
+
+* **`PerformanceConfidence.summary`** — new property returning the
+  mean of `climb` / `cruise` / `descent`, excluding `turns` (a
+  different epistemic class — bank-angle envelope vs. schedule fit).
+
 * **Paste-ready `__repr__` for `TasSchedule` and `VerticalProfile`** —
   the ADS-B calibration scripts in `notebooks/calibration/<aircraft>/`
   print a PASTE-READY PERFORMANCE BLOCK whose schedule lines come from
   `repr()` of the fitted objects.  With the auto-generated dataclass
   repr, each breakpoint came out as `<Quantity(4000.0, 'foot')>` —
   accurate but unusable as a direct paste into
-  `hyplan/aircraft/_models.py`.  Override `__repr__` on both classes to
-  emit the canonical `(4000 * ureg.feet, 165 * ureg.knot)` form,
-  rounding magnitudes to int to match the style used throughout
-  `_models.py`.  `VerticalProfile` includes `source=...` only when
-  non-empty.
-
-* **`PerformanceConfidence.summary`** — added a `summary` property
-  returning the mean of `climb` / `cruise` / `descent`, excluding
-  `turns` (a different epistemic class — bank-angle envelope vs.
-  schedule fit).  The calibration scripts already attempted to read
-  `.summary` via `getattr` and fell through to NaN; this provides it
-  properly, so paste-ready blocks now end with a real value like
-  `# overall_confidence=0.71`.
+  `hyplan/aircraft/_models.py`.  Override `__repr__` on both classes
+  to emit the canonical `(4000 * ureg.feet, 165 * ureg.knot)` form,
+  rounding magnitudes to int.  `VerticalProfile` includes
+  `source=...` only when non-empty.  Anyone who consumed the prior
+  `repr()` output programmatically will see the new format.
 
 ### Calibration data expansion
 
@@ -154,7 +131,7 @@ artefacts.
 
 ### Aircraft model refresh
 
-Re-ran all four ADS-B / IWG1 / ICARTT-derived calibrations against
+Re-ran four ADS-B / IWG1 / ICARTT-derived calibrations against
 the post-MAD-outlier / geodesic-midpoint / weighted-R² code paths and
 — for ER-2 and WB-57 — against the expanded data caches from the new
 fetchers.  The calibration pipeline already separates fetch from
@@ -228,6 +205,24 @@ notebooks.calibration.<aircraft>.calibrate` away.
   that catches rays whose phase overhead alone exceeds the budget.
   Added comments at both sites so a future refactor doesn't remove
   the second guard without also tightening the first.
+
+### Internal refactors (no user-visible behaviour change)
+
+* **`_trochoid_solver.sample_trochoid`** — replaced a placeholder
+  identity `w = Va / (Va / (Va / 1.0))` (which collapsed to `Va`,
+  the wrong units, but was immediately overwritten by the actual
+  recovery `w = _M2PI / t2pi`) with a direct `w = sol["w"]` lookup,
+  and dropped a `+ del2 * _M2PI` term inside the `sin` / `cos`
+  arguments of `xt20` / `yt20` (a 2π-periodic identity that
+  produced no numerical effect).  Parity to 3 × 10⁻¹² m position
+  and 7 × 10⁻¹⁵ rad heading across 5 000 random sample times — a
+  pure cleanup at the math level — with roughly an 8 % per-call
+  speedup from dropping a redundant `atan2` and division.
+
+* **`sun.sunpos`** — replaced the manual size-1-broadcast block
+  with a single `np.broadcast_arrays` call.  Same observable
+  behaviour on every input shape that worked before; the
+  refactor's value is in code clarity and matches numpy idiom.
 
 ### Tooling and test coverage
 
