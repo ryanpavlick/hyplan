@@ -138,7 +138,14 @@ def fetch_appeears_timeseries(
     }
 
     logger.info("Submitting AppEEARS task for %s (%d-%d)...", product, year_start, year_stop)
-    resp = requests.post(f"{_BASE_URL}/task", json=task_payload, headers=headers, timeout=30)
+    # Cast to Any rather than annotating the literal — newer `requests`
+    # stubs narrow `json=` to a strict JsonType that excludes
+    # dict[str, Collection[str]] / dict[str, list[dict[...]]], so the
+    # nested literal we build above trips mypy on the CI matrix.  An
+    # explicit Any keeps the call site readable and works on every
+    # `requests` version in the supported range.
+    payload: Any = task_payload
+    resp = requests.post(f"{_BASE_URL}/task", json=payload, headers=headers, timeout=30)
     if resp.status_code not in (200, 202):
         raise HyPlanRuntimeError(
             f"AppEEARS task submission failed (HTTP {resp.status_code}): {resp.text}"

@@ -914,7 +914,7 @@ class OpenAIPClient:
         limit = 100
 
         while True:
-            params = {
+            params: dict[str, str | int] = {
                 "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}",
                 "page": page,
                 "limit": limit,
