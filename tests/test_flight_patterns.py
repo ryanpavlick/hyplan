@@ -770,3 +770,182 @@ class TestPatternContainer:
         line_id = next(iter(pat.lines))
         with pytest.raises(HyPlanValueError, match="must be a FlightLine"):
             pat.replace_line(line_id, "not a FlightLine")  # type: ignore[arg-type]
+
+
+class TestPatternMovement:
+    """Cover Pattern.translate / move_to / rotate / from_relative."""
+
+    def _lawnmower(self):
+        return racetrack(
+            center=CENTER, heading=0.0, altitude=ALT,
+            leg_length=ureg.Quantity(10, "km"),
+            n_legs=5, offset=ureg.Quantity(2, "km"),
+        )
+
+    def test_translate_returns_new_pattern(self):
+        pat = self._lawnmower()
+        moved = pat.translate(
+            ureg.Quantity(10, "km"), ureg.Quantity(5, "km"),
+        )
+        assert moved is not pat
+        # Original unchanged
+        assert pat.params["center_lat"] == pytest.approx(34.0)
+        # New centre shifted north by ~0.09° (10 km) and east by ~0.054°
+        assert moved.params["center_lat"] > pat.params["center_lat"]
+        assert moved.params["center_lon"] > pat.params["center_lon"]
+        assert moved.params["center_lat"] == pytest.approx(34.0899, abs=1e-3)
+
+    def test_translate_preserves_line_count_and_geometry(self):
+        pat = self._lawnmower()
+        moved = pat.translate(
+            ureg.Quantity(10, "km"), ureg.Quantity(5, "km"),
+        )
+        assert len(moved.lines) == len(pat.lines) == 5
+        # Each line endpoint should be ~10 km north + ~5 km east of original
+        orig = next(iter(pat.lines.values()))
+        new = next(iter(moved.lines.values()))
+        dist_m, _ = pymap3d.vincenty.vdist(
+            orig.waypoint1.latitude, orig.waypoint1.longitude,
+            new.waypoint1.latitude, new.waypoint1.longitude,
+        )
+        # sqrt(10² + 5²) km ≈ 11.18 km
+        assert float(dist_m) == pytest.approx(11180, rel=5e-3)
+
+    def test_translate_float_argument_interpreted_as_metres(self):
+        pat = self._lawnmower()
+        a = pat.translate(1000.0, 0.0)
+        b = pat.translate(ureg.Quantity(1, "km"), ureg.Quantity(0, "km"))
+        assert a.params["center_lat"] == pytest.approx(b.params["center_lat"])
+        assert a.params["center_lon"] == pytest.approx(b.params["center_lon"])
+
+    def test_translate_round_trip_identity(self):
+        pat = self._lawnmower()
+        there_and_back = pat.translate(
+            ureg.Quantity(10, "km"), ureg.Quantity(5, "km"),
+        ).translate(
+            ureg.Quantity(-10, "km"), ureg.Quantity(-5, "km"),
+        )
+        assert there_and_back.params["center_lat"] == pytest.approx(34.0, abs=1e-4)
+        assert there_and_back.params["center_lon"] == pytest.approx(-118.0, abs=1e-4)
+        orig = next(iter(pat.lines.values()))
+        back = next(iter(there_and_back.lines.values()))
+        # NED reference frame rotates slightly with each translate, so
+        # tens-of-km round-trip recovers position to ~few-metre fidelity.
+        assert back.waypoint1.latitude == pytest.approx(
+            orig.waypoint1.latitude, abs=1e-4,
+        )
+        assert back.waypoint1.longitude == pytest.approx(
+            orig.waypoint1.longitude, abs=1e-4,
+        )
+
+    def test_translate_updates_waypoint_pattern(self):
+        # Spiral is waypoint-based
+        pat = spiral(
+            center=CENTER, heading=0.0,
+            altitude_start=ureg.Quantity(5000, "feet"),
+            altitude_end=ureg.Quantity(15000, "feet"),
+            radius=ureg.Quantity(5, "km"),
+            n_turns=2.0,
+        )
+        n_wp = len(pat.waypoints)
+        moved = pat.translate(ureg.Quantity(20, "km"), ureg.Quantity(0, "km"))
+        assert len(moved.waypoints) == n_wp
+        # Every waypoint shifted north
+        for orig_wp, new_wp in zip(pat.waypoints, moved.waypoints):
+            assert new_wp.latitude > orig_wp.latitude
+
+    def test_move_to_relocates_centre(self):
+        pat = self._lawnmower()
+        moved = pat.move_to(latitude=40.0, longitude=-100.0)
+        assert moved.params["center_lat"] == pytest.approx(40.0, abs=1e-4)
+        assert moved.params["center_lon"] == pytest.approx(-100.0, abs=1e-4)
+        # Same number of lines, same heading
+        assert len(moved.lines) == len(pat.lines)
+        assert moved.params["heading"] == pat.params["heading"]
+
+    def test_rotate_360_is_identity(self):
+        pat = self._lawnmower()
+        rotated = pat.rotate(360.0)
+        orig = next(iter(pat.lines.values()))
+        new = next(iter(rotated.lines.values()))
+        assert new.waypoint1.latitude == pytest.approx(
+            orig.waypoint1.latitude, abs=1e-5,
+        )
+        assert new.waypoint1.longitude == pytest.approx(
+            orig.waypoint1.longitude, abs=1e-5,
+        )
+
+    def test_rotate_90_swaps_axes(self):
+        # Lawnmower with heading=0 has legs running north.  Rotating 90°
+        # clockwise should turn the lead leg toward the east.
+        pat = self._lawnmower()
+        rotated = pat.rotate(90.0)
+        first = next(iter(rotated.lines.values()))
+        # After CW 90°, the lead leg heading shifts from 0 -> 90
+        assert first.az12.magnitude == pytest.approx(90.0, abs=1.0)
+        # Pattern params heading is updated too
+        assert rotated.params["heading"] == pytest.approx(90.0)
+
+    def test_rotate_updates_waypoint_headings(self):
+        pat = spiral(
+            center=CENTER, heading=0.0,
+            altitude_start=ureg.Quantity(5000, "feet"),
+            altitude_end=ureg.Quantity(15000, "feet"),
+            radius=ureg.Quantity(5, "km"),
+            n_turns=2.0,
+        )
+        rotated = pat.rotate(45.0)
+        for orig_wp, new_wp in zip(pat.waypoints, rotated.waypoints):
+            expected = (orig_wp.heading + 45.0) % 360
+            assert new_wp.heading == pytest.approx(expected, abs=1e-6)
+
+    def test_rotate_around_external_pivot(self):
+        # Rotating 180° about a point 10 km east of centre should put the
+        # pattern centre 10 km east of the pivot on the *other* side
+        # (i.e. ~10 km east of the pivot becomes ~10 km west).
+        pat = self._lawnmower()
+        # Pick a pivot that is 10 km east of CENTER
+        pivot_lat, pivot_lon = 34.0, -117.892  # ~10 km east of -118.0
+        rotated = pat.rotate(180.0, around=(pivot_lat, pivot_lon))
+        # New centre should be on the other side of the pivot
+        assert rotated.params["center_lon"] > pivot_lon
+        # And reflected through the pivot
+        assert rotated.params["center_lon"] == pytest.approx(
+            2 * pivot_lon - (-118.0), abs=1e-3,
+        )
+
+    def test_from_relative_offsets_generator(self):
+        anchor = (34.0, -118.0)
+        pat = Pattern.from_relative(
+            anchor,
+            bearing=90.0,            # true east
+            distance=ureg.Quantity(50, "km"),
+            generator=racetrack,
+            heading=0.0,
+            altitude=ALT,
+            leg_length=ureg.Quantity(10, "km"),
+            n_legs=3,
+            offset=ureg.Quantity(2, "km"),
+        )
+        # Centre should be ~50 km east of anchor
+        dist_m, _ = pymap3d.vincenty.vdist(
+            34.0, -118.0,
+            pat.params["center_lat"], pat.params["center_lon"],
+        )
+        assert float(dist_m) == pytest.approx(50_000, rel=1e-3)
+        assert pat.params["center_lon"] > -118.0  # east of anchor
+
+    def test_from_relative_accepts_waypoint_anchor(self):
+        from hyplan.waypoint import Waypoint
+        anchor = Waypoint(latitude=34.0, longitude=-118.0, heading=0.0)
+        pat = Pattern.from_relative(
+            anchor,
+            bearing=0.0,
+            distance=10.0,  # 10 nmi north (float ⇒ nautical miles)
+            generator=racetrack,
+            heading=0.0,
+            altitude=ALT,
+            leg_length=ureg.Quantity(5, "km"),
+        )
+        assert pat.params["center_lat"] > 34.0
+        assert pat.params["center_lon"] == pytest.approx(-118.0, abs=1e-4)
