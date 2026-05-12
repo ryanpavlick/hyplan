@@ -2,7 +2,13 @@
 
 This directory contains the per-aircraft calibration scripts and
 notebooks that produce the performance values in
+[`hyplan/data/aircraft/<short_name>.json`](../../hyplan/data/aircraft/),
+which are then loaded by the thin wrapper classes in
 [`hyplan/aircraft/_models.py`](../../hyplan/aircraft/_models.py).
+(Pre-v1.7, the values lived as Python literals inside `_models.py` and
+this script's "PASTE-READY" output was hand-copied; v1.7 retired that
+flow by writing JSON directly via
+[`apply_calibration_to_profile`](_common.py).)
 
 For an end-user view (which aircraft is calibrated, sortie counts,
 data-archive citations) see [`docs/calibration.md`](../../docs/calibration.md).
@@ -83,17 +89,27 @@ shared.
    needing wind-triangle TAS reconstruction).  Set the per-aircraft
    knobs above; the rest is mechanical.
 
-4. **Run it.**  The script prints a paste-ready constructor block.
-   Paste into [`hyplan/aircraft/_models.py`](../../hyplan/aircraft/_models.py).
+4. **Run it.**  The script writes the calibrated values directly to
+   `hyplan/data/aircraft/<short_name>.json` via
+   `apply_calibration_to_profile(...)` (see [`_common.py`](_common.py)).
+   For a brand-new aircraft, create the JSON file by hand first (or
+   `cp` an existing one and edit) — the helper preserves any field
+   you didn't override, so brochure-only fields (range, endurance,
+   useful payload, sources, calibration_status) can be added once
+   and left alone.
 
-5. **Add the SourceRecord** to the new class with `url=` and `doi=`
-   (fields on `hyplan.aircraft.SourceRecord`) so users can cite the
-   underlying archive.
+5. **Add the SourceRecord(s)** to the new JSON file's `"sources"`
+   array with `url` and `doi` fields so users can cite the underlying
+   archive.  Schema reference:
+   [`hyplan/data/aircraft/README.md`](../../hyplan/data/aircraft/README.md).
 
-6. **Wire up the imports** in
-   [`hyplan/aircraft/__init__.py`](../../hyplan/aircraft/__init__.py),
-   [`hyplan/__init__.py`](../../hyplan/__init__.py), and
-   [`docs/api/aircraft.md`](../../docs/api/aircraft.md).
+6. **Wire up the wrapper class** in
+   [`hyplan/aircraft/_models.py`](../../hyplan/aircraft/_models.py)
+   (one-liner: `super().__init__(**load_aircraft_profile("<short_name>"))`),
+   re-export it from
+   [`hyplan/aircraft/__init__.py`](../../hyplan/aircraft/__init__.py)
+   and [`hyplan/__init__.py`](../../hyplan/__init__.py), and add it
+   to [`docs/api/aircraft.md`](../../docs/api/aircraft.md).
 
 7. **Generate the companion notebook** — add an entry to
    `AIRCRAFT_CONFIGS` in [`_make_notebook.py`](_make_notebook.py) and
@@ -124,16 +140,17 @@ calibration refresh.
 ## Provenance and reproducibility
 
 * Calibrations are **not** committed as one-shot snapshots — every
-  number in `_models.py` traces back to (a) a public archive URL/DOI
-  in the `SourceRecord`, (b) the calibration script, and (c) the
-  manifest CSV.
+  number in `hyplan/data/aircraft/<short_name>.json` traces back to
+  (a) a public archive URL/DOI in the JSON's `"sources"` array,
+  (b) the calibration script, and (c) the manifest CSV.
 * When a new sortie batch arrives (e.g., the next FAAM season), the
-  flow is: extend the fetcher → re-run `calibrate.py` → paste the
-  refreshed constructor block → commit `_models.py` + the new
-  `calibration_manifest.csv`.
+  flow is: extend the fetcher → re-run `calibrate.py` → review the
+  diff on `<short_name>.json` → commit the JSON change + the new
+  `calibration_manifest.csv`.  No edits to `_models.py` required.
 * The companion `calibration.ipynb` is a thin interactive wrapper
   that delegates to `calibrate.py`; it's safe to re-run any time
-  to inspect bin medians, IQR, and the paste-ready block.
+  to inspect bin medians, IQR, and the (now-direct-write) JSON
+  output.
 
 ## Aircraft-specific quirks
 
