@@ -243,6 +243,107 @@ class TestWaypointFromDict:
         assert restored.name == "LOITER_45S"
 
 
+class TestRelativeTo:
+    """Tests for Waypoint.relative_to — geodesic offset from anchor."""
+
+    def test_east_offset_at_equator(self):
+        # 60 nmi east at the equator → ≈ 1° of longitude.
+        anchor = Waypoint(0.0, 0.0, 0.0, name="EQ0")
+        wp = Waypoint.relative_to(anchor, bearing=90.0, distance=60.0)
+        assert wp.latitude == pytest.approx(0.0, abs=1e-3)
+        assert wp.longitude == pytest.approx(1.0, abs=0.01)
+
+    def test_north_offset_one_degree(self):
+        # 60 nmi north at the equator → ≈ 1° of latitude.
+        wp = Waypoint.relative_to((0.0, 0.0), bearing=0.0, distance=60.0)
+        assert wp.latitude == pytest.approx(1.0, abs=0.01)
+        assert wp.longitude == pytest.approx(0.0, abs=1e-3)
+
+    def test_anchor_can_be_tuple(self):
+        wp = Waypoint.relative_to((34.0, -118.0), bearing=270.0, distance=100.0)
+        # 100 nmi west → longitude shifts westward, latitude ~unchanged
+        assert wp.longitude < -118.0
+        assert wp.latitude == pytest.approx(34.0, abs=0.5)
+
+    def test_anchor_can_be_waypoint(self):
+        edw = Waypoint(34.92, -117.87, heading=0.0, name="EDW")
+        wp = Waypoint.relative_to(edw, bearing=90.0, distance=200.0)
+        # 200 nmi true east; verify against vreckon (which returns
+        # longitude in [0, 360); the classmethod wraps to [-180, 180)).
+        import pymap3d.vincenty as vinc
+        from hyplan.geometry import wrap_to_180
+        ref_lat, ref_lon = vinc.vreckon(34.92, -117.87, 200 * 1852.0, 90.0)
+        assert wp.latitude == pytest.approx(float(ref_lat), abs=1e-5)
+        assert wp.longitude == pytest.approx(float(wrap_to_180(float(ref_lon))), abs=1e-5)
+
+    def test_distance_quantity_kilometers(self):
+        wp = Waypoint.relative_to(
+            (0.0, 0.0),
+            bearing=90.0,
+            distance=ureg.Quantity(111.32, "kilometer"),
+        )
+        # ~1° east at the equator
+        assert wp.longitude == pytest.approx(1.0, abs=0.005)
+
+    def test_distance_quantity_nm_matches_float_nm(self):
+        # Float-as-nautical-miles must agree with Quantity(...) in nm.
+        wp_float = Waypoint.relative_to((40.0, -100.0), bearing=45.0, distance=150.0)
+        wp_q = Waypoint.relative_to(
+            (40.0, -100.0),
+            bearing=45.0,
+            distance=ureg.Quantity(150, "nautical_mile"),
+        )
+        assert wp_float.latitude == pytest.approx(wp_q.latitude, abs=1e-6)
+        assert wp_float.longitude == pytest.approx(wp_q.longitude, abs=1e-6)
+
+    def test_heading_defaults_to_bearing(self):
+        wp = Waypoint.relative_to((0.0, 0.0), bearing=137.0, distance=10.0)
+        assert wp.heading == 137.0
+
+    def test_heading_can_override(self):
+        wp = Waypoint.relative_to(
+            (0.0, 0.0), bearing=137.0, distance=10.0, heading=270.0,
+        )
+        assert wp.heading == 270.0
+
+    def test_optional_fields_propagate(self):
+        wp = Waypoint.relative_to(
+            (34.0, -118.0),
+            bearing=0.0,
+            distance=30.0,
+            altitude_msl=ureg.Quantity(35_000, "foot"),
+            name="WP_N30",
+            speed=ureg.Quantity(420, "knot"),
+            delay=ureg.Quantity(120, "second"),
+            segment_type="pattern",
+        )
+        assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(35_000)
+        assert wp.name == "WP_N30"
+        assert wp.speed.m_as(ureg.knot) == pytest.approx(420)
+        assert wp.delay.m_as(ureg.second) == pytest.approx(120)
+        assert wp.segment_type == "pattern"
+
+    def test_bearing_wraps_to_0_360(self):
+        # bearing=450 should be equivalent to bearing=90
+        wp_450 = Waypoint.relative_to((0.0, 0.0), bearing=450.0, distance=60.0)
+        wp_90  = Waypoint.relative_to((0.0, 0.0), bearing=90.0,  distance=60.0)
+        assert wp_450.latitude == pytest.approx(wp_90.latitude, abs=1e-6)
+        assert wp_450.longitude == pytest.approx(wp_90.longitude, abs=1e-6)
+
+    def test_round_trip_via_reverse_bearing(self):
+        # offset 100 nmi at heading 45°, then offset back at 225° → original.
+        start = Waypoint(40.0, -100.0, heading=0.0)
+        away = Waypoint.relative_to(start, bearing=45.0, distance=100.0)
+        # Reverse bearing on a great circle isn't simply +180°; use vdist
+        # to get the back-azimuth.
+        import pymap3d.vincenty as vinc
+        _dist, back_az = vinc.vdist(away.latitude, away.longitude,
+                                    start.latitude, start.longitude)
+        back = Waypoint.relative_to(away, bearing=float(back_az), distance=100.0)
+        assert back.latitude == pytest.approx(start.latitude, abs=1e-4)
+        assert back.longitude == pytest.approx(start.longitude, abs=1e-4)
+
+
 class TestIsWaypoint:
     def test_waypoint_instance(self):
         wp = Waypoint(0.0, 0.0, 0.0)

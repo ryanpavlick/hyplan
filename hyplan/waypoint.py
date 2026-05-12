@@ -7,6 +7,7 @@ import logging
 import warnings
 
 import pymap3d
+import pymap3d.vincenty
 from shapely.geometry import Point
 
 from .geometry import wrap_to_180, wrap_to_360
@@ -178,6 +179,101 @@ class Waypoint:
             speed=data.get("speed"),
             delay=data.get("delay"),
             segment_type=data.get("segment_type"),
+        )
+
+    @classmethod
+    def relative_to(
+        cls,
+        anchor: Waypoint | tuple[float, float],
+        *,
+        bearing: float,
+        distance: Quantity | float,
+        heading: float | None = None,
+        altitude_msl: Quantity | float | None = None,
+        name: str | None = None,
+        speed: Quantity | float | None = None,
+        delay: Quantity | float | None = None,
+        segment_type: str | None = None,
+    ) -> Waypoint:
+        """Create a Waypoint as a geodesic offset from an anchor point.
+
+        Computes the destination via Vincenty direct-problem: from
+        ``anchor`` along the great-circle initial bearing ``bearing``
+        for the given ``distance``.  Equivalent to Lait's ``=FROM(loc,
+        az, dist)`` position expression in the GSFC flight planner.
+
+        Args:
+            anchor: A :class:`Waypoint` or ``(latitude, longitude)``
+                tuple to anchor against.  Latitude and longitude must
+                be in decimal degrees.
+            bearing: Initial great-circle bearing from ``anchor``,
+                in degrees true (clockwise from north).  Wrapped to
+                ``[0, 360)``.
+            distance: Geodesic distance along that bearing.  ``float``
+                values are interpreted as nautical miles (matches the
+                common flight-planning convention); pass a pint
+                :class:`Quantity` for other units.
+            heading: Heading of the new waypoint in degrees true.
+                If ``None`` (default), copies ``bearing`` so the
+                waypoint faces the direction it was offset toward —
+                the ergonomic "fly toward the new point" default.
+            altitude_msl: Altitude MSL.  Float interpreted as metres
+                or a pint Quantity with length units; ``None``
+                leaves it unset.
+            name: Optional name for the new waypoint.
+            speed: Optional speed override for the departing leg.
+            delay: Optional loiter time at the new waypoint.
+            segment_type: Optional segment-type label.
+
+        Returns:
+            A new Waypoint at the computed destination.
+
+        Examples:
+            >>> edw = Waypoint(latitude=34.92, longitude=-117.87,
+            ...                heading=0, name="EDW")
+            >>> wp_a = Waypoint.relative_to(edw, bearing=90, distance=200)
+            >>> # wp_a is 200 nmi true east of EDW
+
+            >>> from hyplan.units import ureg
+            >>> wp_b = Waypoint.relative_to(
+            ...     (34.92, -117.87),
+            ...     bearing=180,
+            ...     distance=50 * ureg.kilometer,
+            ...     heading=270,
+            ...     name="WP_B",
+            ... )
+        """
+        if isinstance(anchor, Waypoint):
+            anchor_lat, anchor_lon = anchor.latitude, anchor.longitude
+        else:
+            anchor_lat, anchor_lon = float(anchor[0]), float(anchor[1])
+
+        # Distance: float → nautical miles (planning convention);
+        # Quantity → m_as(meter).
+        if isinstance(distance, (int, float)):
+            distance_m = float(distance) * 1852.0
+        else:
+            distance_m = distance.m_as(ureg.meter)
+
+        bearing_deg = float(wrap_to_360(float(bearing)))
+
+        new_lat, new_lon = pymap3d.vincenty.vreckon(
+            anchor_lat, anchor_lon, distance_m, bearing_deg,
+        )
+        # vreckon may return numpy scalars; normalise to plain floats
+        # and wrap the longitude into [-180, 180).
+        new_lat = float(new_lat)
+        new_lon = float(wrap_to_180(float(new_lon)))
+
+        return cls(
+            latitude=round(new_lat, 6),
+            longitude=round(new_lon, 6),
+            heading=float(heading) if heading is not None else bearing_deg,
+            altitude_msl=altitude_msl,
+            name=name,
+            speed=speed,
+            delay=delay,
+            segment_type=segment_type,
         )
 
 
