@@ -1,14 +1,16 @@
 """Shared helpers for the per-aircraft calibration notebook builders.
 
-Each ``_build_notebook.py`` under ``notebooks/calibration/<aircraft>/``
-emits a notebook that follows the same recipe:
+Each ``calibrate.py`` under ``notebooks/calibration/<aircraft>/``
+follows the same recipe:
 
 1. Load IWG1 / ICARTT files, trim ground taxi, filter sortie length
    and peak altitude, phase-label by vertical-rate threshold.
 2. Active-VS per-altitude-bin medians for climb / descent profiles.
 3. Per-phase TAS schedules (climb / cruise / descent).
 4. Bank-angle p90 in turns.
-5. Paste-ready constructor block for ``hyplan/aircraft/_models.py``.
+5. Write the fitted values directly to
+   ``hyplan/data/aircraft/<short_name>.json`` via
+   :func:`apply_calibration_to_profile`.
 
 The aircraft-specific knobs (active-VS threshold, target altitudes,
 rotation TAS, brochure ceiling, hold bands for the ER-2) stay in the
@@ -18,7 +20,7 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -346,3 +348,110 @@ def summary_table(
         if print_it:
             print(f"manifest:          {path}")
     return df
+
+
+# ---------------------------------------------------------------------------
+# Write fitted values directly to the bundled aircraft JSON profile.
+# ---------------------------------------------------------------------------
+
+
+def apply_calibration_to_profile(
+    short_name: str,
+    *,
+    service_ceiling_ft: float | int | None = None,
+    approach_speed_kt: float | int | None = None,
+    climb_pts: Sequence[tuple[float, float]] | None = None,
+    cruise_pts: Sequence[tuple[float, float]] | None = None,
+    descent_pts: Sequence[tuple[float, float]] | None = None,
+    climb_profile_pts: Sequence[tuple[float, float]] | None = None,
+    descent_profile_pts: Sequence[tuple[float, float]] | None = None,
+    max_bank_deg: float | None = None,
+    extra_overrides: dict[str, Any] | None = None,
+    path: str | Path | None = None,
+) -> Path:
+    """Update ``hyplan/data/aircraft/<short_name>.json`` with fit results.
+
+    Bridges the ``(alt_ft, value)`` plain-tuple form produced by the
+    calibration pipeline to the :class:`TasSchedule` /
+    :class:`VerticalProfile` types that
+    :func:`~hyplan.aircraft._profile_io.write_calibrated_profile`
+    expects.  Fields left ``None`` are not changed — partial recals
+    (e.g. only refit the climb profile) preserve everything else in
+    the JSON file.
+
+    Args:
+        short_name: Filename stem of the target JSON profile
+            (e.g. ``"king_air_350"``).
+        service_ceiling_ft: New service ceiling in feet.
+        approach_speed_kt: New approach speed in knots.
+        climb_pts, cruise_pts, descent_pts: TAS schedule breakpoints
+            as ``(alt_ft, tas_kt)`` tuples.
+        climb_profile_pts, descent_profile_pts: Vertical-profile
+            breakpoints as ``(alt_ft, fpm)`` tuples.
+        max_bank_deg: New maximum bank angle (degrees).  Other fields
+            of the existing :class:`TurnModel` (load factor, per-phase
+            bank angles) are preserved.  Passing ``None`` or ``nan``
+            leaves the existing TurnModel untouched — useful for
+            aircraft whose source files don't carry roll data
+            (e.g. NOAA G-IV ARWO).
+        extra_overrides: Anything else accepted by
+            :class:`Aircraft.__init__`, e.g. ``confidence=...`` or
+            ``sources=[...]``.
+        path: Optional override for the output path; defaults to the
+            bundled location.
+
+    Returns:
+        The :class:`Path` that was written.
+    """
+    # Lazy import: keeps this module importable without the hyplan
+    # package being installed (e.g. during dependency-graph analysis).
+    from hyplan.aircraft._base import TasSchedule, TurnModel, VerticalProfile
+    from hyplan.aircraft._profile_io import (
+        load_aircraft_profile,
+        write_calibrated_profile,
+    )
+    from hyplan.units import ureg
+
+    def _tas(pts: Sequence[tuple[float, float]]) -> TasSchedule:
+        return TasSchedule(points=[
+            (float(a) * ureg.feet, float(v) * ureg.knot) for a, v in pts
+        ])
+
+    def _vp(pts: Sequence[tuple[float, float]]) -> VerticalProfile:
+        return VerticalProfile(points=[
+            (float(a) * ureg.feet, float(v) * ureg.feet / ureg.minute)
+            for a, v in pts
+        ])
+
+    overrides: dict[str, Any] = {}
+    if service_ceiling_ft is not None:
+        overrides["service_ceiling"] = float(service_ceiling_ft) * ureg.feet
+    if approach_speed_kt is not None:
+        overrides["approach_speed"] = float(approach_speed_kt) * ureg.knot
+    if climb_pts is not None:
+        overrides["climb_schedule"] = _tas(climb_pts)
+    if cruise_pts is not None:
+        overrides["cruise_schedule"] = _tas(cruise_pts)
+    if descent_pts is not None:
+        overrides["descent_schedule"] = _tas(descent_pts)
+    if climb_profile_pts is not None:
+        overrides["climb_profile"] = _vp(climb_profile_pts)
+    if descent_profile_pts is not None:
+        overrides["descent_profile"] = _vp(descent_profile_pts)
+    if max_bank_deg is not None and not (
+        isinstance(max_bank_deg, float) and np.isnan(max_bank_deg)
+    ):
+        # Preserve every other turn-model field by mutating the loaded one.
+        # NaN is treated like None — used when an aircraft has no roll data
+        # (e.g. NOAA_GIV ARWO files don't carry roll_deg) — leaving the
+        # existing TurnModel untouched.
+        cur = load_aircraft_profile(short_name)["turn_model"]
+        overrides["turn_model"] = TurnModel(
+            bank_by_phase=cur.bank_by_phase,
+            max_bank_deg=float(max_bank_deg),
+            max_load_factor=cur.max_load_factor,
+        )
+    if extra_overrides:
+        overrides.update(extra_overrides)
+
+    return write_calibrated_profile(short_name, path=path, **overrides)

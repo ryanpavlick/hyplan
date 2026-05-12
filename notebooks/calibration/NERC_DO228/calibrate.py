@@ -224,23 +224,26 @@ def main() -> None:
     print(f"Service ceiling (op-p99): {ceiling:.0f} ft")
     print("Bank angle: not available; using AFM default 30°")
 
-    print()
-    print("=" * 70)
-    print("PASTE-READY NERC_DO228() PERFORMANCE BLOCK")
-    print("=" * 70)
+    from notebooks.calibration._common import apply_calibration_to_profile
 
     def _vs_pts(bins):
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
-    print(f"# Calibrated against {len(sorties)} sorties (ACTIVE + Eyjafjallajökull).")
-    print("# TAS reconstructed via wind triangle (no native TAS in either archive).")
-    print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
-    print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
-    print(f"climb_schedule=TasSchedule(points={klms!r}),")
-    print(f"cruise_schedule=TasSchedule(points={cs!r}),")
-    print(f"descent_schedule=TasSchedule(points={ds!r}),")
-    print(f"climb_profile=VerticalProfile(points={_vs_pts(climb_bins)!r}),")
-    print(f"descent_profile=VerticalProfile(points={_vs_pts(desc_bins)!r}),")
+
+    print()
+    print("=" * 70)
+    path = apply_calibration_to_profile(
+        "nerc_do228",
+        service_ceiling_ft=int(round(ceiling / 100) * 100),
+        approach_speed_kt=int(round(approach_kt)),
+        climb_pts=klms,
+        cruise_pts=cs,
+        descent_pts=ds,
+        climb_profile_pts=_vs_pts(climb_bins),
+        descent_profile_pts=_vs_pts(desc_bins),
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(sorties)}")
 
 
 if __name__ == "__main__":

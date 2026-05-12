@@ -196,24 +196,23 @@ def main() -> None:
         print(f"Bank angle p90 (|roll|>5°): {roll_p90:.1f}° "
               f"(n={len(all_banks):,} fixes)")
 
+    from notebooks.calibration._common import apply_calibration_to_profile
+
     print()
     print("=" * 70)
-    print("PASTE-READY NASA_WB57() PERFORMANCE BLOCK")
-    print("=" * 70)
-    print(f"# Calibrated against {len(sorties)} sorties from NASA 926 + 927")
-    print("# (n92[67]NA_alltracks IWG1 + ACCLIP 2022 MMS-1HZ ICARTT,")
-    print("# combined cache 2018-2026).")
-    print(f"service_ceiling={int(round(ceiling/1000)*1000)} * ureg.feet,")
-    print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
-    print(f"climb_schedule=TasSchedule(points={climb_pts!r}),")
-    print(f"cruise_schedule=TasSchedule(points={cruise_pts!r}),")
-    print(f"descent_schedule=TasSchedule(points={descent_pts!r}),")
-    print(f"climb_profile=VerticalProfile(points={climb_profile_pts!r}),")
-    print(f"descent_profile=VerticalProfile(points={descent_profile_pts!r}),")
-    if len(all_banks):
-        print(f"max_bank_deg={max(30.0, round(roll_p90))},")
-    else:
-        print("max_bank_deg=30.0,  # AFM default; no roll data")
+    path = apply_calibration_to_profile(
+        "nasa_wb57",
+        service_ceiling_ft=int(round(ceiling / 1000) * 1000),
+        approach_speed_kt=int(round(approach_kt)),
+        climb_pts=climb_pts,
+        cruise_pts=cruise_pts,
+        descent_pts=descent_pts,
+        climb_profile_pts=climb_profile_pts,
+        descent_profile_pts=descent_profile_pts,
+        max_bank_deg=(max(30.0, round(roll_p90)) if len(all_banks) else 30.0),
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(sorties)}")
 
 
 if __name__ == "__main__":

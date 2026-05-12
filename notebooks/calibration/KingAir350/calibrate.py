@@ -141,24 +141,28 @@ def main() -> None:
     print("Fitting schedules…")
     fit = fit_schedules(combined, altitude_bin_ft=2000.0, max_schedule_points=6)
 
-    print()
-    print("=" * 70)
-    print("PASTE-READY KingAir350() PERFORMANCE BLOCK")
-    print("=" * 70)
-    print(f"# Calibrated against {len(flights)} ADS-B sorties from")
-    print("# airplanes.live globe-history archive (N2UW / UWKA-2 only).")
-    print(f"service_ceiling={int(round(fit.service_ceiling_ft / 100) * 100)} * ureg.feet,")
-    print(f"approach_speed={int(round(fit.approach_speed_kt))} * ureg.knot,")
-    print(f"climb_schedule={fit.climb_schedule!r},")
-    print(f"cruise_schedule={fit.cruise_schedule!r},")
-    print(f"descent_schedule={fit.descent_schedule!r},")
-    print(f"climb_profile={fit.climb_profile!r},")
-    print(f"descent_profile={fit.descent_profile!r},")
+    from hyplan.aircraft._profile_io import write_calibrated_profile
+    from hyplan.units import ureg
+
     conf = fit.overall_confidence()
     conf_val = getattr(conf, "summary", conf)
     if not isinstance(conf_val, (int, float)):
         conf_val = float("nan")
-    print(f"# overall_confidence={conf_val:.2f}")
+
+    print()
+    print("=" * 70)
+    path = write_calibrated_profile(
+        "king_air_350",
+        service_ceiling=int(round(fit.service_ceiling_ft / 100) * 100) * ureg.feet,
+        approach_speed=int(round(fit.approach_speed_kt)) * ureg.knot,
+        climb_schedule=fit.climb_schedule,
+        cruise_schedule=fit.cruise_schedule,
+        descent_schedule=fit.descent_schedule,
+        climb_profile=fit.climb_profile,
+        descent_profile=fit.descent_profile,
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(flights)}  overall_confidence={conf_val:.2f}")
 
 
 if __name__ == "__main__":

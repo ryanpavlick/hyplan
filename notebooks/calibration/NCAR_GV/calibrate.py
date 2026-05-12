@@ -3,8 +3,9 @@
 Loads every DC3 NSF-GV NAV ICARTT file under ``data/HIAPER/dc3-seac4rs/``,
 derives true airspeed from wind-corrected groundspeed (the LaRC-archived
 DC3 NAV product omits TASX), and runs the standard per-aircraft
-calibration recipe to produce a paste-ready ``NCAR_GV()`` constructor
-block.
+calibration recipe to write the refreshed climb / descent profiles to
+``hyplan/data/aircraft/ncar_gv.json`` (CAS/Mach speed schedules are
+kept from the NASA_GV airframe and not refit here).
 
 Run from repo root::
 
@@ -222,77 +223,29 @@ def main():
     service_ceil = float(np.percentile(peaks, 99))
     print(f"Service ceiling (op-p99 of sortie peaks): {service_ceil:.0f} ft")
 
-    # ── Paste-ready constructor block ───────────────────────────────
-    print()
-    print("=" * 70)
-    print("PASTE-READY NCAR_GV() PERFORMANCE BLOCK")
-    print("=" * 70)
-    _print_constructor(
-        cruise_schedule=cruise_schedule,
-        climb_bins=climb_bins,
-        desc_bins=desc_bins,
-        approach_kt=approach_kt,
-        service_ceil=service_ceil,
-        roll_p90=roll_p90,
-        n_sorties=len(sorties),
-    )
+    # ── Write calibrated profile (climb / descent profiles + approach
+    # speed only; CasMachSchedule speed schedules are retained from
+    # the NASA_GV airframe and unchanged here).
+    from notebooks.calibration._common import apply_calibration_to_profile
 
-
-def _print_constructor(*, cruise_schedule, climb_bins, desc_bins,
-                       approach_kt, service_ceil, roll_p90, n_sorties):
     def _vs_pts(bins):
         return [
-            (int(row["alt_bin_ft"]), int(round(row["vs_med"])))
+            (int(row["alt_bin_ft"]), int(round(abs(row["vs_med"]))))
             for _, row in bins.iterrows()
         ]
 
-    climb_pts = _vs_pts(climb_bins)
-    desc_pts = _vs_pts(desc_bins)
-
-    print("class NCAR_GV(Aircraft):")
-    print('    """NSF/NCAR HIAPER Gulfstream V research aircraft (N677F)."""')
     print()
-    print("    def __init__(self):")
-    print("        cruise = TasSchedule(points=[")
-    for alt, tas in cruise_schedule:
-        print(f"            ({alt:>5} * ureg.feet, {tas:>3} * ureg.knot),")
-    print("        ])")
-    print("        super().__init__(")
-    print('            aircraft_type="Gulfstream V",')
-    print('            tail_number="N677F",')
-    print('            operator="NSF/NCAR EOL",')
-    print(f"            service_ceiling={int(round(service_ceil/100)*100)} * ureg.feet,")
-    print(f"            approach_speed={int(round(approach_kt))} * ureg.knot,")
-    print("            climb_schedule=cruise,")
-    print("            cruise_schedule=cruise,")
-    print("            descent_schedule=_descent_schedule_from_cruise(cruise, 49),")
-    print("            climb_profile=VerticalProfile(points=[")
-    for alt, vs in climb_pts:
-        print(f"                ({alt:>5} * ureg.feet, {vs:>5} * ureg.feet / ureg.minute),")
-    print("            ]),")
-    print("            descent_profile=VerticalProfile(points=[")
-    for alt, vs in desc_pts:
-        print(f"                ({alt:>5} * ureg.feet, {abs(vs):>5} * ureg.feet / ureg.minute),")
-    print("            ]),")
-    print(f"            turn_model=TurnModel(max_bank_deg={max(30.0, round(roll_p90))}),")
-    print('            engine_type="jet",')
-    print("            confidence=PerformanceConfidence(")
-    print("                climb=0.85, cruise=0.85, descent=0.85, turns=0.8,")
-    print("            ),")
-    print("            sources=[SourceRecord(")
-    print('                source_type="icartt",')
-    print('                citation=(')
-    print('                    "NCAR/RAF NSF-GV ICARTT NAV files from NASA LaRC ASD '
-          'archive (DC3, '
-          f'{n_sorties} sorties); calibrated climb/descent VS bin medians '
-          '(active VS >= 1500 fpm), and TAS schedule from wind-derived '
-          'groundspeed (DC3 RAF-NAV omits TASX; TAS reconstructed via '
-          'heading + wind triangle from in-situ WSC/WDC fields)."')
-    print('                ),')
-    print('                confidence=0.85,')
-    print("            )],")
-    print('            calibration_status="calibrated",')
-    print("        )")
+    print("=" * 70)
+    path = apply_calibration_to_profile(
+        "ncar_gv",
+        service_ceiling_ft=int(round(service_ceil / 100) * 100),
+        approach_speed_kt=int(round(approach_kt)),
+        climb_profile_pts=_vs_pts(climb_bins),
+        descent_profile_pts=_vs_pts(desc_bins),
+        max_bank_deg=max(30.0, round(roll_p90)),
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(sorties)}")
 
 
 if __name__ == "__main__":

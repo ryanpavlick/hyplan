@@ -14,8 +14,8 @@ campaigns with N46RF (and possibly N48RF), now under
 
 This script loads everything, applies per-file unit detection (some
 PIs label TAS / WindSpd as m/s when the values are actually in knots),
-runs the standard per-aircraft calibration recipe, and prints a
-paste-ready ``NOAA_TwinOtter()`` constructor block.
+runs the standard per-aircraft calibration recipe, and writes the
+refreshed values to ``hyplan/data/aircraft/noaa_twin_otter.json``.
 
 Run from repo root::
 
@@ -190,31 +190,27 @@ def main():
     print(f"Service ceiling (op-p99): {ceiling:.0f} ft")
     print(f"Bank angle p90 (|roll|>5°): {roll_p90:.1f}°")
 
-    print()
-    print("=" * 70)
-    print("PASTE-READY NOAA_TwinOtter() PERFORMANCE BLOCK")
-    print("=" * 70)
-    _print_block(cs, klms, ds, climb_bins, desc_bins,
-                 approach_kt=approach_kt, ceiling=ceiling, roll_p90=roll_p90,
-                 n_sorties=len(sorties))
+    from notebooks.calibration._common import apply_calibration_to_profile
 
-
-def _print_block(cs, klms, ds, climb_bins, desc_bins, *,
-                 approach_kt, ceiling, roll_p90, n_sorties):
     def _vs_pts(bins):
         return [(int(r["alt_bin_ft"]), int(round(r["vs_med"])))
                 for _, r in bins.iterrows()]
-    print(f"# Calibrated against {n_sorties} ICARTT sorties: FIREX-AQ N48RF +")
-    print("# NOAA CSL N46RF (TopDown, UWFPS, CalFiDE, AEROMMA, AMMBEC, USOS).")
-    print("# Per-file unit detection handles inconsistent m/s vs kt labeling.")
-    print(f"service_ceiling={int(round(ceiling/100)*100)} * ureg.feet,")
-    print(f"approach_speed={int(round(approach_kt))} * ureg.knot,")
-    print(f"climb_schedule=TasSchedule(points={klms!r}),")
-    print(f"cruise_schedule=TasSchedule(points={cs!r}),")
-    print(f"descent_schedule=TasSchedule(points={ds!r}),")
-    print(f"climb_profile=VerticalProfile(points={_vs_pts(climb_bins)!r}),")
-    print(f"descent_profile=VerticalProfile(points={_vs_pts(desc_bins)!r}),")
-    print(f"max_bank_deg={max(30.0, round(roll_p90))},")
+
+    print()
+    print("=" * 70)
+    path = apply_calibration_to_profile(
+        "noaa_twin_otter",
+        service_ceiling_ft=int(round(ceiling / 100) * 100),
+        approach_speed_kt=int(round(approach_kt)),
+        climb_pts=klms,
+        cruise_pts=cs,
+        descent_pts=ds,
+        climb_profile_pts=_vs_pts(climb_bins),
+        descent_profile_pts=_vs_pts(desc_bins),
+        max_bank_deg=max(30.0, round(roll_p90)),
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(sorties)}")
 
 
 if __name__ == "__main__":

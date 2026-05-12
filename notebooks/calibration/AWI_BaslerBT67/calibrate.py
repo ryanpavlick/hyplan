@@ -356,21 +356,24 @@ def main() -> None:
     print(f"Observed peak-altitude p99: {ceiling_obs:.0f} ft")
     print(f"Bank angle p90 (|roll|>5°): {roll_p90:.1f}°")
 
+    from notebooks.calibration._common import apply_calibration_to_profile
+
     print()
     print("=" * 70)
-    print("PASTE-READY AWI_BaslerBT67() PERFORMANCE BLOCK")
-    print("=" * 70)
-    print(f"# Calibrated against {len(sorties)} PANGAEA sorties:")
-    print("# ACLOUD 2017 1 Hz + HALO-AC3 2022 wind/temperature, Polar 5 + Polar 6.")
-    print("# Keep 25 kft Basler BT-67 service ceiling; public sortie p99 is lower.")
-    print("service_ceiling=25000 * ureg.feet,")
-    print(f"approach_speed={max(90, int(round(approach_kt / 5) * 5))} * ureg.knot,")
-    print(f"climb_schedule=TasSchedule(points={klms!r}),")
-    print(f"cruise_schedule=TasSchedule(points={cs!r}),")
-    print(f"descent_schedule=TasSchedule(points={ds!r}),")
-    print(f"climb_profile=VerticalProfile(points={_vs_points(climb_bins, (25000, 250))!r}),")
-    print(f"descent_profile=VerticalProfile(points={_vs_points(desc_bins, (20000, 700), absolute=True)!r}),")
-    print(f"max_bank_deg={max(30.0, round(roll_p90)):.1f},")
+    path = apply_calibration_to_profile(
+        "awi_basler_bt67",
+        # Keep 25 kft Basler BT-67 service ceiling; public sortie p99 is lower.
+        service_ceiling_ft=25000,
+        approach_speed_kt=max(90, int(round(approach_kt / 5) * 5)),
+        climb_pts=klms,
+        cruise_pts=cs,
+        descent_pts=ds,
+        climb_profile_pts=_vs_points(climb_bins, (25000, 250)),
+        descent_profile_pts=_vs_points(desc_bins, (20000, 700), absolute=True),
+        max_bank_deg=max(30.0, round(roll_p90)),
+    )
+    print(f"Wrote calibrated profile to {path}")
+    print(f"  fit n_sorties={len(sorties)}")
 
 
 if __name__ == "__main__":
