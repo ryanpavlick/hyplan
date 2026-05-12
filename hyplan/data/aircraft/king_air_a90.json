@@ -1,0 +1,188 @@
+{
+  "metadata": {
+    "aircraft_type": "King Air A90",
+    "tail_number": "multi-tail",
+    "operator": "multi-operator (A90 fleet aggregate)",
+    "engine_type": "turboprop",
+    "calibration_status": "calibrated"
+  },
+  "scalars": {
+    "service_ceiling_ft": 25000.0,
+    "approach_speed_kt": 149.0,
+    "range_nmi": 1275.0,
+    "endurance_hr": 6.0,
+    "useful_payload_lb": 2400.0,
+    "stall_speed_cas_kt": 75.0,
+    "descent_path_angle_max_deg": null,
+    "climb_path_angle_max_deg": null
+  },
+  "climb_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        1800.0,
+        137.7
+      ],
+      [
+        11800.0,
+        158.1
+      ],
+      [
+        17800.0,
+        183.2
+      ],
+      [
+        19800.0,
+        179.6
+      ],
+      [
+        21800.0,
+        194.0
+      ]
+    ]
+  },
+  "cruise_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        2000.0,
+        143.0
+      ],
+      [
+        10000.0,
+        165.0
+      ],
+      [
+        12000.0,
+        189.8
+      ],
+      [
+        16000.0,
+        221.6
+      ],
+      [
+        20000.0,
+        218.6
+      ],
+      [
+        22000.0,
+        193.5
+      ]
+    ]
+  },
+  "descent_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        2000.0,
+        148.5
+      ],
+      [
+        4000.0,
+        147.8
+      ],
+      [
+        10000.0,
+        190.2
+      ],
+      [
+        14000.0,
+        189.8
+      ],
+      [
+        16000.0,
+        170.05
+      ],
+      [
+        22000.0,
+        179.3
+      ]
+    ]
+  },
+  "climb_profile": {
+    "points_ft_fpm": [
+      [
+        1800.0,
+        1024.0
+      ],
+      [
+        3800.0,
+        832.0
+      ],
+      [
+        9800.0,
+        896.0
+      ],
+      [
+        13800.0,
+        640.0
+      ],
+      [
+        17800.0,
+        704.0
+      ],
+      [
+        21800.0,
+        512.0
+      ]
+    ],
+    "source": ""
+  },
+  "descent_profile": {
+    "points_ft_fpm": [
+      [
+        2000.0,
+        640.0
+      ],
+      [
+        4000.0,
+        640.0
+      ],
+      [
+        6000.0,
+        704.0
+      ],
+      [
+        12000.0,
+        576.0
+      ],
+      [
+        16000.0,
+        960.0
+      ],
+      [
+        22000.0,
+        960.0
+      ]
+    ],
+    "source": ""
+  },
+  "turn_model": {
+    "max_bank_deg": 30.0,
+    "max_load_factor": 2.5,
+    "bank_by_phase": {
+      "climb_deg": 20.0,
+      "cruise_deg": 25.0,
+      "descent_deg": 20.0,
+      "approach_deg": 15.0
+    }
+  },
+  "approach_profile": null,
+  "typical_climb_out": null,
+  "confidence": {
+    "climb": 0.6,
+    "cruise": 0.7,
+    "descent": 0.6,
+    "turns": 0.5
+  },
+  "sources": [
+    {
+      "source_type": "adsb",
+      "reference": "King Air A90 ADS-B calibration, n=428 sorties from airplanes.live globe-history archive (2026-04-09 → 2026-05-08, 25 active US 65-A90 / 65-A90-1 tails); skydive jump-run profiles filtered.  TAS approximated via groundspeed (still-air baseline); v1.6.1 will switch to MERRA-2 wind-triangle reconstruction.",
+      "notes": "",
+      "confidence": 0.65,
+      "url": "https://www.airplanes.live/",
+      "doi": ""
+    }
+  ]
+}

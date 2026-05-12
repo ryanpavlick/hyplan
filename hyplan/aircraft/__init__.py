@@ -21,6 +21,13 @@ from ._base import (
     SourceRecord,
 )
 
+from ._profile_io import (
+    dump_aircraft_profile,
+    load_aircraft_profile,
+    profile_path,
+    write_calibrated_profile,
+)
+
 from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi
 from .wind_path import climb_with_wind_field, descend_with_wind_field
 from ._planned_sortie import (
@@ -92,11 +99,15 @@ __all__ = [
     "TasSchedule",
     "TurnModel",
     "VerticalProfile",
+    "dump_aircraft_profile",
+    "load_aircraft_profile",
     "load_iwg1",
     "load_planned_sortie",
     "parse_green_card_pdf",
     "parse_green_card_xlsx",
     "parse_kml",
+    "profile_path",
     "split_iwg1_alltracks",
     "trim_ground_taxi",
+    "write_calibrated_profile",
 ]

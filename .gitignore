@@ -194,8 +194,9 @@ proposals/
 # Local data caches (IWG1 traces, ADS-B alltracks, planned-sortie cards,
 # per-aircraft calibration source files, etc.).  Distribution policy is
 # collection-specific — calibrated constants ship in code; raw flight
-# data stays local.
-data/
+# data stays local.  Anchored to repo root so it doesn't shadow the
+# bundled package data at hyplan/data/.
+/data/
 
 # JOSS paper build artifacts (inara)
 paper/jats/

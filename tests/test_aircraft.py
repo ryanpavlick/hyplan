@@ -327,7 +327,9 @@ class TestAircraftInstantiation:
     def test_gv(self):
         ac = NASA_GV()
         assert ac.aircraft_type == "Gulfstream V"
-        assert ac.service_ceiling.m_as("feet") == pytest.approx(51000)
+        # Calibrated op-p99 of per-sortie peaks; not the brochure 51 kft
+        # envelope, which the science-mission profile rarely reaches.
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(45000)
 
     def test_nasa_c130(self):
         ac = NASA_C130()
@@ -365,9 +367,9 @@ class TestAircraftInstantiation:
         assert ac.operator == "NERC ARSF"
         assert ac.tail_number == "D-CALM"
         assert ac.calibration_status == "calibrated"
-        assert ac.service_ceiling.m_as("feet") == pytest.approx(22000, abs=1)
-        assert ac.cruise_speed_at(10000 * ureg.feet).m_as("knot") == pytest.approx(176)
-        assert ac.climb_profile.rate_at(5000 * ureg.feet).m_as("feet/minute") == pytest.approx(942)
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(23000, abs=1)
+        assert ac.cruise_speed_at(10000 * ureg.feet).m_as("knot") == pytest.approx(175)
+        assert ac.climb_profile.rate_at(5000 * ureg.feet).m_as("feet/minute") == pytest.approx(957)
 
     def test_awi_basler_bt67(self):
         ac = AWI_BaslerBT67()
@@ -462,8 +464,16 @@ class TestAircraftPerformance:
         )
 
     def test_rate_of_climb_at_ceiling(self):
+        # ``climb_profile.ceiling_rate`` is the rate at the *climb_profile's*
+        # highest breakpoint, which can sit above the operational
+        # ``service_ceiling`` for calibrated aircraft whose data sample
+        # includes occasional excursions above the p99 ceiling.  Query at
+        # the profile's top alt directly so this test verifies the
+        # interpolation-at-boundary contract rather than coupling to the
+        # ceiling derivation.
         ac = B200()
-        roc = ac.rate_of_climb(ac.service_ceiling)
+        top_alt_ft = ac.climb_profile.points[-1][0].m_as("feet")
+        roc = ac.rate_of_climb(top_alt_ft * ureg.feet)
         assert roc.m_as("feet/minute") == pytest.approx(
             ac.climb_profile.ceiling_rate.m_as("feet/minute"), rel=1e-6
         )

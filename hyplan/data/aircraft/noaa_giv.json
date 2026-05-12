@@ -1,0 +1,228 @@
+{
+  "metadata": {
+    "aircraft_type": "Gulfstream IV-SP",
+    "tail_number": "N49RF",
+    "operator": "NOAA AOC",
+    "engine_type": "jet",
+    "calibration_status": "calibrated"
+  },
+  "scalars": {
+    "service_ceiling_ft": 47500.0,
+    "approach_speed_kt": 146.0,
+    "range_nmi": 4220.0,
+    "endurance_hr": 8.5,
+    "useful_payload_lb": 2500.0,
+    "stall_speed_cas_kt": 110.0,
+    "descent_path_angle_max_deg": null,
+    "climb_path_angle_max_deg": null
+  },
+  "climb_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        220.0
+      ],
+      [
+        10000.0,
+        344.0
+      ],
+      [
+        20000.0,
+        421.0
+      ],
+      [
+        30000.0,
+        456.0
+      ],
+      [
+        40000.0,
+        438.0
+      ],
+      [
+        45000.0,
+        436.0
+      ]
+    ]
+  },
+  "cruise_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        258.0
+      ],
+      [
+        10000.0,
+        316.0
+      ],
+      [
+        20000.0,
+        425.0
+      ],
+      [
+        30000.0,
+        476.0
+      ],
+      [
+        40000.0,
+        443.0
+      ],
+      [
+        45000.0,
+        435.0
+      ]
+    ]
+  },
+  "descent_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        175.0
+      ],
+      [
+        10000.0,
+        324.0
+      ],
+      [
+        20000.0,
+        423.0
+      ],
+      [
+        30000.0,
+        482.0
+      ],
+      [
+        40000.0,
+        457.0
+      ],
+      [
+        45000.0,
+        441.0
+      ]
+    ]
+  },
+  "climb_profile": {
+    "points_ft_fpm": [
+      [
+        0.0,
+        2116.0
+      ],
+      [
+        5000.0,
+        2344.0
+      ],
+      [
+        10000.0,
+        1877.0
+      ],
+      [
+        15000.0,
+        1878.0
+      ],
+      [
+        20000.0,
+        1642.0
+      ],
+      [
+        25000.0,
+        1589.0
+      ],
+      [
+        30000.0,
+        1632.0
+      ],
+      [
+        35000.0,
+        1646.0
+      ],
+      [
+        40000.0,
+        1655.0
+      ]
+    ],
+    "source": ""
+  },
+  "descent_profile": {
+    "points_ft_fpm": [
+      [
+        0.0,
+        -1616.0
+      ],
+      [
+        5000.0,
+        -1745.0
+      ],
+      [
+        10000.0,
+        -1978.0
+      ],
+      [
+        15000.0,
+        -2476.0
+      ],
+      [
+        20000.0,
+        -2502.0
+      ],
+      [
+        25000.0,
+        -2436.0
+      ],
+      [
+        30000.0,
+        -2402.0
+      ],
+      [
+        35000.0,
+        -2137.0
+      ],
+      [
+        40000.0,
+        -1942.0
+      ],
+      [
+        45000.0,
+        -1646.0
+      ]
+    ],
+    "source": ""
+  },
+  "turn_model": {
+    "max_bank_deg": 30.0,
+    "max_load_factor": 2.5,
+    "bank_by_phase": {
+      "climb_deg": 20.0,
+      "cruise_deg": 25.0,
+      "descent_deg": 20.0,
+      "approach_deg": 15.0
+    }
+  },
+  "approach_profile": null,
+  "typical_climb_out": null,
+  "confidence": {
+    "climb": 0.85,
+    "cruise": 0.85,
+    "descent": 0.85,
+    "turns": 0.6
+  },
+  "sources": [
+    {
+      "source_type": "text",
+      "reference": "NOAA G-IV-SP (N49RF) HRD AOML hurricane synoptic-surveillance 1-second flight-level data, n=93 sorties 2021-2025",
+      "notes": "",
+      "confidence": 0.85,
+      "url": "https://www.aoml.noaa.gov/ftp/hrd/data/flightlevel/",
+      "doi": ""
+    },
+    {
+      "source_type": "brochure",
+      "reference": "Gulfstream G-IV / G-IV-SP Performance Manual",
+      "notes": "",
+      "confidence": 0.5,
+      "url": "",
+      "doi": ""
+    }
+  ]
+}

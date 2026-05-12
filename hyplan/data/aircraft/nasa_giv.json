@@ -1,0 +1,108 @@
+{
+  "metadata": {
+    "aircraft_type": "Gulfstream IV",
+    "tail_number": "NASA 817",
+    "operator": "NASA AFRC",
+    "engine_type": "jet",
+    "calibration_status": "uncalibrated"
+  },
+  "scalars": {
+    "service_ceiling_ft": 45000.0,
+    "approach_speed_kt": 140.0,
+    "range_nmi": 5130.0,
+    "endurance_hr": 7.5,
+    "useful_payload_lb": 5610.0,
+    "stall_speed_cas_kt": null,
+    "descent_path_angle_max_deg": null,
+    "climb_path_angle_max_deg": null
+  },
+  "climb_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        292.0
+      ],
+      [
+        45000.0,
+        459.0
+      ]
+    ]
+  },
+  "cruise_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        292.0
+      ],
+      [
+        45000.0,
+        459.0
+      ]
+    ]
+  },
+  "descent_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        0.0,
+        243.0
+      ],
+      [
+        45000.0,
+        410.0
+      ]
+    ]
+  },
+  "climb_profile": {
+    "points_ft_fpm": [
+      [
+        0.0,
+        4000.0
+      ],
+      [
+        45000.0,
+        500.0
+      ]
+    ],
+    "source": ""
+  },
+  "descent_profile": {
+    "points_ft_fpm": [
+      [
+        0.0,
+        1500.0
+      ]
+    ],
+    "source": ""
+  },
+  "turn_model": {
+    "max_bank_deg": 30.0,
+    "max_load_factor": 2.5,
+    "bank_by_phase": {
+      "climb_deg": 20.0,
+      "cruise_deg": 25.0,
+      "descent_deg": 20.0,
+      "approach_deg": 15.0
+    }
+  },
+  "approach_profile": null,
+  "typical_climb_out": null,
+  "confidence": {
+    "climb": 0.4,
+    "cruise": 0.4,
+    "descent": 0.35,
+    "turns": 0.5
+  },
+  "sources": [
+    {
+      "source_type": "brochure",
+      "reference": "NASA Airborne Science fact sheet; EUROCONTROL GLF4",
+      "notes": "[ESTIMATED — same as GIII, needs GIV AFM data]",
+      "confidence": 0.4,
+      "url": "",
+      "doi": ""
+    }
+  ]
+}

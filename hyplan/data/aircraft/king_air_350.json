@@ -1,0 +1,188 @@
+{
+  "metadata": {
+    "aircraft_type": "King Air 350",
+    "tail_number": "N2UW",
+    "operator": "University of Wyoming (UWKA-2)",
+    "engine_type": "turboprop",
+    "calibration_status": "calibrated"
+  },
+  "scalars": {
+    "service_ceiling_ft": 35000.0,
+    "approach_speed_kt": 162.0,
+    "range_nmi": 2100.0,
+    "endurance_hr": 5.0,
+    "useful_payload_lb": 2970.0,
+    "stall_speed_cas_kt": 75.0,
+    "descent_path_angle_max_deg": null,
+    "climb_path_angle_max_deg": null
+  },
+  "climb_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        3875.0,
+        165.0
+      ],
+      [
+        9875.0,
+        199.1
+      ],
+      [
+        11875.0,
+        187.5
+      ],
+      [
+        21875.0,
+        245.4
+      ],
+      [
+        27875.0,
+        245.4
+      ],
+      [
+        33875.0,
+        302.8
+      ]
+    ]
+  },
+  "cruise_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        3275.0,
+        154.3
+      ],
+      [
+        21275.0,
+        307.4
+      ],
+      [
+        25275.0,
+        203.4
+      ],
+      [
+        33275.0,
+        318.0
+      ],
+      [
+        35275.0,
+        267.1
+      ]
+    ]
+  },
+  "descent_schedule": {
+    "type": "tas",
+    "points_ft_kt": [
+      [
+        3500.0,
+        168.1
+      ],
+      [
+        5500.0,
+        191.6
+      ],
+      [
+        7500.0,
+        148.1
+      ],
+      [
+        9500.0,
+        191.0
+      ],
+      [
+        33500.0,
+        332.5
+      ],
+      [
+        35500.0,
+        250.05
+      ]
+    ]
+  },
+  "climb_profile": {
+    "points_ft_fpm": [
+      [
+        3875.0,
+        1088.0
+      ],
+      [
+        5875.0,
+        1856.0
+      ],
+      [
+        7875.0,
+        1344.0
+      ],
+      [
+        17875.0,
+        1344.0
+      ],
+      [
+        33875.0,
+        384.0
+      ]
+    ],
+    "source": ""
+  },
+  "descent_profile": {
+    "points_ft_fpm": [
+      [
+        3500.0,
+        512.0
+      ],
+      [
+        5500.0,
+        896.0
+      ],
+      [
+        11500.0,
+        704.0
+      ],
+      [
+        29500.0,
+        1152.0
+      ],
+      [
+        35500.0,
+        640.0
+      ]
+    ],
+    "source": ""
+  },
+  "turn_model": {
+    "max_bank_deg": 30.0,
+    "max_load_factor": 2.5,
+    "bank_by_phase": {
+      "climb_deg": 20.0,
+      "cruise_deg": 25.0,
+      "descent_deg": 20.0,
+      "approach_deg": 15.0
+    }
+  },
+  "approach_profile": null,
+  "typical_climb_out": null,
+  "confidence": {
+    "climb": 0.55,
+    "cruise": 0.65,
+    "descent": 0.4,
+    "turns": 0.5
+  },
+  "sources": [
+    {
+      "source_type": "adsb",
+      "reference": "King Air 350 ADS-B calibration, n=22 sorties from airplanes.live globe-history archive (University of Wyoming UWKA-2, N2UW; single-tail, science-mission profile)",
+      "notes": "",
+      "confidence": 0.55,
+      "url": "https://www.airplanes.live/",
+      "doi": ""
+    },
+    {
+      "source_type": "brochure",
+      "reference": "Beechcraft King Air 350i AFM + Blackhawk XP-67A upgrade datasheet; UW UWKA-2 facility specs (approach_speed and descent_profile retained from brochure due to single-bin sample artifacts)",
+      "notes": "",
+      "confidence": 0.5,
+      "url": "",
+      "doi": ""
+    }
+  ]
+}
