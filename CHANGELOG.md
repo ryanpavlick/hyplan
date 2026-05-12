@@ -1,5 +1,101 @@
 # Changelog
 
+## v1.7.0 — 2026-05-11
+
+Relative-location DSL, whole-pattern movement, and per-aircraft profile
+externalization.  Aircraft performance numbers now live in editable JSON
+files at `hyplan/data/aircraft/<short_name>.json` instead of Python
+literals — every calibration update becomes a single-file diff,
+reviewable line-by-line.  No behaviour change for existing user code:
+all 22 aircraft round-trip to byte-identical values, the 18 calibrate.py
+scripts that drive `_models.py` reproduce identical fits, and the 30/31
+canonical notebook smoke set still passes.
+
+### New features
+
+* **`Waypoint.relative_to(anchor, bearing, distance, …)`** — define a
+  waypoint as a geodesic offset (Vincenty) from another waypoint or
+  `(lat, lon)` tuple.  Inspired by Lait's GSFC flight-planner DSL.
+  `distance` as float defaults to nautical miles (matching the
+  planning convention); pass a pint Quantity for other units.
+  Heading defaults to the bearing for the ergonomic "fly toward the
+  new point" case.
+
+* **`Pattern.translate / move_to / rotate / from_relative`** — four
+  whole-pattern movement methods on `hyplan.pattern.Pattern`.
+  Previously a built-in pattern (lawnmower, rosette, spiral, polygon,
+  sawtooth, glint arc) could only be re-anchored by passing
+  overrides through `Pattern.regenerate(...)` on its stored params.
+  Now any pattern can be shifted by N/E offset, re-centred on a new
+  lat/lon, rotated about an arbitrary pivot, or anchored at a
+  geodesic offset from another waypoint.  All four return new
+  immutable Pattern instances, matching the FlightLine
+  in-place-vs-functional split.
+
+* **Per-aircraft JSON profile system** — every aircraft's schedules,
+  profiles, scalars, sources, and confidence now live in
+  `hyplan/data/aircraft/<short_name>.json` (compact JSON with units
+  in field names; 22 files, ~80–180 lines each).  Editing a JSON file
+  updates the corresponding `Aircraft` subclass with no Python
+  changes.  `hyplan/aircraft/_models.py` shrinks from 2,616 lines of
+  inline literals to 240 lines of thin wrappers.  Calibration
+  scripts (`notebooks/calibration/<aircraft>/calibrate.py`) now write
+  JSON directly via `apply_calibration_to_profile`, eliminating the
+  "PASTE-READY PERFORMANCE BLOCK" copy-paste step.
+
+* **New public API for profile I/O** — `hyplan.aircraft` re-exports:
+  `load_aircraft_profile(short_name)` (JSON → Aircraft kwargs),
+  `dump_aircraft_profile(aircraft, path)` (Aircraft → JSON),
+  `write_calibrated_profile(short_name, **overrides)` (partial,
+  in-place update of a bundled profile), and `profile_path(short_name)`
+  (resolve the bundled file location).
+
+### Bug fixes
+
+* **`NOAA_GIV/calibrate.py` crashed on `nan` roll** — NOAA G-IV ARWO
+  files don't carry roll, so `roll_p90` is `nan`; the new
+  direct-to-JSON path tripped over `round(nan)`.  The
+  `apply_calibration_to_profile` helper now treats `max_bank_deg=nan`
+  the same as `max_bank_deg=None` and preserves the existing
+  `TurnModel` rather than clobbering it.  BAS_TwinOtter's
+  ArcticCyclones segment has the same gap and benefits identically.
+
+### Internal
+
+* **`hyplan/aircraft/_profile_io.py`** (new) — the JSON ↔ Aircraft
+  serializer.  Discriminated `{"type": "tas" | "cas_mach"}` for speed
+  schedules; nested `approach_profile` / `typical_climb_out` /
+  `explicit_climb_plan` blocks for the more complex aircraft (NASA
+  ER-2).  Unit suffixes in field names (`service_ceiling_ft`,
+  `climb_schedule.points_ft_kt`) — no in-band Quantity strings.
+
+* **`notebooks/calibration/_common.py`** gains
+  `apply_calibration_to_profile(short_name, **calibration_outputs)`:
+  bridges the plain-tuple form produced by the calibration pipeline
+  (`climb_pts=[(alt_ft, tas_kt), …]`, `climb_profile_pts=[(alt_ft,
+  fpm), …]`) into the typed objects `Aircraft.__init__` expects.
+  Partial overrides leave un-touched fields intact.
+
+* **`tests/test_aircraft_profiles.py`** (new) — 132 parametrized
+  tests covering JSON schema validation, dump → load round-trip for
+  every aircraft, and class-vs-JSON drift guard.
+
+* **Bug-fix latitude:** the helper's `max_bank_deg` parameter accepts
+  `None` to mean "don't touch the existing `TurnModel`"; pass it for
+  aircraft whose source data has no roll channel.
+
+### Migration notes
+
+End users using only the public API (`from hyplan.aircraft import
+NASA_GV; NASA_GV()`) are unaffected.  Anyone who was monkey-patching
+inside `hyplan/aircraft/_models.py` directly should switch to editing
+the corresponding JSON file in `hyplan/data/aircraft/` (or call
+`write_calibrated_profile(short_name, …)` at runtime).
+
+The previous "PASTE-READY" workflow for refreshed calibrations is
+retired.  See `hyplan/data/aircraft/README.md` for the new edit-JSON
+and regenerate-from-calibrate.py recipes.
+
 ## v1.6.3 — 2026-05-11
 
 Math review + calibration expansion release. In parallel the four ADS-B /

@@ -1,9 +1,12 @@
 # Aircraft
 
 Aircraft performance models with speed profiles, climb/descent rates,
-turn radii, and endurance limits.  21 pre-configured research aircraft
+turn radii, and endurance limits.  22 pre-configured research aircraft
 are included; custom aircraft can be created by instantiating
-{py:class}`~hyplan.aircraft.Aircraft` directly.
+{py:class}`~hyplan.aircraft.Aircraft` directly.  Performance values
+for the pre-configured fleet live in editable JSON files at
+`hyplan/data/aircraft/<short_name>.json` (see the *Profile I/O*
+section below).
 
 ## Fleet overview
 
@@ -58,6 +61,7 @@ calibration provenance and a breakdown of the underlying data archives.
 .. autoclass:: hyplan.aircraft.NASA_GIII
 .. autoclass:: hyplan.aircraft.NASA_GIV
 .. autoclass:: hyplan.aircraft.NASA_GV
+.. autoclass:: hyplan.aircraft.NCAR_GV
 .. autoclass:: hyplan.aircraft.NASA_C20A
 .. autoclass:: hyplan.aircraft.NASA_P3
 .. autoclass:: hyplan.aircraft.NASA_WB57
@@ -75,4 +79,25 @@ calibration provenance and a breakdown of the underlying data archives.
 .. autoclass:: hyplan.aircraft.NERC_DO228
 .. autoclass:: hyplan.aircraft.AWI_BaslerBT67
 .. autoclass:: hyplan.aircraft.DLR_HALO
+```
+
+## Profile I/O
+
+Each pre-configured aircraft loads its performance values from
+`hyplan/data/aircraft/<short_name>.json`.  These functions read,
+write, and resolve those files; use them to refresh a calibration
+in place or to roll your own aircraft profile externally.
+
+The schema is documented in
+[`hyplan/data/aircraft/README.md`](https://github.com/ryanpavlick/hyplan/blob/main/hyplan/data/aircraft/README.md):
+compact JSON with units in field names (e.g.
+`climb_schedule.points_ft_kt`), discriminated `{"type": "tas" |
+"cas_mach"}` speed schedules, and nested `approach_profile` /
+`typical_climb_out` blocks for the more complex airframes.
+
+```{eval-rst}
+.. autofunction:: hyplan.aircraft.load_aircraft_profile
+.. autofunction:: hyplan.aircraft.dump_aircraft_profile
+.. autofunction:: hyplan.aircraft.write_calibrated_profile
+.. autofunction:: hyplan.aircraft.profile_path
 ```

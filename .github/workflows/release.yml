@@ -22,12 +22,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Backstop: refuse to tag a red main.  Mirrors the lint step
-      # in tests.yml; pre-commit is the primary defense locally.
-      - name: Install ruff
-        run: pip install ruff==0.15.12
+      # Backstop: refuse to tag a red main.  Mirrors the lint /
+      # type-check / test steps in tests.yml; pre-commit + a local
+      # ``pytest`` run are the primary defenses for the maintainer.
+      # The matrix coverage (3.10 / 3.11 / 3.12) still lives in
+      # tests.yml — we only re-run the 3.11 check here as a fast
+      # last-chance gate before tagging.
+      - name: Install verification deps
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+          pip install "numpy>=2.0,<2.3" "pint>=0.24,<0.26"
+          pip install pytest pytest-cov ruff==0.15.12 mypy
       - name: Lint (ruff)
         run: ruff check hyplan tests
+      - name: Type check (mypy)
+        run: mypy hyplan
+      - name: Tests (pytest)
+        run: pytest tests/ -q
 
       - name: Update CITATION.cff version
         run: |
