@@ -12,7 +12,7 @@ when it has clearly separable concerns (e.g. base class vs providers).
 | Package | Contents |
 |---------|----------|
 | `aircraft/` | `_base.py` (base class), `_models.py` (12 aircraft), `adsb/` (internal) |
-| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `frame_camera.py`, `radar.py`, `awp.py`, `profilinglidar.py` |
+| `instruments/` | `_base.py`, `line_scanner.py`, `lvis.py`, `als_lidar.py`, `frame_camera.py`, `radar.py`, `awp.py`, `profilinglidar.py` |
 | `winds/` | `base.py`, `simple.py`, `gridded.py`, `factory.py`, `utils.py`, `providers/` |
 | `planning/` | `engine.py` (orchestrator), `segments.py` (record builders) |
 | `exports/` | `_common.py` (shared), one file per format (`excel.py`, `csv.py`, ...) |
