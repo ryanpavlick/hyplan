@@ -58,6 +58,8 @@ continue to be refined as ADS-B calibration data becomes available.
 | Module | Description |
 |--------|-------------|
 | `hyplan.instruments.LVIS` | Full-waveform lidar sensor model |
+| `hyplan.instruments.ALSLidar` | Scanning-mirror topographic lidar sensor model + RIEGL VQ-480 II reference instance; locked public API on nominal-density semantics, contiguity, MTA envelope, inverse solvers, and LVIS-parity terrain-aware methods |
+| `hyplan.instruments.MultiALSLidarRig` | Multi-lidar rig (G-LiHT dual VQ-480i reference); pitch/roll-tilt mount geometry, combined swath/density, multi-angle pair detection |
 | `hyplan.instruments.SidelookingRadar` | SAR sensor model (UAVSAR variants) |
 | `hyplan.instruments.FrameCamera` | Frame camera and multi-camera rig |
 | `hyplan.campaign` | Campaign management and airspace conflict detection |

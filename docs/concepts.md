@@ -35,6 +35,28 @@ All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
   \text{altitude}$), but the effective swath depends on laser repetition
   rate, lens divergence (footprint size), and aircraft speed.
 
+- {class}`~hyplan.instruments.ALSLidar` — Generic scanning-mirror discrete-return
+  topographic Airborne Laser Scanner. Models rotating-polygon scanners
+  (RIEGL VQ-series, Leica TerrainMapper, Optech Galaxy). Parametrised by
+  PRF, scan rate, beam divergence, scan half-angle, wavelength, max range,
+  MTA zones, and scan geometry. Pre-configured reference instance:
+  {data}`~hyplan.instruments.RIEGL_VQ_480II` (1200 kHz operating point of
+  the RIEGL VQ-480 II). Provides nominal-density / contiguity / inverse
+  solvers (`solve_for_altitude`, `solve_for_groundspeed` — both with a
+  `ContiguityError` guard) plus terrain-aware methods
+  (`footprint_on_terrain`, `effective_swath_on_terrain`,
+  `terrain_summary`) modelled on the LVIS pattern.
+
+- {class}`~hyplan.instruments.MultiALSLidarRig` — Multi-lidar rig of
+  identical {class}`~hyplan.instruments.ALSLidar` units with known mount
+  orientations (pitch and roll tilts). Supports the two common
+  configurations: forward/backward pitch tilt for multi-angle returns
+  over the same swath (NASA G-LiHT pattern) and left/right roll tilt for
+  extended cross-track swath. Conforms to the same `ScanningSensor`
+  protocol as a single sensor. Pre-configured reference instance:
+  {data}`~hyplan.instruments.GLIHT_DUAL_VQ_480I` (G-LiHT 2017+ dual
+  VQ-480i, ±7° forward/backward pitch).
+
 - {class}`~hyplan.instruments.FrameCamera` — Frame cameras defined by
   sensor dimensions, focal length, resolution, and frame rate.
 
@@ -52,7 +74,8 @@ All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
   needs a different abstraction.
 
 Imaging and scanning sensors (`LineScanner`, `SidelookingRadar`, `LVIS`,
-`FrameCamera`) provide `half_angle` and `swath_width(altitude_agl)` so they
+`ALSLidar`, `MultiALSLidarRig`, `FrameCamera`) provide `half_angle` and
+`swath_width(altitude_agl)` so they
 work with {func}`~hyplan.swath.generate_swath_polygon`,
 {func}`~hyplan.flight_box.generate_flight_lines`, and other planning tools.
 Profiling lidars do not have a cross-track swath and use their own geometry

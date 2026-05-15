@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.8.0 — 2026-05-15
+
+### New features
+
+* **`ALSLidar` — Airborne Laser Scanner module
+  ([`hyplan/instruments/als_lidar.py`](hyplan/instruments/als_lidar.py))**
+  — generic class for rotating-mirror discrete-return topographic lidar
+  (RIEGL VQ-series, Leica TerrainMapper, Optech Galaxy, Phoenix LiDAR
+  Ranger).  Adds HyPlan's third lidar abstraction alongside the
+  full-waveform `LVIS` and single-beam `ProfilingLidar`.  Public API:
+  swath/footprint geometry, nominal point density with locked semantics,
+  along-track and cross-track contiguity checks, MTA timing envelope
+  (`mta_max_unambiguous_range`, `mta_practical_max_altitude`), inverse
+  solvers (`solve_for_altitude`, `solve_for_groundspeed`) with strict
+  contiguity guards that raise `ContiguityError`, scan-geometry-aware
+  cross-track spacing (rotating-polygon active-arc vs full-circle),
+  and a structured `coverage_diagnostic()` for survey planning.
+  Conforms to the `ScanningSensor` Protocol — plugs into
+  `generate_swath_polygon` and `box_around_polygon` without
+  modification.
+
+* **`RIEGL_VQ_480II` reference instance** — pre-configured at the
+  1200 kHz operating point.  All values transcribed from RIEGL's
+  publicly published VQ-480 II datasheet (2024-08-23); the
+  `source` field cites the URL and retrieval date.  Reproduces the
+  datasheet's swath table to within 1%.  Worked planning example:
+  [`notebooks/als_lidar_planning.ipynb`](notebooks/als_lidar_planning.ipynb).
+
+* **`MultiALSLidarRig` + `LidarMount`** — multi-lidar rig class
+  (analog to `MultiCameraRig` for frame cameras).  Supports both
+  forward/backward pitch tilt (multi-angle returns, same cross-track
+  swath) and left/right roll tilt (extended combined swath).
+  Conforms to the `ScanningSensor` Protocol so rigs plug into
+  `generate_swath_polygon` exactly like a single sensor.  Public
+  surface: `swath_offset_angles`, `swath_width`,
+  `combined_point_density`, `unit_point_densities`,
+  `along_track_offsets`, `multi_angle_pairs`, `coverage_diagnostic`.
+
+* **`GLIHT_DUAL_VQ_480I` reference instance** — NASA G-LiHT 2017+
+  dual VQ-480i scanning lidar rig.  Two identical VQ-480i units
+  pitch-tilted ±7° (forward and backward) viewing the same
+  cross-track ±30° swath from two oblique along-track angles.
+  Reproduces the user-guide combined swath (387 m at 335 m AGL)
+  exactly.  Sources cited in the instance's docstring (G-LiHT V2.0
+  User Guide, Wirt 2021, LP DAAC).
+
 ## v1.7.0 — 2026-05-11
 
 Relative-location DSL, whole-pattern movement, and per-aircraft profile

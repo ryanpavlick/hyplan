@@ -41,6 +41,14 @@ from .awp import (
     awp_profile_locations_for_plan,
 )
 from .profilinglidar import ProfilingLidar, HSRL2, HALO, CPL
+from .als_lidar import (
+    ALSLidar,
+    ContiguityError,
+    GLIHT_DUAL_VQ_480I,
+    LidarMount,
+    MultiALSLidarRig,
+    RIEGL_VQ_480II,
+)
 from .radar import (
     RadarExclusionConflict,
     check_lband_radar_exclusions,
@@ -68,6 +76,9 @@ __all__ = [
     "AerosolWindProfiler",
     "flag_awp_stable_segments", "awp_profile_locations_for_flight_line", "awp_profile_locations_for_plan",
     "ProfilingLidar", "HSRL2", "HALO", "CPL",
+    # ALS topographic lidar
+    "ALSLidar", "ContiguityError", "RIEGL_VQ_480II",
+    "LidarMount", "MultiALSLidarRig", "GLIHT_DUAL_VQ_480I",
     # SAR radar
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",

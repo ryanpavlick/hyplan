@@ -51,6 +51,47 @@ The three pre-configured lens instances are also exposed via the
 ``LVIS_LENSES`` mapping (keys ``"narrow"``, ``"medium"``, ``"wide"``)
 for parameterising tests or campaigns by lens name.
 
+## Airborne laser scanners (topographic ALS)
+
+Generic {class}`~hyplan.instruments.ALSLidar` class for rotating-mirror
+discrete-return topographic lidar (RIEGL VQ-series, Leica TerrainMapper,
+Optech Galaxy, Phoenix LiDAR Ranger).  Pre-configured reference instance:
+{data}`~hyplan.instruments.RIEGL_VQ_480II` (RIEGL VQ-480 II at the
+1200 kHz operating point).  Worked planning example:
+[`notebooks/als_lidar_planning.ipynb`](../../notebooks/als_lidar_planning.ipynb).
+
+```{eval-rst}
+.. autoclass:: hyplan.instruments.ALSLidar
+   :members:
+   :show-inheritance:
+
+.. autoexception:: hyplan.instruments.ContiguityError
+   :show-inheritance:
+
+.. autodata:: hyplan.instruments.RIEGL_VQ_480II
+   :no-value:
+```
+
+Multi-lidar rig (analog to {class}`~hyplan.instruments.MultiCameraRig`)
+for systems that fly two or more identical scanning lidars at known
+mount orientations.  Supports both forward/backward pitch tilt
+(multi-angle returns, same swath — NASA G-LiHT pattern) and
+left/right roll tilt (wider combined swath).  The pre-configured
+{data}`~hyplan.instruments.GLIHT_DUAL_VQ_480I` reference instance models
+the G-LiHT 2017+ dual VQ-480i configuration.
+
+```{eval-rst}
+.. autoclass:: hyplan.instruments.LidarMount
+   :members:
+
+.. autoclass:: hyplan.instruments.MultiALSLidarRig
+   :members:
+   :show-inheritance:
+
+.. autodata:: hyplan.instruments.GLIHT_DUAL_VQ_480I
+   :no-value:
+```
+
 ## Profiling lidars
 
 Nadir-pointing single-beam atmospheric profilers (no cross-track swath):

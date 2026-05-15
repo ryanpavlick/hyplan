@@ -30,7 +30,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
 - **Wind-aware isochrones** — Compute reachability boundaries from a base airport given an aircraft, time budget, and wind field; supports refuel-extended reach with two-clock budget tracking, single-target spot checks, and multi-budget concentric contours; static (Cartopy) and interactive (Folium) plotters
 - **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
-- **Lidar & radar** — LVIS full-waveform lidar and UAVSAR L/P/Ka-band SAR sensor models
+- **Lidar & radar** — Three lidar sensor families (full-waveform conical-scan `LVIS`, scanning-mirror discrete-return topographic `ALSLidar` with a RIEGL VQ-480 II reference, and single-beam atmospheric profilers `HSRL2`/`HALO`/`CPL`), plus a multi-lidar rig class (`MultiALSLidarRig` with a NASA G-LiHT dual VQ-480i reference) and UAVSAR L/P/Ka-band SAR sensor models
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
 - **Terrain-aware analysis** — Download DEM data and compute where the sensor field of view intersects the ground
@@ -245,7 +245,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
 | `campaign` | Campaign manager for organizing free-standing lines and patterns, caching reference data, tracking revisions, and persisting plans |
 | | **Instruments** |
-| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, UAVSAR SAR, and frame cameras |
+| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, ALS topographic lidar (RIEGL VQ-480 II) + multi-lidar rig (G-LiHT dual VQ-480i), profiling lidars (HSRL-2, HALO, CPL), AWP wind profiler, UAVSAR SAR, and frame cameras |
 | `swath` | Sensor swath coverage with terrain integration |
 | | **Aircraft** |
 | `aircraft` | Aircraft performance models (22 pre-configured research aircraft, 19 data-calibrated) |
@@ -304,6 +304,7 @@ The [`notebooks/`](https://github.com/ryanpavlick/hyplan/tree/main/notebooks) di
 | [sensor_comparison.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/sensor_comparison.ipynb) | Comparing GSD, swath width, and critical speed across imaging spectrometers |
 | [frame_camera_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/frame_camera_planning.ipynb) | Frame camera FOV, footprints, GSD, and along-track sampling |
 | [lidar_lvis_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/lidar_lvis_planning.ipynb) | LVIS lens options, swath geometry, contiguous coverage, and coverage rates |
+| [als_lidar_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/als_lidar_planning.ipynb) | RIEGL VQ-480 II scanning-mirror topographic lidar: swath/footprint/density vs altitude and groundspeed, contiguity regime maps, MTA timing envelope, terrain-aware planning over a real DEM, crab-aware swath polygons, and the G-LiHT dual VQ-480i multi-lidar rig |
 | [radar_sar_missions.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/radar_sar_missions.ipynb) | UAVSAR L/P/Ka-band swath geometry, resolution, and InSAR line spacing |
 | [profiling_lidar_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/profiling_lidar_planning.ipynb) | NASA `ProfilingLidar` family (HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile |
 | [awp_planning.ipynb](https://nbviewer.org/github/ryanpavlick/hyplan/blob/main/notebooks/awp_planning.ipynb) | NASA Langley Aerosol Wind Profiler: dual-LOS geometry, stable-segment flagging, terrain-aware profile placement |
@@ -381,7 +382,7 @@ If you use HyPlan in your research, please cite it as:
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
   license = {Apache-2.0},
-  version = {1.6.0}
+  version = {1.8.0}
 }
 ```
 

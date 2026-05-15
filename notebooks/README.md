@@ -75,6 +75,7 @@ Specialized notebooks for planning missions with different instrument types, eac
 | Notebook | Description | When to Use |
 |----------|-------------|-------------|
 | [lidar_lvis_planning.ipynb](lidar_lvis_planning.ipynb) | Plan LVIS lidar missions: pulse rate, swath geometry, altitude constraints, and coverage optimization. | When planning lidar missions where pulse density and footprint size drive the design. |
+| [als_lidar_planning.ipynb](als_lidar_planning.ipynb) | Plan scanning-mirror discrete-return topographic ALS missions (RIEGL VQ-480 II as reference): swath, footprint, nominal point density, contiguity regime maps, MTA timing envelope, inverse solvers, terrain-aware coverage over a real DEM, crab-aware swath polygons, and the G-LiHT dual VQ-480i multi-lidar rig. | When planning corridor / topographic / vegetation / infrastructure ALS surveys where point density and along-track contiguity drive the design. |
 | [profiling_lidar_planning.ipynb](profiling_lidar_planning.ipynb) | Plan nadir-pointing single-beam profiling lidars (NASA HSRL-2, HALO, CPL): footprint diameter, horizontal resolution, pulses-per-profile. | When planning vertical-column atmospheric profiling missions (aerosol/cloud backscatter, water-vapor or methane DIAL). |
 | [awp_planning.ipynb](awp_planning.ipynb) | Plan Aerosol Wind Profiler missions: dual-LOS geometry, profile spacing, stable-leg feasibility, and vector-profile placement along a flight plan. | When planning coherent Doppler wind-lidar missions where long straight legs and profile density matter more than swath width. |
 | [radar_sar_missions.ipynb](radar_sar_missions.ipynb) | Plan SAR radar missions: side-looking geometry, incidence angle, swath width, and look-direction constraints. | When planning SAR missions where look angle and offset geometry matter. |
@@ -195,6 +196,7 @@ These notebooks read locally-cached IWG1 / ICARTT / NetCDF files from `data/<air
 | glint_analysis | No | None | None | No |
 | glint_arc_planning | No | None | None | No |
 | lidar_lvis_planning | No | None | None | No |
+| als_lidar_planning | Yes (terrain section auto-downloads Copernicus GLO-30 DEM) | None | None | No |
 | profiling_lidar_planning | No | None | None | No |
 | awp_planning | Optional (terrain demo) | None | None | No |
 | radar_sar_missions | No | None | None | No |

@@ -134,8 +134,11 @@ pattern.
 ### Instruments and swath ([`hyplan/instruments/`](https://github.com/ryanpavlick/hyplan/tree/main/hyplan/instruments), [`hyplan/swath.py`](https://github.com/ryanpavlick/hyplan/blob/main/hyplan/swath.py))
 
 * Sensor models: AVIRIS-3 / AVIRIS-5 / HyTES / PRISM / MASTER
-  (line-scanners), LVIS (full-waveform lidar), UAVSAR
-  L/P/Ka-band (SAR), frame cameras, profiling lidar, AWP.
+  (line-scanners), LVIS (full-waveform lidar), ALSLidar
+  (scanning-mirror topographic lidar — RIEGL VQ-480 II) plus
+  `MultiALSLidarRig` (multi-lidar rig with G-LiHT dual VQ-480i
+  reference), UAVSAR L/P/Ka-band (SAR), frame cameras,
+  profiling lidar (HSRL-2 / HALO / CPL), AWP.
 * `generate_swath_polygon(...)` — terrain-aware swath polygon via
   ray-DEM intersection.
 * `calculate_swath_widths(...)` — per-line median swath width.
