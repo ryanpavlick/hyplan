@@ -11,11 +11,26 @@ name: Post-release housekeeping
 # A single commit covers both files.  No commit is made if neither
 # file changed (e.g. when release.yml already bumped CITATION.cff
 # before tagging).
+#
+# Triggers:
+#   * push: tags — the normal path when a maintainer pushes a tag
+#     manually from their workstation.
+#   * workflow_dispatch (tag input) — release.yml fans out to this
+#     workflow at the end of its run, because tags pushed by a
+#     workflow's GITHUB_TOKEN do NOT fire other workflows' push: tags
+#     triggers (GitHub Actions anti-recursion policy).  Without this
+#     fallback the SECURITY.md table goes stale every release that's
+#     cut by release.yml — which is every release after v1.6.x.
 
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to housekeep for (e.g. v1.8.0)"
+        required: true
 
 permissions:
   contents: write
@@ -29,7 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          # On push:tags `github.ref` resolves to the tag ref so this
+          # lints the tagged content.  On workflow_dispatch we explicitly
+          # check out the dispatched tag instead.
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -53,7 +71,7 @@ jobs:
 
       - name: Regenerate SECURITY.md supported-versions table
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           python <<'PY'
           import os, re, subprocess
@@ -117,7 +135,7 @@ jobs:
 
       - name: Bump CITATION.cff version
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           VERSION=${TAG#v}
           # POSIX sed: match ^version: ... and replace.
@@ -126,7 +144,7 @@ jobs:
 
       - name: Commit and push
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if git diff --quiet -- SECURITY.md CITATION.cff; then
             echo "No post-release changes; nothing to commit."

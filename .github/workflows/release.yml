@@ -9,6 +9,15 @@ on:
 
 permissions:
   contents: write
+  # `actions: write` lets the final steps below dispatch publish.yml
+  # and post-release.yml via `gh workflow run`.  Without that fan-out
+  # those downstream workflows never fire: this workflow's
+  # GITHUB_TOKEN-pushed tag and GITHUB_TOKEN-created GitHub Release
+  # both fail to satisfy GitHub Actions' anti-recursion rule for
+  # the `push: tags` and `release: published` triggers, so the chain
+  # used to silently break (v1.7.0 and v1.8.0 both shipped without
+  # SECURITY.md / PyPI housekeeping firing automatically).
+  actions: write
 
 jobs:
   release:
@@ -84,3 +93,34 @@ jobs:
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file /tmp/release_notes.md
+
+      # ----------------------------------------------------------------
+      # Fan-out: explicitly dispatch downstream workflows.
+      #
+      # Why: GitHub Actions refuses to fire `push: tags` and
+      # `release: published` triggers when the tag / release is created
+      # by another workflow using GITHUB_TOKEN.  This means publish.yml
+      # and post-release.yml — which would otherwise fire automatically
+      # on the tag + release we just created — silently stay idle.
+      # `gh workflow run` against `workflow_dispatch` triggers IS allowed
+      # (with `actions: write`), so we fan out explicitly here.
+      #
+      # If either dispatch fails the release commit + tag + GitHub
+      # Release are already on origin; the maintainer can re-dispatch
+      # manually from the Actions tab without re-running release.yml.
+      # ----------------------------------------------------------------
+      - name: Dispatch publish.yml (PyPI publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          gh workflow run publish.yml -f tag="v${VERSION}"
+          echo "Dispatched publish.yml for v${VERSION}"
+
+      - name: Dispatch post-release.yml (SECURITY.md / CITATION.cff housekeeping)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          gh workflow run post-release.yml -f tag="v${VERSION}"
+          echo "Dispatched post-release.yml for v${VERSION}"
