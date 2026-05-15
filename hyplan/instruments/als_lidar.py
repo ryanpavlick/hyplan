@@ -31,6 +31,7 @@ https://www.riegl.com/fileadmin/media/Products/03_Airborne_Scanning/RIEGL_VQ-480
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -326,13 +327,13 @@ class ALSLidar(Sensor):
 
     def _angular_pulse_step_rad(self) -> float:
         """Angular spacing between consecutive pulses (radians)."""
-        prf_hz = self.prf.m_as("hertz")
-        sr_hz = self.scan_rate.m_as("hertz")
+        prf_hz = float(self.prf.m_as("hertz"))
+        sr_hz = float(self.scan_rate.m_as("hertz"))
         if self.scan_geometry == "rotating_polygon_active_arc":
-            arc_rad = 2.0 * self.scan_half_angle.m_as("radian")
+            arc_rad = 2.0 * float(self.scan_half_angle.m_as("radian"))
             return arc_rad * sr_hz / prf_hz
         if self.scan_geometry == "rotating_polygon_full_circle":
-            return 2.0 * np.pi * sr_hz / prf_hz
+            return 2.0 * float(np.pi) * sr_hz / prf_hz
         raise HyPlanValueError(
             f"angular step undefined for scan_geometry={self.scan_geometry!r}"
         )
@@ -1202,7 +1203,7 @@ class MultiALSLidarRig(Sensor):
     def __len__(self) -> int:
         return len(self.units)
 
-    def __iter__(self):
+    def __iter__(self) -> "Iterator[LidarMount]":
         return iter(self.units)
 
     # ------------------------------------------------------------------
@@ -1363,9 +1364,11 @@ class MultiALSLidarRig(Sensor):
         * ``combined_density_pts_m2`` — sum of per-unit nominal densities.
         * ``along_track_offsets_m`` — per-unit ground offset for pitch tilts.
         """
-        per_unit = []
+        per_unit: list[dict[str, Any]] = []
         for u in self.units:
-            d = u.lidar.coverage_diagnostic(altitude_agl, groundspeed)
+            d: dict[str, Any] = dict(
+                u.lidar.coverage_diagnostic(altitude_agl, groundspeed)
+            )
             d["label"] = u.label
             d["pitch_tilt_deg"] = u.pitch_tilt_deg
             d["roll_tilt_deg"] = u.roll_tilt_deg
