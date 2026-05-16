@@ -7,6 +7,8 @@ to HyPlan alongside :class:`hyplan.instruments.LVIS` (full-waveform,
 conical-scan) and :class:`hyplan.instruments.ProfilingLidar` (single-beam
 profilers — HSRL-2, HALO, CPL).
 
+*Specific trade names (e.g. Riegl) are for informational purposes only and do not constitute an endorsement by NASA.
+
 Pre-configured reference instance: :data:`RIEGL_VQ_480II` (RIEGL VQ-480 II,
 configured at 1200 kHz PRR — the high-density operating point).  All
 parameters are sourced from RIEGL's publicly published datasheet
@@ -1080,6 +1082,7 @@ class ALSLidar(Sensor):
 # ---------------------------------------------------------------------------
 # Pre-configured reference instance: RIEGL VQ-480 II at 1200 kHz operating point
 # ---------------------------------------------------------------------------
+# Note: Specific trade names are for informational purposes only and do not constitute an endorsement by NASA.
 #
 # All values transcribed from the RIEGL VQ-480 II data sheet (2024-08-23):
 # https://www.riegl.com/fileadmin/media/Products/03_Airborne_Scanning/
@@ -1393,6 +1396,7 @@ class MultiALSLidarRig(Sensor):
 # ---------------------------------------------------------------------------
 # G-LiHT 2017+ dual VQ-480i reference instance
 # ---------------------------------------------------------------------------
+# Note: Specific trade names are for informational purposes only and do not constitute an endorsement by NASA.
 #
 # Section 2.8 of the G-LiHT v2.0 User Guide (Wirt 2021, LP DAAC) describes
 # the 2017+ upgrade verbatim as "the Riegl VQ 480i Dual Scanning LiDAR".
