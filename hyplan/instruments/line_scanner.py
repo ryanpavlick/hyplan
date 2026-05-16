@@ -294,6 +294,7 @@ def create_sensor(sensor_type: str) -> Sensor:
     """
     from .lvis import LVIS
     from .awp import AerosolWindProfiler
+    from .dropsondes import AVAPS_NRD41, AXCTD, RD94
     from .profilinglidar import HSRL2, HALO, CPL
     from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
 
@@ -315,9 +316,19 @@ def create_sensor(sensor_type: str) -> Sensor:
         "UAVSAR P-band": UAVSAR_Pband,
         "UAVSAR_Kaband": UAVSAR_Kaband,
         "GLISTIN-A": UAVSAR_Kaband,
+        # Dropsondes — pre-built singletons (not classes); the factory
+        # returns the same configured instance for each lookup.
+        "AVAPS_NRD41": lambda: AVAPS_NRD41,
+        "Vaisala NRD41": lambda: AVAPS_NRD41,
+        "NRD41": lambda: AVAPS_NRD41,
+        "RD94": lambda: RD94,
+        "Vaisala RD94": lambda: RD94,
+        "AXCTD": lambda: AXCTD,
+        "Sippican AXCTD": lambda: AXCTD,
+        "SIPPICAN_AXCTD": lambda: AXCTD,
     }
     registry = {**SENSOR_REGISTRY, **_extra}
 
     if sensor_type not in registry:
         raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
-    return registry[sensor_type]()  # type: ignore[no-any-return]  # registry value typed as Any
+    return registry[sensor_type]()  # type: ignore[no-any-return,operator]  # mixed class/factory values

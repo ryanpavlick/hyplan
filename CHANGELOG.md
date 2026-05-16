@@ -1,5 +1,137 @@
 # Changelog
 
+## v1.9.0 — 2026-05-16
+
+> ⚠️  **`hyplan.instruments.dropsondes` is experimental in this
+> release.**  The API is provisional and may change in subsequent
+> releases as it is validated against operational use.  Pin the
+> HyPlan version if you depend on the current surface; track release
+> notes for breaking changes.
+
+### New features
+
+* **Dropsondes — event-based sampling integrated with HyPlan's object
+  model**
+  ([`hyplan/instruments/dropsondes/`](hyplan/instruments/dropsondes/)).
+  Adds a third class of sensor abstraction alongside the swath sensors
+  (`LineScanner` / `LVIS` / `ALSLidar` / `SidelookingRadar`) and the
+  profilers (`ProfilingLidar` / `AerosolWindProfiler`).  A dropsonde
+  release is a single event in space and time; the science footprint
+  is the slant column from release to splash, drifting through the
+  ambient wind.  Three first-class domain objects:
+
+  * **`DropsondeRelease`** — one planned release event with the host
+    `Waypoint`, sensor, optional `Aircraft`, release time, source
+    `FlightLine` / `Pattern` / segment provenance, and tri-state QC
+    flags.  Frozen with identity equality.
+  * **`DropsondeTrajectory`** — one simulated descent: per-step
+    trajectory GeoDataFrame, splash `Waypoint`, and drift / time-to-
+    surface diagnostics.
+  * **`DropsondePlan`** — collection of releases (and optionally their
+    simulations).  Frozen; `simulate()` returns a new plan rather than
+    mutating in place.
+
+* **`DropsondeSystem` sensor class** — configurable
+  `descent_rate_model` callable, plus `min_release_altitude`,
+  `deployment_time`, `nominal_mass`, and `source` provenance.  Extends
+  `Sensor` for naming / registry uniformity; does **not** implement
+  the `ScanningSensor` protocol — dropsondes have no swath.
+
+* **Reference instances** — pre-configured shared singletons:
+
+  * `AVAPS_NRD41` — NASA / NCAR-EOL standard Vaisala NRD41 dropsonde
+    (~11 m/s at sea level rising to ~22 m/s at 13 km MSL).
+  * `RD94` — legacy Vaisala dropsonde sharing the NRD41 fall-rate
+    curve as an approximation.
+  * `AXCTD` — Lockheed-Martin Sippican AXCTD oceanographic probe
+    modelled for its **air-phase descent only** (release → splash).
+    Same kernel, same workflow as a dropsonde; the water-column
+    descent through the ocean is not modelled.
+
+  All three resolve via `create_sensor("AVAPS_NRD41")`,
+  `create_sensor("AXCTD")`, etc. as shared singletons — to customise
+  a parameter, build a new `DropsondeSystem(...)` rather than
+  mutating the reference.
+
+* **Plan helpers**:
+
+  * `DropsondePlan.from_flight_plan(plan, aircraft=..., spacing=...)`
+    — build a plan from a `compute_flight_plan` GeoDataFrame.  Filters
+    on segment type (default: `flight_line` + `transit`), applies
+    optional `target_polygon`, and stores a `FlightPlanTrack` for
+    later inverse targeting.
+  * `DropsondePlan.from_pattern(pattern, ...)` — pattern-based release
+    generation for line-based patterns.  Spacing resets per line.
+  * `releases_along_flight_line(flight_line, aircraft=..., ...)` —
+    emit releases along a single `FlightLine` *before*
+    `compute_flight_plan` runs.  Uses `aircraft.cruise_speed_at` as a
+    groundspeed fallback.
+
+* **Simulation**:
+
+  * `simulate_release(release, wind_field=...)` — object-aware descent
+    wrapper.  Pulls lat/lon/altitude/time from the release; returns a
+    `DropsondeTrajectory`.
+  * `simulate_descent_trajectory(...)` — low-level RK4 numerical
+    kernel.  Three termination modes (terrain DEM, explicit surface
+    elevation, sea level); per-step wind sampling preserves vertical-
+    shear physics; deployment-transient model decays the aircraft
+    velocity linearly to the local wind over `sensor.deployment_time`.
+  * `DropsondePlan.simulate(...)` — ensemble forward simulation with
+    optional `n_ensemble` Gaussian wind/fall-rate perturbations.
+    Skips releases that fail the AGL / aircraft-envelope / segment-
+    type gate.
+
+* **Inverse Lagrangian targeting** —
+  `solve_release_for_target(target, flight_plan, wind_field, ...)`
+  finds the release time along the aircraft trajectory whose
+  simulated splash lands closest to a target `Waypoint`.  Coarse
+  scan via `FlightPlanTrack.iter_samples`, then golden-section
+  refinement (no SciPy dependency).  The aircraft trajectory is the
+  constraint — there is no "release anywhere" search.
+
+* **`FlightPlanTrack` adapter** — typed view of a
+  `compute_flight_plan` GeoDataFrame.  Normalises units once at the
+  boundary, preserves labelled segment indices, and exposes the
+  canonical aircraft-trajectory sampler (`sample_at_elapsed`,
+  `iter_samples`) shared by release generation and inverse targeting.
+
+* **`WindField.is_time_dependent`** — class attribute (default
+  `True`) overridden to `False` on `StillAirField` and
+  `ConstantWindField`.  `simulate_release` checks this when the
+  release has no timestamp, raising `HyPlanValueError` for time-
+  dependent fields rather than failing inside the kernel.
+
+* **QC**:  `DropsondeRelease.qc_release_ok` is a tri-state aggregate
+  over three gating flags (`qc_min_alt_ok`, `qc_aircraft_envelope_ok`,
+  `qc_segment_allowed`): any known gate `False` → `False`; all `True`
+  → `True`; else `None`.  `simulate()` skips releases whose
+  `qc_release_ok` is `False` and populates the post-simulation
+  diagnostic `qc_splash_in_target_polygon` (evaluated against the
+  ensemble-mean splash position; not part of the gate).
+
+* **Factory wiring** — `create_sensor("AVAPS_NRD41")`,
+  `create_sensor("RD94")`, and `create_sensor("AXCTD")` (plus the
+  human-readable name aliases) resolve via the `_extra` map in
+  [`hyplan/instruments/line_scanner.py`](hyplan/instruments/line_scanner.py)
+  and return shared singletons.  `SENSOR_REGISTRY` (LineScanner-only)
+  is unchanged.
+
+* **Worked notebook**:
+  [`notebooks/dropsonde_objects.ipynb`](notebooks/dropsonde_objects.ipynb)
+  — NRD41 fall-rate curve, releases along a bare `FlightLine`,
+  single-release trajectories under still air / constant winds /
+  linear shear (3-D descent view), full
+  `DropsondePlan.from_flight_plan` with a 10-member ensemble +
+  splash ellipses, target-polygon QC lifecycle, inverse Lagrangian
+  targeting, racetrack `Pattern` integration, AXCTD vs NRD41 splash
+  comparison, and a real-winds section using a cached MERRA-2 NetCDF
+  slab (offline / auth-free).
+
+References: NCAR/UCAR EOL AVAPS documentation; Hock & Franklin (1999),
+*BAMS* 80(3), 407–420 (NCAR GPS dropwindsonde); Lockheed Martin
+Sippican AXCTD product literature.
+
 ## v1.8.0 — 2026-05-15
 
 ### New features

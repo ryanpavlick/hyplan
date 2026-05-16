@@ -92,6 +92,21 @@ the G-LiHT 2017+ dual VQ-480i configuration.
    :no-value:
 ```
 
+## Sampling systems
+
+Event-based sampling (single release per drop, drifts to splash through
+wind), not a swath geometry.  The
+{class}`~hyplan.instruments.DropsondeSystem` class and helpers are
+documented on the dedicated {doc}`dropsonde` page.
+
+```{eval-rst}
+.. autoclass:: hyplan.instruments.DropsondeSystem
+   :show-inheritance:
+
+.. autodata:: hyplan.instruments.AVAPS_NRD41
+   :no-value:
+```
+
 ## Profiling lidars
 
 Nadir-pointing single-beam atmospheric profilers (no cross-track swath):

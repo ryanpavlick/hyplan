@@ -73,6 +73,20 @@ All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
   from `ProfilingLidar` because the dual-LOS vector-retrieval geometry
   needs a different abstraction.
 
+- {class}`~hyplan.instruments.DropsondeSystem` — Event-based sampler
+  (experimental in v1.9).  Unlike the swath and profile sensors above,
+  a dropsonde is a single release at a (lat, lon, alt, time) tuple;
+  the science footprint is the slant column from release to splash,
+  drifting through wind.  The class does not provide `half_angle` /
+  `swath_width` (no swath geometry); release events and splash
+  predictions are produced via the first-class
+  {class}`~hyplan.instruments.DropsondeRelease`,
+  {class}`~hyplan.instruments.DropsondeTrajectory`, and
+  {class}`~hyplan.instruments.DropsondePlan` objects, which consume a
+  computed flight plan (or a bare {class}`~hyplan.flight_line.FlightLine`
+  / {class}`~hyplan.pattern.Pattern`) and any
+  {class}`~hyplan.winds.WindField` provider.
+
 Imaging and scanning sensors (`LineScanner`, `SidelookingRadar`, `LVIS`,
 `ALSLidar`, `MultiALSLidarRig`, `FrameCamera`) provide `half_angle` and
 `swath_width(altitude_agl)` so they

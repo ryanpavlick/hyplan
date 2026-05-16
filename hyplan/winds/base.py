@@ -13,7 +13,15 @@ class WindField(ABC):
 
     All subclasses must implement :meth:`wind_at`, which returns eastward
     (U) and northward (V) wind components as ``pint.Quantity`` in m/s.
+
+    Subclasses whose wind values do not depend on the ``time`` argument
+    (e.g. still air, constant wind) should override the class attribute
+    :attr:`is_time_dependent` to ``False``.  Consumers that need a
+    timestamp to sample the field (e.g. dropsonde release simulation)
+    use this flag to decide whether a timestamp is required.
     """
+
+    is_time_dependent: bool = True
 
     @abstractmethod
     def wind_at(

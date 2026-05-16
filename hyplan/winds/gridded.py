@@ -67,6 +67,185 @@ class _GriddedWindField(WindField):
         # tell mypy they're always-set NDArrays after construction.
         self._fetch_slab()
 
+    @classmethod
+    def for_plan(
+        cls,
+        plan: Any,
+        *,
+        time_start: datetime.datetime,
+        time_end: datetime.datetime | None = None,
+        bbox_buffer_deg: float = 1.0,
+        descent_altitude_buffer_ft: float = 0.0,
+        **provider_kwargs: Any,
+    ) -> "_GriddedWindField":
+        """Build a gridded wind field sized for a computed flight plan.
+
+        Derives the slab geometry from the plan's columns so callers
+        don't have to remember to set ``pressure_min_hpa`` (or the bbox)
+        manually:
+
+        * **bbox** — union of every segment's ``geometry`` extents,
+          padded by ``bbox_buffer_deg`` (default 1°) so the descent
+          drift envelope and any minor mis-tracking is comfortably
+          covered.
+        * **time window** — ``[time_start, time_end]``; if
+          ``time_end`` is omitted it defaults to
+          ``time_start + sum(time_to_segment) + 1 hr`` buffer.
+        * **pressure range** — derived from the plan's max
+          ``start_altitude`` / ``end_altitude`` (in feet); maps that
+          altitude to ISA pressure and rounds DOWN to the nearest
+          standard MERRA-2 level (taking the lower pressure / higher
+          altitude end for safety).  ``descent_altitude_buffer_ft``
+          (default 0) adds extra room above the plan's max altitude —
+          rarely needed since dropsondes only DESCEND from the release,
+          but useful for isochrone planning where an aircraft may climb
+          above the plan's nominal ceiling.
+
+        Extra keyword args (e.g. provider-specific options) are passed
+        through to the subclass constructor.
+
+        Args:
+            plan: Segment-level GeoDataFrame from
+                :func:`hyplan.compute_flight_plan` (or equivalent).
+                Must carry ``geometry``, ``start_altitude``,
+                ``end_altitude``, and ``time_to_segment`` columns.
+            time_start: UTC start of the wind window (typically the
+                flight's takeoff time).
+            time_end: UTC end of the wind window; defaults to
+                ``time_start + plan.time_to_segment.sum() + 1 hr``.
+            bbox_buffer_deg: Lat/lon padding around the plan's geometric
+                extent.  Default 1° handles a ~100 km drift envelope at
+                mid-latitudes.
+            descent_altitude_buffer_ft: Vertical buffer above the
+                plan's max altitude (feet).  Default 0 — appropriate
+                for dropsondes (which only descend from release).
+        """
+        try:
+            import geopandas as gpd  # noqa: F401
+            from hyplan.atmosphere import pressure_at
+            from hyplan.units import ureg
+        except ImportError as exc:  # pragma: no cover - missing dep
+            raise RuntimeError(
+                "for_plan requires geopandas and hyplan.atmosphere"
+            ) from exc
+
+        if not hasattr(plan, "geometry") or not hasattr(plan, "columns"):
+            raise TypeError("plan must be a GeoDataFrame-like object")
+
+        # Bbox from geometry extents.
+        bounds = plan.geometry.total_bounds  # (minx, miny, maxx, maxy)
+        if not (len(bounds) == 4 and all(np.isfinite(bounds))):
+            raise ValueError("plan geometry has no usable extent")
+        lon_min = float(bounds[0]) - bbox_buffer_deg
+        lon_max = float(bounds[2]) + bbox_buffer_deg
+        lat_min = float(bounds[1]) - bbox_buffer_deg
+        lat_max = float(bounds[3]) + bbox_buffer_deg
+
+        # Time window.
+        if time_end is None:
+            total_min = float(plan["time_to_segment"].sum()) if "time_to_segment" in plan.columns else 0.0
+            time_end = time_start + datetime.timedelta(minutes=total_min + 60.0)
+
+        # Pressure range — derive from max altitude across all rows.
+        alt_cols = [c for c in ("start_altitude", "end_altitude") if c in plan.columns]
+        if not alt_cols:
+            raise ValueError(
+                "plan needs at least one of 'start_altitude' or "
+                "'end_altitude' to derive pressure_min_hpa"
+            )
+        max_alt_ft = max(float(plan[c].max()) for c in alt_cols)
+        max_alt_ft += float(descent_altitude_buffer_ft)
+        max_alt_m = max_alt_ft * 0.3048
+        p_at_max = float(pressure_at(max_alt_m * ureg.meter).m_as("hPa"))
+        # Round DOWN to the nearest convenient standard level so the
+        # fetched slab actually covers the altitude.
+        from hyplan.winds.providers.merra2 import _MERRA2_LEVELS_HPA
+        std_levels_sorted = np.sort(_MERRA2_LEVELS_HPA)  # ascending
+        idx = int(np.searchsorted(std_levels_sorted, p_at_max, side="right")) - 1
+        idx = max(0, idx)
+        pressure_min_hpa = float(std_levels_sorted[idx])
+
+        # Respect provider override if explicitly supplied.
+        provider_kwargs.setdefault("pressure_min_hpa", pressure_min_hpa)
+        provider_kwargs.setdefault("pressure_max_hpa", 1000.0)
+
+        return cls(
+            lat_min=lat_min,
+            lat_max=lat_max,
+            lon_min=lon_min,
+            lon_max=lon_max,
+            time_start=time_start,
+            time_end=time_end,
+            **provider_kwargs,
+        )
+
+    # ------------------------------------------------------------------
+    # Persistence: round-trip the in-memory slab to a NetCDF file
+    # ------------------------------------------------------------------
+
+    def to_netcdf(self, path: str) -> None:
+        """Persist the fetched slab to a NetCDF file.
+
+        Useful for caching a one-time MERRA-2 / GFS fetch so example
+        notebooks can run reproducibly without network or auth.  The
+        file carries the U/V data plus the time / pressure / lat / lon
+        coordinate arrays — everything ``wind_at`` needs.  Load it back
+        with :meth:`from_netcdf` on any ``_GriddedWindField`` subclass:
+
+        >>> wind = MERRA2WindField.from_netcdf("merra2_cache.nc")
+        >>> u, v = wind.wind_at(lat, lon, altitude, time)
+        """
+        xr = _require_xarray()
+        ds = xr.Dataset(
+            data_vars={
+                "u": (("time", "level", "lat", "lon"), self._u_data),
+                "v": (("time", "level", "lat", "lon"), self._v_data),
+                "times_epoch": (("time",), self._times),
+            },
+            coords={
+                "time": self._times_raw,
+                "level": self._levs,
+                "lat": self._lats,
+                "lon": self._lons,
+            },
+            attrs={
+                "description": (
+                    "HyPlan _GriddedWindField slab cache: u/v winds on "
+                    "pressure levels.  Loadable via "
+                    "_GriddedWindField.from_netcdf(path)."
+                ),
+                "u_units": "m s-1",
+                "v_units": "m s-1",
+                "level_units": "hPa",
+            },
+        )
+        ds.to_netcdf(path)
+
+    @classmethod
+    def from_netcdf(cls, path: str) -> "_GriddedWindField":
+        """Load a previously-saved slab cache.
+
+        Bypasses ``__init__`` (no live OPeNDAP fetch, no auth) — simply
+        restores the in-memory arrays from the NetCDF written by
+        :meth:`to_netcdf`.  The returned instance supports the full
+        :meth:`wind_at` API but does not carry the original bbox /
+        time-window / pressure-range metadata (those live in the file's
+        coordinates).
+        """
+        xr = _require_xarray()
+        ds = xr.open_dataset(path)
+        instance = cls.__new__(cls)
+        instance._xr = xr
+        instance._u_data = ds["u"].values.astype(float)
+        instance._v_data = ds["v"].values.astype(float)
+        instance._levs = ds["level"].values.astype(float)
+        instance._lats = ds["lat"].values.astype(float)
+        instance._lons = ds["lon"].values.astype(float)
+        instance._times_raw = ds["time"].values
+        instance._times = ds["times_epoch"].values.astype(float)
+        ds.close()
+        return instance
+
     @abstractmethod
     def _build_urls(self) -> list[str]:
         """Return one or more OPeNDAP dataset URLs covering the time range."""

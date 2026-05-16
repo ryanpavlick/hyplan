@@ -579,6 +579,211 @@ class _SyntheticGriddedWind(_GriddedWindField):
         return []
 
 
+class _DerivedKwargsGriddedWind(_GriddedWindField):
+    """Test subclass with parent-compatible __init__ that records kwargs.
+
+    Used to verify ``_GriddedWindField.for_plan`` derives the right
+    bbox / time / pressure_min_hpa from a plan, without hitting the
+    network.
+    """
+
+    def __init__(self, **kwargs):
+        # Record the kwargs for assertions, then skip _fetch_slab.
+        self.kwargs_received = dict(kwargs)
+        for k, v in kwargs.items():
+            setattr(self, f"_{k}", v)
+
+    def _build_urls(self):
+        return []
+
+
+class TestGriddedForPlanFactory:
+    """``_GriddedWindField.for_plan`` derives bbox/time/pressure from a plan."""
+
+    def _plan(self, *, altitude_ft: float = 25000.0):
+        import geopandas as gpd
+        from shapely.geometry import LineString
+        return gpd.GeoDataFrame(
+            [
+                {
+                    "geometry": LineString([(-75.0, 30.0), (-71.4, 30.0)]),
+                    "segment_type": "flight_line",
+                    "start_lat": 30.0, "start_lon": -75.0,
+                    "end_lat": 30.0, "end_lon": -71.4,
+                    "start_altitude": altitude_ft,
+                    "end_altitude": altitude_ft,
+                    "time_to_segment": 60.0,
+                    "distance": 200.0,
+                    "groundspeed_kts": 200.0,
+                }
+            ],
+            geometry="geometry", crs="EPSG:4326",
+        )
+
+    def test_bbox_padded_around_plan(self):
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+            bbox_buffer_deg=1.0,
+        )
+        # Plan extends lon -75 to -71.4, lat 30; buffer 1°.
+        assert wf.kwargs_received["lat_min"] == pytest.approx(29.0)
+        assert wf.kwargs_received["lat_max"] == pytest.approx(31.0)
+        assert wf.kwargs_received["lon_min"] == pytest.approx(-76.0)
+        assert wf.kwargs_received["lon_max"] == pytest.approx(-70.4)
+
+    def test_time_window_auto_extends(self):
+        t0 = datetime.datetime(2024, 1, 15, 18, 0, 0)
+        wf = _DerivedKwargsGriddedWind.for_plan(self._plan(), time_start=t0)
+        # 60-min segment + 1 hr buffer = 2 hr total.
+        assert wf.kwargs_received["time_end"] == t0 + datetime.timedelta(hours=2)
+
+    def test_time_window_explicit_override(self):
+        t0 = datetime.datetime(2024, 1, 15, 18, 0, 0)
+        t1 = datetime.datetime(2024, 1, 15, 22, 0, 0)
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(), time_start=t0, time_end=t1,
+        )
+        assert wf.kwargs_received["time_end"] == t1
+
+    def test_pressure_min_for_fl250(self):
+        # FL250 = 7.6 km MSL ≈ 377 hPa.  for_plan should round DOWN
+        # to the nearest standard MERRA-2 level (350 hPa).
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(altitude_ft=25000.0),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+        )
+        assert wf.kwargs_received["pressure_min_hpa"] == pytest.approx(350.0)
+
+    def test_pressure_min_for_fl700_er2(self):
+        # FL700 = 21.3 km MSL ≈ 46 hPa.  Nearest standard level at or
+        # below is 40 hPa.
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(altitude_ft=70000.0),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+        )
+        assert wf.kwargs_received["pressure_min_hpa"] == pytest.approx(40.0)
+
+    def test_pressure_min_for_low_altitude(self):
+        # 1000 ft ≈ 977 hPa.  Standard levels go up to 1000 hPa; the
+        # rounded-down result should be the level just below 977 hPa,
+        # which is 975 hPa.
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(altitude_ft=1000.0),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+        )
+        assert wf.kwargs_received["pressure_min_hpa"] == pytest.approx(975.0)
+
+    def test_descent_altitude_buffer(self):
+        # FL250 with 5000 ft buffer = effective altitude 30k ft ≈
+        # 300 hPa → round DOWN to 300 hPa standard level.
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(altitude_ft=25000.0),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+            descent_altitude_buffer_ft=5000.0,
+        )
+        # 30k ft ≈ 301 hPa → nearest level below is 300 hPa.
+        assert wf.kwargs_received["pressure_min_hpa"] == pytest.approx(300.0)
+
+    def test_explicit_pressure_override_respected(self):
+        # User-supplied pressure_min_hpa wins over the derived value.
+        wf = _DerivedKwargsGriddedWind.for_plan(
+            self._plan(altitude_ft=25000.0),
+            time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+            pressure_min_hpa=200.0,
+        )
+        assert wf.kwargs_received["pressure_min_hpa"] == pytest.approx(200.0)
+
+    def test_plan_without_altitude_raises(self):
+        import geopandas as gpd
+        from shapely.geometry import LineString
+        plan = gpd.GeoDataFrame(
+            [{
+                "geometry": LineString([(-75.0, 30.0), (-71.4, 30.0)]),
+                "time_to_segment": 60.0,
+            }],
+            geometry="geometry", crs="EPSG:4326",
+        )
+        with pytest.raises(ValueError, match="start_altitude"):
+            _DerivedKwargsGriddedWind.for_plan(
+                plan, time_start=datetime.datetime(2024, 1, 15, 18, 0, 0),
+            )
+
+
+class TestGriddedNetCDFRoundtrip:
+    """``_GriddedWindField.to_netcdf`` / ``from_netcdf`` preserve the slab."""
+
+    def _make_field(self):
+        lats = np.array([30.0, 32.0, 34.0])
+        lons = np.array([-120.0, -118.0, -116.0])
+        levs = np.array([500.0, 700.0, 850.0])
+        t = np.datetime64("2024-01-01T00:00:00")
+        times_raw = np.array([t, t + np.timedelta64(3, "h")], dtype="datetime64[ns]")
+        epoch_zero = np.datetime64("1970-01-01T00:00:00")
+        times = np.array([
+            (tr - epoch_zero) / np.timedelta64(1, "s") for tr in times_raw
+        ], dtype=float)
+        # Distinct fingerprint per cell so a flip / re-order would fail.
+        u_data = np.arange(2 * 3 * 3 * 3, dtype=float).reshape(2, 3, 3, 3)
+        v_data = -u_data
+        wf = _SyntheticGriddedWind(u_data, v_data, times, levs, lats, lons)
+        wf._times_raw = times_raw  # to_netcdf reads this attr
+        wf._xr = pytest.importorskip("xarray")
+        return wf
+
+    def test_round_trip_preserves_arrays(self, tmp_path):
+        original = self._make_field()
+        path = str(tmp_path / "slab.nc")
+        original.to_netcdf(path)
+
+        loaded = _SyntheticGriddedWind.from_netcdf(path)
+        np.testing.assert_array_equal(loaded._u_data, original._u_data)
+        np.testing.assert_array_equal(loaded._v_data, original._v_data)
+        np.testing.assert_array_equal(loaded._levs, original._levs)
+        np.testing.assert_array_equal(loaded._lats, original._lats)
+        np.testing.assert_array_equal(loaded._lons, original._lons)
+        np.testing.assert_array_equal(loaded._times, original._times)
+
+    def test_round_trip_wind_at_agrees(self, tmp_path):
+        # Round-tripped slab should produce identical wind_at output.
+        original = self._make_field()
+        path = str(tmp_path / "slab.nc")
+        original.to_netcdf(path)
+        loaded = _SyntheticGriddedWind.from_netcdf(path)
+
+        u_orig, v_orig = original.wind_at(
+            31.0, -119.0,
+            ureg.Quantity(18000, "feet"),
+            datetime.datetime(2024, 1, 1, 1, 30),
+        )
+        u_load, v_load = loaded.wind_at(
+            31.0, -119.0,
+            ureg.Quantity(18000, "feet"),
+            datetime.datetime(2024, 1, 1, 1, 30),
+        )
+        assert u_orig.m_as("m/s") == pytest.approx(u_load.m_as("m/s"))
+        assert v_orig.m_as("m/s") == pytest.approx(v_load.m_as("m/s"))
+
+    def test_from_netcdf_does_not_call_subclass_init(self, tmp_path):
+        # from_netcdf must bypass __init__ — so even a subclass with a
+        # raising __init__ (e.g. MERRA2WindField's auth call) can be
+        # constructed from cache.
+        class _RaisingSubclass(_SyntheticGriddedWind):
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("should not be called")
+
+            def _build_urls(self):
+                return []
+
+        # Build a cache from the synthetic field first.
+        original = self._make_field()
+        path = str(tmp_path / "slab.nc")
+        original.to_netcdf(path)
+        # Now load via the raising subclass — should succeed.
+        wf = _RaisingSubclass.from_netcdf(path)
+        assert wf._u_data.shape == original._u_data.shape
+
+
 class TestGriddedInterpolation:
     """Test 4D interpolation with synthetic data."""
 

@@ -49,6 +49,26 @@ from .als_lidar import (
     MultiALSLidarRig,
     RIEGL_VQ_480II,
 )
+from .dropsondes import (
+    AVAPS_NRD41,
+    AXCTD,
+    AircraftTrackSample,
+    DropsondePlan,
+    DropsondeRelease,
+    DropsondeReleaseSolution,
+    DropsondeSystem,
+    DropsondeTrajectory,
+    FlightPlanTrack,
+    PlannedSegment,
+    RD94,
+    releases_along_flight_line,
+    simulate_descent_trajectory,
+    simulate_release,
+    solve_release_for_target,
+    summarize_trajectories,
+    terminal_velocity_nrd41,
+    terminal_velocity_sippican_axctd,
+)
 from .radar import (
     RadarExclusionConflict,
     check_lband_radar_exclusions,
@@ -79,6 +99,15 @@ __all__ = [
     # ALS topographic lidar
     "ALSLidar", "ContiguityError", "RIEGL_VQ_480II",
     "LidarMount", "MultiALSLidarRig", "GLIHT_DUAL_VQ_480I",
+    # Dropsondes
+    "DropsondeSystem", "AVAPS_NRD41", "RD94", "AXCTD",
+    "terminal_velocity_nrd41", "terminal_velocity_sippican_axctd",
+    "DropsondeRelease", "DropsondeTrajectory", "DropsondePlan",
+    "DropsondeReleaseSolution",
+    "FlightPlanTrack", "PlannedSegment", "AircraftTrackSample",
+    "simulate_descent_trajectory", "simulate_release",
+    "releases_along_flight_line", "solve_release_for_target",
+    "summarize_trajectories",
     # SAR radar
     "RadarExclusionConflict", "check_lband_radar_exclusions",
     "SidelookingRadar", "UAVSAR_Lband", "UAVSAR_Pband", "UAVSAR_Kaband",
