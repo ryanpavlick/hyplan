@@ -20,6 +20,8 @@ class StillAirField(WindField):
     wind data is unavailable.
     """
 
+    is_time_dependent = False
+
     def wind_at(
         self,
         lat: float,
@@ -41,6 +43,8 @@ class ConstantWindField(WindField):
         wind_from_deg: Direction the wind is blowing *from* in degrees
             true (meteorological convention: 0 = from north, 90 = from east).
     """
+
+    is_time_dependent = False
 
     def __init__(self, wind_speed: Quantity, wind_from_deg: float):
         ws = wind_speed.m_as(ureg.meter / ureg.second)
