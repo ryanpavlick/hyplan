@@ -1,5 +1,178 @@
 # Changelog
 
+## Unreleased
+
+## v1.10.0 — 2026-05-17
+
+### New features
+
+* **`hyplan.instruments.registry`** — new dedicated module hosting
+  `SENSOR_REGISTRY`, `create_sensor`, and a new
+  `register_sensor(name, factory, *, aliases=())` helper.  Adding a
+  new instrument is now one `register_sensor` call from
+  `hyplan/instruments/__init__.py`; nothing reaches into
+  `line_scanner.py` any more, and the inline `_extra` alias map
+  there is gone.  `SENSOR_REGISTRY` and `create_sensor` remain
+  importable from their historic locations (`hyplan.instruments` and
+  `hyplan.instruments.line_scanner`) via thin re-exports, so
+  existing imports keep working.
+
+* **`GLIHT_HRAC` reference instance** — Phase One medium-format
+  mapping camera as configured on NASA G-LiHT (iXM-RS100F-RS body
+  in the 2022+ payload, iXU1000-R in 2017 — same imaging chain).
+  53.4 × 40.0 mm medium-format CMOS, 11608 × 8708 pixels (≈ 101 MP),
+  Rodenstock 50 mm f/4.0, 1 Hz frame rate, 4 cm GSD at ~435 m AGL.
+  Resolves via `create_sensor("GLIHT_HRAC")`,
+  `create_sensor("G-LiHT HRAC")`,
+  `create_sensor("Phase One iXM-RS100F-RS")`, or
+  `create_sensor("Phase One iXU1000-R")` to the shared singleton.
+
+* **`GLIHT_THERMAL` reference instance** — Xenics Gobi-640 GigE
+  Vision LWIR microbolometer modelled as a `FrameCamera`.  640 × 480
+  active pixels at 17 μm pitch (10.88 × 8.16 mm sensor), athermalized
+  14.25 mm f/1.2 lens, 50 Hz max frame rate.  Resolves via
+  `create_sensor("GLIHT_THERMAL")`, `create_sensor("G-LiHT Thermal")`,
+  `create_sensor("Xenics Gobi-640")`, or `create_sensor("Gobi-640")`
+  to the shared singleton.  Replaces the previous (incorrect)
+  line-scanner model — see below.
+
+* **`GLiHT_SWIR` reference instance** — Headwall Microhyperspec
+  SWIR (UVS-366), a new addition to the 2022 G-LiHT payload: 192
+  cross-track pixels after 2× binning, 75 Hz frame rate, 25 mm
+  f/1.4 achromatic lens, 24 μm pixel pitch, 890–2526 nm spectral
+  range, 9.5 nm sampling (172 bands), 16-bit.  Resolves via
+  `create_sensor("GLiHT_SWIR")`.
+
+* **`MultiALSLidarRig.solve_for_groundspeed`** — inverts
+  `combined_point_density()` at the rig level, returning the ground
+  speed at which the multi-unit combined point density equals a
+  requested target.  For a 2-unit pitch-only rig at equal PRF the
+  result is exactly twice the per-unit
+  `ALSLidar.solve_for_groundspeed`, so notebooks no longer have to
+  invert the density formula by hand or mislabel a single-unit
+  number as rig-level.  Performs per-unit
+  `is_along_track_contiguous` checks by default; pass
+  `strict_contiguity=False` to skip.
+
+* **Motion-blur planning on `FrameCamera`** — adds optional
+  `integration_time` field plus two helpers:
+  `motion_blur_at(altitude_agl, ground_speed)` returns
+  `{"length", "pixels"}` (ground motion during one exposure +
+  normalised to along-track GSD), and
+  `max_ground_speed_for_motion_blur(altitude_agl, max_blur_pixels)`
+  returns the speed that keeps blur under the requested threshold.
+  Set on the G-LiHT singletons: `GLIHT_HRAC.integration_time = 1 ms`
+  (1/1000 s mechanical shutter, documented in the AK 2022 SW66
+  campaign metadata), `GLIHT_THERMAL.integration_time = 20 ms` (the
+  campaign metadata documents only the 50 Hz frame rate for the
+  Gobi-640; HyPlan uses the full frame period as a conservative
+  proxy since uncooled microbolometers integrate continuously
+  between readouts).  Confirms that motion blur — not geometric
+  overlap — is the real binding speed constraint for both frame
+  cameras at G-LiHT cruise.
+
+* **Frame-camera overlap-speed helper** —
+  `FrameCamera.max_ground_speed_for_overlap(altitude_agl, overlap_pct)`
+  reports the maximum ground speed that preserves a requested
+  forward overlap at the configured frame rate.  This is the
+  operational frame-rate limit for nadir survey planning.
+
+* **`FrameCamera.footprint_polygon_at(lat, lon, altitude_agl)`** —
+  flat-earth ground footprint Polygon at a specified geodetic
+  centre.  Convenience wrapper that returns a 2-D `(lon, lat)`
+  Shapely Polygon without DEM access — useful for notebook
+  visualisation that shouldn't depend on terrain downloads.
+
+* **`LineScanner.ground_pixel_dimensions(altitude_agl, ground_speed)`**
+  returns `{"cross_track", "along_track", "aspect_ratio"}` — the
+  cross-track GSD (locked by sensor optics) and along-track GSD
+  (= `ground_speed × frame_period`), plus the resulting ground
+  pixel aspect ratio.  Makes the anisotropic-GSD characterisation
+  of pushbroom planning a first-class API.
+
+* **`generate_swath_polygon(..., terrain_aware=True)`** flag.  When
+  `False`, swath edges are computed analytically as
+  `altitude × tan(edge_angle)` (flat earth, no DEM access).
+  Default `True` preserves the existing DEM-aware behaviour.
+
+### Changed
+
+* `FrameCamera.critical_ground_speed()` docstring clarified to
+  describe what it computes — ground speed corresponding to one
+  along-track pixel of motion per frame, *not* an overlap-based
+  survey limit.  Numeric behaviour is unchanged.  New code should
+  prefer `max_ground_speed_for_overlap`.
+* `FrameCamera.trigger_distance()` and the new
+  `max_ground_speed_for_overlap()` now reject `overlap_pct` values
+  outside `[0, 100)` with a `HyPlanValueError` (previously
+  `trigger_distance` silently accepted bad input and returned
+  negative or out-of-range distances).
+
+### Breaking changes
+
+* **`GLiHT_Thermal` retired.**  The G-LiHT thermal imager (Xenics
+  Gobi-640) was previously modelled as a `LineScanner` subclass in
+  `hyplan.instruments`; this was wrong — the Gobi-640 is a 2-D
+  microbolometer area-array detector read out as a full frame at up
+  to 50 Hz, fundamentally a `FrameCamera`.  The pushbroom model
+  produced an artifactually-tight one-pixel-per-frame speed limit
+  (~20 m/s at 335 m AGL).  The class is removed from the public
+  API in this release; use the new `GLIHT_THERMAL` `FrameCamera`
+  singleton instead.
+* **`GLiHT_VNIR` frame rate corrected: 250 Hz → 75 Hz.**  The
+  campaign-documented frame rate per the NASA GSFC Loudon June 2017
+  G-LiHT metadata is 75 Hz on the Headwall Microhyperspec E Series
+  (pco edge 5.5 sCMOS); HyPlan's earlier 250 Hz value was
+  incorrect.  At 75 Hz, the new sub-meter pushbroom helpers cap
+  ground speed at ~75 m/s for ≤ 1 m along-track pixels — at the top
+  of the documented G-LiHT 110–150 kt survey envelope, so the
+  corrected rate is not binding for typical operations.
+* **`GLiHT_VNIR` cross-track pixels and FOV corrected: 1600 px /
+  64° → 645 px / 55.3°.**  Per the AK 2022 SW66 campaign metadata
+  (confirmed by Loudon June 2017): the VNIR pushbroom reads out 645
+  cross-track pixels after 2× binning through an 8 mm f/1.4
+  achromatic lens on a 21.8 mm-diagonal PCO Edge 5.5 sCMOS, giving
+  a 55.3° cross-track FOV.  The previous 1600 px / 64° values
+  appear to have come from conflating with the SIF/FIREFLY imager's
+  spatial pixel count.
+* **`GLIHT_DUAL_VQ_480I` scan rate corrected: 100 Hz → 150 Hz.**
+  Per the same Loudon June 2017 campaign metadata.  PRF (300 kHz),
+  scan half-angle (30°), beam divergence (0.3 mrad), and wavelength
+  (1550 nm) are unchanged.  The corrected scan rate tightens the
+  achievable along-track point spacing and matches the operational
+  "0.42 m between scan lines" benchmark in the metadata.
+
+### Docs
+
+* **`NOTICE.md`** added at the project root, plus a matching
+  "Commercial products disclaimer" section in
+  [`README.md`](README.md).  HyPlan's documentation, instrument
+  modules, and aircraft catalog name specific commercial products
+  (Phase One, Riegl, Xenics, Headwall, Rodenstock, Tamron, PCO,
+  Cessna, Beechcraft King Air, Gulfstream, etc.) to make modelled
+  parameters traceable to manufacturer specs; the NOTICE/README
+  disclaimer makes explicit that these references are for reader
+  convenience and do not constitute endorsement by the US
+  government or NASA.
+
+### Notebooks
+
+* **G-LiHT integrated instruments**
+  ([`notebooks/gliht_instruments.ipynb`](notebooks/gliht_instruments.ipynb))
+  — five-instrument swath overlay (VNIR, SWIR, Thermal, dual
+  VQ-480i lidar, HRAC) at G-LiHT's nominal 335 m AGL, plus altitude
+  sweeps for swath width and binding ground speed.  Pushbroom
+  planning is reframed around a **sub-meter ground pixel target**
+  (≤ 1 m in both directions) rather than strictly square Nyquist
+  pixels: at 75 Hz, both VNIR and SWIR allow 75 m/s along-track
+  (top of the 110–150 kt survey envelope), with cross-track altitude
+  ceilings of ~526 m (SWIR, binding) and ~668 m (VNIR).  Other
+  takeaways: **motion blur** is the binding speed limit for the two
+  frame cameras at cruise, and the **dual VQ-480i lidar** imposes
+  the only hard altitude ceiling (~999 m AGL practical MTA limit at
+  the configured PRF).  Combined-density planning uses the new
+  `MultiALSLidarRig.solve_for_groundspeed` helper.
+
 ## v1.9.0 — 2026-05-16
 
 > ⚠️  **`hyplan.instruments.dropsondes` is experimental in this

@@ -14,8 +14,10 @@ from typing import Any
 from pint import Quantity, Unit
 import numpy as np
 import numpy.typing as npt
+import pymap3d.vincenty as _vincenty
 from shapely.geometry import Polygon as ShapelyPolygon
 
+from ..geometry import wrap_to_180
 from ..terrain import ray_terrain_intersection
 from ..units import ureg
 from ._base import Sensor
@@ -23,6 +25,8 @@ from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "FrameCamera",
+    "GLIHT_HRAC",
+    "GLIHT_THERMAL",
     "MultiCameraRig",
 ]
 
@@ -57,6 +61,7 @@ class FrameCamera(Sensor):
         f_speed: float,
         tilt_angle: float = 0.0,
         tilt_direction: float = 0.0,
+        integration_time: Quantity | None = None,  # exposure / shutter open
     ):
         super().__init__(name)
 
@@ -79,6 +84,29 @@ class FrameCamera(Sensor):
             raise HyPlanValueError(f"tilt_angle must be in [0, 90), got {tilt_angle}")
         self.tilt_angle = float(tilt_angle)
         self.tilt_direction = float(tilt_direction) % 360.0
+
+        # Integration / shutter time — drives motion-blur planning helpers.
+        # Optional; when None the motion_blur_at / max_ground_speed_for_motion_blur
+        # methods raise HyPlanValueError.  For mechanical-shutter cameras
+        # (e.g. Phase One IXM at 1/1000 s) this is the exposure duration;
+        # for continuously-integrating detectors (uncooled microbolometers
+        # like the Xenics Gobi-640) it is typically the full frame period.
+        if integration_time is None:
+            self.integration_time: Quantity | None = None
+        else:
+            t = self._validate_quantity(integration_time, ureg.second)
+            if t.magnitude <= 0:
+                raise HyPlanValueError(
+                    f"integration_time must be positive, got {t}"
+                )
+            frame_period = (1.0 / self.frame_rate).to(ureg.second)
+            if t > frame_period * 1.01:  # 1% tolerance for rounding
+                raise HyPlanValueError(
+                    f"integration_time {t} exceeds frame period {frame_period} "
+                    f"(at {self.frame_rate}); the sensor cannot integrate longer "
+                    f"than one frame."
+                )
+            self.integration_time = t
 
         if self.sensor_height > self.sensor_width:
             warnings.warn(
@@ -319,13 +347,30 @@ class FrameCamera(Sensor):
 
         Args:
             altitude_agl: Altitude above ground level.
-            overlap_pct: Desired forward overlap between successive images (0-100).
+            overlap_pct: Desired forward overlap between successive images,
+                in percent.  Must satisfy ``0 <= overlap_pct < 100``.
 
         Returns:
             Distance between exposure centers in meters.
+
+        Raises:
+            HyPlanValueError: when ``overlap_pct`` is outside [0, 100).
         """
+        self._validate_overlap_pct(overlap_pct)
         footprint = self.footprint_at(altitude_agl)
         return footprint["height"] * (1 - overlap_pct / 100)
+
+    @staticmethod
+    def _validate_overlap_pct(overlap_pct: float) -> None:
+        """Range check shared by every API that accepts ``overlap_pct``."""
+        if not isinstance(overlap_pct, (int, float)):
+            raise HyPlanTypeError(
+                f"overlap_pct must be a number, got {type(overlap_pct).__name__}"
+            )
+        if overlap_pct < 0 or overlap_pct >= 100:
+            raise HyPlanValueError(
+                f"overlap_pct must satisfy 0 <= overlap_pct < 100; got {overlap_pct}"
+            )
 
     def trigger_interval(self, altitude_agl: Quantity, ground_speed: Quantity,
                          overlap_pct: float = 80.0) -> Quantity:
@@ -361,19 +406,140 @@ class FrameCamera(Sensor):
         return self.trigger_distance(altitude_agl, overlap_pct) * n_frames
 
     def critical_ground_speed(self, altitude_agl: Quantity) -> Quantity:
-        """
-        Calculate the maximum ground speed (m/s) to maintain proper along-track sampling.
+        """Ground speed corresponding to one along-track pixel of motion per frame.
+
+        This is a *pixel-rate* limit (one GSD_y of ground motion per
+        exposure interval), not a survey-overlap planning limit.  For
+        most operational frame-camera surveys the binding constraint
+        is the requested forward overlap at the configured frame rate
+        — use :meth:`max_ground_speed_for_overlap` for that.
 
         Args:
-            altitude_agl (Quantity): Altitude above ground level in meters.
+            altitude_agl: Altitude above ground level.
 
         Returns:
-            Quantity: Maximum allowable ground speed in meters per second.
+            Ground speed in m/s at which one along-track GSD is traversed
+            per frame period.
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         pixel_size = self.ground_sample_distance(altitude_agl)["y"]  # Along-track GSD
         frame_period = (1 / self.frame_rate).to(ureg.s)
         return pixel_size / frame_period
+
+    def max_ground_speed_for_overlap(
+        self,
+        altitude_agl: Quantity,
+        overlap_pct: float = 80.0,
+    ) -> Quantity:
+        """Maximum ground speed that maintains the requested forward overlap.
+
+        Uses the along-track footprint and frame rate::
+
+            speed_max = trigger_distance(altitude_agl, overlap_pct) * frame_rate
+
+        This is the operational frame-rate limit for nadir frame-camera
+        survey planning — distinct from
+        :meth:`critical_ground_speed`, which reports one-pixel-per-frame
+        motion (a much tighter, rarely-binding limit).
+
+        Args:
+            altitude_agl: Altitude above ground level.
+            overlap_pct: Desired forward overlap between successive
+                images, in percent.  Must satisfy
+                ``0 <= overlap_pct < 100``.
+
+        Returns:
+            Maximum allowable ground speed in m/s.
+
+        Raises:
+            HyPlanValueError: when ``overlap_pct`` is outside [0, 100).
+        """
+        self._validate_overlap_pct(overlap_pct)
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        return (self.trigger_distance(altitude_agl, overlap_pct) * self.frame_rate).to(
+            ureg.meter / ureg.second
+        )
+
+    def motion_blur_at(
+        self,
+        altitude_agl: Quantity,
+        ground_speed: Quantity,
+    ) -> dict[str, Quantity | float]:
+        """Along-track motion blur during a single exposure.
+
+        Reports the ground distance the platform traverses while the
+        shutter is open (``ground_speed × integration_time``) and
+        normalises that length to the along-track GSD so the answer
+        is interpretable in units of "pixels of smear per exposure".
+
+        Args:
+            altitude_agl: Altitude above ground level.
+            ground_speed: Platform ground speed.
+
+        Returns:
+            ``{"length": Quantity (m), "pixels": float}`` — ``length``
+            is the along-track ground motion during integration;
+            ``pixels`` is ``length / GSD_y``.
+
+        Raises:
+            HyPlanValueError: when ``integration_time`` was not set on
+                the camera.
+        """
+        if self.integration_time is None:
+            raise HyPlanValueError(
+                f"motion_blur_at requires integration_time to be set on "
+                f"the FrameCamera; {self.name!r} has no integration_time."
+            )
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        ground_speed = self._validate_quantity(ground_speed, ureg.meter / ureg.second)
+        gsd_y = self.ground_sample_distance(altitude_agl)["y"]
+        blur = (ground_speed * self.integration_time).to(ureg.meter)
+        return {
+            "length": blur,
+            "pixels": float((blur / gsd_y).to_reduced_units().magnitude),
+        }
+
+    def max_ground_speed_for_motion_blur(
+        self,
+        altitude_agl: Quantity,
+        max_blur_pixels: float = 1.0,
+    ) -> Quantity:
+        """Maximum ground speed at which motion blur stays under a threshold.
+
+        The threshold is expressed in along-track GSD units —
+        ``max_blur_pixels=1.0`` means the blur length equals one
+        along-track GSD; ``0.5`` is the half-pixel-blur photometry
+        rule of thumb; ``3.0`` is a generous bound for
+        feature-detection workflows.
+
+        Args:
+            altitude_agl: Altitude above ground level.
+            max_blur_pixels: Allowed motion-blur length expressed in
+                along-track GSDs (default 1.0 — one-pixel smear).
+                Must be positive.
+
+        Returns:
+            Maximum ground speed in m/s.
+
+        Raises:
+            HyPlanValueError: when ``integration_time`` was not set,
+                or ``max_blur_pixels`` is non-positive.
+        """
+        if self.integration_time is None:
+            raise HyPlanValueError(
+                f"max_ground_speed_for_motion_blur requires integration_time "
+                f"to be set on the FrameCamera; {self.name!r} has no "
+                f"integration_time."
+            )
+        if not isinstance(max_blur_pixels, (int, float)) or max_blur_pixels <= 0:
+            raise HyPlanValueError(
+                f"max_blur_pixels must be a positive number, got {max_blur_pixels}"
+            )
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        gsd_y = self.ground_sample_distance(altitude_agl)["y"]
+        return (max_blur_pixels * gsd_y / self.integration_time).to(
+            ureg.meter / ureg.second
+        )
 
     def base_height_ratio(self, altitude_agl: Quantity, overlap_pct: float = 80.0) -> float:
         """Base-to-height ratio for stereo photogrammetry.
@@ -575,6 +741,72 @@ class FrameCamera(Sensor):
             ]
 
         return ShapelyPolygon(coords) if len(coords) >= 3 else ShapelyPolygon()
+
+    def footprint_polygon_at(
+        self,
+        lat: float,
+        lon: float,
+        altitude_agl: Quantity,
+        *,
+        heading: float = 0.0,
+        cross_track_offset: float = 0.0,
+        edge_points: int = 4,
+    ) -> ShapelyPolygon:
+        """Flat-earth ground footprint Polygon at a specified geodetic centre.
+
+        Convenience wrapper that returns a 2-D Shapely Polygon in
+        ``(lon, lat)`` coordinates without DEM access — useful for
+        notebooks and survey-plan visualisation where the synthetic
+        flight line shouldn't depend on terrain data.
+
+        Internally builds the flat-mode local-meter polygon via
+        :meth:`ground_footprint` (which already handles tilt, cross-
+        track offset, and edge densification) and projects each
+        vertex to lat/lon via Vincenty.
+
+        Args:
+            lat: Camera latitude in degrees.
+            lon: Camera longitude in degrees.
+            altitude_agl: Altitude above ground level.
+            heading: Aircraft heading in degrees from north (default 0 = north).
+            cross_track_offset: Additional cross-track angular offset
+                in degrees (e.g. for cameras in a multi-camera rig).
+            edge_points: Number of points per sensor edge (default 4 = quadrilateral).
+
+        Returns:
+            A :class:`shapely.geometry.Polygon` with 2-D ``(lon, lat)``
+            coordinates (no elevation field).
+        """
+        flat = self.ground_footprint(
+            altitude_agl,
+            cross_track_offset=cross_track_offset,
+            edge_points=edge_points,
+        )
+        if flat.is_empty:
+            return ShapelyPolygon()
+
+        # Rotate the local (x_cross, y_along) frame into the geodetic frame
+        # via the aircraft heading, then offset each vertex from (lat, lon)
+        # by its rotated (north, east) distance using Vincenty.
+        heading_rad = np.radians(heading)
+        cos_h = float(np.cos(heading_rad))
+        sin_h = float(np.sin(heading_rad))
+        out: list[tuple[float, float]] = []
+        for x, y, *_ in flat.exterior.coords:
+            # x = cross-track (right of flight direction = east when heading=0)
+            # y = along-track (forward = north when heading=0)
+            # Rotate by heading: east = x*cos_h + y*sin_h, north = -x*sin_h + y*cos_h
+            east_m = x * cos_h + y * sin_h
+            north_m = -x * sin_h + y * cos_h
+            distance_m = float(np.hypot(east_m, north_m))
+            if distance_m < 1e-9:
+                vlat, vlon = lat, lon
+            else:
+                az_deg = float(np.degrees(np.arctan2(east_m, north_m))) % 360.0
+                vlat, vlon = _vincenty.vreckon(lat, lon, distance_m, az_deg)
+                vlon = float(wrap_to_180(vlon))
+            out.append((float(vlon), float(vlat)))
+        return ShapelyPolygon(out)
 
     def ground_footprint_corners(self, *args: Any, **kwargs: Any) -> ShapelyPolygon:
         """Deprecated — use :meth:`ground_footprint` instead."""
@@ -851,3 +1083,130 @@ class MultiCameraRig(Sensor):
                 })
 
         return cls(name="QUAKES-I", cameras=cameras)
+
+
+# ---------------------------------------------------------------------------
+# Reference instances
+# ---------------------------------------------------------------------------
+
+GLIHT_HRAC = FrameCamera(
+    name="G-LiHT High Resolution Aerial Camera (Phase One iXM-RS100F-RS / iXU1000-R)",
+    sensor_width=53.4 * ureg.millimeter,
+    sensor_height=40.0 * ureg.millimeter,
+    focal_length=50.0 * ureg.millimeter,
+    resolution_x=11608,
+    resolution_y=8708,
+    frame_rate=1.0 * ureg.hertz,
+    f_speed=4.0,
+    integration_time=1.0 * ureg.millisecond,    # 1/1000 s shutter (AK 2022 metadata)
+)
+"""NASA G-LiHT high-resolution context camera (Phase One iXU1000-R).
+
+A 101 MP medium-format CMOS mapping camera (Phase One iXU1000-R in
+2017, iXM-RS100F-RS in 2022+ — same imaging chain, same lens, same
+sensor; manufacturer model code revised across product generations)
+with a Rodenstock 50 mm f/4 lens (HR Digaron-W on the 2017 unit,
+RS 50mm-Ar on the 2022 unit).  Used on G-LiHT as a high-resolution
+context imager alongside the VQ-480i lidar pair
+(:data:`~hyplan.instruments.GLIHT_DUAL_VQ_480I`), the hyperspectral
+imagers, and the thermal sensor.  Footprint / trigger-distance
+methods on :class:`~hyplan.instruments.FrameCamera` apply unchanged.
+
+The 2022 operational aperture is **f/4.0** with a 1/1000 s shutter
+(NASA G-LiHT AK 2022 SW66 campaign metadata).  HyPlan models the
+lens-max aperture (f/4) as the singleton default, matching the 2022
+operational configuration.
+
+At G-LiHT's published 335 m AGL operational altitude the GSD is ~3 cm
+(per the AK 2022 SW66 campaign metadata, consistent with the 2017
+Loudon metadata).  A 4 cm GSD anchor corresponds to approximately
+435 m AGL.  At a 1 Hz
+frame rate, overlap-limited acquisition depends on the requested
+forward overlap.
+:meth:`~hyplan.instruments.FrameCamera.max_ground_speed_for_overlap`
+gives the maximum ground speed at which the camera can maintain that
+overlap without exceeding its frame-rate limit.  At 435 m AGL the
+along-track footprint is ~348 m, so 80% forward overlap permits ~70 m/s
+at 1 Hz.
+
+References:
+
+* G-LiHT AK 2022 SW66 campaign metadata (NASA GSFC;
+  https://glihtdata.gsfc.nasa.gov/files/G-LiHT/AK_20220728_SW66/
+  metadata/AK_20220728_SW66_metadata.pdf, retrieved 2026-05-16):
+  authoritative source for the **current** Phase One configuration —
+  iXM-RS100F-RS body, Rodenstock RS 50mm-Ar f/4 lens, 56.2 × 43.6°
+  FOV, 53.4 × 40 mm sensor, 11608 × 8708 pixels, 1 Hz frame rate,
+  f/4.0 operational aperture, 1/1000 s shutter, 16-bit.
+* G-LiHT Loudon June 2017 campaign metadata (NASA GSFC;
+  https://glihtdata.gsfc.nasa.gov/files/G-LiHT/Loudon_Jun2017/
+  metadata/Loudon_Jun2017_metadata.pdf, retrieved 2026-05-16):
+  earlier generation with iXU1000-R body and Rodenstock HR Digaron-W
+  lens (same imaging chain).  Used the same sensor format and
+  pixels; differed in operational aperture (f/5.0) and shutter
+  (1/1600 s).
+* NASA GSFC G-LiHT product page, "High Resolution Aerial Camera"
+  (https://gliht.gsfc.nasa.gov/index.php?section=50, retrieved
+  2026-05-16): provides the 4 cm GSD "at nominal altitude" anchor.
+"""
+
+
+GLIHT_THERMAL = FrameCamera(
+    name="G-LiHT Thermal Imager (Xenics Gobi-640 GigE Vision)",
+    sensor_width=10.88 * ureg.millimeter,    # 640 px × 17 μm pitch
+    sensor_height=8.16 * ureg.millimeter,    # 480 px × 17 μm pitch
+    focal_length=14.25 * ureg.millimeter,    # athermalized 14.25 mm f/1.2 lens
+    resolution_x=640,
+    resolution_y=480,
+    frame_rate=50.0 * ureg.hertz,
+    f_speed=1.2,
+    integration_time=20.0 * ureg.millisecond,  # derived from 50 Hz frame period —
+                                                # PDF documents frame rate, not exposure;
+                                                # microbolometer integrates continuously
+                                                # so frame period is a conservative proxy
+)
+"""NASA G-LiHT thermal imager (Xenics Gobi-640 GigE Vision).
+
+An uncooled microbolometer area-array detector (640 × 480 pixels at
+17 μm pitch → 10.88 × 8.16 mm) read out as a full 2-D frame at up to
+50 Hz with an athermalized 14.25 mm f/1.2 lens.  Sensitivity 8–14 μm,
+16-bit output in degrees Celsius.  Fundamentally a **frame camera**,
+not a pushbroom line scanner — planning goes through
+:class:`~hyplan.instruments.FrameCamera`'s overlap-based helpers, not
+the line-scanner critical-speed helper.
+
+Derived geometry: cross-track FOV ≈ 41.8°, along-track FOV ≈ 31.7°.
+At G-LiHT's nominal 335 m AGL the per-frame footprint is 256 × 192 m.
+
+**Integration time is derived, not documented.** The G-LiHT campaign
+metadata records the Gobi-640 frame rate (50 Hz) but does not list an
+exposure / integration time. HyPlan stores
+:attr:`~hyplan.instruments.FrameCamera.integration_time` as 20 ms — the
+full frame period — as a conservative proxy: uncooled microbolometers
+integrate continuously between readouts, so the actual integration
+time is at most the frame period. Treat this value as a planning
+upper bound on motion-blur exposure, not a sourced sensor parameter.
+
+**Operational caveat (not modelled here).** The dominant ground-speed
+constraint for an uncooled microbolometer in airborne use is usually
+**motion blur during the integration interval** (using the 20 ms
+frame-period proxy above), not the geometric frame-rate / overlap limit
+:meth:`~hyplan.instruments.FrameCamera.max_ground_speed_for_overlap`
+returns.  HyPlan does not model sensor-physics motion blur; treat
+the geometric limit as a generous upper bound and plan from the
+acquisition system's documented motion-blur threshold for the
+actual operating speed limit.
+
+References:
+
+* G-LiHT Loudon June 2017 campaign metadata (NASA GSFC;
+  https://glihtdata.gsfc.nasa.gov/files/G-LiHT/Loudon_Jun2017/
+  metadata/Loudon_Jun2017_metadata.pdf, retrieved 2026-05-16):
+  authoritative source for camera model (Xenics Gobi-640 GigE
+  Vision), lens (athermalized 14.25 mm f/1.2), sensor format
+  (640 × 480 at 17 μm), frame rate (50 Hz), spectral range (8–14
+  μm), and 16-bit quantisation.
+* Cook et al. 2019, NTRS 20190001808 (FIREFLY characterization):
+  confirms G-LiHT integration with the Gobi-640 thermal imager
+  on the 2017+ G-LiHT system.
+"""

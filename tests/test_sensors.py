@@ -44,6 +44,22 @@ class TestLineScanner:
         speed = s.critical_ground_speed(ureg.Quantity(6000, "meter"))
         assert speed.magnitude > 0
 
+    def test_ground_pixel_dimensions(self):
+        # At any ground speed equal to critical_ground_speed at the
+        # given altitude, the pixel aspect ratio should be exactly 1
+        # (square pixels — Nyquist sampling).
+        s = AVIRIS3()
+        alt = ureg.Quantity(6000, "meter")
+        crit = s.critical_ground_speed(alt)
+        d = s.ground_pixel_dimensions(alt, crit)
+        assert d["aspect_ratio"] == pytest.approx(1.0, rel=1e-6)
+        assert d["cross_track"].m_as("meter") == pytest.approx(
+            d["along_track"].m_as("meter"), rel=1e-6,
+        )
+        # Doubling speed gives 2:1 aspect ratio.
+        d2 = s.ground_pixel_dimensions(alt, 2 * crit)
+        assert d2["aspect_ratio"] == pytest.approx(2.0, rel=1e-6)
+
     def test_half_angle(self):
         s = AVIRIS3()
         assert 0 < s.half_angle < 90

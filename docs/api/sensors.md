@@ -21,7 +21,6 @@ re-exported from the top-level `hyplan` namespace for convenience.
 .. autoclass:: hyplan.instruments.PRISM
 .. autoclass:: hyplan.instruments.MASTER
 .. autoclass:: hyplan.instruments.GLiHT_VNIR
-.. autoclass:: hyplan.instruments.GLiHT_Thermal
 .. autoclass:: hyplan.instruments.GLiHT_SIF
 .. autoclass:: hyplan.instruments.GCAS_UV_Vis
 .. autoclass:: hyplan.instruments.GCAS_VNIR
@@ -140,6 +139,14 @@ helpers are documented on the dedicated {doc}`awp` page.
 
 ## Frame camera
 
+For nadir survey planning the relevant frame-rate limit is
+{meth}`~hyplan.instruments.FrameCamera.max_ground_speed_for_overlap`
+— the maximum ground speed that maintains a requested forward
+overlap at the configured frame rate.
+{meth}`~hyplan.instruments.FrameCamera.critical_ground_speed` reports
+the (typically much tighter, rarely-binding) one-pixel-motion-per-frame
+ground speed and is retained for backward compatibility.
+
 ```{eval-rst}
 .. autoclass:: hyplan.instruments.FrameCamera
    :members:
@@ -148,6 +155,12 @@ helpers are documented on the dedicated {doc}`awp` page.
 .. autoclass:: hyplan.instruments.MultiCameraRig
    :members:
    :show-inheritance:
+
+.. autodata:: hyplan.instruments.GLIHT_HRAC
+   :no-value:
+
+.. autodata:: hyplan.instruments.GLIHT_THERMAL
+   :no-value:
 ```
 
 ## Factory function

@@ -13,9 +13,10 @@ from typing import Any
 import numpy as np
 from pint import Quantity
 
-from ..exceptions import HyPlanTypeError, HyPlanValueError
+from ..exceptions import HyPlanTypeError
 from ..units import ureg
 from ._base import Sensor
+from .registry import SENSOR_REGISTRY, create_sensor  # re-export (see footer)
 
 __all__ = [
     "AVIRIS3",
@@ -29,7 +30,7 @@ __all__ = [
     "AVIRISNextGen",
     "GCAS_UV_Vis",
     "GLiHT_SIF",
-    "GLiHT_Thermal",
+    "GLiHT_SWIR",
     "GLiHT_VNIR",
     "HyTES",
     "LineScanner",
@@ -193,6 +194,40 @@ class LineScanner(Sensor):
         aircraft_speed = self._validate_quantity(aircraft_speed, ureg.meter / ureg.second)
         return aircraft_speed * self.frame_period / along_track_sampling
 
+    def ground_pixel_dimensions(
+        self,
+        altitude_agl: Quantity,
+        ground_speed: Quantity,
+    ) -> dict[str, Quantity | float]:
+        """Cross-track and along-track ground pixel size + aspect ratio.
+
+        For a pushbroom line scanner, the cross-track GSD is locked by
+        sensor optics (lens + pixel pitch), while the along-track
+        "pixel" is just ``ground_speed × frame_period``.  The ratio of
+        the two tells you whether your data product has square or
+        rectangular ground pixels at the planned operating point.
+
+        Args:
+            altitude_agl: Altitude above ground level.
+            ground_speed: Platform ground speed.
+
+        Returns:
+            ``{"cross_track": Quantity (m), "along_track": Quantity (m),
+            "aspect_ratio": float}`` — ``aspect_ratio`` is
+            ``along_track / cross_track`` (1.0 = square pixels;
+            >1 = elongated along the flight direction).
+        """
+        altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
+        ground_speed = self._validate_quantity(ground_speed, ureg.meter / ureg.second)
+        cross_track = self.ground_sample_distance(altitude_agl, mode="nadir").to(ureg.meter)
+        along_track = (ground_speed * self.frame_period).to(ureg.meter)
+        aspect = float((along_track / cross_track).to_reduced_units().magnitude)
+        return {
+            "cross_track": cross_track,
+            "along_track": along_track,
+            "aspect_ratio": aspect,
+        }
+
 
 # ── Sensor Specifications ─────────────────────────────────────────────────────
 # Each entry maps class_name -> (display_name, fov_deg, across_track_pixels, frame_rate_hz)
@@ -205,9 +240,9 @@ _SENSOR_SPECS = {
     "HyTES":          ("HyTES",                                       50.0,  512,  36.0),
     "PRISM":          ("PRISM",                                       30.7,  608, 176.0),
     "MASTER":         ("MASTER",                                      85.92, 716,  25.0),
-    "GLiHT_VNIR":     ("G-LiHT VNIR",                                64.0, 1600, 250.0),
-    "GLiHT_Thermal":  ("G-LiHT Thermal",                             42.6,  640,  50.0),
-    "GLiHT_SIF":      ("G-LiHT SIF",                                 23.5, 1600,  37.6),
+    "GLiHT_VNIR":     ("G-LiHT VNIR (Headwall Microhyperspec E)",   55.3,  645,  75.0),
+    "GLiHT_SWIR":     ("G-LiHT SWIR (Headwall Microhyperspec SWIR)",20.9,  192,  75.0),
+    "GLiHT_SIF":      ("G-LiHT SIF (Headwall FIREFLY)",             23.5, 1600,  37.5),
     "GCAS_UV_Vis":    ("GCAS UV-Vis Spectrometer",                    45.0, 1024,  12.0),
     "GCAS_VNIR":      ("GCAS Visible Near-Infrared (VNIR) Spectrometer", 70.0, 1024, 12.0),
     "eMAS":           ("eMAS",                                        85.92, 716,   6.25),
@@ -248,7 +283,7 @@ HyTES: type = globals()["HyTES"]
 PRISM: type = globals()["PRISM"]
 MASTER: type = globals()["MASTER"]
 GLiHT_VNIR: type = globals()["GLiHT_VNIR"]
-GLiHT_Thermal: type = globals()["GLiHT_Thermal"]
+GLiHT_SWIR: type = globals()["GLiHT_SWIR"]
 GLiHT_SIF: type = globals()["GLiHT_SIF"]
 GCAS_UV_Vis: type = globals()["GCAS_UV_Vis"]
 GCAS_VNIR: type = globals()["GCAS_VNIR"]
@@ -256,79 +291,8 @@ eMAS: type = globals()["eMAS"]
 PICARD: type = globals()["PICARD"]
 
 
-SENSOR_REGISTRY: dict[str, type[Sensor]] = {
-    "AVIRISClassic": AVIRISClassic,
-    "AVIRIS Classic": AVIRISClassic,
-    "AVIRISNextGen": AVIRISNextGen,
-    "AVIRIS-NG": AVIRISNextGen,
-    "AVIRIS3": AVIRIS3,
-    "AVIRIS-3": AVIRIS3,
-    "AVIRIS5": AVIRIS5,
-    "AVIRIS-5": AVIRIS5,
-    "HyTES": HyTES,
-    "PRISM": PRISM,
-    "MASTER": MASTER,
-    "GLiHT_VNIR": GLiHT_VNIR,
-    "GLiHT_Thermal": GLiHT_Thermal,
-    "GLiHT_SIF": GLiHT_SIF,
-    "GCAS_UV_Vis": GCAS_UV_Vis,
-    "GCAS_VNIR": GCAS_VNIR,
-    "eMAS": eMAS,
-    "PICARD": PICARD,
-}
-
-
-def create_sensor(sensor_type: str) -> Sensor:
-    """
-    Factory function to create and return an instance of a sensor.
-
-    Args:
-        sensor_type (str): The name of the sensor class to instantiate.
-                           Must be one of the keys in SENSOR_REGISTRY.
-
-    Returns:
-        Sensor: An instance of the requested sensor type.
-
-    Raises:
-        HyPlanValueError: If the specified sensor_type is not found in SENSOR_REGISTRY.
-    """
-    from .lvis import LVIS
-    from .awp import AerosolWindProfiler
-    from .dropsondes import AVAPS_NRD41, AXCTD, RD94
-    from .profilinglidar import HSRL2, HALO, CPL
-    from .radar import UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband
-
-    _extra = {
-        "LVIS": LVIS,
-        "AWP": AerosolWindProfiler,
-        "AerosolWindProfiler": AerosolWindProfiler,
-        "Aerosol Wind Profiler": AerosolWindProfiler,
-        "HSRL-2": HSRL2,
-        "HSRL2": HSRL2,
-        "HSRL": HSRL2,
-        "HALO": HALO,
-        "High Altitude Lidar Observatory": HALO,
-        "CPL": CPL,
-        "Cloud Physics Lidar": CPL,
-        "UAVSAR_Lband": UAVSAR_Lband,
-        "UAVSAR L-band": UAVSAR_Lband,
-        "UAVSAR_Pband": UAVSAR_Pband,
-        "UAVSAR P-band": UAVSAR_Pband,
-        "UAVSAR_Kaband": UAVSAR_Kaband,
-        "GLISTIN-A": UAVSAR_Kaband,
-        # Dropsondes — pre-built singletons (not classes); the factory
-        # returns the same configured instance for each lookup.
-        "AVAPS_NRD41": lambda: AVAPS_NRD41,
-        "Vaisala NRD41": lambda: AVAPS_NRD41,
-        "NRD41": lambda: AVAPS_NRD41,
-        "RD94": lambda: RD94,
-        "Vaisala RD94": lambda: RD94,
-        "AXCTD": lambda: AXCTD,
-        "Sippican AXCTD": lambda: AXCTD,
-        "SIPPICAN_AXCTD": lambda: AXCTD,
-    }
-    registry = {**SENSOR_REGISTRY, **_extra}
-
-    if sensor_type not in registry:
-        raise HyPlanValueError(f"Unknown sensor type: {sensor_type}")
-    return registry[sensor_type]()  # type: ignore[no-any-return,operator]  # mixed class/factory values
+# SENSOR_REGISTRY and create_sensor live in `hyplan.instruments.registry`;
+# they are re-exported above for backwards compatibility. Registration of
+# every sensor (line scanners + frame cameras + dropsondes + radars + …)
+# happens explicitly in `hyplan.instruments.__init__` after all instrument
+# modules have been imported, so no module needs to reach into another.

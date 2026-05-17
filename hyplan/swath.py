@@ -80,6 +80,7 @@ def generate_swath_polygon(
     heading_mode: str = "track",
     crab_angle_deg: float | None = None,
     heading_deg: float | None = None,
+    terrain_aware: bool = True,
 ) -> Polygon:
     """Generate a swath polygon for a given flight line and sensor.
 
@@ -95,7 +96,9 @@ def generate_swath_polygon(
         sensor: Any object satisfying :class:`~hyplan.instruments.ScanningSensor`.
         along_precision: Along-track interpolation spacing (meters).
         across_precision: Ray-terrain intersection sampling (meters).
-        dem_file: Path to the DEM file.  If *None*, one is generated.
+        dem_file: Path to the DEM file.  If *None* and ``terrain_aware``
+            is *True*, one is generated automatically.  Ignored when
+            ``terrain_aware`` is *False*.
         heading_mode: ``"track"`` (default) orients the swath
             perpendicular to the ground track.  ``"crabbed"`` orients it
             perpendicular to the aircraft heading, which differs from
@@ -104,6 +107,14 @@ def generate_swath_polygon(
             Only used when ``heading_mode="crabbed"``.
         heading_deg: Constant aircraft heading (degrees true).
             Only used when ``heading_mode="crabbed"``.
+        terrain_aware: When *True* (default), edge rays are intersected
+            with the DEM via
+            :func:`~hyplan.terrain.ray_terrain_intersection` — appropriate
+            for real campaign planning.  When *False*, swath edges are
+            computed analytically from
+            ``altitude × tan(edge_angle)`` (flat-earth, no DEM access)
+            — appropriate for synthetic geometry demos and tests that
+            should not depend on network DEM downloads.
 
     Returns:
         A Shapely Polygon representing the swath.
@@ -138,14 +149,44 @@ def generate_swath_polygon(
     edge1_az, edge1_tilt = _edge_ray(port_angle)
     edge2_az, edge2_tilt = _edge_ray(starboard_angle)
 
-    edge1_lats, edge1_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude_msl, az=edge1_az, tilt=edge1_tilt,
-        precision=across_precision, dem_file=dem_file
-    )
-    edge2_lats, edge2_lons, _ = ray_terrain_intersection(
-        lats, lons, altitude_msl, az=edge2_az, tilt=edge2_tilt,
-        precision=across_precision, dem_file=dem_file
-    )
+    if terrain_aware:
+        edge1_lats, edge1_lons, _ = ray_terrain_intersection(
+            lats, lons, altitude_msl, az=edge1_az, tilt=edge1_tilt,
+            precision=across_precision, dem_file=dem_file
+        )
+        edge2_lats, edge2_lons, _ = ray_terrain_intersection(
+            lats, lons, altitude_msl, az=edge2_az, tilt=edge2_tilt,
+            precision=across_precision, dem_file=dem_file
+        )
+    else:
+        # Flat-earth analytic projection: each edge sits at
+        # `altitude × tan(edge_angle)` perpendicular distance from the
+        # boresight, in the direction `az_port` or `az_starboard`.
+        # No DEM access — appropriate for synthetic geometry demos.
+        import pymap3d.vincenty as _vincenty
+        from .geometry import wrap_to_180
+
+        def _flat_edge(
+            az: npt.NDArray[np.floating[Any]],
+            tilt_deg: npt.NDArray[np.float64],
+        ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+            offset_m = altitude_msl * np.tan(np.deg2rad(tilt_deg))
+            out_lats = np.empty_like(lats, dtype=float)
+            out_lons = np.empty_like(lons, dtype=float)
+            for i in range(len(lats)):
+                if offset_m[i] <= 0:
+                    out_lats[i], out_lons[i] = lats[i], lons[i]
+                    continue
+                vlat, vlon = _vincenty.vreckon(
+                    float(lats[i]), float(lons[i]),
+                    float(offset_m[i]), float(az[i]),
+                )
+                out_lats[i] = float(vlat)
+                out_lons[i] = float(wrap_to_180(vlon))
+            return out_lats, out_lons
+
+        edge1_lats, edge1_lons = _flat_edge(edge1_az, edge1_tilt)
+        edge2_lats, edge2_lons = _flat_edge(edge2_az, edge2_tilt)
 
     # Filter out NaN values from failed terrain intersections
     valid1 = ~(np.isnan(edge1_lats) | np.isnan(edge1_lons))

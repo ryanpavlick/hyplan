@@ -794,6 +794,30 @@ class TestMultiALSLidarRigDensity:
             d["aft"].m_as(1/ureg.meter**2), rel=1e-12,
         )
 
+    def test_solve_for_groundspeed_round_trip(self) -> None:
+        rig = _two_unit_pitch_rig(7.0)
+        alt = 335 * ureg.meter
+        target = 10.0 / ureg.meter**2
+        spd = rig.solve_for_groundspeed(
+            target, alt, strict_contiguity=False,
+        )
+        d = rig.combined_point_density(alt, spd).m_as(1 / ureg.meter**2)
+        assert d == pytest.approx(10.0, rel=1e-6)
+
+    def test_solve_for_groundspeed_pitch_rig_is_double_single(self) -> None:
+        # For a pitch-only rig (shared swath, equal PRF), the rig-level
+        # speed at a given density is exactly 2× the per-unit speed.
+        rig = _two_unit_pitch_rig(7.0)
+        alt = 335 * ureg.meter
+        target = 10.0 / ureg.meter**2
+        rig_spd = rig.solve_for_groundspeed(
+            target, alt, strict_contiguity=False,
+        ).m_as("meter/second")
+        unit_spd = rig.units[0].lidar.solve_for_groundspeed(
+            target, alt, strict_contiguity=False,
+        ).m_as("meter/second")
+        assert rig_spd == pytest.approx(2 * unit_spd, rel=1e-9)
+
 
 class TestMultiALSLidarRigPitchOffsets:
     def test_along_track_offsets_symmetric(self) -> None:

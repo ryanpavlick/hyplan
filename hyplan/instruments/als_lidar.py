@@ -1314,6 +1314,78 @@ class MultiALSLidarRig(Sensor):
             for u in self.units
         }
 
+    def solve_for_groundspeed(
+        self,
+        target_density: Quantity,
+        altitude_agl: Quantity,
+        *,
+        strict_contiguity: bool = True,
+    ) -> Quantity:
+        """Groundspeed (m/s) at which the rig's **combined** point density
+        equals ``target_density`` at the given ``altitude_agl``.
+
+        Inverts :meth:`combined_point_density`: each unit contributes
+        ``prf / (speed × swath)``, so the combined density across N
+        units is ``(sum prf_i) / (speed × swath)``.  Solving for speed:
+
+        .. code-block:: text
+
+            speed = (sum prf_i) / (target_density × swath)
+
+        For an N-unit pitch-only rig at identical PRF this is N× the
+        per-unit speed returned by
+        :meth:`ALSLidar.solve_for_groundspeed` — the dual VQ-480i rig
+        therefore tolerates roughly **double** the per-unit
+        density-limited speed.
+
+        Same per-unit contiguity guard as
+        :meth:`ALSLidar.solve_for_groundspeed`: any unit whose nadir
+        footprint is smaller than the along-track scan spacing at the
+        solved speed raises :class:`ContiguityError` (unless
+        ``strict_contiguity=False``).
+
+        Args:
+            target_density: Target combined point density (pts/m²).
+            altitude_agl: Altitude above ground level.
+            strict_contiguity: When True (default), raise
+                :class:`ContiguityError` if any unit's scan lines would
+                not be contiguous at the solved speed.
+
+        Returns:
+            Ground speed (m/s) achieving the target combined density.
+        """
+        # Reuse the first unit's quantity validation for consistency.
+        ref_unit = self.units[0].lidar
+        d = ref_unit._validate_quantity(target_density, 1 / ureg.meter**2)
+        alt = ref_unit._validate_quantity(altitude_agl, ureg.meter)
+        if d.magnitude <= 0:
+            raise HyPlanValueError("target_density must be positive")
+        if alt.magnitude <= 0:
+            raise HyPlanValueError("altitude_agl must be positive")
+
+        total_prf_hz = sum(u.lidar.prf.m_as("hertz") for u in self.units)
+        d_per_m2 = d.m_as(1 / ureg.meter**2)
+        sw_m = self.swath_width(alt).m_as("meter")
+        spd_mps = total_prf_hz / (d_per_m2 * sw_m)
+        spd = spd_mps * ureg.meter / ureg.second
+
+        if strict_contiguity:
+            for unit in self.units:
+                if not unit.lidar.is_along_track_contiguous(alt, spd):
+                    gap = unit.lidar.along_track_spacing(spd).m_as("meter")
+                    fp = unit.lidar.footprint_diameter(alt).m_as("meter")
+                    raise ContiguityError(
+                        f"Solved combined-density groundspeed "
+                        f"{spd_mps:.1f} m/s at altitude "
+                        f"{alt.m_as('meter'):.0f} m yields the target "
+                        f"density but unit {unit.label!r}'s along-track "
+                        f"gap {gap:.2f} m exceeds nadir footprint "
+                        f"{fp:.2f} m — scan lines do not overlap.  "
+                        f"Increase scan_rate, lower altitude, or pass "
+                        f"strict_contiguity=False."
+                    )
+        return spd
+
     def multi_angle_pairs(
         self, min_dir_diff_deg: float = 5.0,
     ) -> list[tuple[LidarMount, LidarMount]]:
@@ -1429,7 +1501,7 @@ class MultiALSLidarRig(Sensor):
 _GLIHT_VQ_480I_UNIT = ALSLidar(
     name="RIEGL VQ-480i (G-LiHT)",
     prf=300 * ureg.kilohertz,
-    scan_rate=100 * ureg.hertz,
+    scan_rate=150 * ureg.hertz,
     scan_half_angle=30.0 * ureg.degree,
     beam_divergence=0.3 * ureg.milliradian,
     wavelength=1550 * ureg.nanometer,
@@ -1438,9 +1510,12 @@ _GLIHT_VQ_480I_UNIT = ALSLidar(
     mta_zones=2,  # c/(2·300 kHz) = 500 m per zone; max range 1850 m → 4 zones
     scan_geometry="rotating_polygon_active_arc",
     source=(
-        "RIEGL VQ-480i datasheet (60° FOV, 300 kHz max PRR, 100 scans/sec, "
-        "0.3 mrad beam divergence, 1550 nm); operating parameters from the "
-        "G-LiHT V2.0 User Guide (Wirt 2021, LP DAAC, sec 2.2)."
+        "RIEGL VQ-480i datasheet (60° FOV, 300 kHz max PRR, 0.3 mrad beam "
+        "divergence, 1550 nm); operating parameters from the G-LiHT Loudon "
+        "June 2017 campaign metadata (NASA GSFC; "
+        "https://glihtdata.gsfc.nasa.gov/, S/N S2220331 'new' unit): "
+        "PRF 300 kHz, scan rate 150 lines/sec, effective measurement "
+        "frequency = 0.5 × PRF = 150 kHz, max 8 returns/pulse."
     ),
 )
 

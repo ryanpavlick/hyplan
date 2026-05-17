@@ -723,3 +723,234 @@ class TestQUAKESI:
         fwd_1_cx = fps[0]["polygon"].centroid.x  # leftmost fwd
         fwd_2_cx = fps[1]["polygon"].centroid.x  # inner left fwd
         assert abs(fwd_1_cx) > abs(fwd_2_cx)
+
+
+# ---------------------------------------------------------------------------
+# Overlap-based frame-rate limit + validation
+# ---------------------------------------------------------------------------
+
+
+def test_max_ground_speed_for_overlap_matches_trigger_distance(camera, altitude):
+    speed = camera.max_ground_speed_for_overlap(altitude, overlap_pct=80.0)
+    expected = camera.trigger_distance(altitude, overlap_pct=80.0) * camera.frame_rate
+    assert speed.m_as("meter / second") == pytest.approx(
+        expected.m_as("meter / second")
+    )
+
+
+@pytest.mark.parametrize("overlap_pct", [-1.0, 100.0, 125.0])
+def test_frame_camera_overlap_validation(camera, altitude, overlap_pct):
+    # Both APIs that accept overlap_pct must reject the same bad values,
+    # so future edits cannot silently leave one of them permissive.
+    with pytest.raises(ValueError):
+        camera.max_ground_speed_for_overlap(altitude, overlap_pct=overlap_pct)
+    with pytest.raises(ValueError):
+        camera.trigger_distance(altitude, overlap_pct=overlap_pct)
+
+
+# ---------------------------------------------------------------------------
+# G-LiHT High Resolution Aerial Camera reference instance
+# ---------------------------------------------------------------------------
+
+
+class TestGlihtHrac:
+    def test_singleton_identity(self):
+        from hyplan.instruments import GLIHT_HRAC, create_sensor
+        assert create_sensor("GLIHT_HRAC") is GLIHT_HRAC
+        assert create_sensor("G-LiHT HRAC") is GLIHT_HRAC
+        assert create_sensor("Phase One iXU-R 1000") is GLIHT_HRAC
+
+    def test_fov_matches_published(self):
+        # G-LiHT published FOV is 56.2° × 43.7°; allow ±0.5°.
+        from hyplan.instruments import GLIHT_HRAC
+        assert abs(GLIHT_HRAC.fov_x - 56.2) < 0.5
+        assert abs(GLIHT_HRAC.fov_y - 43.7) < 0.5
+
+    def test_gsd_matches_published(self):
+        # 4 cm GSD reached at approximately 435 m AGL (G-LiHT-published
+        # value uses the linear-pinhole formula `pixel_pitch / focal`;
+        # HyPlan's angular-FOV-based ground_sample_distance returns
+        # slightly under at the same altitude — still well within the
+        # planning tolerance for a "nominal 4 cm GSD" claim).
+        from hyplan.instruments import GLIHT_HRAC
+        gsd = GLIHT_HRAC.ground_sample_distance(435 * ureg.meter)
+        assert abs(float(gsd["x"].m_as("centimeter")) - 4.0) < 0.5
+
+    def test_resolution_count(self):
+        from hyplan.instruments import GLIHT_HRAC
+        # ~101 MP within the rounding G-LiHT publishes ("100 Megapixels").
+        n = GLIHT_HRAC.resolution_x * GLIHT_HRAC.resolution_y
+        assert 99_000_000 < n < 103_000_000
+
+    def test_max_ground_speed_for_overlap(self):
+        from hyplan.instruments import GLIHT_HRAC
+        speed = GLIHT_HRAC.max_ground_speed_for_overlap(
+            435 * ureg.meter,
+            overlap_pct=80.0,
+        )
+        assert abs(speed.m_as("meter / second") - 70.0) < 5.0
+
+
+# ---------------------------------------------------------------------------
+# G-LiHT Thermal Imager — Xenics Gobi-640 (was a LineScanner; retired in v1.9.x)
+# ---------------------------------------------------------------------------
+
+
+class TestGlihtThermal:
+    def test_singleton_identity(self):
+        from hyplan.instruments import GLIHT_THERMAL, create_sensor
+        assert create_sensor("GLIHT_THERMAL") is GLIHT_THERMAL
+        assert create_sensor("G-LiHT Thermal") is GLIHT_THERMAL
+        assert create_sensor("Xenics Gobi-640") is GLIHT_THERMAL
+        assert create_sensor("Gobi-640") is GLIHT_THERMAL
+
+    def test_fov_matches_metadata(self):
+        # G-LiHT Loudon June 2017 metadata specifies a 14.25 mm
+        # athermalized lens + 640 × 480 17 μm Gobi-640 sensor →
+        # cross-track FOV ≈ 41.8°.  (The earlier 42.6° value in the
+        # retired LineScanner model came from a stale spec sheet
+        # inconsistent with the documented lens/sensor.)
+        from hyplan.instruments import GLIHT_THERMAL
+        assert abs(GLIHT_THERMAL.fov_x - 41.8) < 0.5
+
+    def test_footprint_cross_track_at_335m(self):
+        # ~256 m cross-track at G-LiHT's 335 m nominal AGL, derived
+        # live from the 41.8° FOV.
+        from hyplan.instruments import GLIHT_THERMAL
+        fp = GLIHT_THERMAL.footprint_at(335 * ureg.meter)
+        assert abs(fp["width"].m_as("meter") - 256.0) < 3.0
+
+    def test_is_frame_camera_not_line_scanner(self):
+        # Regression guard: the Gobi-640 must be modelled as a FrameCamera,
+        # not as a LineScanner.  An older HyPlan release had it backwards.
+        from hyplan.instruments import FrameCamera, GLIHT_THERMAL
+        assert isinstance(GLIHT_THERMAL, FrameCamera)
+
+    def test_legacy_gliht_thermal_linescanner_is_retired(self):
+        # The retired LineScanner class must no longer be importable from
+        # the public surface.
+        import hyplan
+        import hyplan.instruments
+        assert not hasattr(hyplan.instruments, "GLiHT_Thermal")
+        assert not hasattr(hyplan, "GLiHT_Thermal")
+
+
+# ---------------------------------------------------------------------------
+# Motion-blur API
+# ---------------------------------------------------------------------------
+
+
+class TestMotionBlur:
+    def test_motion_blur_requires_integration_time(self, camera):
+        # The default fixture camera has no integration_time set.
+        with pytest.raises(ValueError, match="integration_time"):
+            camera.motion_blur_at(100 * ureg.meter, 50 * ureg.meter / ureg.second)
+        with pytest.raises(ValueError, match="integration_time"):
+            camera.max_ground_speed_for_motion_blur(100 * ureg.meter)
+
+    def test_motion_blur_at_returns_length_and_pixels(self):
+        from hyplan.instruments import GLIHT_THERMAL
+        d = GLIHT_THERMAL.motion_blur_at(
+            335 * ureg.meter, 74 * ureg.meter / ureg.second,
+        )
+        # 74 m/s × 20 ms = 1.48 m
+        assert abs(d["length"].m_as("meter") - 1.48) < 0.01
+        # 1.48 m / 0.4 m GSD ≈ 3.7 px
+        assert 3.5 < d["pixels"] < 4.0
+
+    def test_max_speed_for_motion_blur_inversely_with_integration(self):
+        from hyplan.instruments import GLIHT_HRAC, GLIHT_THERMAL
+        # HRAC: 1 ms × max_blur_pixels=1 / GSD_y(335m) ≈ 1.0 × 0.0297 / 0.001 ≈ 30 m/s
+        hrac_speed = GLIHT_HRAC.max_ground_speed_for_motion_blur(
+            335 * ureg.meter, max_blur_pixels=1.0,
+        )
+        assert 28 < hrac_speed.m_as("meter / second") < 32
+
+        # Thermal: 20 ms integration → ~20 m/s for 1-px blur
+        thermal_speed = GLIHT_THERMAL.max_ground_speed_for_motion_blur(
+            335 * ureg.meter, max_blur_pixels=1.0,
+        )
+        assert 18 < thermal_speed.m_as("meter / second") < 22
+
+        # 3-px blur is 3× as permissive.
+        thermal_3px = GLIHT_THERMAL.max_ground_speed_for_motion_blur(
+            335 * ureg.meter, max_blur_pixels=3.0,
+        )
+        assert thermal_3px.m_as("meter / second") == pytest.approx(
+            3 * thermal_speed.m_as("meter / second"), rel=1e-9,
+        )
+
+    def test_integration_time_validation(self):
+        from hyplan.instruments import FrameCamera
+        # integration_time > frame_period must raise.
+        with pytest.raises(ValueError, match="exceeds frame period"):
+            FrameCamera(
+                name="bad", sensor_width=10*ureg.mm, sensor_height=8*ureg.mm,
+                focal_length=14*ureg.mm, resolution_x=640, resolution_y=480,
+                frame_rate=50 * ureg.hertz, f_speed=1.2,
+                integration_time=50 * ureg.millisecond,  # 2.5× frame period
+            )
+        # Non-positive integration_time must raise.
+        with pytest.raises(ValueError, match="positive"):
+            FrameCamera(
+                name="bad", sensor_width=10*ureg.mm, sensor_height=8*ureg.mm,
+                focal_length=14*ureg.mm, resolution_x=640, resolution_y=480,
+                frame_rate=50 * ureg.hertz, f_speed=1.2,
+                integration_time=-1 * ureg.millisecond,
+            )
+        # max_blur_pixels must be positive.
+        from hyplan.instruments import GLIHT_THERMAL
+        with pytest.raises(ValueError, match="positive"):
+            GLIHT_THERMAL.max_ground_speed_for_motion_blur(
+                335 * ureg.meter, max_blur_pixels=0,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Footprint polygon (lat/lon, flat earth)
+# ---------------------------------------------------------------------------
+
+
+class TestFootprintPolygonAt:
+    def test_returns_polygon_centered_on_lat_lon(self):
+        from hyplan.instruments import GLIHT_HRAC
+        poly = GLIHT_HRAC.footprint_polygon_at(
+            30.0, -80.0, 335 * ureg.meter, heading=0.0,
+        )
+        assert not poly.is_empty
+        # Centroid should sit at the supplied (lat, lon).
+        cx, cy = poly.centroid.x, poly.centroid.y
+        assert abs(cx - (-80.0)) < 1e-4
+        assert abs(cy - 30.0) < 1e-4
+
+    def test_polygon_width_matches_footprint(self):
+        from hyplan.instruments import GLIHT_HRAC
+        poly = GLIHT_HRAC.footprint_polygon_at(
+            30.0, -80.0, 335 * ureg.meter, heading=0.0,
+        )
+        # Cross-track span at this latitude ≈ footprint width.
+        minx, miny, maxx, maxy = poly.bounds
+        m_per_deg_lon = 111_320.0 * float(np.cos(np.radians(30.0)))
+        cross_track_m = (maxx - minx) * m_per_deg_lon
+        expected = float(GLIHT_HRAC.footprint_at(335 * ureg.meter)["width"].m_as("meter"))
+        # Allow 5% for geodesic vs flat-earth slop.
+        assert abs(cross_track_m - expected) / expected < 0.05
+
+    def test_heading_rotates_polygon(self):
+        from hyplan.instruments import GLIHT_HRAC
+        poly_north = GLIHT_HRAC.footprint_polygon_at(
+            30.0, -80.0, 335 * ureg.meter, heading=0.0,
+        )
+        poly_east = GLIHT_HRAC.footprint_polygon_at(
+            30.0, -80.0, 335 * ureg.meter, heading=90.0,
+        )
+        # 90° rotation swaps cross-track and along-track extents.
+        nx = poly_north.bounds[2] - poly_north.bounds[0]   # lon span when heading=N
+        ny = poly_north.bounds[3] - poly_north.bounds[1]   # lat span
+        ex = poly_east.bounds[2] - poly_east.bounds[0]     # lon span when heading=E
+        ey = poly_east.bounds[3] - poly_east.bounds[1]
+        # HRAC is wider cross-track than along-track, so for heading=N
+        # lon-span > lat-span; flipped for heading=E (lat-span > lon-span
+        # after accounting for cos(lat) anisotropy of lat/lon).
+        assert nx > ny     # heading N: cross-track is east-west
+        assert ey > ex     # heading E: cross-track is north-south
