@@ -59,6 +59,7 @@ api/dubins3d
 api/sensors
 api/profiling_lidar
 api/awp
+api/dropsonde
 ```
 
 ```{toctree}

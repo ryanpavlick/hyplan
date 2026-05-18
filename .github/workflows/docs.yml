@@ -30,6 +30,11 @@ jobs:
           pip install -e .
           pip install sphinx myst-nb furo sphinx-autodoc-typehints
 
+      - name: Check API coverage
+        # Verifies every docs/api/*.md is reachable from a toctree and
+        # every autodoc directive points at an importable symbol.
+        run: python docs/_scripts/check_api_coverage.py
+
       - name: Build docs
         # TODO: switch to `-W --keep-going` once existing duplicate-object
         # and duplicate-label warnings in api/*.md are cleaned up.

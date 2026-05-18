@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Docs / CI
+
+* **Docs API coverage check** — new
+  [`docs/_scripts/check_api_coverage.py`](docs/_scripts/check_api_coverage.py)
+  wired into `.github/workflows/docs.yml` ahead of the Sphinx build.
+  Fails the docs CI if any `docs/api/**/*.md` page is unreachable from
+  a toctree, or if any autodoc directive (`autofunction`, `autoclass`,
+  `automethod`, `autodata`, `autoexception`, `autoattribute`,
+  `automodule`) points at a symbol that doesn't import. The
+  `autodata` coverage matters most — that's how reference singletons
+  (`GLIHT_HRAC`, `AVAPS_NRD41`, etc.) are documented, and they drift
+  the most often.
+* **Dropsonde docs reachable.** `docs/api/dropsonde.md` is now in the
+  Instruments toctree of [`docs/index.md`](docs/index.md). Was an
+  orphan since v1.9.
+
+### Tests
+
+* **`tests/test_public_api.py`** — parametrized check that every name
+  in `hyplan.__all__`, `hyplan.instruments.__all__`,
+  `hyplan.planning.__all__`, and `hyplan.exports.__all__` resolves via
+  `getattr`. Scoped to core installed-by-default surfaces; optional-extra
+  submodules (winds, clouds, phenology, adsb, mag, planned) get their
+  own per-extra test files when the time comes.
+* **`TestSensorRegistry`** in `tests/test_sensors.py` extended to
+  iterate every key in `SENSOR_REGISTRY` and assert
+  `create_sensor(name)` round-trips to a `Sensor` instance.
+
 ## v1.10.0 — 2026-05-17
 
 ### New features

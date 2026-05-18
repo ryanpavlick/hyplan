@@ -199,6 +199,17 @@ class TestSensorRegistry:
         s = create_sensor("GLISTIN-A")
         assert isinstance(s, UAVSAR_Kaband)
 
+    @pytest.mark.parametrize("name", sorted(SENSOR_REGISTRY.keys()))
+    def test_every_registry_entry_constructs(self, name):
+        """Every key in SENSOR_REGISTRY must round-trip via create_sensor()
+        to a Sensor instance — catches drift between the registry and the
+        underlying factory callables."""
+        from hyplan.instruments import Sensor
+        s = create_sensor(name)
+        assert isinstance(s, Sensor), (
+            f"create_sensor({name!r}) returned {type(s).__name__}, not a Sensor"
+        )
+
 
 class TestFrameCamera:
     def test_instantiation(self):
