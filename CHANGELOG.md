@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Repository hygiene
+
+* **Untracked `notebooks/interactive_export/`** — 11 regenerable
+  output files (GPX/KML/ICT/CSV/XLSX/TXT, ~150 KB total) produced
+  by `notebooks/export_formats.ipynb`. Removed from git, added to
+  `.gitignore`. They reappear locally when the notebook runs;
+  no `git status` churn for contributors.
+* **[`docs/dev/data_policy.md`](docs/dev/data_policy.md)** —
+  four-category policy: fixtures vs example data vs regenerable
+  notebook artifacts vs auth-walled caches. Decision tree included.
+* **[`docs/dev/public_api.md`](docs/dev/public_api.md)** —
+  public / advanced / private convention. Documents the **Policy B**
+  decision: subpackage-qualified imports are first-class public
+  surfaces; top-level `hyplan.*` is a curated subset, not a
+  comprehensive re-export. Resolves the
+  `hyplan.planning.create_flight_line_record` ambiguity.
+* **Linkcheck workflow** at
+  [`.github/workflows/linkcheck.yml`](.github/workflows/linkcheck.yml)
+  — Sunday 06:00 UTC weekly + manual dispatch. Uploads the report
+  as an artifact and emits a summary in the run page. Does **not**
+  block PRs (NASA/vendor URLs occasionally rate-limit).
+* `docs/developer.md` extended with a toctree linking the two new
+  `docs/dev/*.md` policy pages so they aren't orphans.
+
 ### Notebook CI
 
 * **Tiered notebook execution**, replacing the previous 4-notebook

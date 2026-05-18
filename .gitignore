@@ -7,6 +7,10 @@ notebooks/glint_arc_path.geojson
 notebooks/glint_arc_swath.geojson
 notebooks/glint_arc_trackair.txt
 
+# Notebook export artifacts (regenerated on every export_formats.ipynb run).
+# Policy in docs/dev/data_policy.md — these are not fixtures.
+notebooks/interactive_export/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
