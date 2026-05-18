@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v1.10.1 — 2026-05-18
+
+Maintenance release. No new science features, no API changes. Project-wide
+lint/type ratchet, docs CI hardening, tiered notebook CI, repository
+hygiene.
+
 ### Lint ratchet
 
 * **Project-wide `mypy --strict`.** `[tool.mypy] strict = true` is
