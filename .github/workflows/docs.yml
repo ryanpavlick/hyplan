@@ -27,8 +27,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -e .
-          pip install sphinx myst-nb furo sphinx-autodoc-typehints
+          pip install -e ".[docs]"
 
       - name: Check API coverage
         # Verifies every docs/api/*.md is reachable from a toctree and

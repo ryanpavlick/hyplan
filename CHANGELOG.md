@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Packaging
+
+* **`docs` extra** added to `pyproject.toml`:
+  `sphinx>=7`, `myst-nb`, `furo`, `sphinx-autodoc-typehints`. Replaces
+  the hand-installed pip line in `.github/workflows/docs.yml`; fresh
+  contributors can now build docs with `pip install -e ".[docs]"`.
+* **`notebooks` extra** added: `papermill`, `ipykernel`, `jupyter`,
+  `nbconvert`. **Tooling only** — does NOT pull in the science extras
+  (winds, clouds, mag, planned, …) that individual notebooks may need.
+  Per-notebook extras get declared in `.github/notebooks/manifest.yml`
+  in a later Phase-4 sweep.
+* `.github/workflows/docs.yml` and `.github/workflows/notebooks.yml`
+  switched to `pip install -e ".[...]"` invocations.
+
 ### Docs / CI
 
 * **Docs API coverage check** — new

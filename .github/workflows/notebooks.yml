@@ -48,12 +48,13 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
+          # [notebooks] = papermill / ipykernel / jupyter / nbconvert (tooling).
           # [mag] enables magnetic_declination() in export_formats.ipynb.
-          # openpyxl is required by pandas.read_excel() in the same notebook
-          # for the round-trip verification cells. Other canonical notebooks
-          # don't need any extras.
-          pip install -e .[mag]
-          pip install papermill ipykernel openpyxl
+          # [planned] supplies openpyxl for the Excel round-trip cells in the
+          # same notebook. Other canonical notebooks don't need any extras.
+          # Phase 4 of the hygiene plan replaces this with per-matrix-row
+          # extras driven by .github/notebooks/manifest.yml.
+          pip install -e ".[notebooks,mag,planned]"
 
       - name: Execute ${{ matrix.notebook }}
         # --cwd notebooks/ keeps relative paths (e.g. ../notebooks/exampledata/...)

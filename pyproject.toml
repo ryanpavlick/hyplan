@@ -56,6 +56,15 @@ winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
 adsb = ["traffic>=2.8"]
 planned = ["openpyxl", "pdfplumber"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
+# Docs build tooling — installed by docs.yml. Keep in sync with the
+# `pip install` step there until both are replaced by `pip install -e .[docs]`.
+docs = ["sphinx>=7", "myst-nb", "furo", "sphinx-autodoc-typehints"]
+# Notebook execution tooling only — papermill / ipykernel / jupyter /
+# nbconvert. Does NOT include science-stack extras any individual
+# notebook might need (winds, clouds, mag, planned, ...); those are
+# declared per-notebook in `.github/notebooks/manifest.yml` and
+# installed per matrix row.
+notebooks = ["papermill", "ipykernel", "jupyter", "nbconvert"]
 
 [project.urls]
 Homepage = "https://github.com/ryanpavlick/hyplan"
