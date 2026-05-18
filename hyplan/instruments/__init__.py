@@ -6,55 +6,25 @@ Groups all sensor classes under a single subpackage::
     from hyplan.instruments import FrameCamera, LineScanner, Sensor
 """
 
-from ._base import Sensor, ScanningSensor
-from .registry import (
-    SENSOR_REGISTRY,
-    create_sensor,
-    register_sensor,
-)
-from .line_scanner import (
-    LineScanner,
-    AVIRISClassic,
-    AVIRISNextGen,
-    AVIRIS3,
-    AVIRIS5,
-    HyTES,
-    PRISM,
-    MASTER,
-    GLiHT_VNIR,
-    GLiHT_SWIR,
-    GLiHT_SIF,
-    GCAS_UV_Vis,
-    GCAS_VNIR,
-    eMAS,
-    PICARD,
-)
-from .lvis import (
-    LVISLens,
-    LVIS_LENS_NARROW,
-    LVIS_LENS_MEDIUM,
-    LVIS_LENS_WIDE,
-    LVIS_LENSES,
-    LVIS,
+from ._base import ScanningSensor, Sensor
+from .als_lidar import (
+    GLIHT_DUAL_VQ_480I,
+    RIEGL_VQ_480II,
+    ALSLidar,
+    ContiguityError,
+    LidarMount,
+    MultiALSLidarRig,
 )
 from .awp import (
     AerosolWindProfiler,
-    flag_awp_stable_segments,
     awp_profile_locations_for_flight_line,
     awp_profile_locations_for_plan,
-)
-from .profilinglidar import ProfilingLidar, HSRL2, HALO, CPL
-from .als_lidar import (
-    ALSLidar,
-    ContiguityError,
-    GLIHT_DUAL_VQ_480I,
-    LidarMount,
-    MultiALSLidarRig,
-    RIEGL_VQ_480II,
+    flag_awp_stable_segments,
 )
 from .dropsondes import (
     AVAPS_NRD41,
     AXCTD,
+    RD94,
     AircraftTrackSample,
     DropsondePlan,
     DropsondeRelease,
@@ -63,7 +33,6 @@ from .dropsondes import (
     DropsondeTrajectory,
     FlightPlanTrack,
     PlannedSegment,
-    RD94,
     releases_along_flight_line,
     simulate_descent_trajectory,
     simulate_release,
@@ -72,16 +41,46 @@ from .dropsondes import (
     terminal_velocity_nrd41,
     terminal_velocity_sippican_axctd,
 )
+from .frame_camera import GLIHT_HRAC, GLIHT_THERMAL, FrameCamera, MultiCameraRig
+from .line_scanner import (
+    AVIRIS3,
+    AVIRIS5,
+    GCAS_VNIR,
+    MASTER,
+    PICARD,
+    PRISM,
+    AVIRISClassic,
+    AVIRISNextGen,
+    GCAS_UV_Vis,
+    GLiHT_SIF,
+    GLiHT_SWIR,
+    GLiHT_VNIR,
+    HyTES,
+    LineScanner,
+    eMAS,
+)
+from .lvis import (
+    LVIS,
+    LVIS_LENS_MEDIUM,
+    LVIS_LENS_NARROW,
+    LVIS_LENS_WIDE,
+    LVIS_LENSES,
+    LVISLens,
+)
+from .profilinglidar import CPL, HALO, HSRL2, ProfilingLidar
 from .radar import (
     RadarExclusionConflict,
-    check_lband_radar_exclusions,
     SidelookingRadar,
+    UAVSAR_Kaband,
     UAVSAR_Lband,
     UAVSAR_Pband,
-    UAVSAR_Kaband,
+    check_lband_radar_exclusions,
 )
-from .frame_camera import FrameCamera, GLIHT_HRAC, GLIHT_THERMAL, MultiCameraRig
-
+from .registry import (
+    SENSOR_REGISTRY,
+    create_sensor,
+    register_sensor,
+)
 
 # ── Sensor registration ──────────────────────────────────────────────
 # Every name HyPlan resolves via `create_sensor` is registered here,

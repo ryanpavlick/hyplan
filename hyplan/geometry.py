@@ -19,22 +19,23 @@ doi:10.21105/joss.00580
 from __future__ import annotations
 
 import datetime
-import numpy as np
-import random
 import logging
+import random
 import warnings
-from functools import lru_cache
 from collections.abc import Callable
-from shapely.affinity import affine_transform, translate
-from shapely.geometry import Point, LineString, Polygon, MultiPolygon
-from shapely.ops import triangulate, transform, unary_union
-from shapely.geometry.base import BaseGeometry
-from pyproj import CRS
-from pyproj import Transformer
+from functools import lru_cache
+from typing import Any
+
+import numpy as np
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
-from .exceptions import HyPlanTypeError, HyPlanValueError, HyPlanRuntimeError
-from typing import Any
+from pyproj import CRS, Transformer
+from shapely.affinity import affine_transform, translate
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import transform, triangulate, unary_union
+
+from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
 

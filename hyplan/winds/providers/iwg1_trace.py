@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -10,7 +11,6 @@ from pint import Quantity
 
 from ...units import ureg
 from ..base import WindField
-from typing import Any
 
 _M_PER_S_PER_KT = 0.514444
 

@@ -20,6 +20,7 @@ Idempotent — skips files already on disk.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime
 import gzip
@@ -28,8 +29,6 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-import contextlib
-
 
 REGISTRY_PATH = Path("data/KingAirA90/faa_registry.csv")
 TRACE_DIR = Path("data/KingAirA90/adsb_lol_traces")

@@ -2,17 +2,16 @@
 
 import json
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-from shapely.geometry import box, Polygon
+from shapely.geometry import Polygon, box
 
 from hyplan.airspace import Airspace, parse_airspace_items
 from hyplan.campaign import Campaign
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.flight_line import FlightLine
 from hyplan.units import ureg
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -725,8 +724,8 @@ class TestComputePlanWithPatterns:
 
     def test_pattern_alone_in_sequence(self):
         from hyplan.aircraft import KingAirB200
-        from hyplan.planning.engine import compute_flight_plan
         from hyplan.flight_patterns import racetrack
+        from hyplan.planning.engine import compute_flight_plan
         b200 = KingAirB200()
         pat = racetrack(
             center=(34.0, -118.0), heading=0.0,
@@ -739,8 +738,8 @@ class TestComputePlanWithPatterns:
 
     def test_pattern_mixed_with_free_standing_line(self):
         from hyplan.aircraft import KingAirB200
-        from hyplan.planning.engine import compute_flight_plan
         from hyplan.flight_patterns import spiral
+        from hyplan.planning.engine import compute_flight_plan
         b200 = KingAirB200()
         fl = _make_flight_line(site_name="Stand-alone")
         pat = spiral(
@@ -756,9 +755,9 @@ class TestComputePlanWithPatterns:
     def test_expand_sequence_unwraps_patterns(self):
         """expand_sequence flattens Patterns into FlightLine/Waypoint;
         non-Pattern entries pass through unchanged."""
+        from hyplan.flight_line import FlightLine
         from hyplan.flight_patterns import racetrack
         from hyplan.planning import expand_sequence
-        from hyplan.flight_line import FlightLine
         from hyplan.waypoint import Waypoint
         fl = _make_flight_line(site_name="A")
         pat = racetrack(

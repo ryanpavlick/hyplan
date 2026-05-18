@@ -122,6 +122,7 @@ class _GriddedWindField(WindField):
         """
         try:
             import geopandas  # noqa: F401  — feature-detection import; used downstream via duck-typing
+
             from hyplan.atmosphere import pressure_at
             from hyplan.units import ureg
         except ImportError as exc:  # pragma: no cover - missing dep

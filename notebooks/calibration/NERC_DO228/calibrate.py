@@ -47,7 +47,6 @@ from _common import (
     wind_triangle_tas_kt,
 )
 
-
 ACTIVE_GLOB = "data/DO228/NERC_DCALM/active-core/active-package_arsf-dornier_*.nc"
 EYJAF_GLOB = "data/DO228/NERC_DCALM/eyjafjallajokull-arsf/arsf_uk_*_1Hz.csv"
 

@@ -21,13 +21,13 @@ nav data isn't already in the AFRC IWG1 archive.
 
 from __future__ import annotations
 
+import re
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from http.cookiejar import CookieJar
 from pathlib import Path
-from collections.abc import Callable
-import re
 
 USER_AGENT = "hyplan-calibration-fetcher/1.1 (mailto:ryan.p.pavlick@nasa.gov)"
 

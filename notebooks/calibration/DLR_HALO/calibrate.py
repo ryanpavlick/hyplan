@@ -37,7 +37,6 @@ from _common import (
     tas_per_bin,
 )
 
-
 HALO_GLOB = "data/HALO/halo-ac3-bahamas/raw/HALO-AC3_HALO_BAHAMAS_*.nc"
 
 # G550 envelope: cruise M0.80 (~470 KTAS), MMO M0.885, ceiling 51000 ft.

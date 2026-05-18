@@ -23,19 +23,18 @@ from __future__ import annotations
 
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
-from collections.abc import Callable
 
 import pymap3d
 from pint import Quantity
 
+from .exceptions import HyPlanValueError
 from .flight_line import FlightLine
 from .geometry import wrap_to_180, wrap_to_360
-from .waypoint import Waypoint
 from .units import ureg
-from .exceptions import HyPlanValueError
-
+from .waypoint import Waypoint
 
 LINE_BASED_KINDS = frozenset({"rosette", "racetrack"})
 WAYPOINT_BASED_KINDS = frozenset({"polygon", "sawtooth", "spiral", "glint_arc"})

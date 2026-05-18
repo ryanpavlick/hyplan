@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
-import numpy as np
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-import matplotlib.patches as mpatches
-import pandas as pd
 
 from ..exceptions import HyPlanValueError
 from .analysis import _STAGE_COLUMNS
-import itertools
-
 
 # ---------------------------------------------------------------------------
 # Stage display configuration

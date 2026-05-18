@@ -5,8 +5,9 @@ This file can be tested independently before integrating into dubins3d.py.
 """
 
 import math
-import numpy as np
 from typing import Any
+
+import numpy as np
 
 
 def _mod2pi(angle: "float | np.floating | np.ndarray[Any, np.dtype[Any]]") -> "float | np.floating | np.ndarray[Any, np.dtype[Any]]":

@@ -29,11 +29,14 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, schedule_pts,
-    summary_table, tas_per_bin,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    summary_table,
+    tas_per_bin,
 )
 from _hrd_loader import load_p3_1sec
-
 
 GIV_GLOB = "data/HRD/G-IV-SP_N49RF/*/*/*N*.1sec.txt"
 

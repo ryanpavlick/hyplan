@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 import geopandas as gpd
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-import pandas as pd
-from typing import Any
 
 from ..exceptions import HyPlanValueError
 

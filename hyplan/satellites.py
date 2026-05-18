@@ -17,8 +17,8 @@ T.S. Kelso.
 
 import logging
 import os
-import time
 import shutil
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -26,20 +26,20 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # pragma: no cover - type-checking only
     from skyfield.api import EarthSatellite
 
+import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import geopandas as gpd
-import simplekml
-from shapely.geometry import Point, LineString, Polygon
-from .sun import sunpos
 import pymap3d.vincenty
+import simplekml
 from pyproj import Geod
+from shapely.geometry import LineString, Point, Polygon
 
-from .terrain import get_cache_root
 from .download import download_file
-from .geometry import wrap_to_180
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+from .geometry import wrap_to_180
+from .sun import sunpos
+from .terrain import get_cache_root
 
 logger = logging.getLogger(__name__)
 

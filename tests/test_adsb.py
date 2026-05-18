@@ -6,7 +6,6 @@ installation required for the core algorithm tests.
 
 from __future__ import annotations
 
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -31,7 +30,6 @@ from hyplan.aircraft.adsb.phases import (
 )
 from hyplan.units import ureg
 from hyplan.winds import ConstantWindField, StillAirField
-
 
 # ===================================================================
 # Helpers — synthetic data generation

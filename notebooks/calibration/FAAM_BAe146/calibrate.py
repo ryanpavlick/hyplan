@@ -36,7 +36,6 @@ from _common import (
     tas_per_bin,
 )
 
-
 FAAM_GLOB = "data/FAAM/*/*/core_faam_*_1hz.nc"
 
 # BAe-146-301 envelope: cruise ~360 KTAS, MMO M0.7, ceiling 35000 ft.

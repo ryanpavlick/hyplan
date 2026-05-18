@@ -19,12 +19,12 @@ import pytest
 from hyplan import ureg
 from hyplan.flight_line import FlightLine
 from hyplan.instruments import (
+    GLIHT_DUAL_VQ_480I,
+    RIEGL_VQ_480II,
     ALSLidar,
     ContiguityError,
-    GLIHT_DUAL_VQ_480I,
     LidarMount,
     MultiALSLidarRig,
-    RIEGL_VQ_480II,
     ScanningSensor,
 )
 from hyplan.instruments.als_lidar import SPEED_OF_LIGHT_M_PER_S

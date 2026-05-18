@@ -1,22 +1,23 @@
 """Tests for hyplan.glint."""
 
-import pytest
-import numpy as np
-import geopandas as gpd
 from datetime import datetime, timezone
+
+import geopandas as gpd
+import numpy as np
+import pytest
 from shapely.geometry import LineString
 
+from hyplan.flight_line import FlightLine
 from hyplan.glint import (
-    glint_angle,
-    calculate_target_and_glint_vectorized,
-    compute_glint_vectorized,
     GlintArc,
+    calculate_target_and_glint_vectorized,
     compute_glint_arc,
+    compute_glint_vectorized,
     fraction_exceeding_glint_threshold,
+    glint_angle,
 )
 from hyplan.instruments import AVIRIS3
 from hyplan.units import ureg
-from hyplan.flight_line import FlightLine
 
 
 class TestGlintAngle:
@@ -566,6 +567,7 @@ class TestFractionExceedingGlintThreshold:
 
     def test_missing_column_raises(self):
         import pandas as pd
+
         from hyplan.exceptions import HyPlanValueError
         gdf = gpd.GeoDataFrame(pd.DataFrame({"other_col": [1, 2, 3]}))
         with pytest.raises(HyPlanValueError):

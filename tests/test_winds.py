@@ -5,25 +5,24 @@ import datetime
 import numpy as np
 import pytest
 
+from hyplan.aircraft import KingAirB200 as B200
+from hyplan.flight_line import FlightLine
+from hyplan.flight_plan import (
+    _resolve_wind_factor,
+    _wind_factor,
+    _wind_factor_from_uv,
+    compute_flight_plan,
+)
 from hyplan.units import ureg
+from hyplan.waypoint import Waypoint
 from hyplan.winds import (
     ConstantWindField,
     StillAirField,
+    _gfs_best_cycle,
+    _gfs_filter_url,
     _merra2_stream,
     _merra2_url,
-    _gfs_filter_url,
-    _gfs_best_cycle,
 )
-from hyplan.flight_plan import (
-    _wind_factor,
-    _wind_factor_from_uv,
-    _resolve_wind_factor,
-    compute_flight_plan,
-)
-from hyplan.waypoint import Waypoint
-from hyplan.flight_line import FlightLine
-from hyplan.aircraft import KingAirB200 as B200
-
 
 # ---------------------------------------------------------------------------
 # ConstantWindField
@@ -419,7 +418,7 @@ class TestGFSFilter:
 # Wind vector conversions (utils)
 # ---------------------------------------------------------------------------
 
-from hyplan.winds.utils import wind_uv_from_speed_dir, wind_speed_dir_from_uv
+from hyplan.winds.utils import wind_speed_dir_from_uv, wind_uv_from_speed_dir
 
 
 class TestWindVectorConversions:
@@ -847,9 +846,10 @@ class TestGriddedInterpolation:
 # wind_field_from_plan factory
 # ---------------------------------------------------------------------------
 
-from unittest.mock import patch, MagicMock
-from hyplan.winds.factory import wind_field_from_plan
+from unittest.mock import MagicMock, patch
+
 from hyplan.exceptions import HyPlanValueError
+from hyplan.winds.factory import wind_field_from_plan
 
 
 class _MockAirport:
@@ -1126,8 +1126,8 @@ class TestIWG1TraceWindField:
     def test_compute_flight_plan_round_trip(self):
         """`compute_flight_plan` accepts the new class and produces a
         non-empty plan."""
-        from hyplan.airports import Airport
         from hyplan.aircraft import NASA_ER2
+        from hyplan.airports import Airport
         from hyplan.flight_line import FlightLine
         from hyplan.flight_plan import compute_flight_plan
 

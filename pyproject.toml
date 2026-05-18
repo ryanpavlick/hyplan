@@ -105,6 +105,7 @@ extend-include = ["*.ipynb"]
 # see TODO.md.
 extend-select = [
     "B",    # flake8-bugbear (real bug-class issues)
+    "I",    # isort (import ordering)
     "UP",   # pyupgrade (PEP 585 generics, PEP 604 unions, etc.)
     "RUF",  # Ruff-specific (with selective ignores below)
     "RET",  # flake8-return (unnecessary-assign, etc.)

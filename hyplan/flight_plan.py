@@ -1,6 +1,11 @@
 """Backward-compatible shim — flight planning now lives in :mod:`hyplan.planning`."""
 
-from .planning import compute_flight_plan, create_flight_line_record, process_flight_phase
+from .planning import (
+    compute_flight_plan,
+    create_flight_line_record,
+    process_flight_phase,
+)
+from .planning.segments import _direct_segment_record
 from .winds.utils import (
     _resolve_track_hold_solution,
     _resolve_wind_factor,
@@ -9,7 +14,6 @@ from .winds.utils import (
     _wind_factor,
     _wind_factor_from_uv,
 )
-from .planning.segments import _direct_segment_record
 
 __all__ = [
     "compute_flight_plan",

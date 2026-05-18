@@ -1,23 +1,22 @@
 """Tests for hyplan.flight_patterns."""
 
-import pytest
 import pymap3d.vincenty
+import pytest
 
-from hyplan.units import ureg
+from hyplan.aircraft import NASA_ER2, NASA_P3
 from hyplan.flight_line import FlightLine
-from hyplan.pattern import Pattern
 from hyplan.flight_patterns import (
+    coordinated_line,
+    flight_lines_to_waypoint_path,
+    glint_arc,
+    polygon,
     racetrack,
     rosette,
-    polygon,
     sawtooth,
     spiral,
-    glint_arc,
-    flight_lines_to_waypoint_path,
-    coordinated_line,
 )
-from hyplan.aircraft import NASA_ER2, NASA_P3
-
+from hyplan.pattern import Pattern
+from hyplan.units import ureg
 
 CENTER = (34.0, -118.0)
 ALT = ureg.Quantity(20000, "feet")

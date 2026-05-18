@@ -38,15 +38,14 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # Common helpers in notebooks/calibration/_common.py
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    label_phases,
     apply_sortie_filters,
+    label_phases,
     per_bin,
-    tas_per_bin,
     schedule_pts,
+    tas_per_bin,
 )
 
 from hyplan.aircraft.icartt import load_icartt
-
 
 HIAPER_NAV_GLOB = "data/HIAPER/dc3-seac4rs/DC3-RAF-NAV_GV_*.ICT"
 

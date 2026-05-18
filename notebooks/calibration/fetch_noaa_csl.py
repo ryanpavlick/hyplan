@@ -33,8 +33,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _noaa_csl_fetch import fetch_files, date_from_filename
-
+from _noaa_csl_fetch import date_from_filename, fetch_files
 
 # (mission, platform, hyplan-aircraft-dir, filename_filter, label)
 DATASETS = [

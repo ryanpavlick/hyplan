@@ -21,8 +21,8 @@ from __future__ import annotations
 import re
 import time
 import urllib.request
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 ARCVIEW_ROOT = "https://www-air.larc.nasa.gov/cgi-bin/ArcView"
 ENZFILE_ROOT = "https://www-air.larc.nasa.gov/cgi-bin/enzFile"

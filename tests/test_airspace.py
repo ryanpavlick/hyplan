@@ -3,7 +3,7 @@
 import json
 import os
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -11,27 +11,26 @@ from shapely.geometry import LineString, Polygon, box
 
 from hyplan.airspace import (
     Airspace,
-    OpenAIPClient,
     FAATFRClient,
+    FlightPlanDBClient,
     NASRAirspaceSource,
-    check_airspace_conflicts,
-    check_airspace_proximity,
-    fetch_and_check,
-    classify_severity,
+    OpenAIPClient,
+    _bounds_within_us,
+    _cache_key,
+    _circle_to_polygon,
+    _extract_entry_exit,
+    _is_cache_stale,
+    _is_schedule_active,
     _parse_airspace_item,
     _resolve_type_filter,
-    _cache_key,
-    _is_cache_stale,
-    _circle_to_polygon,
-    _bounds_within_us,
-    _extract_entry_exit,
-    _is_schedule_active,
+    check_airspace_conflicts,
+    check_airspace_proximity,
+    classify_severity,
+    fetch_and_check,
     filter_by_schedule,
-    FlightPlanDBClient,
 )
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.units import ureg
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -56,18 +56,21 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import requests
-from shapely.geometry import Polygon, MultiPolygon, box as box_geom, shape
-from shapely.geometry.base import BaseGeometry
 from shapely import STRtree
+from shapely.geometry import MultiPolygon, Polygon, shape
+from shapely.geometry import box as box_geom
+from shapely.geometry.base import BaseGeometry
 
 if TYPE_CHECKING:
     from datetime import datetime
+
     from shapely.geometry import LineString
+
+import contextlib
 
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .terrain import get_cache_root
 from .units import ureg
-import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +393,7 @@ def convert_agl_floors(
         The same list with AGL floors converted to MSL.
     """
     import numpy as np
+
     from .terrain import get_elevations
 
     for a in airspaces:
@@ -440,7 +444,8 @@ def filter_by_schedule(
     Returns:
         Filtered list of airspaces that are active at the given time.
     """
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     if at_datetime is None:
         at_datetime = _dt.now(_tz.utc)

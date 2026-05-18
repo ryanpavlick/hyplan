@@ -11,17 +11,18 @@ from __future__ import annotations
 
 import warnings
 from typing import Any
-from pint import Quantity, Unit
+
 import numpy as np
 import numpy.typing as npt
 import pymap3d.vincenty as _vincenty
+from pint import Quantity, Unit
 from shapely.geometry import Polygon as ShapelyPolygon
 
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..geometry import wrap_to_180
 from ..terrain import ray_terrain_intersection
 from ..units import ureg
 from ._base import Sensor
-from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "GLIHT_HRAC",

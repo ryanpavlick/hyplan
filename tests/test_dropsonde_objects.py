@@ -34,6 +34,7 @@ from hyplan.flight_line import FlightLine
 from hyplan.instruments import create_sensor
 from hyplan.instruments.dropsondes import (
     AVAPS_NRD41,
+    RD94,
     AircraftTrackSample,
     DropsondePlan,
     DropsondeRelease,
@@ -41,7 +42,6 @@ from hyplan.instruments.dropsondes import (
     DropsondeTrajectory,
     FlightPlanTrack,
     PlannedSegment,
-    RD94,
     golden_section_search,
     releases_along_flight_line,
     simulate_descent_trajectory,
@@ -53,7 +53,6 @@ from hyplan.instruments.dropsondes import (
 from hyplan.pattern import Pattern
 from hyplan.waypoint import Waypoint
 from hyplan.winds import ConstantWindField, StillAirField
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

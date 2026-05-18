@@ -16,16 +16,17 @@ from typing import Any
 
 import folium
 import geopandas as gpd
+import matplotlib.patheffects as _pe
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import matplotlib.pyplot as plt
-import matplotlib.patheffects as _pe
+
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
 from hyplan.pattern import Pattern
-from hyplan.waypoint import is_waypoint
 from hyplan.units import ureg
+from hyplan.waypoint import is_waypoint
 
 __all__ = [
     "map_airspace",
@@ -171,7 +172,7 @@ def terrain_profile_along_track(
         tuple: (times, elevations) where times is cumulative minutes and
             elevations is terrain height in feet MSL, both as numpy arrays.
     """
-    from .terrain import get_elevations, generate_demfile
+    from .terrain import generate_demfile, get_elevations
 
     all_lats, all_lons, all_times = [], [], []
     cumulative_time = 0.0
@@ -577,8 +578,8 @@ def plot_conflict_matrix(
     Returns:
         Matplotlib Figure and Axes.
     """
-    from shapely import STRtree
     import matplotlib.patches as mpatches
+    from shapely import STRtree
 
     n_fl = len(flight_lines)
     n_as = len(airspaces)
@@ -753,6 +754,7 @@ def plot_vertical_profile(
 
     # Entry/exit markers from conflicts
     from shapely.geometry import Point
+
     from .airspace import check_airspace_conflicts
     conflicts = check_airspace_conflicts([flight_line], airspaces)
     for c in conflicts:
@@ -895,6 +897,7 @@ def map_airspace(
         folium.Map with all layers.
     """
     from shapely.geometry import mapping
+
     from .airspace import classify_severity
 
     conflicts = conflicts or []
@@ -1148,8 +1151,10 @@ def plot_isochrone_static(
     Returns:
         ``(fig, ax)`` so the caller can add overlays after.
     """
-    import cartopy.crs as ccrs
     import datetime as _dt
+
+    import cartopy.crs as ccrs
+
     from .planning.isochrone import isochrone_polygon
 
     plate = ccrs.PlateCarree()

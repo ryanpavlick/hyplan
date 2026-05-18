@@ -36,6 +36,7 @@ Run from repo root::
     python -m notebooks.calibration.NOAA_WP3D.calibrate
 """
 from __future__ import annotations
+
 import sys
 import warnings
 from pathlib import Path
@@ -47,11 +48,14 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin, schedule_pts,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    tas_per_bin,
 )
 
 from hyplan.aircraft.icartt import load_icartt
-
 
 WP3D_GLOB = "data/WP3D/NOAA_CSL/*/raw/Aircraft*_NP3_*.ict"
 

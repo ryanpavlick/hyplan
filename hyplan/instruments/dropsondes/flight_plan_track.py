@@ -18,10 +18,9 @@ interpolation logic.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Hashable, Iterator
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Hashable
 
 import geopandas as gpd
 import numpy as np

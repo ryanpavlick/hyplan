@@ -24,7 +24,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _asp_fetch import fetch_tail
 
-
 DEST = Path("data/er2")
 
 # (tail, [fiscal-year subset])

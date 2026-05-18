@@ -11,8 +11,8 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .models import FitResult
     from .._base import Aircraft
+    from .models import FitResult
 
 logger = logging.getLogger(__name__)
 

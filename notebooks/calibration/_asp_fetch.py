@@ -19,8 +19,8 @@ from __future__ import annotations
 import re
 import sys
 import urllib.request
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 
 ARCHIVE_ROOT = "https://asp-archive.arc.nasa.gov"
 

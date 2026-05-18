@@ -13,19 +13,20 @@ derived automatically from the geodesic geometry via Vincenty's formulae.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
-from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
-from pint import Quantity
-import pymap3d
-import pymap3d.vincenty
+
 import geopandas as gpd
 import numpy as np
-import logging
+import pymap3d
+import pymap3d.vincenty
+from pint import Quantity
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
-from .units import ureg
-from .geometry import wrap_to_180
-from .waypoint import Waypoint, is_waypoint
 from .exceptions import HyPlanTypeError, HyPlanValueError
+from .geometry import wrap_to_180
+from .units import ureg
+from .waypoint import Waypoint, is_waypoint
 
 logger = logging.getLogger(__name__)
 

@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import itertools
 
 import numpy as np
 import pytest
 
 from hyplan import (
-    KingAirB200,
     NASA_GIII,
+    KingAirB200,
     Waypoint,
-    compute_isochrone,
     compute_concentric_isochrones,
+    compute_isochrone,
     compute_multi_base_isochrone,
     compute_multi_refuel_isochrone,
     compute_refuel_isochrone,
@@ -21,8 +22,6 @@ from hyplan import (
 )
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.winds import ConstantWindField, StillAirField
-import itertools
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1505,6 +1504,7 @@ def test_plot_isochrone_folium_smoke(
     recovery markers, per-ray dot popup branches (including the
     one_way headwind-only path), and the refuel-airport-marker branch."""
     import folium
+
     from hyplan.planning.isochrone import plot_isochrone
 
     # 1. Plain round-trip: polygon + start marker, no recovery marker.
@@ -1636,8 +1636,9 @@ class TestWindSampling:
     def _leg_time_helper(
         ac, start_wp, end_wp, cruise_alt, wind_source, **kw,
     ):
-        from hyplan.planning.isochrone import _leg_time
         import datetime as _dt
+
+        from hyplan.planning.isochrone import _leg_time
         return _leg_time(
             aircraft=ac, start_wp=start_wp, end_wp=end_wp,
             cruise_altitude=cruise_alt,

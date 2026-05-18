@@ -19,13 +19,13 @@ from typing import Any
 
 import networkx as nx
 
-from .units import ureg
 from .aircraft import Aircraft
 from .airports import Airport
-from .waypoint import Waypoint
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .flight_line import FlightLine
 from .pattern import Pattern
-from .exceptions import HyPlanValueError, HyPlanRuntimeError
+from .units import ureg
+from .waypoint import Waypoint
 
 logger = logging.getLogger(__name__)
 

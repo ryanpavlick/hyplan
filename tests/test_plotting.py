@@ -1,12 +1,13 @@
 """Tests for hyplan.plotting."""
 
 import matplotlib
+
 matplotlib.use("Agg")
 
-import pytest
 import folium
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import pytest
 from shapely.geometry import LineString, Polygon
 
 # cartopy is an optional plotting dependency used by plot_airspace_map and
@@ -18,19 +19,19 @@ try:
 except ImportError:  # pragma: no cover
     HAS_CARTOPY = False
 
-from hyplan.plotting import (
-    map_flight_lines,
-    plot_flight_plan,
-    plot_altitude_trajectory,
-    terrain_profile_along_track,
-    plot_airspace_map,
-    plot_conflict_matrix,
-    plot_vertical_profile,
-    plot_oceanic_tracks,
-    map_airspace,
-)
 from hyplan.airspace import Airspace, AirspaceConflict, OceanicTrack
 from hyplan.flight_line import FlightLine
+from hyplan.plotting import (
+    map_airspace,
+    map_flight_lines,
+    plot_airspace_map,
+    plot_altitude_trajectory,
+    plot_conflict_matrix,
+    plot_flight_plan,
+    plot_oceanic_tracks,
+    plot_vertical_profile,
+    terrain_profile_along_track,
+)
 from hyplan.units import ureg
 
 

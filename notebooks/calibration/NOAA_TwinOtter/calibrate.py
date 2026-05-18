@@ -22,6 +22,7 @@ Run from repo root::
     python -m notebooks.calibration.NOAA_TwinOtter.calibrate
 """
 from __future__ import annotations
+
 import sys
 import warnings
 from pathlib import Path
@@ -33,12 +34,15 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin, schedule_pts,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    tas_per_bin,
 )
 
 from hyplan.aircraft.icartt import load_icartt
 from hyplan.aircraft.iwg1 import trim_ground_taxi
-
 
 # ─── data sources ────────────────────────────────────────────────────
 FIREXAQ_GLOB = "data/NOAA_TwinOtter/FIREXAQ_TwinOtter_N48_FLIGHTDATA/*.ict"

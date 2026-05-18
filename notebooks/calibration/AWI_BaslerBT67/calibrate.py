@@ -39,7 +39,6 @@ from _common import (
     tas_per_bin,
 )
 
-
 ROOT = Path("data/BT67/AWI_Polar")
 ACLOUD_MANIFEST = ROOT / "acloud-2017-1hz" / "manifest.csv"
 HALO_AC3_MANIFEST = ROOT / "halo-ac3-2022-wind-temp" / "manifest.csv"

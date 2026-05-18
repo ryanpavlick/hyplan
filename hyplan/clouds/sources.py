@@ -481,8 +481,8 @@ def fetch_cloud_fraction_spatial(
         dimensions ``(latitude, longitude)`` and values 0.0-1.0.
     """
     try:
-        import xarray as xr
         import numpy as np
+        import xarray as xr
     except ImportError:
         raise HyPlanRuntimeError(
             "xarray and numpy are required for spatial cloud maps. "
@@ -542,8 +542,9 @@ def fetch_cloud_fraction_spatial(
                 f"GEE download URL generation failed for {name}"
             ) from exc
 
-        import requests as _requests
         import io
+
+        import requests as _requests
         resp = _requests.get(url, timeout=120)
         if resp.status_code != 200:
             raise HyPlanRuntimeError(

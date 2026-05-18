@@ -20,7 +20,6 @@ from typing import Any
 
 import pytest
 
-
 CORE_MODULES: tuple[str, ...] = (
     "hyplan",
     "hyplan.instruments",

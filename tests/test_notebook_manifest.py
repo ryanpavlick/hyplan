@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = REPO_ROOT / ".github" / "notebooks" / "manifest.yml"
 NOTEBOOKS_DIR = REPO_ROOT / "notebooks"

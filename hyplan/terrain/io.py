@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -18,7 +19,6 @@ from shapely.geometry import box
 from ..download import download_file
 from ..exceptions import HyPlanRuntimeError, HyPlanValueError
 from ._demgrid import DEMGrid
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

@@ -4,16 +4,16 @@ import numpy as np
 import pytest
 from shapely.geometry import Polygon
 
-from hyplan.units import ureg
-from hyplan.instruments import AVIRIS3
 from hyplan.flight_line import FlightLine
+from hyplan.instruments import AVIRIS3
 from hyplan.swath import (
-    generate_swath_polygon,
-    calculate_swath_widths,
-    analyze_swath_gaps_overlaps,
-    export_polygon_to_kml,
     _resolve_swath_boresight_azimuths,
+    analyze_swath_gaps_overlaps,
+    calculate_swath_widths,
+    export_polygon_to_kml,
+    generate_swath_polygon,
 )
+from hyplan.units import ureg
 
 
 class TestGenerateSwathPolygon:

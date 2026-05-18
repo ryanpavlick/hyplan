@@ -19,13 +19,12 @@ per-aircraft builder; everything else lives here.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
-
 
 # ---------------------------------------------------------------------------
 # Shared numerical helpers (deduped across per-aircraft loaders)

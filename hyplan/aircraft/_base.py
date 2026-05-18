@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     from ..winds.base import WindField

@@ -1,11 +1,13 @@
 """Comprehensive tests for the FrameCamera instrument model."""
 
-import pytest
-import numpy as np
-from shapely.geometry import Polygon as ShapelyPolygon
-from hyplan.units import ureg
-from hyplan.instruments import FrameCamera, MultiCameraRig
 import contextlib
+
+import numpy as np
+import pytest
+from shapely.geometry import Polygon as ShapelyPolygon
+
+from hyplan.instruments import FrameCamera, MultiCameraRig
+from hyplan.units import ureg
 
 
 @pytest.fixture
@@ -824,7 +826,7 @@ class TestGlihtThermal:
     def test_is_frame_camera_not_line_scanner(self):
         # Regression guard: the Gobi-640 must be modelled as a FrameCamera,
         # not as a LineScanner.  An older HyPlan release had it backwards.
-        from hyplan.instruments import FrameCamera, GLIHT_THERMAL
+        from hyplan.instruments import GLIHT_THERMAL, FrameCamera
         assert isinstance(GLIHT_THERMAL, FrameCamera)
 
     def test_legacy_gliht_thermal_linescanner_is_retired(self):

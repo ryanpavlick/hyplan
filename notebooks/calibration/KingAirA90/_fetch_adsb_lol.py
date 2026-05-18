@@ -24,6 +24,7 @@ files are preserved (each filename embeds the fetch date).
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import datetime
 import gzip
@@ -32,8 +33,6 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import contextlib
-
 
 REGISTRY_PATH = Path("data/KingAirA90/faa_registry.csv")
 TRACE_DIR = Path("data/KingAirA90/adsb_lol_traces")

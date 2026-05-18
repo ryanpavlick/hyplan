@@ -2,15 +2,15 @@
 
 import pytest
 
-from hyplan.units import ureg
-from hyplan.waypoint import Waypoint
-from hyplan.flight_line import FlightLine
 from hyplan.aircraft import (
     NASA_GIII,
     KingAirB200,
 )
-from hyplan.flight_plan import compute_flight_plan
 from hyplan.airports import Airport
+from hyplan.flight_line import FlightLine
+from hyplan.flight_plan import compute_flight_plan
+from hyplan.units import ureg
+from hyplan.waypoint import Waypoint
 
 
 @pytest.fixture

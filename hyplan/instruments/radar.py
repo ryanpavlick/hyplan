@@ -14,19 +14,19 @@ Proceedings*, 1-8. doi:10.1109/AERO.2008.4526385
 
 from __future__ import annotations
 
-from typing import Any
 import json
 import os
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from pint import Quantity
-from shapely.geometry import Polygon, shape
 from shapely import STRtree
+from shapely.geometry import Polygon, shape
 
+from ..exceptions import HyPlanValueError
 from ..units import ureg
 from ._base import Sensor
-from ..exceptions import HyPlanValueError
 
 __all__ = [
     "RadarExclusionConflict",

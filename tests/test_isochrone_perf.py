@@ -22,6 +22,7 @@ flaking.  A regression to the v1.5.1 baseline (~38 s on the
 shared runner) still triggers the alarm.
 """
 from __future__ import annotations
+
 import time
 
 import pytest
@@ -29,12 +30,11 @@ import pytest
 from hyplan import Waypoint, ureg
 from hyplan.aircraft import NASA_GIII, KingAirB200
 from hyplan.airports import Airport, initialize_data
-from hyplan.winds import StillAirField, ConstantWindField
 from hyplan.planning.isochrone import (
     compute_isochrone,
     compute_refuel_isochrone,
 )
-
+from hyplan.winds import ConstantWindField, StillAirField
 
 pytestmark = pytest.mark.perf
 

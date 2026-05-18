@@ -35,13 +35,16 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin,
-    schedule_pts, summary_table,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    summary_table,
+    tas_per_bin,
 )
 
 from hyplan.aircraft import load_iwg1, trim_ground_taxi
 from hyplan.aircraft.icartt import load_icartt
-
 
 # ---- globs ----------------------------------------------------------
 WB57_IWG1_GLOB = "data/NASA_WB57/n92[67]_*.txt"

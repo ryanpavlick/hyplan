@@ -1,22 +1,23 @@
 """Tests for hyplan.flight_optimizer."""
 
-import pytest
 import networkx as nx
-from hyplan.units import ureg
-from hyplan.flight_line import FlightLine
-from hyplan.flight_patterns import racetrack, sawtooth
-from hyplan.pattern import Pattern
-from hyplan.waypoint import Waypoint
+import pytest
+
 from hyplan.aircraft import KingAirB200
 from hyplan.airports import Airport, initialize_data
+from hyplan.exceptions import HyPlanValueError
+from hyplan.flight_line import FlightLine
 from hyplan.flight_optimizer import (
-    build_graph,
-    greedy_optimize,
     _opposite_endpoint,
     _pattern_internal_time,
     _transit_time,
+    build_graph,
+    greedy_optimize,
 )
-from hyplan.exceptions import HyPlanValueError
+from hyplan.flight_patterns import racetrack, sawtooth
+from hyplan.pattern import Pattern
+from hyplan.units import ureg
+from hyplan.waypoint import Waypoint
 
 
 @pytest.fixture(scope="module", autouse=True)

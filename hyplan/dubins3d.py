@@ -47,18 +47,17 @@ doi:10.2307/2372560
 """
 
 import math
+from typing import Any
 
 import numpy as np
 from pint import Quantity
 from shapely.geometry import LineString
 from shapely.ops import transform
 
+from .exceptions import HyPlanTypeError, HyPlanValueError
 from .geometry import get_utm_transforms
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
-from .exceptions import HyPlanTypeError, HyPlanValueError
-from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Internal 2D Dubins solver (needed for both horizontal and vertical planes)

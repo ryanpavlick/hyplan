@@ -16,6 +16,12 @@
   document the specific Any-returns we accept.  One additional
   ignore added in `hyplan/clouds/sources.py` for an
   `ee.Image.set(...) -> Any` return.
+* **Ruff `I` (isort) enabled.** Sorted imports across 27 source
+  files in `hyplan/`, `tests/`, and `notebooks/` via `ruff --fix`.
+  All 356 violations were auto-fixed except one notebook site
+  (`notebooks/airspace_check.ipynb`) where an inline
+  `import traceback; traceback.print_exc()` debug line was split to
+  the canonical two-statement form.
 * **Ruff `C4` + `PIE` + `LOG` + `FURB` enabled.** Smaller bug-class
   / modernization rule families that came along essentially for
   free.  72 violations swept across hyplan, tests, and notebooks:

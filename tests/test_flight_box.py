@@ -2,16 +2,17 @@
 
 import pytest
 from shapely.geometry import Polygon
-from hyplan.units import ureg
-from hyplan.instruments import AVIRIS3, UAVSAR_Lband
+
 from hyplan.exceptions import HyPlanValueError
 from hyplan.flight_box import (
+    _validate_inputs,
+    altitude_msl_for_pixel_size,
     box_around_center_line,
     box_around_polygon,
     box_around_polygon_terrain,
-    altitude_msl_for_pixel_size,
-    _validate_inputs,
 )
+from hyplan.instruments import AVIRIS3, UAVSAR_Lband
+from hyplan.units import ureg
 
 
 class TestBoxAroundCenterLine:
@@ -255,8 +256,9 @@ class TestAltitudeMslForPixelSize:
     ])
 
     def test_returns_quantity(self):
-        from hyplan.terrain import generate_demfile
         import numpy as np
+
+        from hyplan.terrain import generate_demfile
 
         sensor = AVIRIS3()
         lats = np.array([34.8, 35.0])
@@ -272,8 +274,9 @@ class TestAltitudeMslForPixelSize:
         assert result.m_as("meter") > 0
 
     def test_larger_pixel_gives_higher_altitude(self):
-        from hyplan.terrain import generate_demfile
         import numpy as np
+
+        from hyplan.terrain import generate_demfile
 
         sensor = AVIRIS3()
         lats = np.array([34.8, 35.0])

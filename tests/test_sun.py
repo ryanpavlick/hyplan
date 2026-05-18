@@ -1,9 +1,11 @@
 """Tests for hyplan.sun."""
 
-import pytest
-import pandas as pd
 from datetime import datetime
-from hyplan.sun import solar_threshold_times, solar_azimuth, solar_position_increments
+
+import pandas as pd
+import pytest
+
+from hyplan.sun import solar_azimuth, solar_position_increments, solar_threshold_times
 
 
 class TestSolarThresholdTimes:

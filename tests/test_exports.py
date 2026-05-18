@@ -32,7 +32,6 @@ from hyplan.exports import (
     to_txt,
 )
 from hyplan.flight_line import FlightLine
-from hyplan.instruments import AVIRIS3
 from hyplan.geometry import (
     dd_to_ddm,
     dd_to_ddms,
@@ -41,9 +40,9 @@ from hyplan.geometry import (
     magnetic_declination,
     true_to_magnetic,
 )
+from hyplan.instruments import AVIRIS3
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
-
 
 # -------------------------------------------------------------------------
 # Coordinate formatting

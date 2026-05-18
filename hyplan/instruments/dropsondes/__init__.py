@@ -41,13 +41,17 @@ from .planning import releases_along_flight_line, releases_along_segment
 from .sensor import (
     AVAPS_NRD41,
     AXCTD,
-    DropsondeSystem,
     RD94,
+    DropsondeSystem,
     terminal_velocity_nrd41,
     terminal_velocity_sippican_axctd,
 )
 from .simulate import simulate_descent_trajectory, simulate_release
-from .targeting import DropsondeReleaseSolution, golden_section_search, solve_release_for_target
+from .targeting import (
+    DropsondeReleaseSolution,
+    golden_section_search,
+    solve_release_for_target,
+)
 
 __all__ = [
     "AVAPS_NRD41",

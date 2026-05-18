@@ -13,18 +13,19 @@ Licensed under the Public Domain (CC0).
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
+from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
-import logging
-from pathlib import Path
 from shapely.geometry import Point
 
-from .units import convert_distance, ureg
 from .download import download_file
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .geometry import haversine
+from .units import convert_distance, ureg
 
 __all__ = [
     "Airport",

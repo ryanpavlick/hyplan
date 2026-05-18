@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import pandas as pd
 
-from .._base import Aircraft, TurnModel
 from ...exceptions import HyPlanValueError
 from ...units import ureg
+from .._base import Aircraft, TurnModel
 from .airdata import reconstruct_airdata, resolve_wind_field
 from .fitting import fit_schedules
 from .io import load_flights

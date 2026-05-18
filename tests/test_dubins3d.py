@@ -1,8 +1,10 @@
 """Tests for hyplan.dubins3d (3D Dubins paths with pitch constraints)."""
 
 import math
-import pytest
+
 import numpy as np
+import pytest
+
 from hyplan.dubins3d import _Dubins2D, _TrochoidDubins2D
 
 
@@ -190,5 +192,3 @@ class TestTrochoidDubins2D:
         # Both methods solve the same physical problem; they should
         # agree to within numerical noise.
         assert abs(tro_sol["total_time"] - t_air) / t_air < 1e-3
-
-

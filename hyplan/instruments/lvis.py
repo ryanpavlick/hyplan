@@ -22,15 +22,16 @@ doi:10.1016/S0924-2716(99)00002-7
 """
 
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pymap3d.vincenty
-from dataclasses import dataclass
 from pint import Quantity
+
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..units import ureg
 from ._base import Sensor
-from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
     "LVIS",
@@ -549,7 +550,11 @@ class LVIS(Sensor):
             Dict with ground position, slant range, incidence angle,
             footprint ellipse dimensions, and flat-earth comparison.
         """
-        from ..terrain import ray_terrain_intersection, surface_normal_at, generate_demfile
+        from ..terrain import (
+            generate_demfile,
+            ray_terrain_intersection,
+            surface_normal_at,
+        )
 
         # Auto-generate DEM once for both ray intersection and normal lookup
         if dem_file is None:
@@ -673,9 +678,9 @@ class LVIS(Sensor):
             Dict with per-position arrays and aggregate metrics.
         """
         from ..terrain import (
+            generate_demfile,
             ray_terrain_intersection,
             surface_normal_at,
-            generate_demfile,
         )
 
         ha = self._scan_half_angle_deg
@@ -894,7 +899,7 @@ class LVIS(Sensor):
             Dict with all keys from :meth:`summary` plus terrain-specific
             keys prefixed with ``terrain_``.
         """
-        from ..terrain import get_elevations, generate_demfile
+        from ..terrain import generate_demfile, get_elevations
 
         if dem_file is None:
             dem_file = generate_demfile(lat, lon)  # type: ignore[arg-type]  # pint Quantity vs concrete float

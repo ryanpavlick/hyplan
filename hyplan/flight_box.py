@@ -11,30 +11,28 @@ and ``LVIS``.  The utility :func:`altitude_msl_for_pixel_size` is provided
 for ``LineScanner`` users who need to derive flight altitude from a target GSD.
 """
 
+import logging
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import pymap3d.vincenty
-from collections.abc import Callable
 from pint import Quantity
 from shapely.geometry import Polygon
-import logging
 
-from . import flight_line
-from . import terrain
-from .instruments import LineScanner, ScanningSensor
-from .swath import generate_swath_polygon, calculate_swath_widths
-from .units import ureg, altitude_to_flight_level
-from .geometry import (
-    wrap_to_180,
-    rotated_rectangle,
-    minimum_rotated_rectangle,
-    buffer_polygon_along_azimuth,
-    rectangle_dimensions,
-    _validate_polygon,
-)
+from . import flight_line, terrain
 from .exceptions import HyPlanValueError
-
+from .geometry import (
+    _validate_polygon,
+    buffer_polygon_along_azimuth,
+    minimum_rotated_rectangle,
+    rectangle_dimensions,
+    rotated_rectangle,
+    wrap_to_180,
+)
+from .instruments import LineScanner, ScanningSensor
+from .swath import calculate_swath_widths, generate_swath_polygon
+from .units import altitude_to_flight_level, ureg
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +80,7 @@ def _validate_inputs(**kwargs: Any) -> None:
                 value = value.m_as("meter")  # Convert to meters
             elif not isinstance(value, float):
                 raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
-            
+
             if value <= 0:
                 raise HyPlanValueError(f"Invalid value for '{key}': {value}. Must be greater than 0.")
 
@@ -103,10 +101,10 @@ def _validate_inputs(**kwargs: Any) -> None:
         else:
             # Warn about unknown parameters
             logger.warning(f"Unknown parameter '{key}' provided. No validation rule exists.")
-    
+
     logger.debug("All inputs passed validation.")
 
-        
+
 def box_around_center_line(
     instrument: ScanningSensor,
     altitude_msl: Quantity,
@@ -256,7 +254,7 @@ def box_around_polygon(
         alternate_direction (bool): Whether to alternate flight line directions.
         clip_to_polygon (bool): Whether to clip flight lines to the convex hull of the polygon.
         starting_point (str): Whether to start the first line from the "edge" or "center".
-        
+
     Returns:
         List[flight_line.FlightLine]: A list of generated flight lines.
 

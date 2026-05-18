@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+from collections.abc import Hashable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from collections.abc import Hashable
 
 import geopandas as gpd
 from pint import Quantity

@@ -19,14 +19,14 @@ import geopandas as gpd
 import pandas as pd
 from pint import Quantity
 
-from ..units import ureg
 from ..aircraft import Aircraft
 from ..airports import Airport
-from ..waypoint import Waypoint, is_waypoint
-from ..flight_line import FlightLine
-from ..pattern import Pattern
-from ..geometry import geodesic_midpoint, process_linestring
 from ..exceptions import HyPlanValueError
+from ..flight_line import FlightLine
+from ..geometry import geodesic_midpoint, process_linestring
+from ..pattern import Pattern
+from ..units import ureg
+from ..waypoint import Waypoint, is_waypoint
 from ..winds.utils import (
     _resolve_track_hold_solution,
     _resolve_wind_uv,

@@ -28,9 +28,9 @@ import dataclasses
 import datetime as _dt
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from collections.abc import Iterable
 
 import geopandas as gpd
 import matplotlib.axes

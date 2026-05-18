@@ -16,14 +16,14 @@ import numpy as np
 import pymap3d.vincenty
 from pint import Quantity
 
-from .units import ureg
-from .exceptions import HyPlanValueError, HyPlanTypeError
-from .geometry import wrap_to_180, wrap_to_360
-from .waypoint import Waypoint
-from .flight_line import FlightLine
 from .aircraft import Aircraft
-from .pattern import Pattern
+from .exceptions import HyPlanTypeError, HyPlanValueError
+from .flight_line import FlightLine
+from .geometry import wrap_to_180, wrap_to_360
 from .glint import GlintArc
+from .pattern import Pattern
+from .units import ureg
+from .waypoint import Waypoint
 
 __all__ = [
     "coordinated_line",

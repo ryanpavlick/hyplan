@@ -25,7 +25,7 @@ import logging
 import os
 from typing import Any
 
-from shapely.geometry import box, mapping, shape, Polygon
+from shapely.geometry import Polygon, box, mapping, shape
 
 from .airspace import (
     Airspace,

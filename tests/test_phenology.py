@@ -3,6 +3,7 @@
 import datetime as dt
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +25,6 @@ from hyplan.phenology._qa import (
     apply_vi_qa_mask,
     convert_mcd12q2_dates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

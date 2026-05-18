@@ -18,9 +18,9 @@ becomes a more direct read.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 import numpy as np
 import pandas as pd

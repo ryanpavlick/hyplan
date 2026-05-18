@@ -1,20 +1,21 @@
 """Tests for the hyplan.instruments subpackage."""
 
 import pytest
-from hyplan.units import ureg
+
 from hyplan.instruments import (
     AVIRIS3,
-    HyTES,
-    PRISM,
-    SENSOR_REGISTRY,
-    ScanningSensor,
-    create_sensor,
-    FrameCamera,
     LVIS,
     LVIS_LENS_NARROW,
-    UAVSAR_Lband,
+    PRISM,
+    SENSOR_REGISTRY,
+    FrameCamera,
+    HyTES,
+    ScanningSensor,
     SidelookingRadar,
+    UAVSAR_Lband,
+    create_sensor,
 )
+from hyplan.units import ureg
 
 
 class TestLineScanner:

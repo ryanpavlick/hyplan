@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
 import datetime
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from pint import Quantity
 import pymap3d.vincenty
+from pint import Quantity
 
-from ..units import ureg
 from ..aircraft import Aircraft
 from ..airports import Airport
-from ..waypoint import Waypoint
 from ..flight_line import FlightLine
 from ..geometry import geodesic_midpoint
+from ..units import ureg
+from ..waypoint import Waypoint
 from ..winds.utils import _resolve_wind_factor
 
 if TYPE_CHECKING:
@@ -159,6 +159,7 @@ def loiter_orbit_geometry(
     """
     from shapely.geometry import LineString
     from shapely.ops import transform
+
     from ..geometry import get_utm_transforms
 
     if waypoint.altitude_msl is None:
