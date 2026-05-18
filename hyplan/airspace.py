@@ -56,13 +56,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import requests
-from shapely.geometry import Polygon, MultiPolygon, box as box_geom, shape
-from shapely.geometry.base import BaseGeometry
 from shapely import STRtree
+from shapely.geometry import MultiPolygon, Polygon, shape
+from shapely.geometry import box as box_geom
+from shapely.geometry.base import BaseGeometry
 
 if TYPE_CHECKING:
     from datetime import datetime
+
     from shapely.geometry import LineString
+
+import contextlib
 
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .terrain import get_cache_root
@@ -389,6 +393,7 @@ def convert_agl_floors(
         The same list with AGL floors converted to MSL.
     """
     import numpy as np
+
     from .terrain import get_elevations
 
     for a in airspaces:
@@ -439,7 +444,8 @@ def filter_by_schedule(
     Returns:
         Filtered list of airspaces that are active at the given time.
     """
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     if at_datetime is None:
         at_datetime = _dt.now(_tz.utc)
@@ -1508,17 +1514,13 @@ class NASRAirspaceSource:
             ceiling_unlimited = False
             for key in ("LOWER_VAL", "lower_val", "FLOOR"):
                 if key in props and props[key] is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         floor_ft = float(props[key])
-                    except (ValueError, TypeError):
-                        pass
                     break
             for key in ("UPPER_VAL", "upper_val", "CEILING"):
                 if key in props and props[key] is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         ceiling_ft = float(props[key])
-                    except (ValueError, TypeError):
-                        pass
                     break
 
             # Handle NASR sentinel values and unlimited ceilings
@@ -1547,16 +1549,12 @@ class NASRAirspaceSource:
             dst_code = None
             raw_offset = props.get("GMTOFFSET")
             if raw_offset is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     gmt_offset = float(raw_offset)
-                except (ValueError, TypeError):
-                    pass
             raw_dst = props.get("DST_CODE")
             if raw_dst is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     dst_code = int(raw_dst)
-                except (ValueError, TypeError):
-                    pass
 
             return Airspace(
                 name=name,

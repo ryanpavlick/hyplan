@@ -1,32 +1,32 @@
 """Tests for hyplan.geometry."""
 
-import pytest
 import numpy as np
-from shapely.geometry import Polygon, Point, LineString, MultiPolygon
+import pytest
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from shapely.ops import transform
+
+from hyplan.exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 from hyplan.geometry import (
+    _validate_polygon,
+    buffer_polygon_along_azimuth,
+    calculate_geographic_mean,
+    dd_to_ddm,
+    dd_to_ddms,
+    dd_to_foreflight_oneline,
+    dd_to_nddmm,
+    get_timezone,
+    get_utm_crs,
+    get_utm_transforms,
+    haversine,
+    minimum_rotated_rectangle,
+    process_linestring,
+    random_points_in_polygon,
+    rotated_rectangle,
+    translate_polygon,
+    true_to_magnetic,
     wrap_to_180,
     wrap_to_360,
-    haversine,
-    get_utm_crs,
-    calculate_geographic_mean,
-    minimum_rotated_rectangle,
-    _validate_polygon,
-    get_utm_transforms,
-    rotated_rectangle,
-    buffer_polygon_along_azimuth,
-    process_linestring,
-    dd_to_ddms,
-    dd_to_nddmm,
-    dd_to_ddm,
-    dd_to_foreflight_oneline,
-    translate_polygon,
-    random_points_in_polygon,
-    true_to_magnetic,
-    get_timezone,
 )
-from hyplan.exceptions import HyPlanValueError, HyPlanTypeError, HyPlanRuntimeError
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -429,6 +429,7 @@ class TestGetTimezoneFinderRecovery:
     def teardown_method(self):
         # Don't leak the disabled-JIT env var or the singleton state.
         import os
+
         from hyplan import geometry
         os.environ.pop("NUMBA_DISABLE_JIT", None)
         geometry._timezone_finder = None

@@ -1,7 +1,8 @@
 
 from typing import Any
 
-from pint import UnitRegistry, Quantity, set_application_registry
+from pint import Quantity, UnitRegistry, set_application_registry
+
 from .exceptions import HyPlanValueError
 
 ureg: UnitRegistry = UnitRegistry()
@@ -48,7 +49,7 @@ def convert_distance(distance: float, from_unit: str, to_unit: str) -> float:
     }
     if from_unit not in units or to_unit not in units:
         raise HyPlanValueError(f"Unsupported unit. Choose from {list(units.keys())}.")
-    
+
     q = distance * units[from_unit]
     return float(q.m_as(units[to_unit]))
 
@@ -172,5 +173,3 @@ def altitude_to_flight_level(altitude: float | int | Quantity, pressure: float |
 
     # Format flight level as a string with leading zeros
     return f"FL{flight_level:03d}"
-
-

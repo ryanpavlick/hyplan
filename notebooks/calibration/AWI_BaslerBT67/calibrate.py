@@ -30,7 +30,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
@@ -38,7 +38,6 @@ from _common import (  # noqa: E402
     summary_table,
     tas_per_bin,
 )
-
 
 ROOT = Path("data/BT67/AWI_Polar")
 ACLOUD_MANIFEST = ROOT / "acloud-2017-1hz" / "manifest.csv"

@@ -11,22 +11,23 @@ from __future__ import annotations
 
 import warnings
 from typing import Any
-from pint import Quantity, Unit
+
 import numpy as np
 import numpy.typing as npt
 import pymap3d.vincenty as _vincenty
+from pint import Quantity, Unit
 from shapely.geometry import Polygon as ShapelyPolygon
 
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..geometry import wrap_to_180
 from ..terrain import ray_terrain_intersection
 from ..units import ureg
 from ._base import Sensor
-from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
-    "FrameCamera",
     "GLIHT_HRAC",
     "GLIHT_THERMAL",
+    "FrameCamera",
     "MultiCameraRig",
 ]
 
@@ -174,7 +175,7 @@ class FrameCamera(Sensor):
         half_fov_y_rad = np.radians(self.fov_y / 2)
         near_dep = tilt_rad - half_fov_y_rad
         far_dep = tilt_rad + half_fov_y_rad
-        cos2_near = np.cos(near_dep) ** 2 if near_dep >= 0 else np.cos(near_dep) ** 2
+        cos2_near = np.cos(near_dep) ** 2
         cos2_far = np.cos(far_dep) ** 2
 
         gsd_y_near = (altitude_agl * pixel_y / (f * cos2_near)).to(ureg.meter)
@@ -737,7 +738,7 @@ class FrameCamera(Sensor):
             ys = t * rays[:, 1]
             coords = [
                 (float(x), float(y), 0.0)
-                for x, y, v in zip(xs, ys, valid) if v
+                for x, y, v in zip(xs, ys, valid, strict=False) if v
             ]
 
         return ShapelyPolygon(coords) if len(coords) >= 3 else ShapelyPolygon()
@@ -952,8 +953,8 @@ class MultiCameraRig(Sensor):
         """
         terrain_kwargs = {}
         if lat is not None and lon is not None and altitude_msl is not None:
-            terrain_kwargs = dict(lat=lat, lon=lon, altitude_msl=altitude_msl,
-                                  heading=heading, dem_file=dem_file)
+            terrain_kwargs = {"lat": lat, "lon": lon, "altitude_msl": altitude_msl,
+                                  "heading": heading, "dem_file": dem_file}
 
         result = []
         for entry in self.cameras:

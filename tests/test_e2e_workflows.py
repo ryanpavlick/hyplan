@@ -7,32 +7,31 @@ use synthetic data only.
 
 from __future__ import annotations
 
-
 import matplotlib
+
 matplotlib.use("Agg")
 
 import numpy as np
 import pytest
 
 from hyplan import (
-    Airport,
     AVIRIS3,
+    Airport,
     ConstantWindField,
-    KingAirB200,
     FlightLine,
+    KingAirB200,
     StillAirField,
     box_around_center_line,
+    calculate_swath_widths,
     compute_flight_plan,
     generate_swath_polygon,
-    calculate_swath_widths,
     initialize_data,
     ureg,
 )
 from hyplan.exports import (
-    to_kml,
     to_gpx,
+    to_kml,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -309,6 +308,7 @@ class TestCloudScheduling:
 
     def test_simulate_visits(self):
         import pandas as pd
+
         from hyplan.clouds import simulate_visits
 
         # Build synthetic cloud data: 3 polygons, 2 years
@@ -346,8 +346,8 @@ class TestCloudScheduling:
         assert all_visited == {"SiteA", "SiteB", "SiteC"}
 
         # Each visit should have at least one day
-        for _year, polygons in visit_tracker.items():
-            for _poly_id, days in polygons.items():
+        for polygons in visit_tracker.values():
+            for days in polygons.values():
                 assert len(days) >= 1
 
 

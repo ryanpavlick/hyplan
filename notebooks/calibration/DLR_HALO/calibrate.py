@@ -28,7 +28,7 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
@@ -36,7 +36,6 @@ from _common import (  # noqa: E402
     summary_table,
     tas_per_bin,
 )
-
 
 HALO_GLOB = "data/HALO/halo-ac3-bahamas/raw/HALO-AC3_HALO_BAHAMAS_*.nc"
 

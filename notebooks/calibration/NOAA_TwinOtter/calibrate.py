@@ -22,6 +22,7 @@ Run from repo root::
     python -m notebooks.calibration.NOAA_TwinOtter.calibrate
 """
 from __future__ import annotations
+
 import sys
 import warnings
 from pathlib import Path
@@ -33,12 +34,15 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin, schedule_pts,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    tas_per_bin,
 )
 
 from hyplan.aircraft.icartt import load_icartt
 from hyplan.aircraft.iwg1 import trim_ground_taxi
-
 
 # ─── data sources ────────────────────────────────────────────────────
 FIREXAQ_GLOB = "data/NOAA_TwinOtter/FIREXAQ_TwinOtter_N48_FLIGHTDATA/*.ict"
@@ -70,12 +74,18 @@ def _load_with_unit_check(path: Path) -> pd.DataFrame:
     # Sanity threshold per aircraft class.  Twin Otter can't fly faster
     # than ~85 m/s air-mass-relative; if loaded TAS exceeds ~190 kt
     # (which would be 98 m/s native) something's wrong.
-    if "tas_kt" in df.columns and df["tas_kt"].notna().any():
-        if df["tas_kt"].quantile(0.95) > 190:
-            df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
-    if "wind_speed_kt" in df.columns and df["wind_speed_kt"].notna().any():
-        if df["wind_speed_kt"].quantile(0.95) > 100:  # 100 kt is rare; >100 likely m/s mislabel
-            df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
+    if (
+        "tas_kt" in df.columns
+        and df["tas_kt"].notna().any()
+        and df["tas_kt"].quantile(0.95) > 190
+    ):
+        df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
+    if (
+        "wind_speed_kt" in df.columns
+        and df["wind_speed_kt"].notna().any()
+        and df["wind_speed_kt"].quantile(0.95) > 100  # 100 kt is rare; >100 likely m/s mislabel
+    ):
+        df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
     return df
 
 

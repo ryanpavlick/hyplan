@@ -218,7 +218,7 @@ def _list_subdatasets(hdf_path: str) -> list[tuple[str, str]]:
     rio = _require_rasterio()
 
     with rio.open(hdf_path) as src:
-        return list(zip(src.subdatasets, src.subdatasets))
+        return list(zip(src.subdatasets, src.subdatasets, strict=False))
 
 
 def _read_hdf4_subdataset(
@@ -349,15 +349,14 @@ def _read_and_clip_subdataset(
         "transform": transform,
     }
 
-    with MemoryFile() as memfile:
-        with memfile.open(**profile) as mem_ds:
-            mem_ds.write(reprojected, 1)
-            clipped, clipped_transform = rio_mask(
-                mem_ds,
-                [polygon_geom.__geo_interface__],
-                crop=True,
-                nodata=0,
-            )
+    with MemoryFile() as memfile, memfile.open(**profile) as mem_ds:
+        mem_ds.write(reprojected, 1)
+        clipped, clipped_transform = rio_mask(
+            mem_ds,
+            [polygon_geom.__geo_interface__],
+            crop=True,
+            nodata=0,
+        )
 
     return clipped[0], clipped_transform
 
@@ -785,9 +784,7 @@ def _empty_phenology_frame(product: str, spatial_mode: str) -> pd.DataFrame:
     """Return the canonical empty DataFrame for the requested schema."""
     if product == "phenology":
         return pd.DataFrame(
-            columns=["polygon_id", "year"] + list(
-                _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()
-            )
+            columns=["polygon_id", "year", *list(_PRODUCT_CONFIG["phenology"]["subdatasets"].keys())]
         )
     if spatial_mode == "mean":
         return pd.DataFrame(

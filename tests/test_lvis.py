@@ -1,16 +1,17 @@
 """Comprehensive tests for the LVIS instrument model."""
 
 
-import pytest
 import numpy as np
-from hyplan.units import ureg
+import pytest
+
 from hyplan.instruments import (
     LVIS,
-    LVIS_LENS_NARROW,
     LVIS_LENS_MEDIUM,
+    LVIS_LENS_NARROW,
     LVIS_LENS_WIDE,
     LVIS_LENSES,
 )
+from hyplan.units import ureg
 
 
 @pytest.fixture
@@ -344,8 +345,8 @@ def _write_synthetic_dem(filepath, lat_center, lon_center, elevation_func, size=
     The raster covers ±0.05° around (lat_center, lon_center).
     """
     import rasterio
-    from rasterio.transform import from_bounds
     from rasterio.crs import CRS
+    from rasterio.transform import from_bounds
 
     pixel_deg = 0.001  # ~111m resolution
     x_min = lon_center - size * pixel_deg / 2

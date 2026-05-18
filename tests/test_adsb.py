@@ -6,7 +6,6 @@ installation required for the core algorithm tests.
 
 from __future__ import annotations
 
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -31,7 +30,6 @@ from hyplan.aircraft.adsb.phases import (
 )
 from hyplan.units import ureg
 from hyplan.winds import ConstantWindField, StillAirField
-
 
 # ===================================================================
 # Helpers — synthetic data generation
@@ -599,7 +597,7 @@ class TestRequireTraffic:
 
     def _traffic_unavailable(self) -> bool:
         try:
-            import traffic  # noqa: F401
+            import traffic
             return False
         except ImportError:
             return True
@@ -611,7 +609,7 @@ class TestRequireTraffic:
         if not self._traffic_unavailable():
             pytest.skip("traffic library is installed; cannot test missing-dep path")
 
-        with pytest.raises(HyPlanRuntimeError, match="traffic.*hyplan\\[adsb\\]"):
+        with pytest.raises(HyPlanRuntimeError, match=r"traffic.*hyplan\[adsb\]"):
             _require_traffic()
 
     def test_load_flights_raises_when_traffic_missing(self, tmp_path):

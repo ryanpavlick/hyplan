@@ -36,7 +36,7 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
@@ -46,7 +46,6 @@ from _common import (  # noqa: E402
     vertical_rate_fpm,
     wind_triangle_tas_kt,
 )
-
 
 ACTIVE_GLOB = "data/DO228/NERC_DCALM/active-core/active-package_arsf-dornier_*.nc"
 EYJAF_GLOB = "data/DO228/NERC_DCALM/eyjafjallajokull-arsf/arsf_uk_*_1Hz.csv"

@@ -101,3 +101,16 @@ html_theme_options = {
 add_module_names = False
 
 exclude_patterns = ["_build"]
+
+# Warning suppression.
+#
+# myst.xref_missing — many docs pages link to source files and
+# notebooks via standard markdown `[text](../../path/to/file.ipynb)`
+# syntax.  MyST tries to resolve these as Sphinx cross-references and
+# warns when the target isn't a built document.  These references are
+# real (the user can click them on GitHub) but not Sphinx documents,
+# so the warning is noise.  Tracked for a future cleanup pass — see
+# plans/hygiene-release.md Phase 3.
+suppress_warnings = [
+    "myst.xref_missing",
+]

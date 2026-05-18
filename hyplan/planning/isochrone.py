@@ -460,7 +460,7 @@ def compute_isochrone(
     )
 
     df = pd.DataFrame(rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     # Stash invocation context for the plotter / consumers.
@@ -525,15 +525,17 @@ def compute_concentric_isochrones(
     than ``O(M·N)`` for ``M`` budgets and ``N`` rays.
 
     Args:
-        aircraft, start, cruise_altitude, on_station_altitude,
-        start_time, wind_source, return_destination, mode,
-        on_station_time, reserve, azimuth_resolution_deg,
-        distance_tolerance_nmi, wind_sampling, wind_sample_spacing,
-        max_wind_samples_per_leg, ray_strategy,
-        adaptive_spacing_nmi, max_adaptive_rays: same semantics as
-            :func:`compute_isochrone`.
         budgets: iterable of ``Quantity`` time values to sweep.
             Must be non-empty; sorted ascending internally.
+
+    All other arguments — ``aircraft``, ``start``, ``cruise_altitude``,
+    ``on_station_altitude``, ``start_time``, ``wind_source``,
+    ``return_destination``, ``mode``, ``on_station_time``, ``reserve``,
+    ``azimuth_resolution_deg``, ``distance_tolerance_nmi``,
+    ``wind_sampling``, ``wind_sample_spacing``,
+    ``max_wind_samples_per_leg``, ``ray_strategy``,
+    ``adaptive_spacing_nmi``, ``max_adaptive_rays`` — have the same
+    semantics as :func:`compute_isochrone`.
 
     Returns:
         A :class:`geopandas.GeoDataFrame` in EPSG:4326, one row per
@@ -664,7 +666,7 @@ def compute_concentric_isochrones(
         seed_d_lo = new_seed
 
     df = pd.DataFrame(all_rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     gdf.attrs.update({
@@ -905,7 +907,7 @@ def compute_refuel_isochrone(
     )
 
     df = pd.DataFrame(rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     used = {
@@ -973,27 +975,27 @@ def evaluate_target_reachability(
     every feasible option.
 
     Args:
-        aircraft, start, sortie_budget, flight_day_budget, cruise_altitude,
-        refuel_airports, refuel_time, return_destination, mode,
-        on_station_altitude, on_station_time, reserve, start_time,
-        wind_source: same semantics as
-            :func:`compute_refuel_isochrone`.  ``flight_day_budget``
-            defaults to ``sortie_budget`` (the day clock then never
-            binds).  ``refuel_airports`` may be empty — only the direct
-            itinerary is then evaluated.
         target: the point to evaluate.  Accepts an :class:`Airport` or
             a :class:`Waypoint`.
 
+    All other arguments — ``aircraft``, ``start``, ``sortie_budget``,
+    ``flight_day_budget``, ``cruise_altitude``, ``refuel_airports``,
+    ``refuel_time``, ``return_destination``, ``mode``,
+    ``on_station_altitude``, ``on_station_time``, ``reserve``,
+    ``start_time``, ``wind_source`` — have the same semantics as
+    :func:`compute_refuel_isochrone`.  ``flight_day_budget`` defaults
+    to ``sortie_budget`` (the day clock then never binds).
+    ``refuel_airports`` may be empty — only the direct itinerary is
+    then evaluated.
+
     Returns:
-        Dict with keys:
-            ``reachable``: ``bool``.
-            ``best``: itinerary diagnostic dict for the chosen route,
-                or ``None`` when ``reachable`` is False.
-            ``alternatives``: list of dicts for the other feasible
-                itineraries, sorted by ascending ``day_total_time_min``.
-            ``unreachable_reason``: short human-readable string when
-                ``reachable`` is False, else ``None``.
-            ``target_lat``, ``target_lon``: coordinates of the target.
+        Dict with keys ``reachable`` (bool), ``best`` (itinerary
+        diagnostic dict for the chosen route, or ``None`` when
+        unreachable), ``alternatives`` (list of dicts for the other
+        feasible itineraries, sorted by ascending
+        ``day_total_time_min``), ``unreachable_reason`` (short
+        human-readable string when unreachable, else ``None``), and
+        ``target_lat`` / ``target_lon`` (coordinates of the target).
     """
     import warnings
 
@@ -1786,7 +1788,7 @@ def _unique_sorted_azimuths(
     wrapped = np.mod(np.asarray(azimuths_deg, dtype=float), 360.0)
     rounded = np.round(wrapped, 8)
     out: npt.NDArray[np.float64] = np.array(
-        sorted(set(float(v) for v in rounded)), dtype=float,
+        sorted({float(v) for v in rounded}), dtype=float,
     )
     return out
 
@@ -2155,7 +2157,7 @@ def _solve_rays(
     final_by_index: dict[int, dict[str, Any]] = {}
     if len(final_indices):
         _, final_diags = _evaluate_many(final_indices, d_lo[final_indices])
-        final_by_index = dict(zip(final_indices.tolist(), final_diags))
+        final_by_index = dict(zip(final_indices.tolist(), final_diags, strict=False))
 
     for i, azimuth_deg in enumerate(azimuths_deg):
         if zero_unflyable[i]:

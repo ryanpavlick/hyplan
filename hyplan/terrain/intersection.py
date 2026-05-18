@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 import pymap3d.aer
@@ -11,7 +12,6 @@ import pymap3d.los
 from ..exceptions import HyPlanValueError
 from .elevation import get_elevations, get_min_max_elevations
 from .io import generate_demfile, load_dem
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

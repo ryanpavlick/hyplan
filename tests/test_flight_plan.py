@@ -1,18 +1,19 @@
 """Tests for hyplan.flight_plan."""
 
+import geopandas as gpd
 import numpy as np
 import pytest
-import geopandas as gpd
-from hyplan.units import ureg
-from hyplan.waypoint import Waypoint
-from hyplan.flight_line import FlightLine
-from hyplan.aircraft import KingAirB200, NASA_ER2
+
+from hyplan.aircraft import NASA_ER2, KingAirB200
 from hyplan.airports import Airport, initialize_data
 from hyplan.exceptions import HyPlanValueError
+from hyplan.flight_line import FlightLine
 from hyplan.flight_plan import (
-    compute_flight_plan,
     _track_hold_solution_from_uv,
+    compute_flight_plan,
 )
+from hyplan.units import ureg
+from hyplan.waypoint import Waypoint
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -153,10 +154,11 @@ class TestLoiterOrbitGeometry:
 
     def test_radius_matches_v_squared_over_g_tan_bank(self, b200):
         """The orbit radius equals v² / (g · tan(bank_cruise))."""
-        from hyplan.planning.segments import loiter_orbit_geometry
-        from hyplan.geometry import get_utm_transforms
         from shapely.geometry import Point
         from shapely.ops import transform as shp_transform
+
+        from hyplan.geometry import get_utm_transforms
+        from hyplan.planning.segments import loiter_orbit_geometry
 
         altitude = ureg.Quantity(20000, "feet")
         wp = Waypoint(34.0, -118.0, 0.0, altitude_msl=altitude)
@@ -179,8 +181,9 @@ class TestLoiterOrbitGeometry:
 
     def test_waypoint_lies_on_orbit(self, b200):
         """The waypoint sits exactly on the orbit (UTM-distance ≈ 0 to first vertex)."""
-        from hyplan.planning.segments import loiter_orbit_geometry
         from shapely.geometry import Point
+
+        from hyplan.planning.segments import loiter_orbit_geometry
         wp = Waypoint(
             34.0, -118.0, 0.0,
             altitude_msl=ureg.Quantity(20000, "feet"),
@@ -198,11 +201,12 @@ class TestLoiterOrbitGeometry:
         # invariant holds.  The B-200 cruise schedule is flat above
         # FL200 (calibrated against ACT-America), so it would be a
         # poor choice for testing the underlying geometry.
-        from hyplan.aircraft import NASA_GIII
-        from hyplan.planning.segments import loiter_orbit_geometry
-        from hyplan.geometry import get_utm_transforms
         from shapely.geometry import Point
         from shapely.ops import transform as shp_transform
+
+        from hyplan.aircraft import NASA_GIII
+        from hyplan.geometry import get_utm_transforms
+        from hyplan.planning.segments import loiter_orbit_geometry
 
         ac = NASA_GIII()
 
@@ -448,8 +452,8 @@ class TestTrackHoldSolution:
 # End-to-end planner regression tests
 # ---------------------------------------------------------------------------
 
-from hyplan.winds import ConstantWindField
 from hyplan.flight_patterns import racetrack
+from hyplan.winds import ConstantWindField
 
 
 class TestPlannerRegression:
@@ -727,8 +731,9 @@ class TestPhaseAwareWind:
         cruise_midpoint should produce identical results — the wind
         is the same at every altitude, so per-phase sampling is
         degenerate."""
-        from hyplan.winds import ConstantWindField
         import datetime as _dt
+
+        from hyplan.winds import ConstantWindField
 
         wf = ConstantWindField(40 * ureg.knot, wind_from_deg=270.0)
         t0 = _dt.datetime(2026, 5, 6, 12, tzinfo=_dt.timezone.utc)
@@ -752,8 +757,10 @@ class TestPhaseAwareWind:
     def test_flag_below_min_safe_speed_no_stall_raises(self, b200):
         """Aircraft without stall_speed_cas calibrated → raises."""
         from copy import copy
-        from hyplan.planning.engine import flag_below_min_safe_speed
+
         import pandas as pd
+
+        from hyplan.planning.engine import flag_below_min_safe_speed
         ac = copy(b200)
         ac.stall_speed_cas = None
         empty_plan = gpd.GeoDataFrame(pd.DataFrame())

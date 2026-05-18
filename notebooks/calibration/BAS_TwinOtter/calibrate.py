@@ -33,7 +33,7 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
@@ -43,7 +43,6 @@ from _common import (  # noqa: E402
     tas_per_bin,
     wind_triangle_tas_kt,
 )
-
 
 # Two file flavors across five CEDA archives:
 #  * 1 Hz native-nav: ofcap, accacia (bas-core_masin_*_1hz.nc),

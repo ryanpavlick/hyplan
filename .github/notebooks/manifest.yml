@@ -1,0 +1,244 @@
+# Notebook CI manifest.
+#
+# Source of truth for which notebooks run under which CI tier and what
+# they need to install / access to succeed. Consumed by
+# `.github/notebooks/build_matrix.py` to produce the GitHub Actions
+# matrix for `.github/workflows/notebooks.yml`.
+#
+# Schema per entry:
+#   name:       file name under notebooks/ (or notebooks/calibration/)
+#   extras:     pyproject extras to install for this notebook (notebooks
+#               extra is always added)
+#   requires:   auth secrets needed; entries here cause the notebook to
+#               be skipped in CI cells where the secret isn't set.
+#               Recognised tokens: earthdata, openaip, gee.
+#   group:      "tutorial" | "auth" | "calibration".  Tutorial entries
+#               run on the nightly tier; auth entries run only when
+#               their requires: secrets are present; calibration runs
+#               only on workflow_dispatch with include_calibration=true.
+#
+# When adding a notebook: bump this file, not the workflow.
+
+notebooks:
+
+  # ── Core tutorial / no-auth, no-extras ───────────────────────────
+  - name: tutorial.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: aircraft_performance.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: airport_selection.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: als_lidar_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: cloud_analysis.ipynb
+    extras: [plots]
+    requires: []
+    group: tutorial
+  - name: dubins_path_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: flight_box_generation.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: flight_line_operations.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: flight_optimizer_demo.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: flight_patterns.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: flight_plan_computation.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: frame_camera_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: gliht_instruments.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: glint_analysis.ipynb
+    extras: [sun]
+    requires: []
+    group: tutorial
+  - name: glint_arc_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: lidar_lvis_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: phenology_analysis.ipynb
+    extras: [phenology, plots]
+    requires: []
+    group: tutorial
+  - name: profiling_lidar_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: radar_sar_missions.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: satellite_coordination.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: sensor_comparison.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: solar_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: stereo_oblique_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: terrain_aware_planning.ipynb
+    extras: []
+    requires: []
+    group: tutorial
+  - name: validation.ipynb
+    extras: [sun]
+    requires: []
+    group: tutorial
+
+  # ── Tutorials needing science extras ─────────────────────────────
+  - name: export_formats.ipynb
+    extras: [mag, planned]
+    requires: []
+    group: tutorial
+  - name: awp_planning.ipynb
+    extras: [winds]
+    requires: []
+    group: tutorial
+  - name: dropsonde_objects.ipynb
+    extras: [winds]
+    requires: []
+    group: tutorial
+  - name: wind_effects.ipynb
+    extras: [winds, plots]
+    requires: []
+    group: tutorial
+  - name: campaign_management.ipynb
+    extras: [secrets]
+    requires: []
+    group: tutorial
+
+  # ── Auth-walled: skipped unless their secrets are present ────────
+  - name: airspace_check.ipynb
+    extras: [plots, secrets]
+    requires: [openaip]
+    group: auth
+  - name: cloud_analysis_gee.ipynb
+    extras: [clouds]
+    requires: [gee]
+    group: auth
+  - name: isochrone.ipynb
+    extras: [winds, plots]
+    requires: [earthdata]
+    group: auth
+  - name: winds.ipynb
+    extras: [winds]
+    requires: [earthdata]
+    group: auth
+
+  # ── Calibration: only on workflow_dispatch w/ include_calibration ─
+  # 19 calibration notebooks. Listed individually so per-notebook
+  # extras / requires can be tuned. All inherit group: calibration.
+  - name: calibration/KingAirB200/calibration.ipynb
+    extras: [adsb]
+    requires: []
+    group: calibration
+  - name: calibration/NASA_ER2/calibration.ipynb
+    extras: [planned]
+    requires: []
+    group: calibration
+  - name: calibration/NASA_ER2/planned_vs_flown.ipynb
+    extras: [planned]
+    requires: []
+    group: calibration
+  - name: calibration/NASA_ER2/sortie_replay.ipynb
+    extras: [planned]
+    requires: []
+    group: calibration
+  - name: calibration/NASA_GIII/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NASA_GV/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NASA_C130/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NASA_WB57/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NASA_P3/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NOAA_TwinOtter/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NOAA_WP3D/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NOAA_GIV/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/SAFIRE_ATR42/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/BAS_TwinOtter/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NERC_DO228/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/AWI_BaslerBT67/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/DLR_HALO/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/FAAM_BAe146/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration
+  - name: calibration/NCAR_GV/calibration.ipynb
+    extras: []
+    requires: []
+    group: calibration

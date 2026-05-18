@@ -47,18 +47,17 @@ doi:10.2307/2372560
 """
 
 import math
+from typing import Any
 
 import numpy as np
 from pint import Quantity
 from shapely.geometry import LineString
 from shapely.ops import transform
 
+from .exceptions import HyPlanTypeError, HyPlanValueError
 from .geometry import get_utm_transforms
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
-from .exceptions import HyPlanTypeError, HyPlanValueError
-from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Internal 2D Dubins solver (needed for both horizontal and vertical planes)
@@ -122,9 +121,13 @@ class _Dubins2D:
 
         # Handle degenerate case (same position, same heading)
         dist_2d = max(abs(self.qi[0] - self.qf[0]), abs(self.qi[1] - self.qf[1]))
-        if d < self.rhomin * 1e-5 and abs(a) < self.rhomin * 1e-5 and abs(b) < self.rhomin * 1e-5:
-            if dist_2d < self.rhomin * 1e-5:
-                paths = [_DubinsSegment(0, 2 * math.pi, 0, 2 * math.pi * self.rhomin, "RRR")]
+        if (
+            d < self.rhomin * 1e-5
+            and abs(a) < self.rhomin * 1e-5
+            and abs(b) < self.rhomin * 1e-5
+            and dist_2d < self.rhomin * 1e-5
+        ):
+            paths = [_DubinsSegment(0, 2 * math.pi, 0, 2 * math.pi * self.rhomin, "RRR")]
 
         paths.sort(key=lambda x: x.length)
         self.maneuver = paths[0]
@@ -602,10 +605,9 @@ class DubinsPath2D:
     def _sample_points(self, n: int) -> np.ndarray[Any, np.dtype[Any]]:
         """Return (n, 3) array of (lat, lon, heading_deg) along the path."""
         if self._length_m <= 0:
-            single = np.array([[
+            return np.array([[
                 self.start.latitude, self.start.longitude, self.start.heading,
             ]])
-            return single
         if self._wind is None:
             offsets = np.linspace(0.0, self._length_m, n)
             samples = [self._solver.get_coordinates_at(float(d)) for d in offsets]

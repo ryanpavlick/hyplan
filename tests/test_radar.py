@@ -1,13 +1,18 @@
 """Comprehensive tests for the SAR radar instrument models."""
 
-import pytest
 import numpy as np
+import pytest
 from shapely.geometry import box
-from hyplan.units import ureg
+
 from hyplan.instruments import (
-    SidelookingRadar, UAVSAR_Lband, UAVSAR_Pband, UAVSAR_Kaband,
-    check_lband_radar_exclusions, RadarExclusionConflict,
+    RadarExclusionConflict,
+    SidelookingRadar,
+    UAVSAR_Kaband,
+    UAVSAR_Lband,
+    UAVSAR_Pband,
+    check_lband_radar_exclusions,
 )
+from hyplan.units import ureg
 
 
 @pytest.fixture

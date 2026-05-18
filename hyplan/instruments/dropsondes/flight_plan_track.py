@@ -18,9 +18,9 @@ interpolation logic.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Hashable, Iterator
 from dataclasses import dataclass
-from typing import Any, Hashable
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -91,7 +91,7 @@ def _opt_str(value: Any) -> str | None:
     if pd.isna(value):
         return None
     s = str(value)
-    return s if s else None
+    return s or None
 
 
 class FlightPlanTrack:
@@ -102,7 +102,7 @@ class FlightPlanTrack:
 
     # ------------------------------------------------------------------ ctor
     @classmethod
-    def from_compute_flight_plan(cls, plan: gpd.GeoDataFrame) -> "FlightPlanTrack":
+    def from_compute_flight_plan(cls, plan: gpd.GeoDataFrame) -> FlightPlanTrack:
         """Validate + normalise a ``compute_flight_plan`` GeoDataFrame."""
         if not isinstance(plan, gpd.GeoDataFrame):
             raise HyPlanTypeError("plan must be a GeoDataFrame")
@@ -173,7 +173,7 @@ class FlightPlanTrack:
         return cls(segments)
 
     # ------------------------------------------------------------------ ops
-    def filter(self, segment_types: tuple[str, ...]) -> "FlightPlanTrack":
+    def filter(self, segment_types: tuple[str, ...]) -> FlightPlanTrack:
         """Return a track with only the given segment types, preserving cumulative timing."""
         wanted = set(segment_types)
         return FlightPlanTrack(

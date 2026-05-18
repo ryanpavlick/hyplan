@@ -29,141 +29,141 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 AIRCRAFT_CONFIGS = [
-    dict(
-        module="notebooks.calibration.FAAM_BAe146.calibrate",
-        aircraft="FAAM_BAe146",
-        title="FAAM BAe-146 calibration",
-        source=(
+    {
+        "module": "notebooks.calibration.FAAM_BAe146.calibrate",
+        "aircraft": "FAAM_BAe146",
+        "title": "FAAM BAe-146 calibration",
+        "source": (
             "FAAM Core Data Product 1 Hz NetCDFs from CEDA "
             "(2017-2024 ASMM-tagged science campaigns)."
         ),
-        notes=(
+        "notes": (
             "FAAM files are unusually clean: every nav variable carries "
             "units, ``WOW_IND`` gives a perfect on-ground filter, and "
             "``HGT_RADR`` feeds the radar-altimeter approach gate."
         ),
-        out="notebooks/calibration/FAAM_BAe146/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.SAFIRE_ATR42.calibrate",
-        aircraft="SAFIRE_ATR42",
-        title="SAFIRE ATR-42 calibration",
-        source=(
+        "out": "notebooks/calibration/FAAM_BAe146/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.SAFIRE_ATR42.calibrate",
+        "aircraft": "SAFIRE_ATR42",
+        "title": "SAFIRE ATR-42 calibration",
+        "source": (
             "Two archives: CEDA EUFAR (28 flights across 7 transnational-"
             "access projects) + AERIS EUREC4A 2020 (19 flights, native TAS)."
         ),
-        notes=(
+        "notes": (
             "CEDA EUFAR files lack TAS; reconstructed via wind triangle "
             "from position derivatives + wind components.  AERIS EUREC4A "
             "files ship native TAS and are used directly."
         ),
-        out="notebooks/calibration/SAFIRE_ATR42/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.DLR_HALO.calibrate",
-        aircraft="DLR_HALO",
-        title="DLR HALO (G550) calibration",
-        source=(
+        "out": "notebooks/calibration/SAFIRE_ATR42/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.DLR_HALO.calibrate",
+        "aircraft": "DLR_HALO",
+        "title": "DLR HALO (G550) calibration",
+        "source": (
             "DLR HALO BAHAMAS 10 Hz NetCDFs (HALO-AC3 March-April 2022, "
             "Arctic), downsampled to 1 Hz for binning."
         ),
-        notes=(
+        "notes": (
             "Single-campaign dataset (n=18) so confidence is set to 0.7. "
             "BAHAMAS ships native TAS, IRS-derived attitude, and vertical "
             "velocity — no reconstruction needed."
         ),
-        out="notebooks/calibration/DLR_HALO/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.AWI_BaslerBT67.calibrate",
-        aircraft="AWI_BaslerBT67",
-        title="AWI Polar 5 / Polar 6 (Basler BT-67) calibration",
-        source=(
+        "out": "notebooks/calibration/DLR_HALO/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.AWI_BaslerBT67.calibrate",
+        "aircraft": "AWI_BaslerBT67",
+        "title": "AWI Polar 5 / Polar 6 (Basler BT-67) calibration",
+        "source": (
             "Two public PANGAEA wind/temperature products: ACLOUD 2017 "
             "(DOI 10.1594/PANGAEA.902849) and HALO-AC3 2022 (DOI "
             "10.1594/PANGAEA.968911), both Polar 5 + Polar 6 tails."
         ),
-        notes=(
+        "notes": (
             "Public files store altitude at whole-metre precision; the "
             "calibration uses a central-difference smoother before "
             "binning to recover meaningful vertical-rate medians."
         ),
-        out="notebooks/calibration/AWI_BaslerBT67/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.BAS_TwinOtter.calibrate",
-        aircraft="BAS_TwinOtter",
-        title="BAS Twin Otter calibration (5 CEDA archives)",
-        source=(
+        "out": "notebooks/calibration/AWI_BaslerBT67/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.BAS_TwinOtter.calibrate",
+        "aircraft": "BAS_TwinOtter",
+        "title": "BAS Twin Otter calibration (5 CEDA archives)",
+        "source": (
             "Five CEDA archives spanning 2010-2022: OFCAP (sub-Antarctic "
             "Falklands), ACCACIA (high Arctic), ORCHESTRA (Southern Ocean), "
             "IGP (Iceland-Greenland Seas), ArcticCyclones (summer Arctic)."
         ),
-        notes=(
+        "notes": (
             "Variable name suffix differs by GPS unit (``_JAVAD`` for OFCAP "
             "2010-2011, ``_OXTS`` for ACCACIA / ORCHESTRA).  IGP and "
             "ArcticCyclones ship the QC subset only — TAS reconstructed "
             "via wind triangle and VS from gps_alt finite difference."
         ),
-        out="notebooks/calibration/BAS_TwinOtter/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NERC_DO228.calibrate",
-        aircraft="NERC_DO228",
-        title="NERC DO228 (D-CALM) calibration",
-        source=(
+        "out": "notebooks/calibration/BAS_TwinOtter/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NERC_DO228.calibrate",
+        "aircraft": "NERC_DO228",
+        "title": "NERC DO228 (D-CALM) calibration",
+        "source": (
             "Two CEDA archives: ACTIVE 2005-2006 (``active-package_arsf-"
             "dornier_*.nc``) and Eyjafjallajökull 2010 (``arsf_uk_*_1Hz.csv``)."
         ),
-        notes=(
+        "notes": (
             "Neither archive ships native TAS or attitude — both use a "
             "wind-triangle reconstruction from position derivatives + "
             "U/V wind components."
         ),
-        out="notebooks/calibration/NERC_DO228/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NOAA_WP3D.calibrate",
-        aircraft="NOAA_WP3D",
-        title="NOAA WP-3D Orion calibration",
-        source=(
+        "out": "notebooks/calibration/NERC_DO228/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NOAA_WP3D.calibrate",
+        "aircraft": "NOAA_WP3D",
+        "title": "NOAA WP-3D Orion calibration",
+        "source": (
             "NOAA CSL ICARTT archive: ARCPAC 2008, CalNex 2010, SENEX 2013, "
             "SONGNEX 2015 (12 + 27 + 20 + 19 sortie-dates).  Each sortie "
             "merges three ICARTT files (AircraftMet + AircraftPos + "
             "AircraftMis) on the AOCTimewave UTC-seconds-past-midnight key."
         ),
-        notes=(
+        "notes": (
             "NOAA WP-3D (``Hurricane Hunter`` chemistry P-3) flies a "
             "different mission profile than NASA's ``NASA_P3`` (LaRC tail), "
             "warranting its own calibration class."
         ),
-        out="notebooks/calibration/NOAA_WP3D/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NCAR_GV.calibrate",
-        aircraft="NCAR_GV",
-        title="NCAR HIAPER (GV) calibration",
-        source=(
+        "out": "notebooks/calibration/NOAA_WP3D/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NCAR_GV.calibrate",
+        "aircraft": "NCAR_GV",
+        "title": "NCAR HIAPER (GV) calibration",
+        "source": (
             "NSF/NCAR HIAPER ICARTT NAV files from LaRC ASD (DC3 2012). "
             "NetCDF-derived ICARTT format."
         ),
-        notes=(
+        "notes": (
             "HIAPER files lack native TAS; reconstructed via wind triangle "
             "from groundspeed and U/V wind components."
         ),
-        out="notebooks/calibration/NCAR_GV/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NOAA_TwinOtter.calibrate",
-        aircraft="NOAA_TwinOtter",
-        title="NOAA Twin Otter (N48RF + N46RF) calibration",
-        source=(
+        "out": "notebooks/calibration/NCAR_GV/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NOAA_TwinOtter.calibrate",
+        "aircraft": "NOAA_TwinOtter",
+        "title": "NOAA Twin Otter (N48RF + N46RF) calibration",
+        "source": (
             "Two ICARTT sources combined under ``data/NOAA_TwinOtter/``: "
             "FIREX-AQ 2019 (N48RF, 17 sorties) plus six NOAA CSL "
             "campaigns on N46RF (TopDown 2014, UWFPS 2017, CalFiDE 2022, "
             "AEROMMA 2023, AMMBEC 2024, USOS 2024).  164 sorties total."
         ),
-        notes=(
+        "notes": (
             "Per-file unit detection handles inconsistent m/s vs kt "
             "labeling between PIs (some campaigns advertise "
             "``TrueAirSpd, m/s`` while values are in kt; the aircraft's "
@@ -172,110 +172,110 @@ AIRCRAFT_CONFIGS = [
             "lower than jets / turboprops, matching the slow Twin Otter "
             "climb gradient."
         ),
-        out="notebooks/calibration/NOAA_TwinOtter/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NASA_P3.calibrate",
-        aircraft="NASA_P3",
-        title="NASA P-3 Orion (NASA 426, LaRC) calibration",
-        source=(
+        "out": "notebooks/calibration/NOAA_TwinOtter/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NASA_P3.calibrate",
+        "aircraft": "NASA_P3",
+        "title": "NASA P-3 Orion (NASA 426, LaRC) calibration",
+        "source": (
             "Per-sortie IWG1 files under ``data/NASA_P3/``: local NASA "
             "delivery (``p3_*.txt``) plus NASA ASP archive "
             "(``n426_*.txt`` from ``asp-archive.arc.nasa.gov/N426NA``)."
         ),
-        notes=(
+        "notes": (
             "Distinct from the NOAA WP-3D 'Hurricane Hunter' (different "
             "operator, different mission profile, separate calibration "
             "class ``NOAA_WP3D``).  Cruise-phase schedule restricted to "
             "FL150-FL280."
         ),
-        out="notebooks/calibration/NASA_P3/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NASA_GV.calibrate",
-        aircraft="NASA_GV",
-        title="NASA G-V (NASA 95, JSC) calibration",
-        source=(
+        "out": "notebooks/calibration/NASA_P3/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NASA_GV.calibrate",
+        "aircraft": "NASA_GV",
+        "title": "NASA G-V (NASA 95, JSC) calibration",
+        "source": (
             "Per-sortie IWG1 files split from the local "
             "``n95na_alltracks*.csv`` deliveries.  Files prefix "
             "``n95_*.txt`` under ``data/NASA_GV/``."
         ),
-        notes=(
+        "notes": (
             "Cruise-phase schedule restricted to FL410-FL510 (typical "
             "G-V operating band).  Service ceiling op-p99 reaches "
             "~FL450 in this sample even though FL510 is the airframe "
             "certified ceiling — payload weight typically caps mission "
             "peaks below the AFM number."
         ),
-        out="notebooks/calibration/NASA_GV/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NASA_C130.calibrate",
-        aircraft="NASA_C130",
-        title="NASA C-130H (NASA 436 + 439, Wallops) calibration",
-        source=(
+        "out": "notebooks/calibration/NASA_GV/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NASA_C130.calibrate",
+        "aircraft": "NASA_C130",
+        "title": "NASA C-130H (NASA 436 + 439, Wallops) calibration",
+        "source": (
             "Per-sortie IWG1 files split from the local "
             "``n43[69]NA_alltracks.csv`` deliveries (ACT-America "
             "2016-2018, NASA Wallops C-130H archive).  Both tails land "
             "in ``data/NASA_C130/`` (prefix ``n436_*.txt`` / "
             "``n439_*.txt``)."
         ),
-        notes=(
+        "notes": (
             "Single-operator (NASA Wallops) calibration; USAF / NRL / "
             "NCAR C-130 variants would need their own classes.  Cruise-"
             "phase schedule restricted to FL200-FL280 (the typical "
             "operational band)."
         ),
-        out="notebooks/calibration/NASA_C130/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.KingAirB200.calibrate",
-        aircraft="KingAirB200",
-        title="KingAirB200 multi-campaign calibration",
-        source=(
+        "out": "notebooks/calibration/NASA_C130/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.KingAirB200.calibrate",
+        "aircraft": "KingAirB200",
+        "title": "KingAirB200 multi-campaign calibration",
+        "source": (
             "Six ICARTT campaign archives under ``data/KingAirB200/``: "
             "ACT-AMERICA housekeeping, three DISCOVER-AQ deployments "
             "(CA / CO / TX), KORUS-AQ NAV, LMOS NAV."
         ),
-        notes=(
+        "notes": (
             "Active-VS threshold lowered to 1000 fpm (vs the 1500 fpm "
             "used for jets) since B-200 climb rates drop below 1500 fpm "
             "above FL150.  Ground-taxi trim falls back to altitude-based "
             "trim when groundspeed is missing from the ICARTT file."
         ),
-        out="notebooks/calibration/KingAirB200/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NASA_WB57.calibrate",
-        aircraft="NASA_WB57",
-        title="NASA WB-57 (NASA 926 + 927, JSC) calibration",
-        source=(
+        "out": "notebooks/calibration/KingAirB200/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NASA_WB57.calibrate",
+        "aircraft": "NASA_WB57",
+        "title": "NASA WB-57 (NASA 926 + 927, JSC) calibration",
+        "source": (
             "Per-sortie IWG1 files split from the local "
             "``n92[67]NA_alltracks.csv`` deliveries.  Both tails land "
             "in ``data/NASA_WB57/`` (prefix ``n926_*.txt`` / "
             "``n927_*.txt``)."
         ),
-        notes=(
+        "notes": (
             "High-altitude reconnaissance twin-jet, typical cruise "
             "FL500-FL620, brochure ceiling FL650.  Cruise-phase "
             "schedule restricted to FL500-FL620; FL400 / FL450 anchors "
             "in ``_models.py`` are hand-curated additions outside the "
             "calibrate.py output."
         ),
-        out="notebooks/calibration/NASA_WB57/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NASA_GIII.calibrate",
-        aircraft="NASA_GIII",
-        title="NASA G-III (NASA 520, LaRC) calibration",
-        source=(
+        "out": "notebooks/calibration/NASA_WB57/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NASA_GIII.calibrate",
+        "aircraft": "NASA_GIII",
+        "title": "NASA G-III (NASA 520, LaRC) calibration",
+        "source": (
             "NASA ASP archive ``asp-archive.arc.nasa.gov/N520NA`` "
             "(per-sortie IWG1 files prefixed ``n520_*.txt``) plus the "
             "local ``n520NA_g3_alltracks.csv`` delivery split into "
             "per-sortie files (prefix ``g3ih_*.txt``).  Both land in "
             "``data/NASA_GIII/`` and are loaded together by glob."
         ),
-        notes=(
+        "notes": (
             "Per-phase TAS schedule targets differ — climb anchored at "
             "SL with rotation TAS, cruise restricted to FL250-FL400 "
             "(the typical operating band), descent anchored at SL "
@@ -283,24 +283,24 @@ AIRCRAFT_CONFIGS = [
             "per-phase target altitudes; the notebook uses the unified "
             "``TARGET_ALTS_FT`` for display."
         ),
-        out="notebooks/calibration/NASA_GIII/calibration.ipynb",
-    ),
-    dict(
-        module="notebooks.calibration.NOAA_GIV.calibrate",
-        aircraft="NOAA_GIV",
-        title="NOAA G-IV-SP 'Gonzo' (N49RF) calibration",
-        source=(
+        "out": "notebooks/calibration/NASA_GIII/calibration.ipynb",
+    },
+    {
+        "module": "notebooks.calibration.NOAA_GIV.calibrate",
+        "aircraft": "NOAA_GIV",
+        "title": "NOAA G-IV-SP 'Gonzo' (N49RF) calibration",
+        "source": (
             "NOAA HRD AOML hurricane field-program archive 2021-2025: "
             "1-second flight-level text files (``*N*.1sec.txt``) per "
             "synoptic-surveillance sortie."
         ),
-        notes=(
+        "notes": (
             "Same file format as the NOAA P-3 H/I files, loaded via the "
             "shared ``_hrd_loader.load_p3_1sec``.  Format does not ship "
             "roll, so ``max_bank_deg=30`` (AFM normal-ops floor)."
         ),
-        out="notebooks/calibration/NOAA_GIV/calibration.ipynb",
-    ),
+        "out": "notebooks/calibration/NOAA_GIV/calibration.ipynb",
+    },
 ]
 
 

@@ -30,8 +30,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import M_PER_S_TO_KT, M_TO_FT, smooth_diff  # noqa: E402
-
+from _common import M_PER_S_TO_KT, M_TO_FT, smooth_diff
 
 # ---------------------------------------------------------------------------
 # G-IV-SP ARWO loader (.01.txt)
@@ -57,7 +56,7 @@ def _parse_giv_date(first_line: str) -> date | None:
 def load_giv_arwo(path: Path) -> pd.DataFrame | None:
     """Load one G-IV-SP ARWO file, return canonical DataFrame."""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except OSError:
         return None
@@ -170,7 +169,7 @@ def _parse_p3_date(filename: str) -> date | None:
 def load_p3_1sec(path: Path) -> pd.DataFrame | None:
     """Load one P-3 1-sec ARWO file."""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except OSError:
         return None

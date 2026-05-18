@@ -116,9 +116,8 @@ def _label_heuristic(
     phases = _refine_cruise(phases, altitude_ft, level_band_ft)
 
     # Step 5: merge short phases
-    phases = _merge_short_phases(phases, timestamps, min_phase_seconds)
+    return _merge_short_phases(phases, timestamps, min_phase_seconds)
 
-    return phases
 
 
 def _rolling_median(
@@ -204,7 +203,7 @@ def _find_runs(arr: npt.NDArray[Any]) -> list[tuple[int, int, Any]]:
     changes = np.where(arr[:-1] != arr[1:])[0] + 1
     starts = np.concatenate([[0], changes])
     ends = np.concatenate([changes, [len(arr)]])
-    return [(int(s), int(e), arr[s]) for s, e in zip(starts, ends)]
+    return [(int(s), int(e), arr[s]) for s, e in zip(starts, ends, strict=False)]
 
 
 def _timestamps_to_seconds(

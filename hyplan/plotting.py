@@ -16,16 +16,17 @@ from typing import Any
 
 import folium
 import geopandas as gpd
+import matplotlib.patheffects as _pe
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import matplotlib.pyplot as plt
-import matplotlib.patheffects as _pe
+
 from hyplan.aircraft import Aircraft
 from hyplan.airports import Airport
 from hyplan.flight_line import FlightLine
 from hyplan.pattern import Pattern
-from hyplan.waypoint import is_waypoint
 from hyplan.units import ureg
+from hyplan.waypoint import is_waypoint
 
 __all__ = [
     "map_airspace",
@@ -134,7 +135,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
         if isinstance(item, Pattern):
             if item.is_line_based:
                 for idx, fl in enumerate(item.lines.values()):
-                    x, y = zip(*fl.geometry.coords)
+                    x, y = zip(*fl.geometry.coords, strict=False)
                     label = item.name if idx == 0 else None
                     ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=label)
             else:
@@ -144,7 +145,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
         elif is_waypoint(item):
             ax.scatter(item.longitude, item.latitude, color='green', marker='o', s=100, label=item.name)
         elif isinstance(item, FlightLine):
-            x, y = zip(*item.geometry.coords)
+            x, y = zip(*item.geometry.coords, strict=False)
             ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=item.site_name)
 
     ax.set_title("Flight Plan")
@@ -171,7 +172,7 @@ def terrain_profile_along_track(
         tuple: (times, elevations) where times is cumulative minutes and
             elevations is terrain height in feet MSL, both as numpy arrays.
     """
-    from .terrain import get_elevations, generate_demfile
+    from .terrain import generate_demfile, get_elevations
 
     all_lats, all_lons, all_times = [], [], []
     cumulative_time = 0.0
@@ -445,7 +446,7 @@ def plot_airspace_map(
         nm_indices = {nm.flight_line_index for nm in near_misses}
 
         for i, fl in enumerate(flight_lines):
-            lons, lats = zip(*fl.geometry.coords)
+            lons, lats = zip(*fl.geometry.coords, strict=False)
             if i in conflicting_indices:
                 color, style, lw = "red", "-", 2.5
             elif i in nm_indices:
@@ -464,7 +465,7 @@ def plot_airspace_map(
         parts = list(geom.geoms) if geom.geom_type.startswith("Multi") else [geom]
         for part in parts:
             if hasattr(part, "coords") and len(part.coords) >= 2:
-                x, y = zip(*part.coords)
+                x, y = zip(*part.coords, strict=False)
                 ax.plot(x, y, color="red", linewidth=5, alpha=0.4,
                         transform=transform)
 
@@ -495,7 +496,7 @@ def plot_airspace_map(
                 xy=(mid.x, mid.y), fontsize=6, color="#B8860B",
                 weight="bold", xytext=(8, -8), textcoords="offset points",
                 transform=transform,
-                arrowprops=dict(arrowstyle="->", color="#DAA520", lw=0.8),
+                arrowprops={"arrowstyle": "->", "color": "#DAA520", "lw": 0.8},
             )
 
     # Legend
@@ -528,7 +529,7 @@ def plot_airspace_map(
         # Prefer flight lines for extent if available
         if flight_lines:
             for fl in flight_lines:
-                lons, lats = zip(*fl.geometry.coords)
+                lons, lats = zip(*fl.geometry.coords, strict=False)
                 all_lons.extend(lons)
                 all_lats.extend(lats)
         if not all_lons:
@@ -577,8 +578,8 @@ def plot_conflict_matrix(
     Returns:
         Matplotlib Figure and Axes.
     """
-    from shapely import STRtree
     import matplotlib.patches as mpatches
+    from shapely import STRtree
 
     n_fl = len(flight_lines)
     n_as = len(airspaces)
@@ -753,6 +754,7 @@ def plot_vertical_profile(
 
     # Entry/exit markers from conflicts
     from shapely.geometry import Point
+
     from .airspace import check_airspace_conflicts
     conflicts = check_airspace_conflicts([flight_line], airspaces)
     for c in conflicts:
@@ -772,7 +774,7 @@ def plot_vertical_profile(
     ax.set_ylim(bottom=0)
     # Deduplicate legend
     handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
+    by_label = dict(zip(labels, handles, strict=False))
     ax.legend(by_label.values(), by_label.keys(), fontsize=7, loc="upper right")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -828,7 +830,7 @@ def plot_oceanic_tracks(
         else:
             color, style = "gray", "--"
 
-        lons, lats = zip(*[(w[0], w[1]) for w in t.waypoints])
+        lons, lats = zip(*[(w[0], w[1]) for w in t.waypoints], strict=False)
         ax.plot(lons, lats, style, color=color, linewidth=1.8, alpha=0.8,
                 transform=transform)
 
@@ -851,7 +853,7 @@ def plot_oceanic_tracks(
     # Overlay flight lines if provided
     if flight_lines:
         for fl in flight_lines:
-            lons, lats = zip(*fl.geometry.coords)
+            lons, lats = zip(*fl.geometry.coords, strict=False)
             ax.plot(lons, lats, "-o", color="red", linewidth=2, markersize=4,
                     transform=transform)
 
@@ -895,6 +897,7 @@ def map_airspace(
         folium.Map with all layers.
     """
     from shapely.geometry import mapping
+
     from .airspace import classify_severity
 
     conflicts = conflicts or []
@@ -1148,8 +1151,10 @@ def plot_isochrone_static(
     Returns:
         ``(fig, ax)`` so the caller can add overlays after.
     """
-    import cartopy.crs as ccrs
     import datetime as _dt
+
+    import cartopy.crs as ccrs
+
     from .planning.isochrone import isochrone_polygon
 
     plate = ccrs.PlateCarree()
@@ -1233,8 +1238,8 @@ def plot_isochrone_static(
                 0.01, 0.99, wind_caption,
                 transform=ax.transAxes, va="top", ha="left",
                 fontsize=8, color="0.15",
-                bbox=dict(boxstyle="round,pad=0.3", fc="white",
-                          ec="0.7", alpha=0.85),
+                bbox={"boxstyle": "round,pad=0.3", "fc": "white",
+                          "ec": "0.7", "alpha": 0.85},
             )
 
     for poly, color, label in polygons:

@@ -212,10 +212,11 @@ class LineScanner(Sensor):
             ground_speed: Platform ground speed.
 
         Returns:
-            ``{"cross_track": Quantity (m), "along_track": Quantity (m),
-            "aspect_ratio": float}`` — ``aspect_ratio`` is
-            ``along_track / cross_track`` (1.0 = square pixels;
-            >1 = elongated along the flight direction).
+            A dict with keys ``"cross_track"`` (Quantity, meters),
+            ``"along_track"`` (Quantity, meters), and ``"aspect_ratio"``
+            (float).  ``aspect_ratio`` is ``along_track / cross_track``
+            (1.0 = square pixels; >1 = elongated along the flight
+            direction).
         """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
         ground_speed = self._validate_quantity(ground_speed, ureg.meter / ureg.second)

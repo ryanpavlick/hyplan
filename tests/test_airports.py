@@ -1,17 +1,19 @@
 """Tests for hyplan.airports."""
 
 import os
-import pytest
+
 import pandas as pd
+import pytest
+
 from hyplan.airports import (
     Airport,
-    initialize_data,
+    airports_within_radius,
     find_nearest_airport,
     find_nearest_airports,
-    airports_within_radius,
-    get_runway_details,
-    get_longest_runway,
     generate_geojson,
+    get_longest_runway,
+    get_runway_details,
+    initialize_data,
 )
 
 

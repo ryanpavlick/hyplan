@@ -17,8 +17,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from .._base import TasSchedule, VerticalProfile
 from ...units import ureg
+from .._base import TasSchedule, VerticalProfile
 from .models import FitResult, FlightPhaseData, ScheduleFitMetrics
 
 logger = logging.getLogger(__name__)

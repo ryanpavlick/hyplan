@@ -115,7 +115,7 @@ def _sample_to_release(
     sample: AircraftTrackSample,
     *,
     sensor: DropsondeSystem,
-    aircraft: "Aircraft | None",
+    aircraft: Aircraft | None,
     takeoff_time: _dt.datetime,
     release_id: int = 0,
 ) -> DropsondeRelease:
@@ -153,7 +153,7 @@ def solve_release_for_target(
     takeoff_time: _dt.datetime,
     sensor: DropsondeSystem = AVAPS_NRD41,
     wind_field: WindField,
-    aircraft: "Aircraft | None" = None,
+    aircraft: Aircraft | None = None,
     search_window: tuple[_dt.datetime, _dt.datetime] | None = None,
     segment_types: tuple[str, ...] = ("flight_line", "transit"),
     coarse_step: Quantity = 10 * ureg.second,

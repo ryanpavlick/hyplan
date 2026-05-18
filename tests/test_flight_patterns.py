@@ -1,23 +1,22 @@
 """Tests for hyplan.flight_patterns."""
 
-import pytest
 import pymap3d.vincenty
+import pytest
 
-from hyplan.units import ureg
+from hyplan.aircraft import NASA_ER2, NASA_P3
 from hyplan.flight_line import FlightLine
-from hyplan.pattern import Pattern
 from hyplan.flight_patterns import (
+    coordinated_line,
+    flight_lines_to_waypoint_path,
+    glint_arc,
+    polygon,
     racetrack,
     rosette,
-    polygon,
     sawtooth,
     spiral,
-    glint_arc,
-    flight_lines_to_waypoint_path,
-    coordinated_line,
 )
-from hyplan.aircraft import NASA_ER2, NASA_P3
-
+from hyplan.pattern import Pattern
+from hyplan.units import ureg
 
 CENTER = (34.0, -118.0)
 ALT = ureg.Quantity(20000, "feet")
@@ -65,7 +64,7 @@ class TestRacetrack:
         pat = racetrack(CENTER, 0.0, alts[0], ureg.Quantity(30, "km"),
                         n_legs=3, offset=0, altitudes=alts)
         legs = list(pat.lines.values())
-        for leg, alt_expected in zip(legs, alts):
+        for leg, alt_expected in zip(legs, alts, strict=False):
             assert leg.altitude_msl.m_as(ureg.foot) == pytest.approx(
                 alt_expected.m_as(ureg.foot), rel=1e-3)
 
@@ -83,7 +82,7 @@ class TestRacetrack:
 
     def test_leg_length_accuracy(self):
         pat = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"))
-        leg = list(pat.lines.values())[0]
+        leg = next(iter(pat.lines.values()))
         dist, _ = pymap3d.vincenty.vdist(leg.lat1, leg.lon1, leg.lat2, leg.lon2)
         assert dist == pytest.approx(50000, rel=1e-3)
 
@@ -135,14 +134,14 @@ class TestRosette:
 
     def test_radius_accuracy(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(25, "km"))
-        first = list(pat.lines.values())[0]
+        first = next(iter(pat.lines.values()))
         for lat, lon in [(first.lat1, first.lon1), (first.lat2, first.lon2)]:
             dist, _ = pymap3d.vincenty.vdist(CENTER[0], CENTER[1], lat, lon)
             assert dist == pytest.approx(25000, rel=1e-3)
 
     def test_line_length(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(25, "km"))
-        first = list(pat.lines.values())[0]
+        first = next(iter(pat.lines.values()))
         dist, _ = pymap3d.vincenty.vdist(first.lat1, first.lon1, first.lat2, first.lon2)
         assert dist == pytest.approx(50000, rel=1e-3)
 
@@ -215,7 +214,7 @@ class TestSawtooth:
         pat = sawtooth(CENTER, 0.0, alt_min, alt_max,
                        ureg.Quantity(100, "km"), n_cycles=2)
         expected_ft = [10000, 5000, 10000, 5000, 10000]
-        for wp, exp in zip(pat.waypoints, expected_ft):
+        for wp, exp in zip(pat.waypoints, expected_ft, strict=False):
             assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(exp, rel=1e-3)
 
     def test_track_length(self):
@@ -518,14 +517,14 @@ class TestPatternRegenerate:
 class TestPatternReplaceLine:
     def test_replace_line_preserves_id(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
-        first_id = list(pat.lines.keys())[0]
+        first_id = next(iter(pat.lines.keys()))
         new_fl = FlightLine.start_length_azimuth(
             lat1=40.0, lon1=-100.0,
             length=ureg.Quantity(5, "km"), az=45.0,
             altitude_msl=ureg.Quantity(5000, "meter"),
         )
         pat.replace_line(first_id, new_fl)
-        assert list(pat.lines.keys())[0] == first_id
+        assert next(iter(pat.lines.keys())) == first_id
         assert pat.lines[first_id].lat1 == pytest.approx(40.0)
 
     def test_replace_line_waypoint_pattern_rejected(self):
@@ -555,14 +554,14 @@ class TestCoordinatedLine:
     """Tests for the coordinated dual-aircraft line pattern."""
 
     def _make_result(self, **kwargs):
-        defaults = dict(
-            center=CENTER, heading=0.0,
-            primary_leg_length=ureg.Quantity(200, "km"),
-            primary_aircraft=NASA_P3(),
-            secondary_aircraft=NASA_ER2(),
-            primary_altitude=ureg.Quantity(5000, "feet"),
-            secondary_altitude=ureg.Quantity(65000, "feet"),
-        )
+        defaults = {
+            "center": CENTER, "heading": 0.0,
+            "primary_leg_length": ureg.Quantity(200, "km"),
+            "primary_aircraft": NASA_P3(),
+            "secondary_aircraft": NASA_ER2(),
+            "primary_altitude": ureg.Quantity(5000, "feet"),
+            "secondary_altitude": ureg.Quantity(65000, "feet"),
+        }
         defaults.update(kwargs)
         return coordinated_line(**defaults)
 
@@ -851,7 +850,7 @@ class TestPatternMovement:
         moved = pat.translate(ureg.Quantity(20, "km"), ureg.Quantity(0, "km"))
         assert len(moved.waypoints) == n_wp
         # Every waypoint shifted north
-        for orig_wp, new_wp in zip(pat.waypoints, moved.waypoints):
+        for orig_wp, new_wp in zip(pat.waypoints, moved.waypoints, strict=False):
             assert new_wp.latitude > orig_wp.latitude
 
     def test_move_to_relocates_centre(self):
@@ -895,7 +894,7 @@ class TestPatternMovement:
             n_turns=2.0,
         )
         rotated = pat.rotate(45.0)
-        for orig_wp, new_wp in zip(pat.waypoints, rotated.waypoints):
+        for orig_wp, new_wp in zip(pat.waypoints, rotated.waypoints, strict=False):
             expected = (orig_wp.heading + 45.0) % 360
             assert new_wp.heading == pytest.approx(expected, abs=1e-6)
 

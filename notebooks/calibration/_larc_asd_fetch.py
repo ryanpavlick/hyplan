@@ -21,8 +21,8 @@ from __future__ import annotations
 import re
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
 
 ARCVIEW_ROOT = "https://www-air.larc.nasa.gov/cgi-bin/ArcView"
 ENZFILE_ROOT = "https://www-air.larc.nasa.gov/cgi-bin/enzFile"
@@ -39,9 +39,9 @@ def _http_get(url: str, timeout: float = 120.0) -> bytes:
 def list_files(
     mission: str,
     button: str,
-    filename_filter: Optional[Callable[[str], bool]] = None,
-    extensions: Tuple[str, ...] = (".ICT", ".ict"),
-) -> List[Tuple[str, str]]:
+    filename_filter: Callable[[str], bool] | None = None,
+    extensions: tuple[str, ...] = (".ICT", ".ict"),
+) -> list[tuple[str, str]]:
     """Return ``[(filename, enzFile_token), ...]`` matching the filter.
 
     Args:
@@ -60,7 +60,7 @@ def list_files(
     pattern = re.compile(
         r'href="/cgi-bin/enzFile\?([0-9A-Fa-f]+)"[^>]*>([^<]+)</a>'
     )
-    out: List[Tuple[str, str]] = []
+    out: list[tuple[str, str]] = []
     for m in pattern.finditer(html):
         token, anchor = m.group(1), m.group(2).strip()
         if not any(anchor.endswith(ext) for ext in extensions):
@@ -71,7 +71,7 @@ def list_files(
 
     # De-duplicate while preserving order.
     seen: set[str] = set()
-    deduped: List[Tuple[str, str]] = []
+    deduped: list[tuple[str, str]] = []
     for f, t in out:
         if f in seen:
             continue
@@ -84,12 +84,12 @@ def fetch_files(
     mission: str,
     button: str,
     out_dir: str | Path,
-    filename_filter: Optional[Callable[[str], bool]] = None,
+    filename_filter: Callable[[str], bool] | None = None,
     sleep_between: float = 0.5,
     replace: bool = False,
-    extensions: Tuple[str, ...] = (".ICT", ".ict"),
-    label: Optional[str] = None,
-) -> List[Path]:
+    extensions: tuple[str, ...] = (".ICT", ".ict"),
+    label: str | None = None,
+) -> list[Path]:
     """Download every matching file from a LaRC ASD listing.
 
     Idempotent: skips files already present unless ``replace=True``.
@@ -107,7 +107,7 @@ def fetch_files(
 
     print(f"  [{label}] {len(listing)} files matched")
 
-    landed: List[Path] = []
+    landed: list[Path] = []
     for i, (filename, token) in enumerate(listing, 1):
         target = out_path / filename
         if target.exists() and not replace:
@@ -131,7 +131,7 @@ def fetch_files(
     return landed
 
 
-def date_from_filename(name: str) -> Optional[str]:
+def date_from_filename(name: str) -> str | None:
     """Extract a YYYYMMDD substring from an ICARTT filename, or None."""
     m = re.search(r"_(20\d{6})_", name)
     return m.group(1) if m else None

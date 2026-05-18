@@ -1,10 +1,13 @@
 """Comprehensive tests for the FrameCamera instrument model."""
 
-import pytest
+import contextlib
+
 import numpy as np
+import pytest
 from shapely.geometry import Polygon as ShapelyPolygon
-from hyplan.units import ureg
+
 from hyplan.instruments import FrameCamera, MultiCameraRig
+from hyplan.units import ureg
 
 
 @pytest.fixture
@@ -370,14 +373,14 @@ class TestCoverageBuffer:
 class TestFootprintCorners:
     def test_deprecation_warning(self):
         """footprint_corners emits DeprecationWarning."""
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            # Will fail on missing DEM, but the warning fires first
-            try:
-                FrameCamera.footprint_corners(
-                    34.0, -117.0, 5000.0, 36.0, 24.0, "__nonexistent__.tif"
-                )
-            except Exception:
-                pass
+        # Will fail on missing DEM, but the warning fires first
+        with (
+            pytest.warns(DeprecationWarning, match="deprecated"),
+            contextlib.suppress(Exception),
+        ):
+            FrameCamera.footprint_corners(
+                34.0, -117.0, 5000.0, 36.0, 24.0, "__nonexistent__.tif"
+            )
 
 
 class TestGroundFootprint:
@@ -823,7 +826,7 @@ class TestGlihtThermal:
     def test_is_frame_camera_not_line_scanner(self):
         # Regression guard: the Gobi-640 must be modelled as a FrameCamera,
         # not as a LineScanner.  An older HyPlan release had it backwards.
-        from hyplan.instruments import FrameCamera, GLIHT_THERMAL
+        from hyplan.instruments import GLIHT_THERMAL, FrameCamera
         assert isinstance(GLIHT_THERMAL, FrameCamera)
 
     def test_legacy_gliht_thermal_linescanner_is_retired(self):

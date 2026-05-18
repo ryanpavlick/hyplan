@@ -2,6 +2,232 @@
 
 ## Unreleased
 
+## v1.10.1 — 2026-05-18
+
+Maintenance release. No new science features, no API changes. Project-wide
+lint/type ratchet, docs CI hardening, tiered notebook CI, repository
+hygiene.
+
+### Lint ratchet
+
+* **Project-wide `mypy --strict`.** `[tool.mypy] strict = true` is
+  now the default for the whole `hyplan/` package. Every one of the
+  101 source files passes strict.  Previously only two modules
+  (`hyplan.planning.isochrone`, `hyplan.aircraft.wind_path`) had
+  per-module strict overrides; those overrides are now redundant
+  and have been removed.  `ignore_missing_imports = true` is kept
+  at the global level for third-party libraries that lack stubs
+  (earthengine, earthaccess, geomag, rasterio, etc.); inline
+  `# type: ignore` markers at the library boundary continue to
+  document the specific Any-returns we accept.  One additional
+  ignore added in `hyplan/clouds/sources.py` for an
+  `ee.Image.set(...) -> Any` return.
+* **Ruff `I` (isort) enabled.** Sorted imports across 27 source
+  files in `hyplan/`, `tests/`, and `notebooks/` via `ruff --fix`.
+  All 356 violations were auto-fixed except one notebook site
+  (`notebooks/airspace_check.ipynb`) where an inline
+  `import traceback; traceback.print_exc()` debug line was split to
+  the canonical two-statement form.
+* **Ruff `C4` + `PIE` + `LOG` + `FURB` enabled.** Smaller bug-class
+  / modernization rule families that came along essentially for
+  free.  72 violations swept across hyplan, tests, and notebooks:
+  * 52 `C408` unnecessary-collection-call (`dict(a=1)` → `{"a": 1}`)
+  * 4 `C401` unnecessary-generator-set (`set(g)` → `{...}`)
+  * 1 `C416` unnecessary-comprehension
+  * 3 `PIE810` multiple-startswith/endswith collapsed to a tuple
+  * 3 `LOG015` root-logger calls in `hyplan/geometry.py` switched
+    to the module-level `logger`.
+  * 8 `FURB` modernization fixes.
+  * 1 `SIM118` dict-keys iteration in a notebook.
+  All auto-fixed (some with --unsafe-fixes).
+  `PERF` (perflint) considered but not enabled — 28 `PERF401`
+  manual-list-comprehension sites and 10 `PERF203` try-in-loop
+  sites need manual touchup; deferred.
+* **Ruff `SIM` (flake8-simplify) enabled** with `SIM108`
+  (if-else-as-expression) ignored. 24 manual fixes across hyplan,
+  notebooks, and tests:
+  * 15× SIM117 (nested `with`) — combined with the parenthesized
+    multi-context syntax (`with (a as x, b as y): ...`). Touches 4
+    calibration fetchers (BAS_TwinOtter, FAAM_BAe146, SAFIRE_ATR42,
+    _hrd_fetch) and 7 test files (test_airspace, test_clouds,
+    test_frame_camera, test_satellites).
+  * 7× SIM102 (collapsible-if) — flattened into `and`-chained
+    conditions across `hyplan/dubins3d.py`, `flight_optimizer.py`,
+    `notebooks/calibration/NOAA_TwinOtter/calibrate.py`,
+    `NOAA_WP3D/calibrate.py`.
+  * 1× SIM105 (suppressible-exception) in `tests/test_download.py`:
+    `try/except/pass` → `contextlib.suppress(Exception)`.
+  * 1× SIM113 (manual counter in for-loop) in
+    `KingAirA90/_fetch_airplanes_live.py`: replaced `done = 0; ...
+    done += 1` with `for done, f in enumerate(..., start=1)`.
+* **Ruff `B905` (zip-without-explicit-strict)** removed from the
+  ignore list. 99 `zip(a, b)` call sites swept to
+  `zip(a, b, strict=False)` via `ruff --fix --unsafe-fixes` —
+  preserves the current silent-truncation semantics but makes the
+  intent explicit. Sites that should assert equal lengths
+  (`strict=True`) can opt in case-by-case in future work.
+* **Ruff `RET` (flake8-return) enabled** in
+  `[tool.ruff.lint] extend-select`. 14 RET504 unnecessary-assign
+  sites cleared by `ruff --fix --unsafe-fixes`.
+* **Ruff `RUF` (Ruff-specific) enabled** with selective ignores:
+  `RUF001/RUF002/RUF003` (ambiguous-unicode — intentional
+  typography), `RUF046` (cast-to-int — high-noise), `RUF059`
+  (unused-unpacked-variable — defer). After ignores, 80 violations:
+  74 auto-fixed (38 safe + 36 unsafe), 6 manual (RUF012 ClassVar
+  annotations on `Aircraft._SCHEDULE_COMPAT` and a test fixture,
+  RUF034 useless if-else in `FrameCamera.ground_sample_distance`,
+  RUF043 raw-string regex patterns in pytest match=).  Hidden
+  feature-detection imports (`geopandas`, `cfgrib`) marked with
+  `# noqa: F401`.
+* **Ruff `UP` (pyupgrade) enabled** in `[tool.ruff.lint] extend-select`.
+  65 violations in the baseline tree (22× UP037 quoted-annotation,
+  17× UP006 non-pep585-annotation, 12× UP035 deprecated-typing-import,
+  10× UP045 non-pep604-optional, plus a handful of others); 59
+  auto-fixed via `ruff --fix`, 6 fixed manually:
+  * `hyplan/aircraft/_base.py`: `Union[CasMachSchedule, TasSchedule]`
+    → `CasMachSchedule | TasSchedule`; dropped the `Union` import.
+  * `notebooks/calibration/_larc_asd_fetch.py` and
+    `_noaa_csl_fetch.py`: dropped the unused
+    `from typing import List, Optional, Tuple` imports.
+  * `tests/test_download.py`: `for c in self._chunks: yield c`
+    → `yield from self._chunks`.
+* TODO.md updated to reflect `UP` as done; `RUF`, `RET`, `SIM` still
+  queued for future ratchet passes (Phase 6 strategy: one rule
+  family per maintenance window).
+
+### Docs build
+
+* **`sphinx-build -W` enabled** in `.github/workflows/docs.yml`. The
+  docs CI now fails on any new warning, not just build errors. Fixes
+  applied to clear the existing warnings:
+  * Removed the duplicate `autoclass`/`autodata` block for
+    `DropsondeSystem` + `AVAPS_NRD41` from `docs/api/sensors.md` —
+    they're already documented in the dedicated
+    `docs/api/dropsonde.md` page; the sensors-page block had a
+    `{doc}` pointer to dropsonde.md but still autoincluded the
+    classes, producing 5 duplicate-object warnings.
+  * Two `|VS|` literals in `hyplan.aircraft.NASA_ER2` docstring
+    rewrote as plain `VS` (RST was interpreting them as undefined
+    substitution refs).
+  * `compute_concentric_isochrones` and `evaluate_target_reachability`
+    docstrings in `hyplan.planning.isochrone`: the multi-name field
+    `aircraft, start, ...: same semantics` style isn't valid napoleon
+    syntax; restructured into a single passthrough paragraph.
+  * `LineScanner.ground_pixel_dimensions` docstring rewrote a
+    multi-line inline literal `` ``{"cross_track": Quantity ...}``  ``
+    into prose (RST inline literals can't span lines).
+* **`suppress_warnings = ["myst.xref_missing"]`** added to
+  `docs/conf.py`. Markdown links like
+  `[text](../../notebooks/foo.ipynb)` resolve correctly on GitHub
+  but MyST treats them as cross-references and warns when the target
+  isn't a built Sphinx document. Tracked for a future cleanup pass.
+
+### Repository hygiene
+
+* **Untracked `notebooks/interactive_export/`** — 11 regenerable
+  output files (GPX/KML/ICT/CSV/XLSX/TXT, ~150 KB total) produced
+  by `notebooks/export_formats.ipynb`. Removed from git, added to
+  `.gitignore`. They reappear locally when the notebook runs;
+  no `git status` churn for contributors.
+* **[`docs/dev/data_policy.md`](docs/dev/data_policy.md)** —
+  four-category policy: fixtures vs example data vs regenerable
+  notebook artifacts vs auth-walled caches. Decision tree included.
+* **[`docs/dev/public_api.md`](docs/dev/public_api.md)** —
+  public / advanced / private convention. Documents the **Policy B**
+  decision: subpackage-qualified imports are first-class public
+  surfaces; top-level `hyplan.*` is a curated subset, not a
+  comprehensive re-export. Resolves the
+  `hyplan.planning.create_flight_line_record` ambiguity.
+* **Linkcheck workflow** at
+  [`.github/workflows/linkcheck.yml`](.github/workflows/linkcheck.yml)
+  — Sunday 06:00 UTC weekly + manual dispatch. Uploads the report
+  as an artifact and emits a summary in the run page. Does **not**
+  block PRs (NASA/vendor URLs occasionally rate-limit).
+* `docs/developer.md` extended with a toctree linking the two new
+  `docs/dev/*.md` policy pages so they aren't orphans.
+
+### Notebook CI
+
+* **Tiered notebook execution**, replacing the previous 4-notebook
+  smoke matrix in `.github/workflows/notebooks.yml`. The new manifest
+  at [`.github/notebooks/manifest.yml`](.github/notebooks/manifest.yml)
+  is the source of truth for which notebooks run, what extras they
+  need, and what auth secrets they require. Tiers:
+  * **PR**: only notebooks changed in the PR
+    (via `tj-actions/changed-files`); empty matrix → job is a no-op.
+  * **Schedule (nightly)**: every tutorial-group entry, plus auth-
+    walled entries whose `requires:` secrets are present in repo
+    settings. Calibration excluded.
+  * **`workflow_dispatch`**: pick tier explicitly; optional
+    `include_calibration=true` input runs the 19 calibration
+    notebooks as a separate matrix.
+  * **Per-matrix-row extras**: each cell installs
+    `pip install -e ".[notebooks,<row extras>]"`, so cells don't
+    over-install heavy science dependencies.
+  * **Source-tree clean check**: executed notebooks go to
+    `/tmp/notebooks/`; a post-execution `git status --porcelain` step
+    fails the job if anything in the working tree changed (catches
+    accidental in-place writes).
+* [`tests/test_notebook_manifest.py`](tests/test_notebook_manifest.py)
+  asserts every `notebooks/**/*.ipynb` appears in the manifest and
+  every manifest entry maps to a real file — catches silent
+  CI-coverage gaps.
+
+### Lint
+
+* **Native Ruff for notebooks.** `pyproject.toml`'s `[tool.ruff]` now
+  sets `extend-include = ["*.ipynb"]`, so `ruff check .` covers
+  `hyplan/`, `tests/`, and `notebooks/` uniformly. Existing per-file-
+  ignores already declared the notebook-appropriate relaxations;
+  added `F401` (unused-import) to the notebook list so tutorials can
+  import a symbol to demonstrate an import path without lint noise.
+  Pre-commit config in `.pre-commit-config.yaml` updated to match.
+* Cleaned six `F541` (f-string without placeholders) bugs in
+  `notebooks/gliht_instruments.ipynb` (introduced during the v1.10
+  notebook work).
+
+### Packaging
+
+* **`docs` extra** added to `pyproject.toml`:
+  `sphinx>=7`, `myst-nb`, `furo`, `sphinx-autodoc-typehints`. Replaces
+  the hand-installed pip line in `.github/workflows/docs.yml`; fresh
+  contributors can now build docs with `pip install -e ".[docs]"`.
+* **`notebooks` extra** added: `papermill`, `ipykernel`, `jupyter`,
+  `nbconvert`. **Tooling only** — does NOT pull in the science extras
+  (winds, clouds, mag, planned, …) that individual notebooks may need.
+  Per-notebook extras get declared in `.github/notebooks/manifest.yml`
+  in a later Phase-4 sweep.
+* `.github/workflows/docs.yml` and `.github/workflows/notebooks.yml`
+  switched to `pip install -e ".[...]"` invocations.
+
+### Docs / CI
+
+* **Docs API coverage check** — new
+  [`docs/_scripts/check_api_coverage.py`](docs/_scripts/check_api_coverage.py)
+  wired into `.github/workflows/docs.yml` ahead of the Sphinx build.
+  Fails the docs CI if any `docs/api/**/*.md` page is unreachable from
+  a toctree, or if any autodoc directive (`autofunction`, `autoclass`,
+  `automethod`, `autodata`, `autoexception`, `autoattribute`,
+  `automodule`) points at a symbol that doesn't import. The
+  `autodata` coverage matters most — that's how reference singletons
+  (`GLIHT_HRAC`, `AVAPS_NRD41`, etc.) are documented, and they drift
+  the most often.
+* **Dropsonde docs reachable.** `docs/api/dropsonde.md` is now in the
+  Instruments toctree of [`docs/index.md`](docs/index.md). Was an
+  orphan since v1.9.
+
+### Tests
+
+* **`tests/test_public_api.py`** — parametrized check that every name
+  in `hyplan.__all__`, `hyplan.instruments.__all__`,
+  `hyplan.planning.__all__`, and `hyplan.exports.__all__` resolves via
+  `getattr`. Scoped to core installed-by-default surfaces; optional-extra
+  submodules (winds, clouds, phenology, adsb, mag, planned) get their
+  own per-extra test files when the time comes.
+* **`TestSensorRegistry`** in `tests/test_sensors.py` extended to
+  iterate every key in `SENSOR_REGISTRY` and assert
+  `create_sensor(name)` round-trips to a `Sensor` instance.
+
 ## v1.10.0 — 2026-05-17
 
 ### New features

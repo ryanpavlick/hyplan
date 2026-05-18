@@ -3,13 +3,14 @@
 import math
 
 import pytest
+
 from hyplan.units import (
-    ureg,
+    altitude_to_flight_level,
+    convert_angle,
     convert_distance,
     convert_speed,
-    convert_angle,
     convert_time,
-    altitude_to_flight_level,
+    ureg,
 )
 
 

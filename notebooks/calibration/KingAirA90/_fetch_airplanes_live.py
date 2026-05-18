@@ -20,6 +20,7 @@ Idempotent — skips files already on disk.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime
 import gzip
@@ -28,7 +29,6 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 
 REGISTRY_PATH = Path("data/KingAirA90/faa_registry.csv")
 TRACE_DIR = Path("data/KingAirA90/adsb_lol_traces")
@@ -51,10 +51,8 @@ def _fetch(date: str, hex_code: str) -> dict | None:
         raise
     if data[:1] == b"<":
         return None  # got an HTML error page disguised as 200
-    try:
+    with contextlib.suppress(OSError):
         data = gzip.decompress(data)
-    except OSError:
-        pass
     try:
         d = json.loads(data)
     except json.JSONDecodeError:
@@ -121,8 +119,7 @@ def main() -> None:
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
         futures = [ex.submit(_one, j) for j in jobs]
-        done = 0
-        for f in as_completed(futures):
+        for done, f in enumerate(as_completed(futures), start=1):
             n_rows, nd = f.result()
             if n_rows > 0:
                 written += 1
@@ -131,7 +128,6 @@ def main() -> None:
                 no_data += 1
             else:
                 skipped += 1
-            done += 1
             if done % 200 == 0:
                 print(f"  ... {done}/{len(jobs)}  written={written}  "
                       f"no_data={no_data}  rows={total_rows:,}")

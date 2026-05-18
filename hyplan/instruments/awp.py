@@ -495,7 +495,7 @@ def _terrain_dem_for_awp_profiles(
     dem_lons = [pos["longitude"] for pos in positions]
     if platform_headings_deg is None:
         platform_headings_deg = np.asarray([pos["heading"] for pos in positions], dtype=float)
-    for pos, platform_heading in zip(positions, platform_headings_deg):
+    for pos, platform_heading in zip(positions, platform_headings_deg, strict=False):
         intercepts = sensor.los_ground_intercepts(
             pos["latitude"],
             pos["longitude"],
@@ -766,7 +766,7 @@ def _profiles_for_geometry(
 
     records = []
     for sample_index, (distance_m, pos, platform_heading) in enumerate(
-        zip(sample_distances, interpolated, platform_headings),
+        zip(sample_distances, interpolated, platform_headings, strict=False),
         start=1,
     ):
         intercepts = sensor.los_ground_intercepts(

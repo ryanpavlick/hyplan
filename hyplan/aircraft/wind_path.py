@@ -43,7 +43,6 @@ from ..winds.base import WindField
 from ..winds.simple import StillAirField
 from ._base import Aircraft
 
-
 __all__ = [
     "climb_with_wind_field",
     "descend_with_wind_field",

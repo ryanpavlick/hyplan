@@ -28,8 +28,9 @@ import dataclasses
 import datetime as _dt
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 import geopandas as gpd
 import matplotlib.axes
@@ -80,7 +81,7 @@ class DropsondePlan:
         plan: gpd.GeoDataFrame | FlightPlanTrack,
         *,
         sensor: DropsondeSystem = AVAPS_NRD41,
-        aircraft: "Aircraft | None" = None,
+        aircraft: Aircraft | None = None,
         takeoff_time: _dt.datetime,
         spacing: Quantity | None = None,
         spacing_time: Quantity | None = None,
@@ -90,7 +91,7 @@ class DropsondePlan:
         target_polygon: shapely.geometry.Polygon | None = None,
         dem_file: str | None = None,
         terrain_aware: bool = False,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Build a plan from a ``compute_flight_plan`` GeoDataFrame.
 
         Set ``flight_track`` on the returned plan so the inverse
@@ -141,15 +142,15 @@ class DropsondePlan:
     @classmethod
     def from_pattern(
         cls,
-        pattern: "Pattern",
+        pattern: Pattern,
         *,
         sensor: DropsondeSystem = AVAPS_NRD41,
-        aircraft: "Aircraft | None" = None,
+        aircraft: Aircraft | None = None,
         takeoff_time: _dt.datetime | None = None,
         spacing: Quantity | None = None,
         spacing_time: Quantity | None = None,
         start_elapsed: Quantity = 0 * ureg.second,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Build a plan from a line-based :class:`Pattern`.
 
         Spacing resets per line; line-to-line transit is NOT modelled in
@@ -235,7 +236,7 @@ class DropsondePlan:
         surface_elevation_msl: Quantity | None = None,
         dt: Quantity = 1 * ureg.second,
         rng_seed: int | None = None,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Forward-simulate all non-skipped releases. Returns a new plan."""
         if n_ensemble < 0:
             raise HyPlanValueError("n_ensemble must be non-negative")
@@ -433,17 +434,17 @@ class DropsondePlan:
                     height_deg = 2 * b_m / m_per_deg_lat
                     bearing = float(row["splash_ellipse_bearing_deg"])
                     angle = (90.0 - bearing) % 360.0
-                    kw: dict[str, Any] = dict(
-                        xy=(center_lon, center_lat),
-                        width=width_deg,
-                        height=height_deg,
-                        angle=angle,
-                        fill=True,
-                        facecolor="C3",
-                        alpha=0.18,
-                        edgecolor="C3",
-                        lw=1.2,
-                    )
+                    kw: dict[str, Any] = {
+                        "xy": (center_lon, center_lat),
+                        "width": width_deg,
+                        "height": height_deg,
+                        "angle": angle,
+                        "fill": True,
+                        "facecolor": "C3",
+                        "alpha": 0.18,
+                        "edgecolor": "C3",
+                        "lw": 1.2,
+                    }
                     if not added:
                         kw["label"] = f"Splash {sigma_scale:.0f}-σ ellipse"
                         added = True
@@ -507,7 +508,7 @@ def _refine_agl_qc_with_dem(
     lons = np.asarray([r.waypoint.longitude for r in releases], dtype=float)
     elevs = get_elevations(lats, lons, dem_file)
     out: list[DropsondeRelease] = []
-    for r, e in zip(releases, elevs):
+    for r, e in zip(releases, elevs, strict=False):
         if r.waypoint.altitude_msl is None or np.isnan(e):
             qc_min: bool | None = None
         else:
@@ -579,7 +580,7 @@ def summarize_trajectories(
 
         if target_polygon is not None:
             hits = sum(
-                1 for la, lo in zip(lats, lons)
+                1 for la, lo in zip(lats, lons, strict=False)
                 if target_polygon.contains(Point(float(lo), float(la)))
             )
             frac_in = hits / len(group)

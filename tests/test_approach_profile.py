@@ -8,7 +8,6 @@ from hyplan.aircraft import ApproachProfile, TasSchedule
 from hyplan.exceptions import HyPlanValueError
 from hyplan.units import ureg
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

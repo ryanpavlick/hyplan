@@ -19,22 +19,23 @@ doi:10.21105/joss.00580
 from __future__ import annotations
 
 import datetime
-import numpy as np
-import random
 import logging
+import random
 import warnings
-from functools import lru_cache
 from collections.abc import Callable
-from shapely.affinity import affine_transform, translate
-from shapely.geometry import Point, LineString, Polygon, MultiPolygon
-from shapely.ops import triangulate, transform, unary_union
-from shapely.geometry.base import BaseGeometry
-from pyproj import CRS
-from pyproj import Transformer
+from functools import lru_cache
+from typing import Any
+
+import numpy as np
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
-from .exceptions import HyPlanTypeError, HyPlanValueError, HyPlanRuntimeError
-from typing import Any
+from pyproj import CRS, Transformer
+from shapely.affinity import affine_transform, translate
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import transform, triangulate, unary_union
+
+from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +113,7 @@ def _disable_numba_and_reimport_timezonefinder() -> Any:
     import sys
 
     os.environ["NUMBA_DISABLE_JIT"] = "1"
-    for mod in [m for m in sys.modules if m == "numba" or m.startswith("numba.")
-                or m == "timezonefinder" or m.startswith("timezonefinder.")]:
+    for mod in [m for m in sys.modules if m == "numba" or m.startswith(("numba.", "timezonefinder.")) or m == "timezonefinder"]:
         del sys.modules[mod]
     return _import_timezonefinder()
 
@@ -214,7 +214,7 @@ def _validate_polygon(polygon: Polygon | None) -> bool | None:
         - Uses Shapely's built-in validation for geometry validity checks.
     """
     if polygon is None:
-        logging.debug("Polygon validation skipped because input is None.")
+        logger.debug("Polygon validation skipped because input is None.")
         return None  # No validation needed for None
 
     if not isinstance(polygon, Polygon):
@@ -237,7 +237,7 @@ def _validate_polygon(polygon: Polygon | None) -> bool | None:
             f"Input polygon is invalid: {polygon.explain_validity()}"
         )
 
-    logging.debug("Polygon validation passed.")
+    logger.debug("Polygon validation passed.")
     return True
 
 
@@ -351,7 +351,7 @@ def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Cal
     wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
     utm_to_wgs84 = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True).transform
 
-    logging.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
+    logger.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
     return wgs84_to_utm, utm_to_wgs84
 
 def haversine(
@@ -558,7 +558,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
         ybound = (xbound_r * np.sin(-azimuth_radians) + ybound_r * np.cos(-azimuth_radians)) + cy
 
         # Create rotated bounding box
-        rotated_bbox_utm = Polygon(zip(xbound, ybound))
+        rotated_bbox_utm = Polygon(zip(xbound, ybound, strict=False))
         rotated_bbox_wgs84 = transform(utm_to_wgs84, rotated_bbox_utm)
 
     except Exception as e:
@@ -645,9 +645,8 @@ def translate_polygon(polygon: Polygon, distance: float, azimuth: float) -> Poly
     y_offset = distance * np.cos(azimuth_radians)
 
     # Translate the polygon
-    translated_polygon = translate(polygon, xoff=x_offset, yoff=y_offset)
+    return translate(polygon, xoff=x_offset, yoff=y_offset)
 
-    return translated_polygon
 
 
 def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, across_track_distance: float, azimuth: float) -> Polygon:

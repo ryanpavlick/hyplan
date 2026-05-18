@@ -17,8 +17,8 @@ T.S. Kelso.
 
 import logging
 import os
-import time
 import shutil
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -26,20 +26,20 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # pragma: no cover - type-checking only
     from skyfield.api import EarthSatellite
 
+import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import geopandas as gpd
-import simplekml
-from shapely.geometry import Point, LineString, Polygon
-from .sun import sunpos
 import pymap3d.vincenty
+import simplekml
 from pyproj import Geod
+from shapely.geometry import LineString, Point, Polygon
 
-from .terrain import get_cache_root
 from .download import download_file
-from .geometry import wrap_to_180
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+from .geometry import wrap_to_180
+from .sun import sunpos
+from .terrain import get_cache_root
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ def fetch_tle(
 
     # Parse the TLE file
     with open(cache_path) as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        lines = [line.strip() for line in f if line.strip()]
 
     if len(lines) < 2:
         raise HyPlanRuntimeError(
@@ -286,9 +286,9 @@ def compute_ground_track(
         radians=False,
     )
 
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats, strict=False)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
 
-    gdf = gpd.GeoDataFrame(
+    return gpd.GeoDataFrame(
         {
             "satellite_name": satellite.name,
             "norad_id": satellite.norad_id,
@@ -302,7 +302,6 @@ def compute_ground_track(
         crs="EPSG:4326",
     )
 
-    return gdf
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +459,7 @@ def compute_swath_footprint(
                 f"Polygon may be invalid in EPSG:4326."
             )
 
-        polygon = Polygon(zip(poly_lons, poly_lats))
+        polygon = Polygon(zip(poly_lons, poly_lats, strict=False))
         ascending = p_lats[-1] > p_lats[0]
 
         rows.append({
@@ -590,7 +589,7 @@ def find_overpasses(
         is_usable = sza_center < max_sza
 
         ascending = p_lats[-1] > p_lats[0]
-        ground_track_line = LineString(zip(p_lons, p_lats))
+        ground_track_line = LineString(zip(p_lons, p_lats, strict=False))
 
         if include_swath:
             # Build swath polygon for this pass segment
@@ -666,8 +665,7 @@ def find_all_overpasses(
 
     combined = pd.concat(results, ignore_index=True)
     combined = gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:4326")
-    combined = combined.sort_values("pass_start").reset_index(drop=True)
-    return combined
+    return combined.sort_values("pass_start").reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,6 @@ from hyplan.aircraft.icartt import (
 )
 from hyplan.exceptions import HyPlanValueError
 
-
 # ----------------------------------------------------------------------
 # Fixture-builder helpers
 # ----------------------------------------------------------------------

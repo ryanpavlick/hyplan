@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
-import numpy as np
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-import matplotlib.patches as mpatches
-import pandas as pd
 
 from ..exceptions import HyPlanValueError
 from .analysis import _STAGE_COLUMNS
-
 
 # ---------------------------------------------------------------------------
 # Stage display configuration
@@ -134,7 +134,7 @@ def plot_phenology_calendar(
     bar_height = 0.6
 
     # Draw bars between consecutive stages
-    stage_pairs = list(zip(_STAGE_COLUMNS[:-1], _STAGE_COLUMNS[1:]))
+    stage_pairs = list(itertools.pairwise(_STAGE_COLUMNS))
 
     for _, row in stages_df.iterrows():
         y = y_positions[row["polygon_id"]]

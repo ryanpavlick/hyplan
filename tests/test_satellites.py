@@ -1,33 +1,34 @@
 """Tests for hyplan.satellites (registry and helper functions, no network)."""
 
 import os
-import pytest
-import numpy as np
-import pandas as pd
-import geopandas as gpd
 from datetime import datetime, timedelta
 from unittest.mock import patch
-from shapely.geometry import Point, Polygon, LineString
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import pytest
+from shapely.geometry import LineString, Point, Polygon
 
 from hyplan.satellites import (
-    SatelliteInfo,
     SATELLITE_REGISTRY,
-    get_satellite,
-    fetch_tle,
-    clear_tle_cache,
-    compute_ground_track,
-    compute_swath_footprint,
-    find_overpasses,
-    find_all_overpasses,
-    compute_overpass_overlap,
-    overpasses_to_kml,
+    SatelliteInfo,
     _compute_headings,
-    _segment_passes,
-    _merge_time_windows,
     _empty_overpass_gdf,
     _get_tle_cache_dir,
-    _tle_cache_path,
     _is_tle_stale,
+    _merge_time_windows,
+    _segment_passes,
+    _tle_cache_path,
+    clear_tle_cache,
+    compute_ground_track,
+    compute_overpass_overlap,
+    compute_swath_footprint,
+    fetch_tle,
+    find_all_overpasses,
+    find_overpasses,
+    get_satellite,
+    overpasses_to_kml,
 )
 
 # ---------------------------------------------------------------------------
@@ -41,7 +42,8 @@ _ISS_TLE_TEXT = f"{_ISS_TLE_NAME}\n{_ISS_TLE_LINE1}\n{_ISS_TLE_LINE2}\n"
 
 def _make_earth_satellite():
     """Create a Skyfield EarthSatellite from the synthetic ISS TLE."""
-    from skyfield.api import load as sf_load, EarthSatellite
+    from skyfield.api import EarthSatellite
+    from skyfield.api import load as sf_load
     ts = sf_load.timescale()
     return EarthSatellite(_ISS_TLE_LINE1, _ISS_TLE_LINE2, name=_ISS_TLE_NAME, ts=ts)
 
@@ -57,7 +59,7 @@ def _make_ground_track_gdf(n=20, start=None, step_s=30.0, sat_name="ISS (ZARYA)"
     timestamps = np.array([start + timedelta(seconds=i * step_s) for i in range(n)])
     alt_km = np.full(n, 420.0)
     sza = np.full(n, 30.0)
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats, strict=False)]
     return gpd.GeoDataFrame(
         {
             "satellite_name": sat_name,
@@ -288,9 +290,11 @@ class TestFetchTle:
         tle_file.write_text("only one line\n")
 
         iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
-        with patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)):
-            with pytest.raises(RuntimeError, match="fewer than 2 lines"):
-                fetch_tle(iss_info, max_age_hours=999)
+        with (
+            patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)),
+            pytest.raises(RuntimeError, match="fewer than 2 lines"),
+        ):
+            fetch_tle(iss_info, max_age_hours=999)
 
     def test_fetch_tle_by_name(self, tmp_path):
         """Test that fetch_tle accepts a string name from the registry."""

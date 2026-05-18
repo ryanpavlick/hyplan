@@ -26,12 +26,12 @@ planning tool. Zenodo. doi:10.5281/zenodo.1478126
 """
 
 from ._common import extract_waypoints, generate_wp_names
+from .csv import to_er2_csv, to_foreflight_csv, to_honeywell_fms
 from .excel import to_excel, to_pilot_excel
-from .csv import to_foreflight_csv, to_honeywell_fms, to_er2_csv
+from .gpx import to_gpx
 from .icartt import to_icartt
 from .kml import to_kml
-from .gpx import to_gpx
-from .text import to_txt, to_trackair
+from .text import to_trackair, to_txt
 
 __all__ = [
     "extract_waypoints",

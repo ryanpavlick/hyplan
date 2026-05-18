@@ -1,0 +1,64 @@
+name: Sphinx linkcheck
+
+# Runs `sphinx-build -b linkcheck` against the docs tree to flag
+# broken external URLs.  HyPlan cites many NASA / vendor / public-
+# dataset links that decay silently; this is the catch-net.
+#
+# Runs weekly (Sunday 06:00 UTC) and on manual dispatch.  Does NOT
+# block PRs — false positives from rate-limited NASA / GitHub /
+# vendor sites would otherwise be a constant noise.  Broken links
+# are reported as a workflow artifact; the maintainer triages them.
+
+on:
+  schedule:
+    # Sunday 06:00 UTC — low-traffic time across NASA/Earthdata mirrors.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linkcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[docs]"
+
+      - name: Run sphinx linkcheck
+        # Linkcheck exits 0 even on broken links if --keep-going is
+        # set (we want the full report); use `|| true` to make sure
+        # the artifact upload step still runs if the build itself
+        # crashes for some other reason.
+        run: |
+          sphinx-build -b linkcheck --keep-going docs docs/_build/linkcheck || true
+
+      - name: Upload linkcheck report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linkcheck-report
+          path: docs/_build/linkcheck/
+          retention-days: 30
+
+      - name: Summarise broken links
+        if: always()
+        run: |
+          if [ -f docs/_build/linkcheck/output.txt ]; then
+            BROKEN=$(grep -E '^\S+: line\s+[0-9]+\) broken' docs/_build/linkcheck/output.txt | wc -l || true)
+            REDIRECT=$(grep -E '^\S+: line\s+[0-9]+\) redirected' docs/_build/linkcheck/output.txt | wc -l || true)
+            echo "## Linkcheck summary" >>"$GITHUB_STEP_SUMMARY"
+            echo "" >>"$GITHUB_STEP_SUMMARY"
+            echo "- Broken links: $BROKEN" >>"$GITHUB_STEP_SUMMARY"
+            echo "- Redirects:    $REDIRECT" >>"$GITHUB_STEP_SUMMARY"
+            echo "" >>"$GITHUB_STEP_SUMMARY"
+            echo "Full report attached as the \`linkcheck-report\` artifact." >>"$GITHUB_STEP_SUMMARY"
+          fi

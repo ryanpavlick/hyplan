@@ -1,12 +1,14 @@
 """Tests for hyplan.clouds (date range logic, no Google Earth Engine required)."""
 
-import pytest
+import matplotlib
 import numpy as np
 import pandas as pd
-import matplotlib
+import pytest
+
 matplotlib.use("Agg")
+from unittest.mock import MagicMock, patch
+
 import matplotlib.pyplot as plt
-from unittest.mock import patch, MagicMock
 
 # xarray is part of the [clouds] extra; the spatial-plotting tests below
 # require it but the rest of this file does not. Gate the dependent class
@@ -19,14 +21,14 @@ except ImportError:  # pragma: no cover
     HAS_XARRAY = False
 
 from hyplan.clouds import (
-    create_date_ranges,
-    simulate_visits,
-    OpenMeteoCloudFraction,
     OpenMeteoCloudForecast,
-    fetch_cloud_fraction,
+    OpenMeteoCloudFraction,
+    create_date_ranges,
     fetch_cloud_forecast,
-    summarize_cloud_fraction_by_doy,
+    fetch_cloud_fraction,
     plot_doy_cloud_fraction,
+    simulate_visits,
+    summarize_cloud_fraction_by_doy,
 )
 from hyplan.clouds.plotting import (
     plot_cloud_fraction_spatial,
@@ -258,17 +260,19 @@ class TestOpenMeteoCloudFraction:
         gdf = _mock_gdf([("A", 34.0, -118.0)])
 
         import requests as _req
-        with patch.object(_req, "get", return_value=mock_resp):
-            with pytest.raises(Exception, match="500"):
-                OpenMeteoCloudFraction().fetch(gdf, 2023, 2023, 1, 10)
+        with (
+            patch.object(_req, "get", return_value=mock_resp),
+            pytest.raises(Exception, match="500"),
+        ):
+            OpenMeteoCloudFraction().fetch(gdf, 2023, 2023, 1, 10)
 
 
 class TestFetchCloudFraction:
     def test_unknown_source_raises(self, tmp_path):
         """Unknown source should raise."""
         # Create a minimal GeoJSON file
-        from shapely.geometry import box
         import geopandas as _gpd
+        from shapely.geometry import box
 
         gdf = _gpd.GeoDataFrame(
             {"Name": ["A"]},
@@ -283,8 +287,8 @@ class TestFetchCloudFraction:
 
     def test_satellite_with_openmeteo_raises(self, tmp_path):
         """Passing satellite!='both' with openmeteo should raise."""
-        from shapely.geometry import box
         import geopandas as _gpd
+        from shapely.geometry import box
 
         gdf = _gpd.GeoDataFrame(
             {"Name": ["A"]},
@@ -499,9 +503,11 @@ class TestOpenMeteoCloudForecast:
         gdf = _mock_gdf([("A", 34.0, -118.0)])
 
         import requests as _req
-        with patch.object(_req, "get", return_value=mock_resp):
-            with pytest.raises(Exception, match="500"):
-                OpenMeteoCloudForecast().fetch(gdf, forecast_days=3)
+        with (
+            patch.object(_req, "get", return_value=mock_resp),
+            pytest.raises(Exception, match="500"),
+        ):
+            OpenMeteoCloudForecast().fetch(gdf, forecast_days=3)
 
     def test_models_param_passed(self):
         """The models parameter should be included in the request."""
@@ -525,8 +531,8 @@ class TestOpenMeteoCloudForecast:
 
 class TestFetchCloudForecast:
     def test_unknown_source_raises(self, tmp_path):
-        from shapely.geometry import box
         import geopandas as _gpd
+        from shapely.geometry import box
 
         gdf = _gpd.GeoDataFrame(
             {"Name": ["A"]},

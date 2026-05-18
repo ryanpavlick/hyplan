@@ -31,17 +31,16 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
     schedule_pts,
+    smooth_diff,
     summary_table,
     tas_per_bin,
-    smooth_diff,
-    vertical_rate_fpm
+    vertical_rate_fpm,
 )
-
 
 CEDA_GLOB = "data/ATR42/ceda-eufar/*/*/*.nc"
 AERIS_GLOB = "data/ATR42/eurec4a-aeris/EUREC4A_*.nc"

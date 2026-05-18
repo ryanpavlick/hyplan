@@ -46,13 +46,13 @@ from ..units import ureg
 from ._base import Sensor
 
 __all__ = [
-    "ALSLidar",
-    "ContiguityError",
     "GLIHT_DUAL_VQ_480I",
-    "LidarMount",
-    "MultiALSLidarRig",
     "RIEGL_VQ_480II",
     "SPEED_OF_LIGHT_M_PER_S",
+    "ALSLidar",
+    "ContiguityError",
+    "LidarMount",
+    "MultiALSLidarRig",
 ]
 
 
@@ -1206,7 +1206,7 @@ class MultiALSLidarRig(Sensor):
     def __len__(self) -> int:
         return len(self.units)
 
-    def __iter__(self) -> "Iterator[LidarMount]":
+    def __iter__(self) -> Iterator[LidarMount]:
         return iter(self.units)
 
     # ------------------------------------------------------------------

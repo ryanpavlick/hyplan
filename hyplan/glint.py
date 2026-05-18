@@ -33,30 +33,25 @@ doi:10.1016/j.solener.2003.12.003
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
+import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
-import geopandas as gpd
-
-from datetime import datetime
-
-from shapely.geometry import Point, LineString, Polygon
-from shapely.ops import transform
-
 import pymap3d
 import pymap3d.vincenty
 from pymap3d import los
+from shapely.geometry import LineString, Point, Polygon
+from shapely.ops import transform
 
-from .sun import sunpos
-
-from .units import ureg, magnitude_in
 from .exceptions import HyPlanValueError
-from .geometry import process_linestring, get_utm_transforms, wrap_to_360, wrap_to_180
-from .instruments import ScanningSensor
 from .flight_line import FlightLine
+from .geometry import get_utm_transforms, process_linestring, wrap_to_180, wrap_to_360
+from .instruments import ScanningSensor
+from .sun import sunpos
+from .units import magnitude_in, ureg
 from .waypoint import Waypoint
-
 
 logger = logging.getLogger(__name__)
 

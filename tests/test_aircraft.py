@@ -1,32 +1,34 @@
 """Tests for hyplan.aircraft."""
 
-import pytest
 import numpy as np
-from hyplan.units import ureg
+import pytest
+
 from hyplan.aircraft import (
-    CasMachSchedule,
-    TasSchedule,
-    VerticalProfile,
-    TurnModel,
-    PhaseBankAngles,
-    PerformanceConfidence,
-    SourceRecord,
+    DLR_HALO,
+    NASA_C130,
     NASA_ER2,
     NASA_GIII,
     NASA_GIV,
     NASA_GV,
-    KingAirB200 as B200,
-    NASA_C130,
-    NOAA_TwinOtter,
-    BAS_TwinOtter,
-    FAAM_BAe146,
-    SAFIRE_ATR42,
     NERC_DO228,
+    SAFIRE_ATR42,
     AWI_BaslerBT67,
-    DLR_HALO,
+    BAS_TwinOtter,
+    CasMachSchedule,
+    FAAM_BAe146,
+    NOAA_TwinOtter,
+    PerformanceConfidence,
+    PhaseBankAngles,
+    SourceRecord,
+    TasSchedule,
+    TurnModel,
+    VerticalProfile,
+)
+from hyplan.aircraft import (
+    KingAirB200 as B200,
 )
 from hyplan.exceptions import HyPlanValueError
-
+from hyplan.units import ureg
 
 # ---------------------------------------------------------------------------
 # TasSchedule
@@ -222,10 +224,22 @@ class TestLoadFactorBudget:
         """Every aircraft factory's calibrated banks fit well under
         the load-factor budget at level flight."""
         from hyplan.aircraft import (
-            NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
-            NASA_P3, NASA_WB57, KingAirB200, NASA_C130, NOAA_TwinOtter,
-            BAS_TwinOtter, FAAM_BAe146, SAFIRE_ATR42, NERC_DO228,
-            AWI_BaslerBT67, DLR_HALO,
+            DLR_HALO,
+            NASA_C20A,
+            NASA_C130,
+            NASA_ER2,
+            NASA_GIII,
+            NASA_GIV,
+            NASA_GV,
+            NASA_P3,
+            NASA_WB57,
+            NERC_DO228,
+            SAFIRE_ATR42,
+            AWI_BaslerBT67,
+            BAS_TwinOtter,
+            FAAM_BAe146,
+            KingAirB200,
+            NOAA_TwinOtter,
         )
         for cls in (NASA_ER2, NASA_GV, NASA_GIII, NASA_GIV, NASA_C20A,
                     NASA_P3, NASA_WB57, KingAirB200, NASA_C130, NOAA_TwinOtter,
@@ -540,8 +554,9 @@ class TestAircraftPerformance:
 
     def test_service_ceiling_no_warning_below(self):
         """No warning when both endpoints are below ceiling."""
-        from hyplan.waypoint import Waypoint
         import warnings as _warnings
+
+        from hyplan.waypoint import Waypoint
 
         ac = B200()
         ceiling_ft = ac.service_ceiling.m_as(ureg.foot)
@@ -1420,9 +1435,9 @@ class TestAircraftApproachProfile:
         )
 
     def test_aircraft_rejects_wrong_approach_profile_type(self):
+        from hyplan.aircraft._base import Aircraft
         from hyplan.aircraft._models import KingAirB200
         from hyplan.exceptions import HyPlanTypeError
-        from hyplan.aircraft._base import Aircraft
         base = KingAirB200()
         with pytest.raises(HyPlanTypeError, match="approach_profile"):
             Aircraft(
@@ -1546,7 +1561,7 @@ class TestTimeToReturnApproachIntegration:
         ac = self._build_b200_with_approach()
         info = ac.time_to_return(cruise_waypoint, airport)
         approach_geom = info["phases"]["approach"]["geometry"]
-        start_lon, start_lat = list(approach_geom.coords)[0]
+        start_lon, start_lat = next(iter(approach_geom.coords))
         distance_m, _ = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude, start_lat, start_lon,
         )
@@ -1559,7 +1574,7 @@ class TestTimeToReturnApproachIntegration:
         ac = self._build_b200_with_approach()
         info = ac.time_to_return(cruise_waypoint, airport)
         approach_geom = info["phases"]["approach"]["geometry"]
-        start_lon, start_lat = list(approach_geom.coords)[0]
+        start_lon, start_lat = next(iter(approach_geom.coords))
         # Bearing FROM faf TO airport.
         _, bearing_faf_to_airport = pymap3d.vincenty.vdist(
             start_lat, start_lon, airport.latitude, airport.longitude,
@@ -1591,7 +1606,7 @@ class TestTimeToReturnApproachIntegration:
         dubins_geom = info["dubins_path"].geometry
         dubins_end_lon, dubins_end_lat = list(dubins_geom.coords)[-1]
         approach_geom = info["phases"]["approach"]["geometry"]
-        faf_lon, faf_lat = list(approach_geom.coords)[0]
+        faf_lon, faf_lat = next(iter(approach_geom.coords))
         # Dubins endpoint should match FAF (within 1e-4 deg ≈ 11 m).
         assert dubins_end_lat == pytest.approx(faf_lat, abs=1e-4)
         assert dubins_end_lon == pytest.approx(faf_lon, abs=1e-4)
@@ -1800,7 +1815,7 @@ class TestClimbPlan:
     def test_pauses_render_as_loiter(self):
         """The pause sub-phase carries segment_type='loiter' and
         process_flight_phase emits a 'loiter' dataframe row."""
-        from hyplan.aircraft import ClimbPlan, NASA_ER2
+        from hyplan.aircraft import NASA_ER2, ClimbPlan
         from hyplan.airports import Airport
         from hyplan.flight_line import FlightLine
         from hyplan.flight_plan import compute_flight_plan
@@ -1831,7 +1846,7 @@ class TestClimbPlan:
     def test_climb_plan_increases_total_duration(self):
         """compute_flight_plan total time grows by the hold duration
         when ClimbPlan adds pauses."""
-        from hyplan.aircraft import ClimbPlan, NASA_ER2
+        from hyplan.aircraft import NASA_ER2, ClimbPlan
         from hyplan.airports import Airport
         from hyplan.flight_line import FlightLine
         from hyplan.flight_plan import compute_flight_plan

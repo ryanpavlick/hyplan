@@ -96,8 +96,8 @@ def get_binary_cloud(image: ee.Image) -> ee.Image:
     clouds = qa.bitwiseAnd(3).gt(0)
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
-    result = result.set("satellite", image.get("satellite"))
-    return result  # type: ignore[no-any-return, unused-ignore]  # earthengine has no stubs; whether mypy infers Any-return varies by py version
+    # earthengine-api lacks type stubs; ee.Image.set returns Any.
+    return result.set("satellite", image.get("satellite"))  # type: ignore[no-any-return,unused-ignore]
 
 
 def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
@@ -255,8 +255,7 @@ def create_cloud_data_array_with_limit(
     group_cols = ['polygon_id', 'year', 'day_of_year']
     if split_satellite:
         group_cols.append('satellite')
-    aggregated_df = results_df.groupby(group_cols).mean().reset_index()
-    return aggregated_df
+    return results_df.groupby(group_cols).mean().reset_index()
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +355,7 @@ class OpenMeteoCloudFraction:
             dates = daily.get("time", [])
             cloud_pct = daily.get("cloud_cover_mean", [])
 
-            for date_str, pct in zip(dates, cloud_pct):
+            for date_str, pct in zip(dates, cloud_pct, strict=False):
                 if pct is None:
                     continue
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
@@ -482,8 +481,8 @@ def fetch_cloud_fraction_spatial(
         dimensions ``(latitude, longitude)`` and values 0.0-1.0.
     """
     try:
-        import xarray as xr
         import numpy as np
+        import xarray as xr
     except ImportError:
         raise HyPlanRuntimeError(
             "xarray and numpy are required for spatial cloud maps. "
@@ -543,8 +542,9 @@ def fetch_cloud_fraction_spatial(
                 f"GEE download URL generation failed for {name}"
             ) from exc
 
-        import requests as _requests
         import io
+
+        import requests as _requests
         resp = _requests.get(url, timeout=120)
         if resp.status_code != 200:
             raise HyPlanRuntimeError(

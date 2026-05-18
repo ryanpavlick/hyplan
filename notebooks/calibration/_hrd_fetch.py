@@ -121,10 +121,12 @@ def _download_one(entry: dict) -> tuple[dict, str, int]:
         return entry, "skip", out.stat().st_size
     tmp = out.with_suffix(out.suffix + ".part")
     try:
-        with urllib.request.urlopen(entry["url"], timeout=120) as r:
-            with open(tmp, "wb") as f:
-                while chunk := r.read(1 << 20):
-                    f.write(chunk)
+        with (
+            urllib.request.urlopen(entry["url"], timeout=120) as r,
+            open(tmp, "wb") as f,
+        ):
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
         size = tmp.stat().st_size
         tmp.rename(out)
         return entry, "ok", size

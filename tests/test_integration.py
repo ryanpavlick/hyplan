@@ -55,7 +55,7 @@ def study_polygon():
 def flight_lines(sensor, study_polygon):
     """Generate flight lines from the study polygon."""
     altitude = ureg.Quantity(20000, "feet")
-    lines = box_around_polygon(
+    return box_around_polygon(
         instrument=sensor,
         altitude_msl=altitude,
         polygon=study_polygon,
@@ -63,39 +63,35 @@ def flight_lines(sensor, study_polygon):
         box_name="INT",
         overlap=20,
     )
-    return lines
 
 
 @pytest.fixture(scope="module")
 def airports():
     """Airports for optimization and flight plan."""
-    ksba = Airport("KSBA")
-    return ksba
+    return Airport("KSBA")
 
 
 @pytest.fixture(scope="module")
 def optimized_result(aircraft, flight_lines, airports):
     """Run greedy optimization on the generated flight lines."""
-    result = greedy_optimize(
+    return greedy_optimize(
         aircraft=aircraft,
         flight_lines=flight_lines,
         airports=[airports],
         takeoff_airport=airports,
         return_airport=airports,
     )
-    return result
 
 
 @pytest.fixture(scope="module")
 def flight_plan(aircraft, optimized_result, airports):
     """Compute a full flight plan from the optimized sequence."""
-    plan = compute_flight_plan(
+    return compute_flight_plan(
         aircraft=aircraft,
         flight_sequence=optimized_result["flight_sequence"],
         takeoff_airport=airports,
         return_airport=airports,
     )
-    return plan
 
 
 class TestFlightBoxGeneration:

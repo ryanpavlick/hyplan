@@ -13,18 +13,19 @@ Licensed under the Public Domain (CC0).
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
+from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
-import logging
-from pathlib import Path
 from shapely.geometry import Point
 
-from .units import convert_distance, ureg
 from .download import download_file
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .geometry import haversine
+from .units import convert_distance, ureg
 
 __all__ = [
     "Airport",
@@ -358,8 +359,7 @@ def load_runways(filepath: str) -> pd.DataFrame:
 
     columns_to_keep = ['airport_ident', 'length_ft', 'width_ft', 'surface',
                        'le_heading_degT', 'he_heading_degT']
-    df_runways = df_runways[columns_to_keep]
-    return df_runways
+    return df_runways[columns_to_keep]
 
 def initialize_data(
     countries: list[str] | None = None,

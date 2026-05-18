@@ -18,16 +18,10 @@ from ._base import Aircraft
 from ._profile_io import load_aircraft_profile
 
 __all__ = [
-    "AWI_BaslerBT67",
-    "BAS_TwinOtter",
     "DLR_HALO",
-    "FAAM_BAe146",
-    "KingAir350",
-    "KingAirA90",
-    "KingAirB200",
     "NASA_B777",
-    "NASA_C130",
     "NASA_C20A",
+    "NASA_C130",
     "NASA_ER2",
     "NASA_GIII",
     "NASA_GIV",
@@ -37,9 +31,15 @@ __all__ = [
     "NCAR_GV",
     "NERC_DO228",
     "NOAA_GIV",
-    "NOAA_TwinOtter",
     "NOAA_WP3D",
     "SAFIRE_ATR42",
+    "AWI_BaslerBT67",
+    "BAS_TwinOtter",
+    "FAAM_BAe146",
+    "KingAir350",
+    "KingAirA90",
+    "KingAirB200",
+    "NOAA_TwinOtter",
 ]
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class NASA_ER2(Aircraft):
     plus a local in-house delivery; see
     ``notebooks/calibration/NASA_ER2/_fetch_asp.py`` for the fetcher).
     See [notebooks/calibration/NASA_ER2/calibration.ipynb] for the full
-    derivation: per-altitude-bin |VS| medians, breakpoint selection rules,
+    derivation: per-altitude-bin VS medians, breakpoint selection rules,
     and validation against per-sortie observed timing.
 
     Vertical-rate highlights from the calibration:
@@ -67,7 +67,7 @@ class NASA_ER2(Aircraft):
     * Weight-management level-offs and holds during climb-out are modeled
       explicitly via ``typical_climb_out``; the ``climb_profile`` itself
       is active-climb-only performance, not wall-clock climb-out timing.
-    * Two-regime descent: peak idle-power |VS| ~3675 fpm at top-of-
+    * Two-regime descent: peak idle-power VS ~3675 fpm at top-of-
       descent, decaying to ~840 fpm at top-of-approach as the aircraft
       configures for the terminal pattern.
     * Empirical 2.5° glideslope on the terminal approach (shallower

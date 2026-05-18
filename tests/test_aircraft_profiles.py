@@ -16,11 +16,28 @@ import pytest
 from pint import Quantity
 
 from hyplan.aircraft import (
-    NASA_ER2, NASA_GIII, NASA_GIV, NASA_GV, NCAR_GV, NASA_C20A,
-    NASA_P3, NOAA_WP3D, NOAA_GIV, NASA_WB57, NASA_B777,
-    KingAirA90, KingAirB200, KingAir350,
-    NASA_C130, NOAA_TwinOtter, BAS_TwinOtter, FAAM_BAe146,
-    SAFIRE_ATR42, NERC_DO228, AWI_BaslerBT67, DLR_HALO,
+    DLR_HALO,
+    NASA_B777,
+    NASA_C20A,
+    NASA_C130,
+    NASA_ER2,
+    NASA_GIII,
+    NASA_GIV,
+    NASA_GV,
+    NASA_P3,
+    NASA_WB57,
+    NCAR_GV,
+    NERC_DO228,
+    NOAA_GIV,
+    NOAA_WP3D,
+    SAFIRE_ATR42,
+    AWI_BaslerBT67,
+    BAS_TwinOtter,
+    FAAM_BAe146,
+    KingAir350,
+    KingAirA90,
+    KingAirB200,
+    NOAA_TwinOtter,
 )
 from hyplan.aircraft._base import Aircraft
 from hyplan.aircraft._profile_io import (
@@ -28,7 +45,6 @@ from hyplan.aircraft._profile_io import (
     load_aircraft_profile,
     profile_path,
 )
-
 
 # Aircraft class -> JSON filename stem.  Pin every shipped pairing here.
 ROSTER: list[tuple[type, str]] = [
@@ -83,7 +99,7 @@ def _approx_equal(a, b, tol=1e-6) -> bool:
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
         if len(a) != len(b):
             return False
-        return all(_approx_equal(x, y, tol) for x, y in zip(a, b))
+        return all(_approx_equal(x, y, tol) for x, y in zip(a, b, strict=False))
     if hasattr(a, "__dict__") and hasattr(b, "__dict__"):
         return _approx_equal(a.__dict__, b.__dict__, tol)
     if isinstance(a, dict) and isinstance(b, dict):

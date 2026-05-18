@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 
 from ..geometry import process_linestring
 from ._demgrid import DEMGrid
 from .io import generate_demfile, load_dem
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

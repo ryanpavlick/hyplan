@@ -1,42 +1,148 @@
 name: Notebook smoke test
 
-# Executes a small set of representative notebooks end-to-end on a
-# schedule, so we catch breakage in the notebooks even though they are
-# not part of the unit-test suite.
+# Tiered notebook execution.  Manifest at .github/notebooks/manifest.yml
+# is the source of truth; .github/notebooks/build_matrix.py turns it
+# into the GitHub Actions matrix.
 #
-# The committed .ipynb outputs are intentionally preserved for GitHub
-# rendering, so this workflow runs each notebook into a throwaway
-# temp file (--output) rather than rewriting the source. If a notebook
-# fails, papermill exits non-zero and the matrix job goes red.
+# Tiers:
+#   - PR              changed notebooks only (excluding calibration);
+#                     no-op if no notebooks changed
+#   - schedule        every non-calibration manifest entry, skipping
+#                     auth-walled notebooks whose secrets aren't set
+#   - workflow_dispatch
+#                     pick a tier explicitly; optionally include
+#                     calibration via the include_calibration input
+#
+# Executed notebooks go to /tmp and are NEVER overwritten in place.
+# A post-execution `git status --porcelain` check fails the job if
+# anything in the working tree changed, so accidental in-place writes
+# don't slip through.
 
 on:
   schedule:
     # 09:00 UTC daily (~02:00 PT, ~05:00 ET) — quiet time for runners.
     - cron: "0 9 * * *"
   workflow_dispatch:
+    inputs:
+      tier:
+        description: "Which tier to run"
+        required: true
+        default: "nightly"
+        type: choice
+        options: [pr, nightly, calibration]
+      include_calibration:
+        description: "Also run the calibration tier"
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
-      - "notebooks/tutorial.ipynb"
-      - "notebooks/export_formats.ipynb"
-      - "notebooks/aircraft_performance.ipynb"
-      - "notebooks/profiling_lidar_planning.ipynb"
+      - "notebooks/**/*.ipynb"
+      - ".github/notebooks/**"
       - ".github/workflows/notebooks.yml"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
 
 jobs:
+  # Build the matrix from the manifest based on the trigger.
+  build-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+      empty: ${{ steps.build.outputs.empty }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need enough history for the changed-files action below.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install matrix-builder deps
+        run: pip install pyyaml
+
+      - name: Detect changed notebooks (PR only)
+        id: changed
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            notebooks/**/*.ipynb
+
+      - name: Build matrix
+        id: build
+        env:
+          # Each gate is `true` if the corresponding secret has been
+          # configured in this repo's settings, `false` otherwise.
+          HAS_EARTHDATA: ${{ secrets.EARTHDATA_TOKEN != '' }}
+          HAS_OPENAIP: ${{ secrets.OPENAIP_API_KEY != '' }}
+          HAS_GEE: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON != '' }}
+        run: |
+          set -euo pipefail
+
+          # Resolve tier from trigger.
+          case "${{ github.event_name }}" in
+            pull_request)        TIER=pr ;;
+            schedule)            TIER=nightly ;;
+            workflow_dispatch)   TIER="${{ inputs.tier }}" ;;
+            *)                   TIER=nightly ;;
+          esac
+          echo "Tier: $TIER"
+
+          ARGS=( --tier "$TIER" )
+          if [ "$TIER" = "pr" ]; then
+            # tj-actions emits a space-separated list of changed files.
+            for f in ${{ steps.changed.outputs.all_changed_files }}; do
+              ARGS+=( --changed-file "$f" )
+            done
+          fi
+          [ "$HAS_EARTHDATA" = "true" ] && ARGS+=( --has-earthdata )
+          [ "$HAS_OPENAIP"   = "true" ] && ARGS+=( --has-openaip )
+          [ "$HAS_GEE"       = "true" ] && ARGS+=( --has-gee )
+
+          MATRIX="$(python .github/notebooks/build_matrix.py "${ARGS[@]}")"
+          echo "Matrix: $MATRIX"
+          echo "matrix=$MATRIX" >>"$GITHUB_OUTPUT"
+
+          # Check for empty matrix; downstream job uses this to no-op.
+          COUNT="$(echo "$MATRIX" | python -c 'import json,sys; print(len(json.load(sys.stdin)["include"]))')"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "empty=true"  >>"$GITHUB_OUTPUT"
+          else
+            echo "empty=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      # If workflow_dispatch and include_calibration=true, also fire the
+      # calibration tier as a separate matrix.  Implemented as a second
+      # job below for clarity (build-matrix-calibration).
+
+  build-matrix-calibration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.include_calibration == true
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - id: build
+        run: |
+          MATRIX="$(python .github/notebooks/build_matrix.py --tier calibration)"
+          echo "matrix=$MATRIX" >>"$GITHUB_OUTPUT"
+
   papermill:
+    needs: build-matrix
+    if: needs.build-matrix.outputs.empty != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        notebook:
-          # Canonical end-to-end workflow (covers most planning APIs).
-          - tutorial.ipynb
-          # Exercises every public function in hyplan.exports.
-          - export_formats.ipynb
-          # Exercises the Aircraft base class and several subclasses.
-          - aircraft_performance.ipynb
-          # Exercises the ProfilingLidar family (HSRL-2, HALO, CPL).
-          - profiling_lidar_planning.ipynb
+      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -48,21 +154,56 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          # [mag] enables magnetic_declination() in export_formats.ipynb.
-          # openpyxl is required by pandas.read_excel() in the same notebook
-          # for the round-trip verification cells. Other canonical notebooks
-          # don't need any extras.
-          pip install -e .[mag]
-          pip install papermill ipykernel openpyxl
+          # Per-matrix-row extras come from the manifest.  `notebooks`
+          # is always present; extras like `mag`, `winds`, `planned`,
+          # `clouds`, `adsb` are added per row.
+          pip install -e ".[${{ matrix.extras }}]"
 
-      - name: Execute ${{ matrix.notebook }}
-        # --cwd notebooks/ keeps relative paths (e.g. ../notebooks/exampledata/...)
-        # working the same way they do for an interactive user. The output
-        # path goes to a temp file so we never rewrite the committed
-        # notebook with stripped or re-executed cells.
+      - name: Execute ${{ matrix.name }}
         run: |
+          mkdir -p /tmp/notebooks
           papermill \
             --cwd notebooks \
             --kernel python3 \
-            notebooks/${{ matrix.notebook }} \
-            /tmp/${{ matrix.notebook }}
+            notebooks/${{ matrix.name }} \
+            /tmp/notebooks/${{ matrix.slug }}.ipynb
+
+      - name: Assert no source-tree changes
+        # Anything in the working tree changing during papermill execution
+        # is a bug (we write to /tmp).  Catch it explicitly.
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::papermill modified the source tree:"
+            git status --short
+            exit 1
+          fi
+
+  papermill-calibration:
+    needs: build-matrix-calibration
+    if: github.event_name == 'workflow_dispatch' && inputs.include_calibration == true
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.build-matrix-calibration.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install --upgrade pip
+          pip install -e ".[${{ matrix.extras }}]"
+      - run: |
+          mkdir -p /tmp/notebooks
+          papermill \
+            --cwd notebooks \
+            --kernel python3 \
+            notebooks/${{ matrix.name }} \
+            /tmp/notebooks/${{ matrix.slug }}.ipynb
+      - run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::papermill modified the source tree:"
+            git status --short
+            exit 1
+          fi

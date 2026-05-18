@@ -1,13 +1,12 @@
 """Tests for hyplan.terrain (unit-testable parts, no network)."""
 
 import os
-import pytest
 import tempfile
 
 import numpy as np
+import pytest
 
-from hyplan.terrain import get_cache_root, clear_cache, _COS_TILT_MIN
-
+from hyplan.terrain import _COS_TILT_MIN, clear_cache, get_cache_root
 
 # ---------------------------------------------------------------------------
 # Synthetic DEM helper
@@ -28,8 +27,8 @@ def _write_synthetic_dem(filepath, lat_center, lon_center, elevation_func, size=
     The raster covers ±(size*pixel_deg/2) degrees around (lat_center, lon_center).
     """
     import rasterio
-    from rasterio.transform import from_bounds
     from rasterio.crs import CRS
+    from rasterio.transform import from_bounds
 
     pixel_deg = 0.001  # ~111m resolution
     x_min = lon_center - size * pixel_deg / 2
@@ -354,8 +353,8 @@ class TestSurfaceNormalAt:
 # terrain_elevation_along_track
 # ---------------------------------------------------------------------------
 
-from hyplan.terrain import terrain_elevation_along_track
 from hyplan.flight_line import FlightLine
+from hyplan.terrain import terrain_elevation_along_track
 from hyplan.units import ureg
 
 
@@ -411,8 +410,9 @@ class TestTerrainElevationAlongTrack:
 # terrain_aspect_azimuth
 # ---------------------------------------------------------------------------
 
-from hyplan.terrain import terrain_aspect_azimuth
 from shapely.geometry import box
+
+from hyplan.terrain import terrain_aspect_azimuth
 
 
 class TestTerrainAspectAzimuth:

@@ -1,8 +1,9 @@
 """Tests for hyplan.flight_line."""
 
 import pytest
-from hyplan.units import ureg
+
 from hyplan.flight_line import FlightLine, to_gdf
+from hyplan.units import ureg
 
 
 class TestFlightLineCreation:

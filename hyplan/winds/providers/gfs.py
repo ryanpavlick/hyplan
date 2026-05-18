@@ -128,7 +128,7 @@ class GFSWindField(_GriddedWindField):
         pressure levels and geographic region, typically ~10 KB.
         """
         try:
-            import cfgrib  # noqa: F401  # imported for xarray engine registration side effect
+            import cfgrib  # noqa: F401  — imported for xarray engine registration side effect
         except ImportError:
             raise HyPlanRuntimeError(
                 "cfgrib (with eccodes) is required for GFS GRIB2 data. "

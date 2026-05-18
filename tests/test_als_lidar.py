@@ -11,18 +11,20 @@ Verifies the generic class against:
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
 from hyplan import ureg
 from hyplan.flight_line import FlightLine
 from hyplan.instruments import (
+    GLIHT_DUAL_VQ_480I,
+    RIEGL_VQ_480II,
     ALSLidar,
     ContiguityError,
-    GLIHT_DUAL_VQ_480I,
     LidarMount,
     MultiALSLidarRig,
-    RIEGL_VQ_480II,
     ScanningSensor,
 )
 from hyplan.instruments.als_lidar import SPEED_OF_LIGHT_M_PER_S
@@ -122,7 +124,7 @@ class TestDatasheetReproducibility:
     well within the published precision.
     """
 
-    DATASHEET_POINTS = [
+    DATASHEET_POINTS: ClassVar[list[tuple[float, float]]] = [
         (180.0, 280.0),
         (240.0, 370.0),
         (340.0, 520.0),
@@ -234,14 +236,14 @@ class TestCrossTrackSpacing:
 
     def test_full_circle_differs_from_active_arc(self) -> None:
         # Same PRF/scan_rate, different geometry → different ground spacings.
-        common = dict(
-            prf=300 * ureg.kilohertz,
-            scan_rate=100 * ureg.hertz,
-            scan_half_angle=30 * ureg.degree,
-            beam_divergence=0.3 * ureg.milliradian,
-            wavelength=1064 * ureg.nanometer,
-            max_range=1000 * ureg.meter,
-        )
+        common = {
+            "prf": 300 * ureg.kilohertz,
+            "scan_rate": 100 * ureg.hertz,
+            "scan_half_angle": 30 * ureg.degree,
+            "beam_divergence": 0.3 * ureg.milliradian,
+            "wavelength": 1064 * ureg.nanometer,
+            "max_range": 1000 * ureg.meter,
+        }
         active = ALSLidar(
             name="A", scan_geometry="rotating_polygon_active_arc", **common,
         )
@@ -426,7 +428,7 @@ class TestGenericClassIndependentOfSensor:
 
 def _has_rasterio() -> bool:
     try:
-        import rasterio  # noqa: F401
+        import rasterio
         return True
     except ImportError:
         return False

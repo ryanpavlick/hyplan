@@ -27,7 +27,7 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,
@@ -35,7 +35,6 @@ from _common import (  # noqa: E402
     summary_table,
     tas_per_bin,
 )
-
 
 FAAM_GLOB = "data/FAAM/*/*/core_faam_*_1hz.nc"
 

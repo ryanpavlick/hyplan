@@ -30,13 +30,16 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin,
-    schedule_pts, summary_table,
+from _common import (
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    summary_table,
+    tas_per_bin,
 )
 
-from hyplan.aircraft import load_iwg1, trim_ground_taxi  # noqa: E402
-
+from hyplan.aircraft import load_iwg1, trim_ground_taxi
 
 # Match both p3_*.txt (local delivery) and n426_*.txt (ASP archive).
 P3_GLOB = "data/NASA_P3/*_*.txt"
@@ -115,13 +118,9 @@ def main() -> None:
     print("\nCRUISE TAS bins:")
     print(cruise_tas.to_string(index=False))
 
-    climb_pts = [(0, ROTATION_TAS_KT)] + schedule_pts(
-        climb_tas, CLIMB_TARGET_ALTS_FT, n_min=200,
-    )
+    climb_pts = [(0, ROTATION_TAS_KT), *schedule_pts(climb_tas, CLIMB_TARGET_ALTS_FT, n_min=200)]
     cruise_pts = schedule_pts(cruise_tas, CRUISE_TARGET_ALTS_FT, n_min=200)
-    descent_pts = [(0, APPROACH_ANCHOR_TAS_KT)] + schedule_pts(
-        desc_tas, DESCENT_TARGET_ALTS_FT, n_min=200,
-    )
+    descent_pts = [(0, APPROACH_ANCHOR_TAS_KT), *schedule_pts(desc_tas, DESCENT_TARGET_ALTS_FT, n_min=200)]
     print(f"\nClimb TAS schedule:   {climb_pts}")
     print(f"Cruise TAS schedule:  {cruise_pts}")
     print(f"Descent TAS schedule: {descent_pts}")

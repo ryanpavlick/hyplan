@@ -1,8 +1,9 @@
 """Shared fixtures for HyPlan tests."""
 
 import pytest
-from hyplan.units import ureg
+
 from hyplan.flight_line import FlightLine
+from hyplan.units import ureg
 
 
 @pytest.fixture

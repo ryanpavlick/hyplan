@@ -268,7 +268,7 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
         scale, missing = col_meta.get(col, (1.0, -9999.0))
         s = pd.to_numeric(raw[col], errors="coerce")
         # Per-column declared missing first.
-        if not (missing != missing):  # not NaN
+        if missing == missing:  # not NaN
             s = s.where(s != missing)
         # Then the broader fallback set — only replace exact matches to
         # avoid clobbering legitimate small-magnitude data.
@@ -287,7 +287,7 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
     # same canonical name (e.g., "Altitude" vs "GPS_Altitude"); take
     # the first match.
     used_columns = {indep_col}
-    name_to_unit = {n: u for n, u in dep_vars}
+    name_to_unit = dict(dep_vars)
     for canonical, patterns, unit_hint in _COLUMN_PATTERNS:
         if canonical in out.columns:
             continue

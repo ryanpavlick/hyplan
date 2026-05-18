@@ -4,9 +4,9 @@ import warnings
 
 import pytest
 
+from hyplan.exceptions import HyPlanTypeError, HyPlanValueError
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint, is_waypoint
-from hyplan.exceptions import HyPlanValueError, HyPlanTypeError
 
 
 class TestWaypointConstruction:
@@ -271,6 +271,7 @@ class TestRelativeTo:
         # 200 nmi true east; verify against vreckon (which returns
         # longitude in [0, 360); the classmethod wraps to [-180, 180)).
         import pymap3d.vincenty as vinc
+
         from hyplan.geometry import wrap_to_180
         ref_lat, ref_lon = vinc.vreckon(34.92, -117.87, 200 * 1852.0, 90.0)
         assert wp.latitude == pytest.approx(float(ref_lat), abs=1e-5)
@@ -357,6 +358,7 @@ class TestIsWaypoint:
     def test_duck_type(self):
         """An object with the right attributes should pass."""
         from types import SimpleNamespace
+
         from shapely.geometry import Point
         fake = SimpleNamespace(
             latitude=0, longitude=0, heading=0, altitude_msl=None,

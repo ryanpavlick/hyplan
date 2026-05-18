@@ -1,20 +1,21 @@
 """Tests for the hyplan.instruments subpackage."""
 
 import pytest
-from hyplan.units import ureg
+
 from hyplan.instruments import (
     AVIRIS3,
-    HyTES,
-    PRISM,
-    SENSOR_REGISTRY,
-    ScanningSensor,
-    create_sensor,
-    FrameCamera,
     LVIS,
     LVIS_LENS_NARROW,
-    UAVSAR_Lband,
+    PRISM,
+    SENSOR_REGISTRY,
+    FrameCamera,
+    HyTES,
+    ScanningSensor,
     SidelookingRadar,
+    UAVSAR_Lband,
+    create_sensor,
 )
+from hyplan.units import ureg
 
 
 class TestLineScanner:
@@ -198,6 +199,17 @@ class TestSensorRegistry:
         from hyplan.instruments import UAVSAR_Kaband
         s = create_sensor("GLISTIN-A")
         assert isinstance(s, UAVSAR_Kaband)
+
+    @pytest.mark.parametrize("name", sorted(SENSOR_REGISTRY.keys()))
+    def test_every_registry_entry_constructs(self, name):
+        """Every key in SENSOR_REGISTRY must round-trip via create_sensor()
+        to a Sensor instance — catches drift between the registry and the
+        underlying factory callables."""
+        from hyplan.instruments import Sensor
+        s = create_sensor(name)
+        assert isinstance(s, Sensor), (
+            f"create_sensor({name!r}) returned {type(s).__name__}, not a Sensor"
+        )
 
 
 class TestFrameCamera:

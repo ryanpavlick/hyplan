@@ -12,15 +12,15 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import pymap3d.vincenty
 import simplekml
 from shapely.geometry import Polygon
 from shapely.ops import transform
-import pymap3d.vincenty
 
 from .flight_line import FlightLine
+from .geometry import get_utm_transforms, process_linestring
 from .instruments import ScanningSensor
 from .terrain import ray_terrain_intersection
-from .geometry import get_utm_transforms, process_linestring
 
 __all__ = [
     "analyze_swath_gaps_overlaps",
@@ -164,6 +164,7 @@ def generate_swath_polygon(
         # boresight, in the direction `az_port` or `az_starboard`.
         # No DEM access — appropriate for synthetic geometry demos.
         import pymap3d.vincenty as _vincenty
+
         from .geometry import wrap_to_180
 
         def _flat_edge(
@@ -196,7 +197,7 @@ def generate_swath_polygon(
 
     swath_lats = np.concatenate([edge1_lats, edge2_lats[::-1]])
     swath_lons = np.concatenate([edge1_lons, edge2_lons[::-1]])
-    return Polygon(zip(swath_lons, swath_lats))
+    return Polygon(zip(swath_lons, swath_lats, strict=False))
 
 def calculate_swath_widths(swath_polygon: Polygon) -> dict[str, float]:
     """Calculate the minimum, mean, and maximum width of a swath polygon.

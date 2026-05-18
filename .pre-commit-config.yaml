@@ -17,10 +17,12 @@ repos:
     rev: v0.15.12
     hooks:
       - id: ruff-check
-        # Match CI's invocation exactly — hyplan/ and tests/ only.
-        # Notebook cells use intentional per-cell imports that trip
-        # E402 / F811 unhelpfully; ruff doesn't lint them in CI.
-        files: ^(hyplan|tests)/.*\.py$
+        # Match CI's invocation: hyplan/, tests/, and notebooks/.
+        # Native Ruff notebook support is enabled via
+        # [tool.ruff] extend-include = ["*.ipynb"]; per-file-ignores
+        # at [tool.ruff.lint.per-file-ignores] cover notebook-appropriate
+        # relaxations (E402, E701, E702, B007, F811, F841).
+        files: ^(hyplan|tests|notebooks)/.*\.(py|ipynb)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

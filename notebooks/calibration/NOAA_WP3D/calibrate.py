@@ -36,6 +36,7 @@ Run from repo root::
     python -m notebooks.calibration.NOAA_WP3D.calibrate
 """
 from __future__ import annotations
+
 import sys
 import warnings
 from pathlib import Path
@@ -47,11 +48,14 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _common import (
-    apply_sortie_filters, label_phases, per_bin, tas_per_bin, schedule_pts,
+    apply_sortie_filters,
+    label_phases,
+    per_bin,
+    schedule_pts,
+    tas_per_bin,
 )
 
 from hyplan.aircraft.icartt import load_icartt
-
 
 WP3D_GLOB = "data/WP3D/NOAA_CSL/*/raw/Aircraft*_NP3_*.ict"
 
@@ -71,15 +75,24 @@ TARGET_ALTS_FT = (0, 5000, 10000, 15000, 20000, 25000)
 
 def _load_with_unit_check(path: Path) -> pd.DataFrame:
     df = load_icartt(path)
-    if "tas_kt" in df.columns and df["tas_kt"].notna().any():
-        if df["tas_kt"].quantile(0.95) > TAS_KT_MAX_REASONABLE:
-            df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
-    if "wind_speed_kt" in df.columns and df["wind_speed_kt"].notna().any():
-        if df["wind_speed_kt"].quantile(0.95) > 200:  # 200 kt + winds rare
-            df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
-    if "groundspeed" in df.columns and df["groundspeed"].notna().any():
-        if df["groundspeed"].quantile(0.95) > TAS_KT_MAX_REASONABLE:
-            df["groundspeed"] = df["groundspeed"] / 1.9438444924406046
+    if (
+        "tas_kt" in df.columns
+        and df["tas_kt"].notna().any()
+        and df["tas_kt"].quantile(0.95) > TAS_KT_MAX_REASONABLE
+    ):
+        df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
+    if (
+        "wind_speed_kt" in df.columns
+        and df["wind_speed_kt"].notna().any()
+        and df["wind_speed_kt"].quantile(0.95) > 200  # 200 kt + winds rare
+    ):
+        df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
+    if (
+        "groundspeed" in df.columns
+        and df["groundspeed"].notna().any()
+        and df["groundspeed"].quantile(0.95) > TAS_KT_MAX_REASONABLE
+    ):
+        df["groundspeed"] = df["groundspeed"] / 1.9438444924406046
     return df
 
 
@@ -145,7 +158,7 @@ HRD_P3_GLOB = "data/HRD/P-3_N4{2,3}RF/*/*/*.1sec.txt"
 def _load_hrd_sorties() -> dict[str, pd.DataFrame]:
     """Load NOAA HRD hurricane-program 1-sec P-3 files (H + I tails)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from _hrd_loader import load_p3_1sec  # noqa: E402
+    from _hrd_loader import load_p3_1sec
     out: dict[str, pd.DataFrame] = {}
     skipped: list[tuple[str, str]] = []
     for tail in ("P-3_N42RF", "P-3_N43RF"):

@@ -3,6 +3,14 @@
 This page describes the internal layout of HyPlan and the conventions
 to follow when adding new modules or extending existing ones.
 
+```{toctree}
+:maxdepth: 1
+:caption: Conventions and policies
+
+dev/public_api
+dev/data_policy
+```
+
 ## Package layout
 
 HyPlan uses a mix of multi-file packages and single-file modules. The

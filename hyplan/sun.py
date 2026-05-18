@@ -22,17 +22,17 @@ for planets and Earth satellites generator. Astrophysics Source Code
 Library, ascl:1907.024.
 """
 
+from datetime import date, datetime, timedelta
 from typing import Any
 
-import pandas as pd
-import numpy as np
-import numpy.typing as npt
-from datetime import datetime, date, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker
-from .exceptions import HyPlanValueError
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
 
+from .exceptions import HyPlanValueError
 
 # ---------------------------------------------------------------------------
 # Solar position via Skyfield
@@ -57,7 +57,9 @@ def _skyfield_handles() -> tuple[Any, Any, Any]:
     global _SKYFIELD_TS, _SKYFIELD_SUN, _SKYFIELD_EARTH
     if _SKYFIELD_TS is None:
         from importlib.resources import files
-        from skyfield.api import load as sf_load, load_file
+
+        from skyfield.api import load as sf_load
+        from skyfield.api import load_file
         _SKYFIELD_TS = sf_load.timescale()
         # Load the bundled DE421 ephemeris from the package data directory
         # rather than letting Skyfield download it into the user's cwd.
@@ -259,7 +261,7 @@ def solar_threshold_times(
 
         if len(thresholds) == 2:
             lower, upper = sorted(thresholds)
-            for threshold, label in zip([lower, upper], [f'_{lower}', f'_{upper}']):
+            for threshold, label in zip([lower, upper], [f'_{lower}', f'_{upper}'], strict=False):
                 rise_time = None
                 fall_time = None
 
@@ -388,13 +390,12 @@ def solar_position_increments(
     # Only keep times when the solar elevation exceeds the specified threshold.
     valid = solar_elevation > min_elevation
 
-    df = pd.DataFrame({
+    return pd.DataFrame({
         'Time': local_timestamps[valid].strftime('%H:%M:%S'),
         'Azimuth': azimuth[valid],
         'Elevation': solar_elevation[valid]
     })
 
-    return df
 
 def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     """

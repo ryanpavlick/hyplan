@@ -22,7 +22,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _larc_asd_fetch import fetch_files
 
-
 # (mission, button, label).  Filename filter is "RAF-NAV but not
 # RAF-NAV-HRT" — HRT is the 25-Hz variant which doesn't help with
 # 5-kft binned calibration.

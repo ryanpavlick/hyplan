@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, Literal, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     from ..winds.base import WindField
@@ -173,13 +173,13 @@ class TasSchedule:
     def __repr__(self) -> str:
         items = ", ".join(
             f"({int(round(a))} * ureg.feet, {int(round(s))} * ureg.knot)"
-            for a, s in zip(self._alts_ft, self._tas_kt)
+            for a, s in zip(self._alts_ft, self._tas_kt, strict=False)
         )
         return f"TasSchedule(points=[{items}])"
 
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
-SpeedSchedule = Union[CasMachSchedule, TasSchedule]
+SpeedSchedule = CasMachSchedule | TasSchedule
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ class VerticalProfile:
     def __repr__(self) -> str:
         items = ", ".join(
             f"({int(round(a))} * ureg.feet, {int(round(r))} * ureg.feet / ureg.minute)"
-            for a, r in zip(self._alts_ft, self._rates_fpm)
+            for a, r in zip(self._alts_ft, self._rates_fpm, strict=False)
         )
         src = f", source={self.source!r}" if self.source else ""
         return f"VerticalProfile(points=[{items}]{src})"
@@ -742,7 +742,7 @@ class Aircraft:
     #   "typical"  — expected combination, no warning.
     #   "unusual"  — allowed but surprising; emits a warning.
     #   "forbid"   — raises HyPlanValueError.
-    _SCHEDULE_COMPAT = {
+    _SCHEDULE_COMPAT: ClassVar[dict[str, dict[type, str]]] = {
         "jet": {CasMachSchedule: "typical", TasSchedule: "typical"},
         "turboprop": {CasMachSchedule: "unusual", TasSchedule: "typical"},
         "piston": {CasMachSchedule: "forbid", TasSchedule: "typical"},
@@ -1808,7 +1808,7 @@ class Aircraft:
 
         if cruise_altitude is None:
             # Default: the higher of the two endpoints.
-            cruise_altitude = start_alt if start_alt >= end_alt else end_alt
+            cruise_altitude = max(start_alt, end_alt)
         cruise_altitude = cruise_altitude.to(ureg.feet)
 
         # Service-ceiling check.  Aircraft can sometimes operate

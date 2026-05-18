@@ -41,8 +41,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from ..units import ureg
 from ..exceptions import HyPlanRuntimeError, HyPlanValueError
+from ..units import ureg
 from ._base import (
     ApproachProfile,
     CasMachSchedule,
@@ -56,7 +56,6 @@ from ._base import (
     TurnModel,
     VerticalProfile,
 )
-
 
 __all__ = [
     "dump_aircraft_profile",

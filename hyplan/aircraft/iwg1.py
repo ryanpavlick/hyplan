@@ -18,9 +18,9 @@ becomes a more direct read.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -322,7 +322,7 @@ def split_iwg1_alltracks(
     ends = [*boundaries.tolist(), len(data_lines)]
 
     written: list[Path] = []
-    for s, e in zip(starts, ends):
+    for s, e in zip(starts, ends, strict=False):
         date = timestamps[s].strftime("%Y-%m-%d")
         out_path = dest / f"{tail_label}_{date}.txt"
         with out_path.open("w") as f:

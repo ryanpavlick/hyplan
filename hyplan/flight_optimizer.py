@@ -19,13 +19,13 @@ from typing import Any
 
 import networkx as nx
 
-from .units import ureg
 from .aircraft import Aircraft
 from .airports import Airport
-from .waypoint import Waypoint
+from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .flight_line import FlightLine
 from .pattern import Pattern
-from .exceptions import HyPlanValueError, HyPlanRuntimeError
+from .units import ureg
+from .waypoint import Waypoint
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
         total = 0.0
         for line in lines:
             total += _flight_line_time(aircraft, line)
-        for prev_line, next_line in zip(lines, lines[1:]):
+        for prev_line, next_line in itertools.pairwise(lines):
             total += _transit_time(aircraft, prev_line.waypoint2, next_line.waypoint1)
         return total
 
@@ -160,7 +160,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     if len(waypoints) < 2:
         return 0.0
     total = 0.0
-    for prev_wp, next_wp in zip(waypoints, waypoints[1:]):
+    for prev_wp, next_wp in itertools.pairwise(waypoints):
         total += _transit_time(aircraft, prev_wp, next_wp)
     return total
 
@@ -868,12 +868,14 @@ def greedy_optimize(
                 daily_time += refuel_time
 
         # Return to airport at end of day
-        if current_node != return_airport.icao_code:
-            if G.has_edge(current_node, return_airport.icao_code):
-                return_t = G[current_node][return_airport.icao_code]["weight"]
-                daily_time += return_t
-                route.append(return_airport.icao_code)
-                current_node = return_airport.icao_code
+        if (
+            current_node != return_airport.icao_code
+            and G.has_edge(current_node, return_airport.icao_code)
+        ):
+            return_t = G[current_node][return_airport.icao_code]["weight"]
+            daily_time += return_t
+            route.append(return_airport.icao_code)
+            current_node = return_airport.icao_code
 
         daily_times.append(daily_time)
         total_time += daily_time

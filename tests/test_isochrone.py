@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import itertools
 
 import numpy as np
 import pytest
 
 from hyplan import (
-    KingAirB200,
     NASA_GIII,
+    KingAirB200,
     Waypoint,
-    compute_isochrone,
     compute_concentric_isochrones,
+    compute_isochrone,
     compute_multi_base_isochrone,
     compute_multi_refuel_isochrone,
     compute_refuel_isochrone,
@@ -21,7 +22,6 @@ from hyplan import (
 )
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.winds import ConstantWindField, StillAirField
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,15 +174,15 @@ def test_one_way_tailwind_exceeds_no_wind_range(giii, kedw_wp, cruise_alt):
 
 def test_on_station_dwell_shrinks(giii, kedw_wp, cruise_alt):
     """Increasing on_station_time shrinks every ray."""
-    common = dict(
-        aircraft=giii,
-        start=kedw_wp,
-        budget=4 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        mode="round_trip",
-        wind_source=StillAirField(),
-        azimuth_resolution_deg=30.0,
-    )
+    common = {
+        "aircraft": giii,
+        "start": kedw_wp,
+        "budget": 4 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "mode": "round_trip",
+        "wind_source": StillAirField(),
+        "azimuth_resolution_deg": 30.0,
+    }
     base = compute_isochrone(**common, on_station_time=0 * ureg.minute)
     shrunk = compute_isochrone(**common, on_station_time=60 * ureg.minute)
     base_d = base.set_index("azimuth_deg")["distance_nmi"]
@@ -199,15 +199,15 @@ def test_on_station_dwell_shrinks(giii, kedw_wp, cruise_alt):
 
 def test_reserve_shrinks(giii, kedw_wp, cruise_alt):
     """Increasing reserve shrinks every ray."""
-    common = dict(
-        aircraft=giii,
-        start=kedw_wp,
-        budget=4 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        mode="round_trip",
-        wind_source=StillAirField(),
-        azimuth_resolution_deg=30.0,
-    )
+    common = {
+        "aircraft": giii,
+        "start": kedw_wp,
+        "budget": 4 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "mode": "round_trip",
+        "wind_source": StillAirField(),
+        "azimuth_resolution_deg": 30.0,
+    }
     base = compute_isochrone(**common, reserve=0 * ureg.minute)
     shrunk = compute_isochrone(**common, reserve=30 * ureg.minute)
     base_d = base.set_index("azimuth_deg")["distance_nmi"]
@@ -264,14 +264,14 @@ def test_return_safe_biases_toward_alternate(giii, kedw_wp, cruise_alt):
 
 def test_one_way_exceeds_round_trip(giii, kedw_wp, cruise_alt):
     """Same budget: one_way distance > round_trip distance everywhere."""
-    common = dict(
-        aircraft=giii,
-        start=kedw_wp,
-        budget=3 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        wind_source=StillAirField(),
-        azimuth_resolution_deg=30.0,
-    )
+    common = {
+        "aircraft": giii,
+        "start": kedw_wp,
+        "budget": 3 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "wind_source": StillAirField(),
+        "azimuth_resolution_deg": 30.0,
+    }
     rt = compute_isochrone(**common, mode="round_trip")
     ow = compute_isochrone(**common, mode="one_way")
     rt_idx = rt.set_index("azimuth_deg")["distance_nmi"]
@@ -292,15 +292,15 @@ def test_inflight_reaches_farther_than_preflight(giii, kedw_wp, cruise_alt):
         altitude_msl=cruise_alt,
         name="KEDW (in-flight)",
     )
-    common = dict(
-        aircraft=giii,
-        budget=3 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        mode="return_safe",
-        wind_source=StillAirField(),
-        return_destination=kedw_wp,
-        azimuth_resolution_deg=30.0,
-    )
+    common = {
+        "aircraft": giii,
+        "budget": 3 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "mode": "return_safe",
+        "wind_source": StillAirField(),
+        "return_destination": kedw_wp,
+        "azimuth_resolution_deg": 30.0,
+    }
     pre = compute_isochrone(start=kedw_wp, **common)
     flying = compute_isochrone(start=inflight_start, **common)
     pre_idx = pre.set_index("azimuth_deg")["distance_nmi"]
@@ -328,7 +328,7 @@ class TestValidation:
     def test_distinct_on_station_altitude_raises(
         self, giii, kedw_wp, cruise_alt,
     ):
-        with pytest.raises(HyPlanValueError, match="[Mm]ulti-altitude"):
+        with pytest.raises(HyPlanValueError, match=r"[Mm]ulti-altitude"):
             compute_isochrone(
                 aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
                 cruise_altitude=cruise_alt,
@@ -411,7 +411,7 @@ class TestValidation:
             latitude=kedw_wp.latitude, longitude=kedw_wp.longitude,
             heading=0.0, altitude_msl=40000 * ureg.feet,
         )
-        with pytest.raises(HyPlanValueError, match="initial descent|cruise"):
+        with pytest.raises(HyPlanValueError, match=r"initial descent|cruise"):
             compute_isochrone(
                 aircraft=giii, start=airborne, budget=2 * ureg.hour,
                 cruise_altitude=20000 * ureg.feet, mode="round_trip",
@@ -451,15 +451,15 @@ class TestValidation:
 
 def test_round_trip_defaults_to_start(giii, kedw_wp, cruise_alt):
     """round_trip without `return_destination` matches one with start."""
-    common = dict(
-        aircraft=giii,
-        start=kedw_wp,
-        budget=3 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        mode="round_trip",
-        wind_source=StillAirField(),
-        azimuth_resolution_deg=60.0,
-    )
+    common = {
+        "aircraft": giii,
+        "start": kedw_wp,
+        "budget": 3 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "mode": "round_trip",
+        "wind_source": StillAirField(),
+        "azimuth_resolution_deg": 60.0,
+    }
     a = compute_isochrone(**common)
     b = compute_isochrone(return_destination=kedw_wp, **common)
     a_d = a.set_index("azimuth_deg")["distance_nmi"]
@@ -562,14 +562,14 @@ def test_start_accepts_airport(giii, kedw_wp, cruise_alt):
     initialize_data()
     kedw_airport = Airport("KEDW")
 
-    common = dict(
-        aircraft=giii,
-        budget=4 * ureg.hour,
-        cruise_altitude=cruise_alt,
-        mode="round_trip",
-        wind_source=StillAirField(),
-        azimuth_resolution_deg=60.0,
-    )
+    common = {
+        "aircraft": giii,
+        "budget": 4 * ureg.hour,
+        "cruise_altitude": cruise_alt,
+        "mode": "round_trip",
+        "wind_source": StillAirField(),
+        "azimuth_resolution_deg": 60.0,
+    }
     gdf_airport = compute_isochrone(start=kedw_airport, **common)
     # Reconstruct an equivalent Waypoint manually.
     kedw_equiv_wp = Waypoint(
@@ -631,11 +631,11 @@ def test_pure_crosswind_slows_groundspeed(giii, kedw_wp, cruise_alt):
     # crosswind.  With crab handling, GS = sqrt(TAS² − xwind²) < TAS,
     # so those rays should reach less far than still air.
     wind = ConstantWindField(60 * ureg.knot, wind_from_deg=270.0)
-    common = dict(
-        aircraft=giii, start=kedw_wp, budget=4 * ureg.hour,
-        cruise_altitude=cruise_alt, mode="round_trip",
-        azimuth_resolution_deg=90.0,
-    )
+    common = {
+        "aircraft": giii, "start": kedw_wp, "budget": 4 * ureg.hour,
+        "cruise_altitude": cruise_alt, "mode": "round_trip",
+        "azimuth_resolution_deg": 90.0,
+    }
     calm = compute_isochrone(wind_source=StillAirField(), **common)
     crossed = compute_isochrone(wind_source=wind, **common)
 
@@ -936,13 +936,13 @@ class TestRefuel:
         self, b200, kefd_wp, klbb_wp, b200_cruise,
     ):
         """Along the bearing toward KLBB, refuel boundary > direct boundary."""
-        common = dict(
-            aircraft=b200, start=kefd_wp,
-            cruise_altitude=b200_cruise,
-            mode="round_trip",
-            azimuth_resolution_deg=30.0,
-            distance_tolerance_nmi=2.0,
-        )
+        common = {
+            "aircraft": b200, "start": kefd_wp,
+            "cruise_altitude": b200_cruise,
+            "mode": "round_trip",
+            "azimuth_resolution_deg": 30.0,
+            "distance_tolerance_nmi": 2.0,
+        }
         direct = compute_isochrone(
             **common, budget=4 * ureg.hour,
         )
@@ -992,13 +992,13 @@ class TestRefuel:
             latitude=kefd_wp.latitude + 0.1, longitude=kefd_wp.longitude,
             heading=0.0, altitude_msl=100 * ureg.feet, name="NEAR",
         )
-        common = dict(
-            aircraft=b200, start=kefd_wp,
-            cruise_altitude=b200_cruise,
-            mode="round_trip",
-            azimuth_resolution_deg=60.0,
-            distance_tolerance_nmi=2.0,
-        )
+        common = {
+            "aircraft": b200, "start": kefd_wp,
+            "cruise_altitude": b200_cruise,
+            "mode": "round_trip",
+            "azimuth_resolution_deg": 60.0,
+            "distance_tolerance_nmi": 2.0,
+        }
         direct = compute_isochrone(
             **common, budget=4 * ureg.hour,
         )
@@ -1023,16 +1023,16 @@ class TestRefuel:
         self, b200, kefd_wp, klbb_wp, b200_cruise,
     ):
         """Increasing refuel_time monotonically shrinks per-ray reach."""
-        common = dict(
-            aircraft=b200, start=kefd_wp,
-            sortie_budget=4 * ureg.hour,
-            flight_day_budget=8 * ureg.hour,
-            cruise_altitude=b200_cruise,
-            refuel_airports=[klbb_wp],
-            mode="round_trip",
-            azimuth_resolution_deg=60.0,
-            distance_tolerance_nmi=2.0,
-        )
+        common = {
+            "aircraft": b200, "start": kefd_wp,
+            "sortie_budget": 4 * ureg.hour,
+            "flight_day_budget": 8 * ureg.hour,
+            "cruise_altitude": b200_cruise,
+            "refuel_airports": [klbb_wp],
+            "mode": "round_trip",
+            "azimuth_resolution_deg": 60.0,
+            "distance_tolerance_nmi": 2.0,
+        }
         short = compute_refuel_isochrone(refuel_time=30 * ureg.minute, **common)
         long_ = compute_refuel_isochrone(refuel_time=90 * ureg.minute, **common)
         for az in short["azimuth_deg"]:
@@ -1197,9 +1197,7 @@ class TestRefuel:
             azimuth_resolution_deg=30.0,
             distance_tolerance_nmi=2.0,
         )
-        from_rows = set(
-            r for r in gdf["refuel_airport"].dropna().unique()
-        )
+        from_rows = set(gdf["refuel_airport"].dropna().unique())
         assert set(gdf.attrs["refuel_airports_used"]) == from_rows
 
 
@@ -1356,7 +1354,7 @@ class TestConcentric:
                 .sort_values("budget_hr")["distance_nmi"]
                 .tolist()
             )
-            for a, b in zip(d_by_b[:-1], d_by_b[1:]):
+            for a, b in itertools.pairwise(d_by_b):
                 assert b >= a - 2.0, (
                     f"az {az}: budget grew {a} → {b}, expected non-decreasing"
                 )
@@ -1365,12 +1363,12 @@ class TestConcentric:
         self, giii, kedw_wp, cruise_alt,
     ):
         """Concentric with a single-element list matches compute_isochrone."""
-        common = dict(
-            cruise_altitude=cruise_alt,
-            mode="round_trip",
-            azimuth_resolution_deg=60.0,
-            distance_tolerance_nmi=2.0,
-        )
+        common = {
+            "cruise_altitude": cruise_alt,
+            "mode": "round_trip",
+            "azimuth_resolution_deg": 60.0,
+            "distance_tolerance_nmi": 2.0,
+        }
         single = compute_isochrone(
             giii, kedw_wp, 2 * ureg.hour, **common,
         )
@@ -1420,18 +1418,18 @@ def test_refuel_caching_constant_wind_matches_still_air(
     rays still matches per-ray.
     """
     from hyplan.winds import ConstantWindField, StillAirField
-    common = dict(
-        aircraft=b200, start=kefd_wp,
-        sortie_budget=4 * ureg.hour,
-        flight_day_budget=8 * ureg.hour,
-        cruise_altitude=b200_cruise,
-        refuel_airports=[klbb_wp],
-        refuel_time=30 * ureg.minute,
-        return_destination=kbtr_wp,
-        mode="return_safe",
-        azimuth_resolution_deg=60.0,
-        distance_tolerance_nmi=2.0,
-    )
+    common = {
+        "aircraft": b200, "start": kefd_wp,
+        "sortie_budget": 4 * ureg.hour,
+        "flight_day_budget": 8 * ureg.hour,
+        "cruise_altitude": b200_cruise,
+        "refuel_airports": [klbb_wp],
+        "refuel_time": 30 * ureg.minute,
+        "return_destination": kbtr_wp,
+        "mode": "return_safe",
+        "azimuth_resolution_deg": 60.0,
+        "distance_tolerance_nmi": 2.0,
+    }
     g_still = compute_refuel_isochrone(wind_source=StillAirField(), **common)
     g_const = compute_refuel_isochrone(
         wind_source=ConstantWindField(20 * ureg.knot, wind_from_deg=270.0),
@@ -1506,6 +1504,7 @@ def test_plot_isochrone_folium_smoke(
     recovery markers, per-ray dot popup branches (including the
     one_way headwind-only path), and the refuel-airport-marker branch."""
     import folium
+
     from hyplan.planning.isochrone import plot_isochrone
 
     # 1. Plain round-trip: polygon + start marker, no recovery marker.
@@ -1637,8 +1636,9 @@ class TestWindSampling:
     def _leg_time_helper(
         ac, start_wp, end_wp, cruise_alt, wind_source, **kw,
     ):
-        from hyplan.planning.isochrone import _leg_time
         import datetime as _dt
+
+        from hyplan.planning.isochrone import _leg_time
         return _leg_time(
             aircraft=ac, start_wp=start_wp, end_wp=end_wp,
             cruise_altitude=cruise_alt,

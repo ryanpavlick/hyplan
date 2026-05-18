@@ -77,7 +77,7 @@ class _GriddedWindField(WindField):
         bbox_buffer_deg: float = 1.0,
         descent_altitude_buffer_ft: float = 0.0,
         **provider_kwargs: Any,
-    ) -> "_GriddedWindField":
+    ) -> _GriddedWindField:
         """Build a gridded wind field sized for a computed flight plan.
 
         Derives the slab geometry from the plan's columns so callers
@@ -121,7 +121,8 @@ class _GriddedWindField(WindField):
                 for dropsondes (which only descend from release).
         """
         try:
-            import geopandas as gpd  # noqa: F401
+            import geopandas  # noqa: F401  — feature-detection import; used downstream via duck-typing
+
             from hyplan.atmosphere import pressure_at
             from hyplan.units import ureg
         except ImportError as exc:  # pragma: no cover - missing dep
@@ -222,7 +223,7 @@ class _GriddedWindField(WindField):
         ds.to_netcdf(path)
 
     @classmethod
-    def from_netcdf(cls, path: str) -> "_GriddedWindField":
+    def from_netcdf(cls, path: str) -> _GriddedWindField:
         """Load a previously-saved slab cache.
 
         Bypasses ``__init__`` (no live OPeNDAP fetch, no auth) — simply

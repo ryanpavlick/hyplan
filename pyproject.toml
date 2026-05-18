@@ -55,7 +55,25 @@ phenology = ["earthaccess", "xarray"]
 winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
 adsb = ["traffic>=2.8"]
 planned = ["openpyxl", "pdfplumber"]
+# Cartopy-backed static plotting (hyplan.plotting lazy-imports cartopy
+# inside functions; notebooks that call those helpers need this extra).
+plots = ["cartopy"]
+# Standalone sun-position library used by a couple of tutorial notebooks
+# (glint_analysis, validation).  Independent of hyplan.sun.
+sun = ["sunposition"]
+# Loading API keys / tokens from .env files in tutorial notebooks
+# (airspace_check OpenAIP key, campaign_management config).
+secrets = ["python-dotenv"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
+# Docs build tooling — installed by docs.yml. Keep in sync with the
+# `pip install` step there until both are replaced by `pip install -e .[docs]`.
+docs = ["sphinx>=7", "myst-nb", "furo", "sphinx-autodoc-typehints"]
+# Notebook execution tooling only — papermill / ipykernel / jupyter /
+# nbconvert. Does NOT include science-stack extras any individual
+# notebook might need (winds, clouds, mag, planned, ...); those are
+# declared per-notebook in `.github/notebooks/manifest.yml` and
+# installed per matrix row.
+notebooks = ["papermill", "ipykernel", "jupyter", "nbconvert"]
 
 [project.urls]
 Homepage = "https://github.com/ryanpavlick/hyplan"
@@ -85,6 +103,13 @@ markers = [
 
 [tool.ruff]
 target-version = "py310"
+# Native notebook linting (Ruff has stable .ipynb support since 0.6).
+# Per-file-ignores below pick the notebook-appropriate rule relaxations.
+extend-include = ["*.ipynb"]
+# setuptools-scm regenerates `hyplan/_version.py` on every install; the
+# `__all__` ordering varies between local and CI builds (RUF022) and the
+# file header explicitly says "don't change, don't track in version control".
+extend-exclude = ["hyplan/_version.py"]
 
 [tool.ruff.lint]
 # Default ruff includes E (pycodestyle errors) and F (pyflakes).
@@ -93,7 +118,15 @@ target-version = "py310"
 # see TODO.md.
 extend-select = [
     "B",    # flake8-bugbear (real bug-class issues)
-    "SIM115",  # open() without context manager (file-leak risk)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (PEP 585 generics, PEP 604 unions, etc.)
+    "RUF",  # Ruff-specific (with selective ignores below)
+    "RET",  # flake8-return (unnecessary-assign, etc.)
+    "SIM",  # flake8-simplify (with SIM108 ignored — see below)
+    "C4",   # flake8-comprehensions (dict()/list()/set() → literals)
+    "PIE",  # flake8-pie (misc idioms — starts-with collapsing etc.)
+    "LOG",  # flake8-logging (no root-logger calls)
+    "FURB", # refurb (modernization suggestions)
 ]
 # B017 — test_radar uses pytest.raises(Exception) intentionally for
 #        broad-stack-trace assertions.
@@ -102,11 +135,28 @@ extend-select = [
 # B023 — function-uses-loop-variable: 2 sites in isochrone.py use
 #        the closure intentionally; verify before fixing.
 # B018 — 1 site in dubins3d.py is intentional XXX-debugging code.
-# B905 — zip-without-explicit-strict: ~40 sites; pure stylistic, low
-#        value to enforce in CI.
 # B007 — already fixed; keep enabled.
 # B904 — already fixed; keep enabled.
-ignore = ["B017", "B008", "B023", "B018", "B905"]
+# B905 — already swept in v1.11.x hygiene; keep enabled.
+# RUF001/RUF002/RUF003 — ambiguous-unicode-character — flags
+#        intentional typography (en-dash, em-dash, curly quotes) in
+#        strings, docstrings, and comments.  HyPlan uses these for
+#        legible math and prose; not bugs.
+# RUF046 — unnecessary-cast-to-int — 73 sites, mostly defensive
+#        casts of floor()/ceil() results or pint magnitudes.
+#        Needs case-by-case review; deferred.
+# RUF059 — unused-unpacked-variable — 49 sites, mostly in
+#        algorithmic code that unpacks tuples and uses a subset.
+#        Defer to a focused pass.
+# SIM108 — if-else-as-expression.  Some sites compress nicely as
+#        ternaries; others (especially with long branches or pint
+#        Quantity arithmetic) hurt readability.  Opt out and apply
+#        case-by-case via local refactors.
+ignore = [
+    "B017", "B008", "B023", "B018",
+    "RUF001", "RUF002", "RUF003", "RUF046", "RUF059",
+    "SIM108",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Package surface re-exports use `from .x import y` patterns that ruff
@@ -132,13 +182,20 @@ ignore = ["B017", "B008", "B023", "B018", "B905"]
 # conditionals are common (E701/E702), unused loop variables in
 # exploration cells aren't worth chasing (B007), and re-imports across
 # cells produce false-positive F811s.  Also tolerate F841 unused-var
-# leftovers in cell scopes.
-"notebooks/**/*.ipynb" = ["E402", "E701", "E702", "B007", "F811", "F841"]
+# leftovers in cell scopes.  F401 unused-import is tolerated in
+# tutorials because notebooks sometimes import a symbol to demonstrate
+# the import path even when the cell body doesn't reference it.
+"notebooks/**/*.ipynb" = ["E402", "E701", "E702", "B007", "F401", "F811", "F841"]
 
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
+# Project-wide strict mypy.  Every module in `hyplan/` passes
+# `mypy --strict` as of v1.11.x.  `ignore_missing_imports` is kept
+# at the global level for third-party libraries that lack stubs
+# (earthengine, earthaccess, geomag, rasterio, etc.); inline
+# `# type: ignore` comments at the library boundary document the
+# specific Any-returns we accept.
+strict = true
 ignore_missing_imports = true
 # pint's stubs vary across versions (newer numpy stub interactions
 # return PlainQuantity[Any] rather than the alias Quantity, breaking
@@ -147,15 +204,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pint.*"
 follow_imports = "skip"
-
-# Strict mypy on the two newest planner modules.
-[[tool.mypy.overrides]]
-module = "hyplan.planning.isochrone"
-strict = true
-
-[[tool.mypy.overrides]]
-module = "hyplan.aircraft.wind_path"
-strict = true
 
 [tool.coverage.run]
 source = ["hyplan"]

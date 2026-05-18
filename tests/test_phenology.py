@@ -3,6 +3,7 @@
 import datetime as dt
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +25,6 @@ from hyplan.phenology._qa import (
     apply_vi_qa_mask,
     convert_mcd12q2_dates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -330,7 +330,7 @@ class TestExtractPhenologyStages:
 
     def test_empty_df(self):
         from hyplan.phenology.analysis import _STAGE_COLUMNS
-        cols = ["polygon_id", "year"] + _STAGE_COLUMNS
+        cols = ["polygon_id", "year", *_STAGE_COLUMNS]
         df = pd.DataFrame(columns=cols)
         result = extract_phenology_stages(df)
         assert len(result) == 0

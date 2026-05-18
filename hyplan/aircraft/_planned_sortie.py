@@ -23,11 +23,11 @@ column schema.
 
 from __future__ import annotations
 
-from typing import Any
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
-import re
 
 import pandas as pd
 
@@ -504,7 +504,7 @@ _PDF_COL_REMARKS = 8
 def _normalize_pdf_row(row: list[Any]) -> list[Any]:
     """Strip the empty placeholder col 1 used by page-1's merged-header layout."""
     if len(row) == 10 and row[1] is None:
-        return [row[0]] + list(row[2:])
+        return [row[0], *list(row[2:])]
     return list(row)
 
 # Line 1 of col 0: "[wp#] fix [vor] alt M".  fix may contain spaces
@@ -544,7 +544,7 @@ def _parse_pdf_fix_block(cell: str) -> dict[Any, Any]:
     if m1:
         wp_str, fix_name, vor_str, alt_str = m1.groups()
         wp_num: int | None = int(wp_str) if wp_str else None
-        vor_freq: str | None = vor_str if vor_str else None
+        vor_freq: str | None = vor_str or None
         altitude_ft: float | None = float(alt_str) if alt_str else None
     else:
         wp_num = None

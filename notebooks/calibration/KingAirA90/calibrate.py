@@ -235,9 +235,9 @@ def main() -> None:
               f"total={sum(durs)/60:5.1f} hr")
 
     # Run pipeline stages
-    from hyplan.aircraft.adsb.phases import label_phases
     from hyplan.aircraft.adsb.airdata import reconstruct_airdata, resolve_wind_field
     from hyplan.aircraft.adsb.fitting import fit_schedules
+    from hyplan.aircraft.adsb.phases import label_phases
 
     print("\nLabeling phases…")
     phased = [label_phases(f, backend="heuristic") for f in flights]

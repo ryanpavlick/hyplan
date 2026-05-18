@@ -117,25 +117,27 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   * `effective_swath_on_terrain` (`instruments/lvis.py`) — 222
     lines.  Medium: geometric computation.
 
-* **Expanded ruff rule sets** — v1.6.1 enabled `B` (bugbear) and
-  `SIM115` (file-open without context manager).  Stylistic rule
-  sets queued, each behind ~10-50 minor fixes:
-  * `RUF` (ruff-specific): unused-unpacked-variable (~46 sites),
-    `[*]`-fixable simplifications (`RUF015` list-allocation,
-    `RUF005` collection-literal-concat, `RUF007` zip-pairwise).
-  * `RET` (flake8-return): RET504 unnecessary-assign (~14
-    remaining; RET505 superfluous-else-return was cleared in
-    v1.6.1).
-  * `SIM` (flake8-simplify): SIM117 nested with-stmts (~11),
-    SIM108 if-else-as-expression (~9), SIM105 suppressible-
-    exception (~6), SIM102 collapsible-if (~2).
-  * `UP` (pyupgrade): only ~2 minor sites remain.
-  Pure cosmetic; no bug fixes; gradually opt in.
+* **Expanded ruff rule sets** — `B` (bugbear), `UP` (pyupgrade),
+  `RUF` (Ruff-specific with selective ignores), `RET` (flake8-
+  return), and `SIM` (flake8-simplify with SIM108 ignored) are all
+  enabled in v1.11.x.  Permanently-ignored / deferred rules:
+  * `RUF001/002/003` (ambiguous-unicode-character): permanently
+    ignored — HyPlan uses en-dash / em-dash / curly quotes
+    intentionally for typography (~230 sites).
+  * `RUF046` (unnecessary-cast-to-int): 73 sites, mostly
+    defensive casts of pint magnitudes / floor/ceil results.
+    Needs case-by-case review; deferred.
+  * `RUF059` (unused-unpacked-variable): 49 sites in algorithmic
+    code that unpacks tuples and uses a subset; defer.
+  * `SIM108` (if-else-as-expression): opt out — some sites
+    compress to ternaries cleanly, others (long branches, pint
+    Quantity arithmetic) hurt readability.
 
-* **B905 zip-without-explicit-strict** — ~40 sites.  `zip(a, b)` →
-  `zip(a, b, strict=True)` (length-mismatch detection) or
-  `strict=False` (silent truncation, current behavior).  Pure
-  defensive coding; would need per-site judgment of which.
+* ~~**B905 zip-without-explicit-strict**~~ — done in v1.11.x.  99
+  sites swept to `strict=False` (matches prior truncation semantics);
+  `B905` removed from the Ruff ignore list.  Sites that should
+  assert equal lengths via `strict=True` can be opted in case-by-
+  case in future work.
 
 * **`tests/test_radar.py`** uses `pytest.raises(Exception)` 19
   places (B017).  Would benefit from narrowing to specific
@@ -161,4 +163,3 @@ worth tracking.
   TRANS2AM, CAESAR, WE-CAN).  Higher quality than ADS-B if
   reachable.  Currently behind ORDER request via
   `datahelp@eol.ucar.edu`.
-
