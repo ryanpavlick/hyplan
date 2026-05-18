@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Docs build
+
+* **`sphinx-build -W` enabled** in `.github/workflows/docs.yml`. The
+  docs CI now fails on any new warning, not just build errors. Fixes
+  applied to clear the existing warnings:
+  * Removed the duplicate `autoclass`/`autodata` block for
+    `DropsondeSystem` + `AVAPS_NRD41` from `docs/api/sensors.md` —
+    they're already documented in the dedicated
+    `docs/api/dropsonde.md` page; the sensors-page block had a
+    `{doc}` pointer to dropsonde.md but still autoincluded the
+    classes, producing 5 duplicate-object warnings.
+  * Two `|VS|` literals in `hyplan.aircraft.NASA_ER2` docstring
+    rewrote as plain `VS` (RST was interpreting them as undefined
+    substitution refs).
+  * `compute_concentric_isochrones` and `evaluate_target_reachability`
+    docstrings in `hyplan.planning.isochrone`: the multi-name field
+    `aircraft, start, ...: same semantics` style isn't valid napoleon
+    syntax; restructured into a single passthrough paragraph.
+  * `LineScanner.ground_pixel_dimensions` docstring rewrote a
+    multi-line inline literal `` ``{"cross_track": Quantity ...}``  ``
+    into prose (RST inline literals can't span lines).
+* **`suppress_warnings = ["myst.xref_missing"]`** added to
+  `docs/conf.py`. Markdown links like
+  `[text](../../notebooks/foo.ipynb)` resolve correctly on GitHub
+  but MyST treats them as cross-references and warns when the target
+  isn't a built Sphinx document. Tracked for a future cleanup pass.
+
 ### Repository hygiene
 
 * **Untracked `notebooks/interactive_export/`** — 11 regenerable
