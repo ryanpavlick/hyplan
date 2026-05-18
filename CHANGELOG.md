@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Notebook CI
+
+* **Tiered notebook execution**, replacing the previous 4-notebook
+  smoke matrix in `.github/workflows/notebooks.yml`. The new manifest
+  at [`.github/notebooks/manifest.yml`](.github/notebooks/manifest.yml)
+  is the source of truth for which notebooks run, what extras they
+  need, and what auth secrets they require. Tiers:
+  * **PR**: only notebooks changed in the PR
+    (via `tj-actions/changed-files`); empty matrix → job is a no-op.
+  * **Schedule (nightly)**: every tutorial-group entry, plus auth-
+    walled entries whose `requires:` secrets are present in repo
+    settings. Calibration excluded.
+  * **`workflow_dispatch`**: pick tier explicitly; optional
+    `include_calibration=true` input runs the 19 calibration
+    notebooks as a separate matrix.
+  * **Per-matrix-row extras**: each cell installs
+    `pip install -e ".[notebooks,<row extras>]"`, so cells don't
+    over-install heavy science dependencies.
+  * **Source-tree clean check**: executed notebooks go to
+    `/tmp/notebooks/`; a post-execution `git status --porcelain` step
+    fails the job if anything in the working tree changed (catches
+    accidental in-place writes).
+* [`tests/test_notebook_manifest.py`](tests/test_notebook_manifest.py)
+  asserts every `notebooks/**/*.ipynb` appears in the manifest and
+  every manifest entry maps to a real file — catches silent
+  CI-coverage gaps.
+
+### Lint
+
+* **Native Ruff for notebooks.** `pyproject.toml`'s `[tool.ruff]` now
+  sets `extend-include = ["*.ipynb"]`, so `ruff check .` covers
+  `hyplan/`, `tests/`, and `notebooks/` uniformly. Existing per-file-
+  ignores already declared the notebook-appropriate relaxations;
+  added `F401` (unused-import) to the notebook list so tutorials can
+  import a symbol to demonstrate an import path without lint noise.
+  Pre-commit config in `.pre-commit-config.yaml` updated to match.
+* Cleaned six `F541` (f-string without placeholders) bugs in
+  `notebooks/gliht_instruments.ipynb` (introduced during the v1.10
+  notebook work).
+
 ### Packaging
 
 * **`docs` extra** added to `pyproject.toml`:

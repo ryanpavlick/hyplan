@@ -94,6 +94,9 @@ markers = [
 
 [tool.ruff]
 target-version = "py310"
+# Native notebook linting (Ruff has stable .ipynb support since 0.6).
+# Per-file-ignores below pick the notebook-appropriate rule relaxations.
+extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
 # Default ruff includes E (pycodestyle errors) and F (pyflakes).
@@ -141,8 +144,10 @@ ignore = ["B017", "B008", "B023", "B018", "B905"]
 # conditionals are common (E701/E702), unused loop variables in
 # exploration cells aren't worth chasing (B007), and re-imports across
 # cells produce false-positive F811s.  Also tolerate F841 unused-var
-# leftovers in cell scopes.
-"notebooks/**/*.ipynb" = ["E402", "E701", "E702", "B007", "F811", "F841"]
+# leftovers in cell scopes.  F401 unused-import is tolerated in
+# tutorials because notebooks sometimes import a symbol to demonstrate
+# the import path even when the cell body doesn't reference it.
+"notebooks/**/*.ipynb" = ["E402", "E701", "E702", "B007", "F401", "F811", "F841"]
 
 [tool.mypy]
 python_version = "3.10"
