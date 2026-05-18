@@ -97,7 +97,7 @@ def get_binary_cloud(image: ee.Image) -> ee.Image:
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
     # earthengine-api lacks type stubs; ee.Image.set returns Any.
-    return result.set("satellite", image.get("satellite"))  # type: ignore[no-any-return]
+    return result.set("satellite", image.get("satellite"))  # type: ignore[no-any-return,unused-ignore]
 
 
 def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
