@@ -388,13 +388,12 @@ def solar_position_increments(
     # Only keep times when the solar elevation exceeds the specified threshold.
     valid = solar_elevation > min_elevation
 
-    df = pd.DataFrame({
+    return pd.DataFrame({
         'Time': local_timestamps[valid].strftime('%H:%M:%S'),
         'Azimuth': azimuth[valid],
         'Elevation': solar_elevation[valid]
     })
 
-    return df
 
 def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     """

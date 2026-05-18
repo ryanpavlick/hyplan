@@ -118,17 +118,23 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
     lines.  Medium: geometric computation.
 
 * **Expanded ruff rule sets** — `B` (bugbear), `SIM115`
-  (file-open without context manager), and `UP` (pyupgrade) are
-  enabled.  Remaining stylistic rule sets queued:
-  * `RUF` (ruff-specific): unused-unpacked-variable (~46 sites),
-    `[*]`-fixable simplifications (`RUF015` list-allocation,
-    `RUF005` collection-literal-concat, `RUF007` zip-pairwise).
-  * `RET` (flake8-return): RET504 unnecessary-assign (~14
-    remaining; RET505 superfluous-else-return was cleared in
-    v1.6.1).
-  * `SIM` (flake8-simplify): SIM117 nested with-stmts (~11),
-    SIM108 if-else-as-expression (~9), SIM105 suppressible-
-    exception (~6), SIM102 collapsible-if (~2).
+  (file-open without context manager), `UP` (pyupgrade), `RUF`
+  (Ruff-specific with selective ignores), and `RET` (flake8-return)
+  are enabled.  Remaining queued:
+  * `SIM` (flake8-simplify): defers due to manual-fix volume.
+    SIM117 nested with-stmts (15 sites — auto-fix refused even
+    with --unsafe-fixes, needs case-by-case manual review),
+    SIM102 collapsible-if (7), SIM108 if-else-as-expression (10
+    — opt out, hurts readability for long expressions), SIM105
+    suppressible-exception (1), SIM113 enumerate-for-loop (1).
+  * `RUF001/002/003` (ambiguous-unicode-character): permanently
+    ignored — HyPlan uses en-dash / em-dash / curly quotes
+    intentionally for typography (~230 sites).
+  * `RUF046` (unnecessary-cast-to-int): 73 sites, mostly
+    defensive casts of pint magnitudes / floor/ceil results.
+    Needs case-by-case review; deferred.
+  * `RUF059` (unused-unpacked-variable): 49 sites in algorithmic
+    code that unpacks tuples and uses a subset; defer.
   Pure cosmetic; no bug fixes; gradually opt in.
 
 * **B905 zip-without-explicit-strict** — ~40 sites.  `zip(a, b)` →

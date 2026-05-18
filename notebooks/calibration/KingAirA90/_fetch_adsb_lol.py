@@ -32,6 +32,7 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import contextlib
 
 
 REGISTRY_PATH = Path("data/KingAirA90/faa_registry.csv")
@@ -53,10 +54,8 @@ def _fetch_trace(hex_code: str) -> dict | None:
         if e.code == 404:
             return None
         raise
-    try:
+    with contextlib.suppress(OSError):
         data = gzip.decompress(data)
-    except OSError:
-        pass
     try:
         d = json.loads(data)
     except json.JSONDecodeError:

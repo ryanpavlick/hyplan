@@ -116,9 +116,8 @@ def _label_heuristic(
     phases = _refine_cruise(phases, altitude_ft, level_band_ft)
 
     # Step 5: merge short phases
-    phases = _merge_short_phases(phases, timestamps, min_phase_seconds)
+    return _merge_short_phases(phases, timestamps, min_phase_seconds)
 
-    return phases
 
 
 def _rolling_median(

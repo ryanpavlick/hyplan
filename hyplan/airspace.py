@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .terrain import get_cache_root
 from .units import ureg
+import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -1508,17 +1509,13 @@ class NASRAirspaceSource:
             ceiling_unlimited = False
             for key in ("LOWER_VAL", "lower_val", "FLOOR"):
                 if key in props and props[key] is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         floor_ft = float(props[key])
-                    except (ValueError, TypeError):
-                        pass
                     break
             for key in ("UPPER_VAL", "upper_val", "CEILING"):
                 if key in props and props[key] is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         ceiling_ft = float(props[key])
-                    except (ValueError, TypeError):
-                        pass
                     break
 
             # Handle NASR sentinel values and unlimited ceilings
@@ -1547,16 +1544,12 @@ class NASRAirspaceSource:
             dst_code = None
             raw_offset = props.get("GMTOFFSET")
             if raw_offset is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     gmt_offset = float(raw_offset)
-                except (ValueError, TypeError):
-                    pass
             raw_dst = props.get("DST_CODE")
             if raw_dst is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     dst_code = int(raw_dst)
-                except (ValueError, TypeError):
-                    pass
 
             return Airspace(
                 name=name,

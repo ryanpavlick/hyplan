@@ -28,6 +28,7 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+import contextlib
 
 
 REGISTRY_PATH = Path("data/KingAirA90/faa_registry.csv")
@@ -51,10 +52,8 @@ def _fetch(date: str, hex_code: str) -> dict | None:
         raise
     if data[:1] == b"<":
         return None  # got an HTML error page disguised as 200
-    try:
+    with contextlib.suppress(OSError):
         data = gzip.decompress(data)
-    except OSError:
-        pass
     try:
         d = json.loads(data)
     except json.JSONDecodeError:

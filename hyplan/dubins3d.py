@@ -602,10 +602,9 @@ class DubinsPath2D:
     def _sample_points(self, n: int) -> np.ndarray[Any, np.dtype[Any]]:
         """Return (n, 3) array of (lat, lon, heading_deg) along the path."""
         if self._length_m <= 0:
-            single = np.array([[
+            return np.array([[
                 self.start.latitude, self.start.longitude, self.start.heading,
             ]])
-            return single
         if self._wind is None:
             offsets = np.linspace(0.0, self._length_m, n)
             samples = [self._solver.get_coordinates_at(float(d)) for d in offsets]

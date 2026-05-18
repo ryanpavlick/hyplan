@@ -358,8 +358,7 @@ def load_runways(filepath: str) -> pd.DataFrame:
 
     columns_to_keep = ['airport_ident', 'length_ft', 'width_ft', 'surface',
                        'le_heading_degT', 'he_heading_degT']
-    df_runways = df_runways[columns_to_keep]
-    return df_runways
+    return df_runways[columns_to_keep]
 
 def initialize_data(
     countries: list[str] | None = None,

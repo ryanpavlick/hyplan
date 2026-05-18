@@ -268,7 +268,7 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
         scale, missing = col_meta.get(col, (1.0, -9999.0))
         s = pd.to_numeric(raw[col], errors="coerce")
         # Per-column declared missing first.
-        if not (missing != missing):  # not NaN
+        if missing == missing:  # not NaN
             s = s.where(s != missing)
         # Then the broader fallback set — only replace exact matches to
         # avoid clobbering legitimate small-magnitude data.

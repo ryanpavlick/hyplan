@@ -645,9 +645,8 @@ def translate_polygon(polygon: Polygon, distance: float, azimuth: float) -> Poly
     y_offset = distance * np.cos(azimuth_radians)
 
     # Translate the polygon
-    translated_polygon = translate(polygon, xoff=x_offset, yoff=y_offset)
+    return translate(polygon, xoff=x_offset, yoff=y_offset)
 
-    return translated_polygon
 
 
 def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, across_track_distance: float, azimuth: float) -> Polygon:

@@ -4,6 +4,19 @@
 
 ### Lint ratchet
 
+* **Ruff `RET` (flake8-return) enabled** in
+  `[tool.ruff.lint] extend-select`. 14 RET504 unnecessary-assign
+  sites cleared by `ruff --fix --unsafe-fixes`.
+* **Ruff `RUF` (Ruff-specific) enabled** with selective ignores:
+  `RUF001/RUF002/RUF003` (ambiguous-unicode — intentional
+  typography), `RUF046` (cast-to-int — high-noise), `RUF059`
+  (unused-unpacked-variable — defer). After ignores, 80 violations:
+  74 auto-fixed (38 safe + 36 unsafe), 6 manual (RUF012 ClassVar
+  annotations on `Aircraft._SCHEDULE_COMPAT` and a test fixture,
+  RUF034 useless if-else in `FrameCamera.ground_sample_distance`,
+  RUF043 raw-string regex patterns in pytest match=).  Hidden
+  feature-detection imports (`geopandas`, `cfgrib`) marked with
+  `# noqa: F401`.
 * **Ruff `UP` (pyupgrade) enabled** in `[tool.ruff.lint] extend-select`.
   65 violations in the baseline tree (22× UP037 quoted-annotation,
   17× UP006 non-pep585-annotation, 12× UP035 deprecated-typing-import,

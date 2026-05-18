@@ -349,15 +349,14 @@ def _read_and_clip_subdataset(
         "transform": transform,
     }
 
-    with MemoryFile() as memfile:
-        with memfile.open(**profile) as mem_ds:
-            mem_ds.write(reprojected, 1)
-            clipped, clipped_transform = rio_mask(
-                mem_ds,
-                [polygon_geom.__geo_interface__],
-                crop=True,
-                nodata=0,
-            )
+    with MemoryFile() as memfile, memfile.open(**profile) as mem_ds:
+        mem_ds.write(reprojected, 1)
+        clipped, clipped_transform = rio_mask(
+            mem_ds,
+            [polygon_geom.__geo_interface__],
+            crop=True,
+            nodata=0,
+        )
 
     return clipped[0], clipped_transform
 

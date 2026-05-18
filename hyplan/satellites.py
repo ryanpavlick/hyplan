@@ -288,7 +288,7 @@ def compute_ground_track(
 
     geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
 
-    gdf = gpd.GeoDataFrame(
+    return gpd.GeoDataFrame(
         {
             "satellite_name": satellite.name,
             "norad_id": satellite.norad_id,
@@ -302,7 +302,6 @@ def compute_ground_track(
         crs="EPSG:4326",
     )
 
-    return gdf
 
 
 # ---------------------------------------------------------------------------
@@ -666,8 +665,7 @@ def find_all_overpasses(
 
     combined = pd.concat(results, ignore_index=True)
     combined = gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:4326")
-    combined = combined.sort_values("pass_start").reset_index(drop=True)
-    return combined
+    return combined.sort_values("pass_start").reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------

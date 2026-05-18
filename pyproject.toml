@@ -108,6 +108,7 @@ extend-select = [
     "SIM115",  # open() without context manager (file-leak risk)
     "UP",   # pyupgrade (PEP 585 generics, PEP 604 unions, etc.)
     "RUF",  # Ruff-specific (with selective ignores below)
+    "RET",  # flake8-return (unnecessary-assign, etc.)
 ]
 # B017 — test_radar uses pytest.raises(Exception) intentionally for
 #        broad-stack-trace assertions.

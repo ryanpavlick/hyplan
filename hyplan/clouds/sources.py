@@ -96,8 +96,7 @@ def get_binary_cloud(image: ee.Image) -> ee.Image:
     clouds = qa.bitwiseAnd(3).gt(0)
     date_char = image.date().format('yyyy-MM-dd')
     result = clouds.set("date_char", date_char)
-    result = result.set("satellite", image.get("satellite"))
-    return result  # type: ignore[no-any-return, unused-ignore]  # earthengine has no stubs; whether mypy infers Any-return varies by py version
+    return result.set("satellite", image.get("satellite"))
 
 
 def calculate_cloud_fraction(image: ee.Image, polygon_geometry: ee.Geometry) -> ee.Feature:
@@ -255,8 +254,7 @@ def create_cloud_data_array_with_limit(
     group_cols = ['polygon_id', 'year', 'day_of_year']
     if split_satellite:
         group_cols.append('satellite')
-    aggregated_df = results_df.groupby(group_cols).mean().reset_index()
-    return aggregated_df
+    return results_df.groupby(group_cols).mean().reset_index()
 
 
 # ---------------------------------------------------------------------------

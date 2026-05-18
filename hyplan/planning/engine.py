@@ -378,8 +378,7 @@ def compute_flight_plan(
 
     # Create and return the GeoDataFrame.
     df = pd.DataFrame(records)
-    flight_plan_gdf = gpd.GeoDataFrame(df, geometry=df["geometry"], crs="EPSG:4326")
-    return flight_plan_gdf
+    return gpd.GeoDataFrame(df, geometry=df["geometry"], crs="EPSG:4326")
 
 
 # ---------------------------------------------------------------------------

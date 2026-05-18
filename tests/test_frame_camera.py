@@ -5,6 +5,7 @@ import numpy as np
 from shapely.geometry import Polygon as ShapelyPolygon
 from hyplan.units import ureg
 from hyplan.instruments import FrameCamera, MultiCameraRig
+import contextlib
 
 
 @pytest.fixture
@@ -372,12 +373,10 @@ class TestFootprintCorners:
         """footprint_corners emits DeprecationWarning."""
         with pytest.warns(DeprecationWarning, match="deprecated"):
             # Will fail on missing DEM, but the warning fires first
-            try:
+            with contextlib.suppress(Exception):
                 FrameCamera.footprint_corners(
                     34.0, -117.0, 5000.0, 36.0, 24.0, "__nonexistent__.tif"
                 )
-            except Exception:
-                pass
 
 
 class TestGroundFootprint:
