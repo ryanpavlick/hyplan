@@ -27,7 +27,10 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[docs]"
+          # Include `phenology` so xarray is available — Sphinx with -W
+          # otherwise fails on the forward-reference warning for
+          # hyplan.phenology.fetch_phenology_spatial.
+          pip install -e ".[docs,phenology]"
 
       - name: Check API coverage
         # Verifies every docs/api/*.md is reachable from a toctree and
