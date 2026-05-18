@@ -92,7 +92,7 @@ def _opt_str(value: Any) -> str | None:
     if pd.isna(value):
         return None
     s = str(value)
-    return s if s else None
+    return s or None
 
 
 class FlightPlanTrack:

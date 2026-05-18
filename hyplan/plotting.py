@@ -495,7 +495,7 @@ def plot_airspace_map(
                 xy=(mid.x, mid.y), fontsize=6, color="#B8860B",
                 weight="bold", xytext=(8, -8), textcoords="offset points",
                 transform=transform,
-                arrowprops=dict(arrowstyle="->", color="#DAA520", lw=0.8),
+                arrowprops={"arrowstyle": "->", "color": "#DAA520", "lw": 0.8},
             )
 
     # Legend
@@ -1233,8 +1233,8 @@ def plot_isochrone_static(
                 0.01, 0.99, wind_caption,
                 transform=ax.transAxes, va="top", ha="left",
                 fontsize=8, color="0.15",
-                bbox=dict(boxstyle="round,pad=0.3", fc="white",
-                          ec="0.7", alpha=0.85),
+                bbox={"boxstyle": "round,pad=0.3", "fc": "white",
+                          "ec": "0.7", "alpha": 0.85},
             )
 
     for poly, color, label in polygons:

@@ -434,17 +434,17 @@ class DropsondePlan:
                     height_deg = 2 * b_m / m_per_deg_lat
                     bearing = float(row["splash_ellipse_bearing_deg"])
                     angle = (90.0 - bearing) % 360.0
-                    kw: dict[str, Any] = dict(
-                        xy=(center_lon, center_lat),
-                        width=width_deg,
-                        height=height_deg,
-                        angle=angle,
-                        fill=True,
-                        facecolor="C3",
-                        alpha=0.18,
-                        edgecolor="C3",
-                        lw=1.2,
-                    )
+                    kw: dict[str, Any] = {
+                        "xy": (center_lon, center_lat),
+                        "width": width_deg,
+                        "height": height_deg,
+                        "angle": angle,
+                        "fill": True,
+                        "facecolor": "C3",
+                        "alpha": 0.18,
+                        "edgecolor": "C3",
+                        "lw": 1.2,
+                    }
                     if not added:
                         kw["label"] = f"Splash {sigma_scale:.0f}-σ ellipse"
                         added = True

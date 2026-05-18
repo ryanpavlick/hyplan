@@ -215,13 +215,13 @@ class TestProfilingLidar:
     """Tests for the ProfilingLidar base class directly."""
 
     def _minimal_kwargs(self, **overrides):
-        kwargs = dict(
-            wavelengths=(532 * ureg.nanometer,),
-            pulse_rate=200 * ureg.hertz,
-            telescope_diameter=40 * ureg.centimeter,
-            vertical_resolution=15 * ureg.meter,
-            sampling_rate=2 * ureg.hertz,
-        )
+        kwargs = {
+            "wavelengths": (532 * ureg.nanometer,),
+            "pulse_rate": 200 * ureg.hertz,
+            "telescope_diameter": 40 * ureg.centimeter,
+            "vertical_resolution": 15 * ureg.meter,
+            "sampling_rate": 2 * ureg.hertz,
+        }
         kwargs.update(overrides)
         return kwargs
 

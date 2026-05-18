@@ -173,8 +173,7 @@ def to_icartt(
     header.append("Start_UTC, Latitude, Longitude, Altitude, speed, Bearing, SZA")
 
     with open(filepath, "w") as f:
-        for line in header:
-            f.write(line + "\n")
+        f.writelines(line + "\n" for line in header)
         for t, lat, lon, alt, spd, hdg, sza in data_rows:
             f.write(f"{t:.0f}, {lat:.9f}, {lon:.9f}, {alt:.0f}, "
                     f"{spd:.3f}, {hdg:.3f}, {sza:.3f}\n")

@@ -1808,7 +1808,7 @@ class Aircraft:
 
         if cruise_altitude is None:
             # Default: the higher of the two endpoints.
-            cruise_altitude = start_alt if start_alt >= end_alt else end_alt
+            cruise_altitude = max(start_alt, end_alt)
         cruise_altitude = cruise_altitude.to(ureg.feet)
 
         # Service-ceiling check.  Aircraft can sometimes operate

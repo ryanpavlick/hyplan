@@ -555,14 +555,14 @@ class TestCoordinatedLine:
     """Tests for the coordinated dual-aircraft line pattern."""
 
     def _make_result(self, **kwargs):
-        defaults = dict(
-            center=CENTER, heading=0.0,
-            primary_leg_length=ureg.Quantity(200, "km"),
-            primary_aircraft=NASA_P3(),
-            secondary_aircraft=NASA_ER2(),
-            primary_altitude=ureg.Quantity(5000, "feet"),
-            secondary_altitude=ureg.Quantity(65000, "feet"),
-        )
+        defaults = {
+            "center": CENTER, "heading": 0.0,
+            "primary_leg_length": ureg.Quantity(200, "km"),
+            "primary_aircraft": NASA_P3(),
+            "secondary_aircraft": NASA_ER2(),
+            "primary_altitude": ureg.Quantity(5000, "feet"),
+            "secondary_altitude": ureg.Quantity(65000, "feet"),
+        }
         defaults.update(kwargs)
         return coordinated_line(**defaults)
 

@@ -109,6 +109,10 @@ extend-select = [
     "RUF",  # Ruff-specific (with selective ignores below)
     "RET",  # flake8-return (unnecessary-assign, etc.)
     "SIM",  # flake8-simplify (with SIM108 ignored — see below)
+    "C4",   # flake8-comprehensions (dict()/list()/set() → literals)
+    "PIE",  # flake8-pie (misc idioms — starts-with collapsing etc.)
+    "LOG",  # flake8-logging (no root-logger calls)
+    "FURB", # refurb (modernization suggestions)
 ]
 # B017 — test_radar uses pytest.raises(Exception) intentionally for
 #        broad-stack-trace assertions.

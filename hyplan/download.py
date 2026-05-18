@@ -33,8 +33,7 @@ def download_file(filepath: str, url: str, chunk_size: int = int(1E6), timeout: 
         with requests.get(url, stream=True, timeout=timeout) as response:
             response.raise_for_status()
             with open(tmp_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    file.write(chunk)
+                file.writelines(response.iter_content(chunk_size=chunk_size))
         os.replace(tmp_path, filepath)
         logger.info(f"Data downloaded successfully to {filepath}.")
     except requests.RequestException as e:

@@ -1788,7 +1788,7 @@ def _unique_sorted_azimuths(
     wrapped = np.mod(np.asarray(azimuths_deg, dtype=float), 360.0)
     rounded = np.round(wrapped, 8)
     out: npt.NDArray[np.float64] = np.array(
-        sorted(set(float(v) for v in rounded)), dtype=float,
+        sorted({float(v) for v in rounded}), dtype=float,
     )
     return out
 

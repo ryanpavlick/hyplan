@@ -16,6 +16,21 @@
   document the specific Any-returns we accept.  One additional
   ignore added in `hyplan/clouds/sources.py` for an
   `ee.Image.set(...) -> Any` return.
+* **Ruff `C4` + `PIE` + `LOG` + `FURB` enabled.** Smaller bug-class
+  / modernization rule families that came along essentially for
+  free.  72 violations swept across hyplan, tests, and notebooks:
+  * 52 `C408` unnecessary-collection-call (`dict(a=1)` → `{"a": 1}`)
+  * 4 `C401` unnecessary-generator-set (`set(g)` → `{...}`)
+  * 1 `C416` unnecessary-comprehension
+  * 3 `PIE810` multiple-startswith/endswith collapsed to a tuple
+  * 3 `LOG015` root-logger calls in `hyplan/geometry.py` switched
+    to the module-level `logger`.
+  * 8 `FURB` modernization fixes.
+  * 1 `SIM118` dict-keys iteration in a notebook.
+  All auto-fixed (some with --unsafe-fixes).
+  `PERF` (perflint) considered but not enabled — 28 `PERF401`
+  manual-list-comprehension sites and 10 `PERF203` try-in-loop
+  sites need manual touchup; deferred.
 * **Ruff `SIM` (flake8-simplify) enabled** with `SIM108`
   (if-else-as-expression) ignored. 24 manual fixes across hyplan,
   notebooks, and tests:

@@ -108,7 +108,7 @@ def list_files(
     html = _http_get(opener, search_url)
 
     # ICARTT hrefs are relative ../../data/<platform>/...
-    hrefs = re.findall(r'href="(\.\./\.\./[^"]+\.ict)"', html, re.I)
+    hrefs = re.findall(r'href="(\.\./\.\./[^"]+\.ict)"', html, re.IGNORECASE)
     out: list[tuple[str, str]] = []
     seen: set[str] = set()
     for href in hrefs:

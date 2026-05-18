@@ -112,8 +112,7 @@ def _disable_numba_and_reimport_timezonefinder() -> Any:
     import sys
 
     os.environ["NUMBA_DISABLE_JIT"] = "1"
-    for mod in [m for m in sys.modules if m == "numba" or m.startswith("numba.")
-                or m == "timezonefinder" or m.startswith("timezonefinder.")]:
+    for mod in [m for m in sys.modules if m == "numba" or m.startswith(("numba.", "timezonefinder.")) or m == "timezonefinder"]:
         del sys.modules[mod]
     return _import_timezonefinder()
 
@@ -214,7 +213,7 @@ def _validate_polygon(polygon: Polygon | None) -> bool | None:
         - Uses Shapely's built-in validation for geometry validity checks.
     """
     if polygon is None:
-        logging.debug("Polygon validation skipped because input is None.")
+        logger.debug("Polygon validation skipped because input is None.")
         return None  # No validation needed for None
 
     if not isinstance(polygon, Polygon):
@@ -237,7 +236,7 @@ def _validate_polygon(polygon: Polygon | None) -> bool | None:
             f"Input polygon is invalid: {polygon.explain_validity()}"
         )
 
-    logging.debug("Polygon validation passed.")
+    logger.debug("Polygon validation passed.")
     return True
 
 
@@ -351,7 +350,7 @@ def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Cal
     wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
     utm_to_wgs84 = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True).transform
 
-    logging.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
+    logger.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
     return wgs84_to_utm, utm_to_wgs84
 
 def haversine(

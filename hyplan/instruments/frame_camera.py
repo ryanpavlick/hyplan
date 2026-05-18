@@ -952,8 +952,8 @@ class MultiCameraRig(Sensor):
         """
         terrain_kwargs = {}
         if lat is not None and lon is not None and altitude_msl is not None:
-            terrain_kwargs = dict(lat=lat, lon=lon, altitude_msl=altitude_msl,
-                                  heading=heading, dem_file=dem_file)
+            terrain_kwargs = {"lat": lat, "lon": lon, "altitude_msl": altitude_msl,
+                                  "heading": heading, "dem_file": dem_file}
 
         result = []
         for entry in self.cameras:

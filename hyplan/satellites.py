@@ -174,7 +174,7 @@ def fetch_tle(
 
     # Parse the TLE file
     with open(cache_path) as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        lines = [line.strip() for line in f if line.strip()]
 
     if len(lines) < 2:
         raise HyPlanRuntimeError(

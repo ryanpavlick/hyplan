@@ -175,14 +175,14 @@ def resolve_wind_field(
     time_min -= datetime.timedelta(hours=margin_hours)
     time_max += datetime.timedelta(hours=margin_hours)
 
-    kwargs = dict(
-        lat_min=lat_min,
-        lat_max=lat_max,
-        lon_min=lon_min,
-        lon_max=lon_max,
-        time_start=time_min,
-        time_end=time_max,
-    )
+    kwargs = {
+        "lat_min": lat_min,
+        "lat_max": lat_max,
+        "lon_min": lon_min,
+        "lon_max": lon_max,
+        "time_start": time_min,
+        "time_end": time_max,
+    }
 
     if wind_source == "merra2":
         from ...winds import MERRA2WindField

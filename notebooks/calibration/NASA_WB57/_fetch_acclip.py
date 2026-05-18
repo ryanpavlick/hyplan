@@ -75,12 +75,12 @@ def _list_acclip_mms_1hz() -> list[tuple[str, str]]:
         name = entry.get("producer_granule_id", "")
         if "MMS-1HZ" not in name:
             continue
-        if not (name.endswith(".ICT") or name.endswith(".ict")):
+        if not (name.endswith((".ICT", ".ict"))):
             continue
         for link in entry.get("links", []):
             href = link.get("href", "")
             if href.startswith("https://asdc") and (
-                href.endswith(".ICT") or href.endswith(".ict")
+                href.endswith((".ICT", ".ict"))
             ):
                 out.append((name, href))
                 break

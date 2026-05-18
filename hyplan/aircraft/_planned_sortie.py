@@ -544,7 +544,7 @@ def _parse_pdf_fix_block(cell: str) -> dict[Any, Any]:
     if m1:
         wp_str, fix_name, vor_str, alt_str = m1.groups()
         wp_num: int | None = int(wp_str) if wp_str else None
-        vor_freq: str | None = vor_str if vor_str else None
+        vor_freq: str | None = vor_str or None
         altitude_ft: float | None = float(alt_str) if alt_str else None
     else:
         wp_num = None

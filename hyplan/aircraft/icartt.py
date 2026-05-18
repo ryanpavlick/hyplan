@@ -287,7 +287,7 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
     # same canonical name (e.g., "Altitude" vs "GPS_Altitude"); take
     # the first match.
     used_columns = {indep_col}
-    name_to_unit = {n: u for n, u in dep_vars}
+    name_to_unit = dict(dep_vars)
     for canonical, patterns, unit_hint in _COLUMN_PATTERNS:
         if canonical in out.columns:
             continue

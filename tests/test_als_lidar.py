@@ -236,14 +236,14 @@ class TestCrossTrackSpacing:
 
     def test_full_circle_differs_from_active_arc(self) -> None:
         # Same PRF/scan_rate, different geometry → different ground spacings.
-        common = dict(
-            prf=300 * ureg.kilohertz,
-            scan_rate=100 * ureg.hertz,
-            scan_half_angle=30 * ureg.degree,
-            beam_divergence=0.3 * ureg.milliradian,
-            wavelength=1064 * ureg.nanometer,
-            max_range=1000 * ureg.meter,
-        )
+        common = {
+            "prf": 300 * ureg.kilohertz,
+            "scan_rate": 100 * ureg.hertz,
+            "scan_half_angle": 30 * ureg.degree,
+            "beam_divergence": 0.3 * ureg.milliradian,
+            "wavelength": 1064 * ureg.nanometer,
+            "max_range": 1000 * ureg.meter,
+        }
         active = ALSLidar(
             name="A", scan_geometry="rotating_polygon_active_arc", **common,
         )

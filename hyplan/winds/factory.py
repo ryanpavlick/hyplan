@@ -110,16 +110,16 @@ def wind_field_from_plan(
     if source_lower == "still_air":
         return StillAirField()
 
-    bbox = dict(
-        lat_min=lat_min,
-        lat_max=lat_max,
-        lon_min=lon_min,
-        lon_max=lon_max,
-        time_start=time_start,
-        time_end=time_end,
-        pressure_min_hpa=pressure_min_hpa,
-        pressure_max_hpa=pressure_max_hpa,
-    )
+    bbox = {
+        "lat_min": lat_min,
+        "lat_max": lat_max,
+        "lon_min": lon_min,
+        "lon_max": lon_max,
+        "time_start": time_start,
+        "time_end": time_end,
+        "pressure_min_hpa": pressure_min_hpa,
+        "pressure_max_hpa": pressure_max_hpa,
+    }
 
     if source_lower == "merra2":
         from .providers.merra2 import MERRA2WindField

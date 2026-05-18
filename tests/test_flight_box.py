@@ -33,16 +33,16 @@ class TestBoxAroundCenterLine:
 
     def test_overlap_changes_count(self):
         sensor = AVIRIS3()
-        kwargs = dict(
-            instrument=sensor,
-            altitude_msl=ureg.Quantity(6000, "meter"),
-            lat0=34.0,
-            lon0=-118.0,
-            azimuth=0.0,
-            box_length=ureg.Quantity(50000, "meter"),
-            box_width=ureg.Quantity(20000, "meter"),
-            box_name="TestBox",
-        )
+        kwargs = {
+            "instrument": sensor,
+            "altitude_msl": ureg.Quantity(6000, "meter"),
+            "lat0": 34.0,
+            "lon0": -118.0,
+            "azimuth": 0.0,
+            "box_length": ureg.Quantity(50000, "meter"),
+            "box_width": ureg.Quantity(20000, "meter"),
+            "box_name": "TestBox",
+        }
         lines_20 = box_around_center_line(overlap=20, **kwargs)
         lines_50 = box_around_center_line(overlap=50, **kwargs)
         # More overlap → more lines
