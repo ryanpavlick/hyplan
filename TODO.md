@@ -117,9 +117,9 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   * `effective_swath_on_terrain` (`instruments/lvis.py`) — 222
     lines.  Medium: geometric computation.
 
-* **Expanded ruff rule sets** — v1.6.1 enabled `B` (bugbear) and
-  `SIM115` (file-open without context manager).  Stylistic rule
-  sets queued, each behind ~10-50 minor fixes:
+* **Expanded ruff rule sets** — `B` (bugbear), `SIM115`
+  (file-open without context manager), and `UP` (pyupgrade) are
+  enabled.  Remaining stylistic rule sets queued:
   * `RUF` (ruff-specific): unused-unpacked-variable (~46 sites),
     `[*]`-fixable simplifications (`RUF015` list-allocation,
     `RUF005` collection-literal-concat, `RUF007` zip-pairwise).
@@ -129,7 +129,6 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   * `SIM` (flake8-simplify): SIM117 nested with-stmts (~11),
     SIM108 if-else-as-expression (~9), SIM105 suppressible-
     exception (~6), SIM102 collapsible-if (~2).
-  * `UP` (pyupgrade): only ~2 minor sites remain.
   Pure cosmetic; no bug fixes; gradually opt in.
 
 * **B905 zip-without-explicit-strict** — ~40 sites.  `zip(a, b)` →
@@ -161,4 +160,3 @@ worth tracking.
   TRANS2AM, CAESAR, WE-CAN).  Higher quality than ADS-B if
   reachable.  Currently behind ORDER request via
   `datahelp@eol.ucar.edu`.
-

@@ -44,7 +44,7 @@ _TURN_TYPES = frozenset({"turn", "approach", "takeoff", "landing"})
 
 def _resolve_groundspeed_mps(
     explicit: Quantity | None,
-    aircraft: "Aircraft | None",
+    aircraft: Aircraft | None,
     altitude: Quantity,
 ) -> float | None:
     if explicit is not None:
@@ -94,7 +94,7 @@ def _evaluate_qc(
     altitude_msl_m: float,
     min_release_altitude_m: float,
     surface_elevation_m: float | None,
-    aircraft: "Aircraft | None",
+    aircraft: Aircraft | None,
     segment_type: str,
 ) -> tuple[bool | None, bool | None, bool | None]:
     """Return (qc_min_alt_ok, qc_aircraft_envelope_ok, qc_segment_allowed)."""
@@ -116,10 +116,10 @@ def _evaluate_qc(
 
 
 def releases_along_flight_line(
-    flight_line: "FlightLine",
+    flight_line: FlightLine,
     *,
     sensor: DropsondeSystem = AVAPS_NRD41,
-    aircraft: "Aircraft | None" = None,
+    aircraft: Aircraft | None = None,
     takeoff_time: _dt.datetime | None = None,
     start_elapsed: Quantity = 0 * ureg.second,
     groundspeed: Quantity | None = None,
@@ -231,7 +231,7 @@ def releases_along_segment(
     segment: PlannedSegment,
     *,
     sensor: DropsondeSystem = AVAPS_NRD41,
-    aircraft: "Aircraft | None" = None,
+    aircraft: Aircraft | None = None,
     takeoff_time: _dt.datetime,
     spacing: Quantity | None = None,
     spacing_time: Quantity | None = None,

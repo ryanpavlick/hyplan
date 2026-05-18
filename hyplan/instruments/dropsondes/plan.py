@@ -29,7 +29,8 @@ import datetime as _dt
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
 
 import geopandas as gpd
 import matplotlib.axes
@@ -80,7 +81,7 @@ class DropsondePlan:
         plan: gpd.GeoDataFrame | FlightPlanTrack,
         *,
         sensor: DropsondeSystem = AVAPS_NRD41,
-        aircraft: "Aircraft | None" = None,
+        aircraft: Aircraft | None = None,
         takeoff_time: _dt.datetime,
         spacing: Quantity | None = None,
         spacing_time: Quantity | None = None,
@@ -90,7 +91,7 @@ class DropsondePlan:
         target_polygon: shapely.geometry.Polygon | None = None,
         dem_file: str | None = None,
         terrain_aware: bool = False,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Build a plan from a ``compute_flight_plan`` GeoDataFrame.
 
         Set ``flight_track`` on the returned plan so the inverse
@@ -141,15 +142,15 @@ class DropsondePlan:
     @classmethod
     def from_pattern(
         cls,
-        pattern: "Pattern",
+        pattern: Pattern,
         *,
         sensor: DropsondeSystem = AVAPS_NRD41,
-        aircraft: "Aircraft | None" = None,
+        aircraft: Aircraft | None = None,
         takeoff_time: _dt.datetime | None = None,
         spacing: Quantity | None = None,
         spacing_time: Quantity | None = None,
         start_elapsed: Quantity = 0 * ureg.second,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Build a plan from a line-based :class:`Pattern`.
 
         Spacing resets per line; line-to-line transit is NOT modelled in
@@ -235,7 +236,7 @@ class DropsondePlan:
         surface_elevation_msl: Quantity | None = None,
         dt: Quantity = 1 * ureg.second,
         rng_seed: int | None = None,
-    ) -> "DropsondePlan":
+    ) -> DropsondePlan:
         """Forward-simulate all non-skipped releases. Returns a new plan."""
         if n_ensemble < 0:
             raise HyPlanValueError("n_ensemble must be non-negative")

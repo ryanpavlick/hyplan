@@ -24,7 +24,8 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass, field
-from typing import Any, Callable, cast
+from typing import Any, cast
+from collections.abc import Callable
 
 import pymap3d
 from pint import Quantity

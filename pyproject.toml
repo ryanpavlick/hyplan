@@ -106,6 +106,7 @@ extend-include = ["*.ipynb"]
 extend-select = [
     "B",    # flake8-bugbear (real bug-class issues)
     "SIM115",  # open() without context manager (file-leak risk)
+    "UP",   # pyupgrade (PEP 585 generics, PEP 604 unions, etc.)
 ]
 # B017 — test_radar uses pytest.raises(Exception) intentionally for
 #        broad-stack-trace assertions.

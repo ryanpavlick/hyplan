@@ -1206,7 +1206,7 @@ class MultiALSLidarRig(Sensor):
     def __len__(self) -> int:
         return len(self.units)
 
-    def __iter__(self) -> "Iterator[LidarMount]":
+    def __iter__(self) -> Iterator[LidarMount]:
         return iter(self.units)
 
     # ------------------------------------------------------------------

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Lint ratchet
+
+* **Ruff `UP` (pyupgrade) enabled** in `[tool.ruff.lint] extend-select`.
+  65 violations in the baseline tree (22× UP037 quoted-annotation,
+  17× UP006 non-pep585-annotation, 12× UP035 deprecated-typing-import,
+  10× UP045 non-pep604-optional, plus a handful of others); 59
+  auto-fixed via `ruff --fix`, 6 fixed manually:
+  * `hyplan/aircraft/_base.py`: `Union[CasMachSchedule, TasSchedule]`
+    → `CasMachSchedule | TasSchedule`; dropped the `Union` import.
+  * `notebooks/calibration/_larc_asd_fetch.py` and
+    `_noaa_csl_fetch.py`: dropped the unused
+    `from typing import List, Optional, Tuple` imports.
+  * `tests/test_download.py`: `for c in self._chunks: yield c`
+    → `yield from self._chunks`.
+* TODO.md updated to reflect `UP` as done; `RUF`, `RET`, `SIM` still
+  queued for future ratchet passes (Phase 6 strategy: one rule
+  family per maintenance window).
+
 ### Docs build
 
 * **`sphinx-build -W` enabled** in `.github/workflows/docs.yml`. The

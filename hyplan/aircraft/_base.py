@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, Literal, TYPE_CHECKING, Union
+from typing import Any, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..winds.base import WindField
@@ -179,7 +179,7 @@ class TasSchedule:
 
 
 # Union of both schedule types — used as a type hint on Aircraft fields.
-SpeedSchedule = Union[CasMachSchedule, TasSchedule]
+SpeedSchedule = CasMachSchedule | TasSchedule
 
 
 # ---------------------------------------------------------------------------

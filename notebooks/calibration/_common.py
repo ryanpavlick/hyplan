@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 import pandas as pd

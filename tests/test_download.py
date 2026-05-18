@@ -59,8 +59,7 @@ class TestDownloadFile:
                 pass
 
             def iter_content(self, chunk_size):
-                for c in self._chunks:
-                    yield c
+                yield from self._chunks
 
         def _fake_get(url, stream, timeout):
             return _FakeResponse()

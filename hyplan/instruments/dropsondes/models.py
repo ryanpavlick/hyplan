@@ -17,7 +17,8 @@ from __future__ import annotations
 import dataclasses
 import datetime
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Hashable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Hashable
 
 import geopandas as gpd
 from pint import Quantity
@@ -71,12 +72,12 @@ class DropsondeRelease:
 
     waypoint: Waypoint
     sensor: DropsondeSystem = AVAPS_NRD41
-    aircraft: "Aircraft | None" = None
+    aircraft: Aircraft | None = None
     release_time: datetime.datetime | None = None
     aircraft_velocity_mps: tuple[float, float] | None = None
 
     # Provenance
-    source: "FlightLine | Pattern | Hashable | None" = None
+    source: FlightLine | Pattern | Hashable | None = None
     source_id: Hashable | None = None
     source_pattern_id: str | None = None
     source_segment_type: str | None = None
@@ -128,7 +129,7 @@ class DropsondeRelease:
         release_time: datetime.datetime | None = None,
         release_id: int = 0,
         **kwargs: Any,
-    ) -> "DropsondeRelease":
+    ) -> DropsondeRelease:
         """Build a release from a :class:`Waypoint` (defensively copied)."""
         return cls(
             waypoint=_copy_waypoint(wp),
@@ -171,7 +172,7 @@ class DropsondeRelease:
         qc_aircraft_envelope_ok: bool | None | object = dataclasses.MISSING,
         qc_segment_allowed: bool | None | object = dataclasses.MISSING,
         qc_splash_in_target_polygon: bool | None | object = dataclasses.MISSING,
-    ) -> "DropsondeRelease":
+    ) -> DropsondeRelease:
         """Return a copy of self with one or more QC flags replaced."""
         kwargs: dict[str, Any] = {}
         if qc_min_alt_ok is not dataclasses.MISSING:

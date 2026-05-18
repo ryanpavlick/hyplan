@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 from http.cookiejar import CookieJar
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from collections.abc import Callable
 import re
 
 USER_AGENT = "hyplan-calibration-fetcher/1.1 (mailto:ryan.p.pavlick@nasa.gov)"
@@ -85,8 +85,8 @@ def list_files(
     platform: str,
     download_subpath: str = "DataDownload",
     search_page: str = "DataDownloadAllSearch.php",
-    filename_filter: Optional[Callable[[str], bool]] = None,
-) -> Tuple[List[Tuple[str, str]], CookieJar]:
+    filename_filter: Callable[[str], bool] | None = None,
+) -> tuple[list[tuple[str, str]], CookieJar]:
     """List downloadable ICARTT files in a NOAA CSL mission archive.
 
     Returns ``([(filename, full_url), ...], cookie_jar)``.  The cookie
@@ -109,7 +109,7 @@ def list_files(
 
     # ICARTT hrefs are relative ../../data/<platform>/...
     hrefs = re.findall(r'href="(\.\./\.\./[^"]+\.ict)"', html, re.I)
-    out: List[Tuple[str, str]] = []
+    out: list[tuple[str, str]] = []
     seen: set[str] = set()
     for href in hrefs:
         full = urllib.parse.urljoin(search_url, href)
@@ -127,13 +127,13 @@ def fetch_files(
     mission: str,
     platform: str,
     out_dir: str | Path,
-    filename_filter: Optional[Callable[[str], bool]] = None,
+    filename_filter: Callable[[str], bool] | None = None,
     sleep_between: float = 0.5,
     replace: bool = False,
     download_subpath: str = "DataDownload",
     search_page: str = "DataDownloadAllSearch.php",
-    label: Optional[str] = None,
-) -> List[Path]:
+    label: str | None = None,
+) -> list[Path]:
     """Download every matching file, idempotent."""
     label = label or f"{mission}/{platform}"
     out_path = Path(out_dir)
@@ -151,7 +151,7 @@ def fetch_files(
     print(f"  [{label}] {len(listing)} files matched")
 
     opener = _opener(jar)
-    landed: List[Path] = []
+    landed: list[Path] = []
     for i, (filename, url) in enumerate(listing, 1):
         target = out_path / filename
         if target.exists() and not replace:
@@ -173,6 +173,6 @@ def fetch_files(
     return landed
 
 
-def date_from_filename(name: str) -> Optional[str]:
+def date_from_filename(name: str) -> str | None:
     m = re.search(r"_(20\d{6})_", name)
     return m.group(1) if m else None
