@@ -39,7 +39,7 @@ notebooks:
     requires: []
     group: tutorial
   - name: cloud_analysis.ipynb
-    extras: []
+    extras: [plots]
     requires: []
     group: tutorial
   - name: dubins_path_planning.ipynb
@@ -75,7 +75,7 @@ notebooks:
     requires: []
     group: tutorial
   - name: glint_analysis.ipynb
-    extras: []
+    extras: [sun]
     requires: []
     group: tutorial
   - name: glint_arc_planning.ipynb
@@ -87,7 +87,7 @@ notebooks:
     requires: []
     group: tutorial
   - name: phenology_analysis.ipynb
-    extras: []
+    extras: [phenology, plots]
     requires: []
     group: tutorial
   - name: profiling_lidar_planning.ipynb
@@ -119,7 +119,7 @@ notebooks:
     requires: []
     group: tutorial
   - name: validation.ipynb
-    extras: []
+    extras: [sun]
     requires: []
     group: tutorial
 
@@ -137,17 +137,17 @@ notebooks:
     requires: []
     group: tutorial
   - name: wind_effects.ipynb
-    extras: [winds]
+    extras: [winds, plots]
     requires: []
     group: tutorial
   - name: campaign_management.ipynb
-    extras: []
+    extras: [secrets]
     requires: []
     group: tutorial
 
   # ── Auth-walled: skipped unless their secrets are present ────────
   - name: airspace_check.ipynb
-    extras: []
+    extras: [plots, secrets]
     requires: [openaip]
     group: auth
   - name: cloud_analysis_gee.ipynb
@@ -155,7 +155,7 @@ notebooks:
     requires: [gee]
     group: auth
   - name: isochrone.ipynb
-    extras: [winds]
+    extras: [winds, plots]
     requires: [earthdata]
     group: auth
   - name: winds.ipynb

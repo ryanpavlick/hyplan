@@ -55,6 +55,15 @@ phenology = ["earthaccess", "xarray"]
 winds = ["xarray", "netcdf4", "earthaccess", "pydap", "cfgrib"]
 adsb = ["traffic>=2.8"]
 planned = ["openpyxl", "pdfplumber"]
+# Cartopy-backed static plotting (hyplan.plotting lazy-imports cartopy
+# inside functions; notebooks that call those helpers need this extra).
+plots = ["cartopy"]
+# Standalone sun-position library used by a couple of tutorial notebooks
+# (glint_analysis, validation).  Independent of hyplan.sun.
+sun = ["sunposition"]
+# Loading API keys / tokens from .env files in tutorial notebooks
+# (airspace_check OpenAIP key, campaign_management config).
+secrets = ["python-dotenv"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 # Docs build tooling — installed by docs.yml. Keep in sync with the
 # `pip install` step there until both are replaced by `pip install -e .[docs]`.
@@ -97,6 +106,10 @@ target-version = "py310"
 # Native notebook linting (Ruff has stable .ipynb support since 0.6).
 # Per-file-ignores below pick the notebook-appropriate rule relaxations.
 extend-include = ["*.ipynb"]
+# setuptools-scm regenerates `hyplan/_version.py` on every install; the
+# `__all__` ordering varies between local and CI builds (RUF022) and the
+# file header explicitly says "don't change, don't track in version control".
+extend-exclude = ["hyplan/_version.py"]
 
 [tool.ruff.lint]
 # Default ruff includes E (pycodestyle errors) and F (pyflakes).
