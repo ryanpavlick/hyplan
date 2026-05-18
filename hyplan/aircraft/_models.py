@@ -18,16 +18,10 @@ from ._base import Aircraft
 from ._profile_io import load_aircraft_profile
 
 __all__ = [
-    "AWI_BaslerBT67",
-    "BAS_TwinOtter",
     "DLR_HALO",
-    "FAAM_BAe146",
-    "KingAir350",
-    "KingAirA90",
-    "KingAirB200",
     "NASA_B777",
-    "NASA_C130",
     "NASA_C20A",
+    "NASA_C130",
     "NASA_ER2",
     "NASA_GIII",
     "NASA_GIV",
@@ -37,9 +31,15 @@ __all__ = [
     "NCAR_GV",
     "NERC_DO228",
     "NOAA_GIV",
-    "NOAA_TwinOtter",
     "NOAA_WP3D",
     "SAFIRE_ATR42",
+    "AWI_BaslerBT67",
+    "BAS_TwinOtter",
+    "FAAM_BAe146",
+    "KingAir350",
+    "KingAirA90",
+    "KingAirB200",
+    "NOAA_TwinOtter",
 ]
 
 # ---------------------------------------------------------------------------

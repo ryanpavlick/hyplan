@@ -603,7 +603,7 @@ class TestCampaignPatterns:
     def test_get_line_finds_pattern_lines(self):
         c = Campaign("T", bounds=SAMPLE_BOUNDS)
         pid, pat = self._add_rosette(c, n_lines=2)
-        any_id = list(pat.lines.keys())[0]
+        any_id = next(iter(pat.lines.keys()))
         fl = c.get_line(any_id)
         assert fl is pat.lines[any_id]
 
@@ -622,7 +622,7 @@ class TestCampaignPatterns:
         c = Campaign("T", bounds=SAMPLE_BOUNDS)
         c.add_flight_lines([_make_flight_line()])  # line_001 (free-standing)
         pid, pat = self._add_rosette(c, n_lines=2)
-        pattern_line_id = list(pat.lines.keys())[0]
+        pattern_line_id = next(iter(pat.lines.keys()))
         assert c.find_pattern_for_line(pattern_line_id) is pat
         assert c.find_pattern_for_line("line_001") is None
         assert c.find_pattern_for_line("nonexistent") is None
@@ -661,7 +661,7 @@ class TestCampaignPatterns:
     def test_remove_last_pattern_leg_removes_pattern(self):
         c = Campaign("T", bounds=SAMPLE_BOUNDS)
         pid, pat = self._add_rosette(c, n_lines=1)
-        only_id = list(pat.lines.keys())[0]
+        only_id = next(iter(pat.lines.keys()))
         c.remove_line_anywhere(only_id)
         assert pid not in c.pattern_ids
 

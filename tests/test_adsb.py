@@ -599,7 +599,7 @@ class TestRequireTraffic:
 
     def _traffic_unavailable(self) -> bool:
         try:
-            import traffic  # noqa: F401
+            import traffic
             return False
         except ImportError:
             return True
@@ -611,7 +611,7 @@ class TestRequireTraffic:
         if not self._traffic_unavailable():
             pytest.skip("traffic library is installed; cannot test missing-dep path")
 
-        with pytest.raises(HyPlanRuntimeError, match="traffic.*hyplan\\[adsb\\]"):
+        with pytest.raises(HyPlanRuntimeError, match=r"traffic.*hyplan\[adsb\]"):
             _require_traffic()
 
     def test_load_flights_raises_when_traffic_missing(self, tmp_path):

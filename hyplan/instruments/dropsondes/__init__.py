@@ -52,6 +52,7 @@ from .targeting import DropsondeReleaseSolution, golden_section_search, solve_re
 __all__ = [
     "AVAPS_NRD41",
     "AXCTD",
+    "RD94",
     "AircraftTrackSample",
     "DropsondePlan",
     "DropsondeRelease",
@@ -60,7 +61,6 @@ __all__ = [
     "DropsondeTrajectory",
     "FlightPlanTrack",
     "PlannedSegment",
-    "RD94",
     "golden_section_search",
     "releases_along_flight_line",
     "releases_along_segment",

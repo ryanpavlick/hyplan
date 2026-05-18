@@ -504,7 +504,7 @@ _PDF_COL_REMARKS = 8
 def _normalize_pdf_row(row: list[Any]) -> list[Any]:
     """Strip the empty placeholder col 1 used by page-1's merged-header layout."""
     if len(row) == 10 and row[1] is None:
-        return [row[0]] + list(row[2:])
+        return [row[0], *list(row[2:])]
     return list(row)
 
 # Line 1 of col 0: "[wp#] fix [vor] alt M".  fix may contain spaces

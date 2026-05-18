@@ -83,7 +83,7 @@ class TestRacetrack:
 
     def test_leg_length_accuracy(self):
         pat = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"))
-        leg = list(pat.lines.values())[0]
+        leg = next(iter(pat.lines.values()))
         dist, _ = pymap3d.vincenty.vdist(leg.lat1, leg.lon1, leg.lat2, leg.lon2)
         assert dist == pytest.approx(50000, rel=1e-3)
 
@@ -135,14 +135,14 @@ class TestRosette:
 
     def test_radius_accuracy(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(25, "km"))
-        first = list(pat.lines.values())[0]
+        first = next(iter(pat.lines.values()))
         for lat, lon in [(first.lat1, first.lon1), (first.lat2, first.lon2)]:
             dist, _ = pymap3d.vincenty.vdist(CENTER[0], CENTER[1], lat, lon)
             assert dist == pytest.approx(25000, rel=1e-3)
 
     def test_line_length(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(25, "km"))
-        first = list(pat.lines.values())[0]
+        first = next(iter(pat.lines.values()))
         dist, _ = pymap3d.vincenty.vdist(first.lat1, first.lon1, first.lat2, first.lon2)
         assert dist == pytest.approx(50000, rel=1e-3)
 
@@ -518,14 +518,14 @@ class TestPatternRegenerate:
 class TestPatternReplaceLine:
     def test_replace_line_preserves_id(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
-        first_id = list(pat.lines.keys())[0]
+        first_id = next(iter(pat.lines.keys()))
         new_fl = FlightLine.start_length_azimuth(
             lat1=40.0, lon1=-100.0,
             length=ureg.Quantity(5, "km"), az=45.0,
             altitude_msl=ureg.Quantity(5000, "meter"),
         )
         pat.replace_line(first_id, new_fl)
-        assert list(pat.lines.keys())[0] == first_id
+        assert next(iter(pat.lines.keys())) == first_id
         assert pat.lines[first_id].lat1 == pytest.approx(40.0)
 
     def test_replace_line_waypoint_pattern_rejected(self):

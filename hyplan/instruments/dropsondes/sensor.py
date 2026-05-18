@@ -31,8 +31,8 @@ from .._base import Sensor
 __all__ = [
     "AVAPS_NRD41",
     "AXCTD",
-    "DropsondeSystem",
     "RD94",
+    "DropsondeSystem",
     "terminal_velocity_nrd41",
     "terminal_velocity_sippican_axctd",
 ]

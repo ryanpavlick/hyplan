@@ -21,6 +21,7 @@ from hyplan import (
 )
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
 from hyplan.winds import ConstantWindField, StillAirField
+import itertools
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +329,7 @@ class TestValidation:
     def test_distinct_on_station_altitude_raises(
         self, giii, kedw_wp, cruise_alt,
     ):
-        with pytest.raises(HyPlanValueError, match="[Mm]ulti-altitude"):
+        with pytest.raises(HyPlanValueError, match=r"[Mm]ulti-altitude"):
             compute_isochrone(
                 aircraft=giii, start=kedw_wp, budget=2 * ureg.hour,
                 cruise_altitude=cruise_alt,
@@ -411,7 +412,7 @@ class TestValidation:
             latitude=kedw_wp.latitude, longitude=kedw_wp.longitude,
             heading=0.0, altitude_msl=40000 * ureg.feet,
         )
-        with pytest.raises(HyPlanValueError, match="initial descent|cruise"):
+        with pytest.raises(HyPlanValueError, match=r"initial descent|cruise"):
             compute_isochrone(
                 aircraft=giii, start=airborne, budget=2 * ureg.hour,
                 cruise_altitude=20000 * ureg.feet, mode="round_trip",
@@ -1356,7 +1357,7 @@ class TestConcentric:
                 .sort_values("budget_hr")["distance_nmi"]
                 .tolist()
             )
-            for a, b in zip(d_by_b[:-1], d_by_b[1:]):
+            for a, b in itertools.pairwise(d_by_b):
                 assert b >= a - 2.0, (
                     f"az {az}: budget grew {a} → {b}, expected non-decreasing"
                 )

@@ -159,7 +159,7 @@ def main() -> None:
         except urllib.error.HTTPError as exc:
             failed.append((dest_name, f"HTTP {exc.code}"))
             continue
-        except Exception as exc:  # noqa: BLE001 - any download error
+        except Exception as exc:
             failed.append((dest_name, repr(exc)))
             continue
         new += 1

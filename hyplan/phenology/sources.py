@@ -785,9 +785,7 @@ def _empty_phenology_frame(product: str, spatial_mode: str) -> pd.DataFrame:
     """Return the canonical empty DataFrame for the requested schema."""
     if product == "phenology":
         return pd.DataFrame(
-            columns=["polygon_id", "year"] + list(
-                _PRODUCT_CONFIG["phenology"]["subdatasets"].keys()
-            )
+            columns=["polygon_id", "year", *list(_PRODUCT_CONFIG["phenology"]["subdatasets"].keys())]
         )
     if spatial_mode == "mean":
         return pd.DataFrame(

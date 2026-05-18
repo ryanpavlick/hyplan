@@ -145,7 +145,7 @@ HRD_P3_GLOB = "data/HRD/P-3_N4{2,3}RF/*/*/*.1sec.txt"
 def _load_hrd_sorties() -> dict[str, pd.DataFrame]:
     """Load NOAA HRD hurricane-program 1-sec P-3 files (H + I tails)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from _hrd_loader import load_p3_1sec  # noqa: E402
+    from _hrd_loader import load_p3_1sec
     out: dict[str, pd.DataFrame] = {}
     skipped: list[tuple[str, str]] = []
     for tail in ("P-3_N42RF", "P-3_N43RF"):

@@ -120,7 +120,7 @@ def fetch_tail(
                 body = _fetch(
                     f"{ARCHIVE_ROOT}/{tail}/{fy}/{date}/{fname}"
                 ).decode("utf-8", errors="replace")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"    {date}: download failed ({e})", file=sys.stderr)
                 missing += 1
                 continue

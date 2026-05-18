@@ -152,7 +152,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
         total = 0.0
         for line in lines:
             total += _flight_line_time(aircraft, line)
-        for prev_line, next_line in zip(lines, lines[1:]):
+        for prev_line, next_line in itertools.pairwise(lines):
             total += _transit_time(aircraft, prev_line.waypoint2, next_line.waypoint1)
         return total
 
@@ -160,7 +160,7 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     if len(waypoints) < 2:
         return 0.0
     total = 0.0
-    for prev_wp, next_wp in zip(waypoints, waypoints[1:]):
+    for prev_wp, next_wp in itertools.pairwise(waypoints):
         total += _transit_time(aircraft, prev_wp, next_wp)
     return total
 

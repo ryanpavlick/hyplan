@@ -11,6 +11,8 @@ Verifies the generic class against:
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -122,7 +124,7 @@ class TestDatasheetReproducibility:
     well within the published precision.
     """
 
-    DATASHEET_POINTS = [
+    DATASHEET_POINTS: ClassVar[list[tuple[float, float]]] = [
         (180.0, 280.0),
         (240.0, 370.0),
         (340.0, 520.0),
@@ -426,7 +428,7 @@ class TestGenericClassIndependentOfSensor:
 
 def _has_rasterio() -> bool:
     try:
-        import rasterio  # noqa: F401
+        import rasterio
         return True
     except ImportError:
         return False

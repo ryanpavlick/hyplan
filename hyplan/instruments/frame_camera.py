@@ -24,9 +24,9 @@ from ._base import Sensor
 from ..exceptions import HyPlanTypeError, HyPlanValueError
 
 __all__ = [
-    "FrameCamera",
     "GLIHT_HRAC",
     "GLIHT_THERMAL",
+    "FrameCamera",
     "MultiCameraRig",
 ]
 
@@ -174,7 +174,7 @@ class FrameCamera(Sensor):
         half_fov_y_rad = np.radians(self.fov_y / 2)
         near_dep = tilt_rad - half_fov_y_rad
         far_dep = tilt_rad + half_fov_y_rad
-        cos2_near = np.cos(near_dep) ** 2 if near_dep >= 0 else np.cos(near_dep) ** 2
+        cos2_near = np.cos(near_dep) ** 2
         cos2_far = np.cos(far_dep) ** 2
 
         gsd_y_near = (altitude_agl * pixel_y / (f * cos2_near)).to(ureg.meter)

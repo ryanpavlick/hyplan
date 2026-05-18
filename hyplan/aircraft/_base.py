@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, ClassVar, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..winds.base import WindField
@@ -742,7 +742,7 @@ class Aircraft:
     #   "typical"  — expected combination, no warning.
     #   "unusual"  — allowed but surprising; emits a warning.
     #   "forbid"   — raises HyPlanValueError.
-    _SCHEDULE_COMPAT = {
+    _SCHEDULE_COMPAT: ClassVar[dict[str, dict[type, str]]] = {
         "jet": {CasMachSchedule: "typical", TasSchedule: "typical"},
         "turboprop": {CasMachSchedule: "unusual", TasSchedule: "typical"},
         "piston": {CasMachSchedule: "forbid", TasSchedule: "typical"},

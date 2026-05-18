@@ -330,7 +330,7 @@ class TestExtractPhenologyStages:
 
     def test_empty_df(self):
         from hyplan.phenology.analysis import _STAGE_COLUMNS
-        cols = ["polygon_id", "year"] + _STAGE_COLUMNS
+        cols = ["polygon_id", "year", *_STAGE_COLUMNS]
         df = pd.DataFrame(columns=cols)
         result = extract_phenology_stages(df)
         assert len(result) == 0

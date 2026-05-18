@@ -1546,7 +1546,7 @@ class TestTimeToReturnApproachIntegration:
         ac = self._build_b200_with_approach()
         info = ac.time_to_return(cruise_waypoint, airport)
         approach_geom = info["phases"]["approach"]["geometry"]
-        start_lon, start_lat = list(approach_geom.coords)[0]
+        start_lon, start_lat = next(iter(approach_geom.coords))
         distance_m, _ = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude, start_lat, start_lon,
         )
@@ -1559,7 +1559,7 @@ class TestTimeToReturnApproachIntegration:
         ac = self._build_b200_with_approach()
         info = ac.time_to_return(cruise_waypoint, airport)
         approach_geom = info["phases"]["approach"]["geometry"]
-        start_lon, start_lat = list(approach_geom.coords)[0]
+        start_lon, start_lat = next(iter(approach_geom.coords))
         # Bearing FROM faf TO airport.
         _, bearing_faf_to_airport = pymap3d.vincenty.vdist(
             start_lat, start_lon, airport.latitude, airport.longitude,
@@ -1591,7 +1591,7 @@ class TestTimeToReturnApproachIntegration:
         dubins_geom = info["dubins_path"].geometry
         dubins_end_lon, dubins_end_lat = list(dubins_geom.coords)[-1]
         approach_geom = info["phases"]["approach"]["geometry"]
-        faf_lon, faf_lat = list(approach_geom.coords)[0]
+        faf_lon, faf_lat = next(iter(approach_geom.coords))
         # Dubins endpoint should match FAF (within 1e-4 deg ≈ 11 m).
         assert dubins_end_lat == pytest.approx(faf_lat, abs=1e-4)
         assert dubins_end_lon == pytest.approx(faf_lon, abs=1e-4)

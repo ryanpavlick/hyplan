@@ -28,7 +28,7 @@ import xarray as xr
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _common import (  # noqa: E402
+from _common import (
     apply_sortie_filters,
     label_phases,
     per_bin,

@@ -121,7 +121,7 @@ class _GriddedWindField(WindField):
                 for dropsondes (which only descend from release).
         """
         try:
-            import geopandas as gpd  # noqa: F401
+            import geopandas  # noqa: F401  — feature-detection import; used downstream via duck-typing
             from hyplan.atmosphere import pressure_at
             from hyplan.units import ureg
         except ImportError as exc:  # pragma: no cover - missing dep

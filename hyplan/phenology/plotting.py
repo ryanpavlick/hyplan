@@ -13,6 +13,7 @@ import pandas as pd
 
 from ..exceptions import HyPlanValueError
 from .analysis import _STAGE_COLUMNS
+import itertools
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +135,7 @@ def plot_phenology_calendar(
     bar_height = 0.6
 
     # Draw bars between consecutive stages
-    stage_pairs = list(zip(_STAGE_COLUMNS[:-1], _STAGE_COLUMNS[1:]))
+    stage_pairs = list(itertools.pairwise(_STAGE_COLUMNS))
 
     for _, row in stages_df.iterrows():
         y = y_positions[row["polygon_id"]]
