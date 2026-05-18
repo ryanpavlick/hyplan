@@ -71,15 +71,24 @@ TARGET_ALTS_FT = (0, 5000, 10000, 15000, 20000, 25000)
 
 def _load_with_unit_check(path: Path) -> pd.DataFrame:
     df = load_icartt(path)
-    if "tas_kt" in df.columns and df["tas_kt"].notna().any():
-        if df["tas_kt"].quantile(0.95) > TAS_KT_MAX_REASONABLE:
-            df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
-    if "wind_speed_kt" in df.columns and df["wind_speed_kt"].notna().any():
-        if df["wind_speed_kt"].quantile(0.95) > 200:  # 200 kt + winds rare
-            df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
-    if "groundspeed" in df.columns and df["groundspeed"].notna().any():
-        if df["groundspeed"].quantile(0.95) > TAS_KT_MAX_REASONABLE:
-            df["groundspeed"] = df["groundspeed"] / 1.9438444924406046
+    if (
+        "tas_kt" in df.columns
+        and df["tas_kt"].notna().any()
+        and df["tas_kt"].quantile(0.95) > TAS_KT_MAX_REASONABLE
+    ):
+        df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
+    if (
+        "wind_speed_kt" in df.columns
+        and df["wind_speed_kt"].notna().any()
+        and df["wind_speed_kt"].quantile(0.95) > 200  # 200 kt + winds rare
+    ):
+        df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
+    if (
+        "groundspeed" in df.columns
+        and df["groundspeed"].notna().any()
+        and df["groundspeed"].quantile(0.95) > TAS_KT_MAX_REASONABLE
+    ):
+        df["groundspeed"] = df["groundspeed"] / 1.9438444924406046
     return df
 
 

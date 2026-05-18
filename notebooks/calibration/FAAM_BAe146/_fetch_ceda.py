@@ -84,10 +84,15 @@ def _download_one(entry: dict, headers: dict[str, str]) -> tuple[dict, str]:
     url = f"{ARCHIVE_BASE}/{yr}/{fd}/core_processed/{fn}"
     tmp = out_path.with_suffix(out_path.suffix + ".part")
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as r:
-            with open(tmp, "wb") as f:
-                while chunk := r.read(1 << 20):
-                    f.write(chunk)
+        with (
+            urllib.request.urlopen(
+                urllib.request.Request(url, headers=headers),
+                timeout=120,
+            ) as r,
+            open(tmp, "wb") as f,
+        ):
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
         tmp.rename(out_path)
         return entry, "ok"
     except Exception as e:

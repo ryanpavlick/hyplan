@@ -117,16 +117,10 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
   * `effective_swath_on_terrain` (`instruments/lvis.py`) — 222
     lines.  Medium: geometric computation.
 
-* **Expanded ruff rule sets** — `B` (bugbear), `SIM115`
-  (file-open without context manager), `UP` (pyupgrade), `RUF`
-  (Ruff-specific with selective ignores), and `RET` (flake8-return)
-  are enabled.  Remaining queued:
-  * `SIM` (flake8-simplify): defers due to manual-fix volume.
-    SIM117 nested with-stmts (15 sites — auto-fix refused even
-    with --unsafe-fixes, needs case-by-case manual review),
-    SIM102 collapsible-if (7), SIM108 if-else-as-expression (10
-    — opt out, hurts readability for long expressions), SIM105
-    suppressible-exception (1), SIM113 enumerate-for-loop (1).
+* **Expanded ruff rule sets** — `B` (bugbear), `UP` (pyupgrade),
+  `RUF` (Ruff-specific with selective ignores), `RET` (flake8-
+  return), and `SIM` (flake8-simplify with SIM108 ignored) are all
+  enabled in v1.11.x.  Permanently-ignored / deferred rules:
   * `RUF001/002/003` (ambiguous-unicode-character): permanently
     ignored — HyPlan uses en-dash / em-dash / curly quotes
     intentionally for typography (~230 sites).
@@ -135,7 +129,9 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
     Needs case-by-case review; deferred.
   * `RUF059` (unused-unpacked-variable): 49 sites in algorithmic
     code that unpacks tuples and uses a subset; defer.
-  Pure cosmetic; no bug fixes; gradually opt in.
+  * `SIM108` (if-else-as-expression): opt out — some sites
+    compress to ternaries cleanly, others (long branches, pint
+    Quantity arithmetic) hurt readability.
 
 * ~~**B905 zip-without-explicit-strict**~~ — done in v1.11.x.  99
   sites swept to `strict=False` (matches prior truncation semantics);

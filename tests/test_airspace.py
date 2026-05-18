@@ -370,11 +370,13 @@ class TestOpenAIPClient:
         cache_dir = str(tmp_path / "airspace_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        with patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir):
-            with patch("hyplan.airspace.requests.get") as mock_get:
-                mock_get.side_effect = requests.ConnectionError("no network")
-                with pytest.raises(HyPlanRuntimeError, match="request failed"):
-                    client.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
+        with (
+            patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir),
+            patch("hyplan.airspace.requests.get") as mock_get,
+        ):
+            mock_get.side_effect = requests.ConnectionError("no network")
+            with pytest.raises(HyPlanRuntimeError, match="request failed"):
+                client.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
 
     def test_fetch_successful_api_call(self, tmp_path):
         """Successful API call returns parsed airspaces and writes cache."""
@@ -406,15 +408,17 @@ class TestOpenAIPClient:
         mock_resp.json.return_value = api_response
         mock_resp.raise_for_status = MagicMock()
 
-        with patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir):
-            with patch("hyplan.airspace.requests.get", return_value=mock_resp) as mock_get:
-                result = client.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
-                # Tiled fetch makes multiple API calls across the bbox
-                assert mock_get.call_count >= 1
-                # Same _id returned by every tile → deduped to 1
-                assert len(result) == 1
-                assert result[0].name == "API Zone"
-                assert result[0].airspace_class == "B"
+        with (
+            patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp) as mock_get,
+        ):
+            result = client.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
+            # Tiled fetch makes multiple API calls across the bbox
+            assert mock_get.call_count >= 1
+            # Same _id returned by every tile → deduped to 1
+            assert len(result) == 1
+            assert result[0].name == "API Zone"
+            assert result[0].airspace_class == "B"
 
 
 # ---------------------------------------------------------------------------
@@ -733,11 +737,13 @@ class TestFAATFRClient:
         cache_dir = str(tmp_path / "airspace_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        with patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir):
-            with patch("hyplan.airspace.requests.get") as mock_get:
-                mock_get.side_effect = requests.ConnectionError("no network")
-                with pytest.raises(HyPlanRuntimeError, match="TFR"):
-                    client.fetch_tfrs()
+        with (
+            patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir),
+            patch("hyplan.airspace.requests.get") as mock_get,
+        ):
+            mock_get.side_effect = requests.ConnectionError("no network")
+            with pytest.raises(HyPlanRuntimeError, match="TFR"):
+                client.fetch_tfrs()
 
     def test_fetch_mocked(self, tmp_path):
         """Mocked WFS + tfrapi response returns parsed TFRs."""
@@ -783,11 +789,13 @@ class TestFAATFRClient:
                 return wfs_resp
             return meta_resp
 
-        with patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir):
-            with patch("hyplan.airspace.requests.get", side_effect=mock_get):
-                result = client.fetch_tfrs()
-                assert len(result) == 1
-                assert "SPACE OPERATIONS" in result[0].name
+        with (
+            patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir),
+            patch("hyplan.airspace.requests.get", side_effect=mock_get),
+        ):
+            result = client.fetch_tfrs()
+            assert len(result) == 1
+            assert "SPACE OPERATIONS" in result[0].name
 
     def test_parse_date_from_description(self):
         parse = FAATFRClient._parse_date_from_description
@@ -895,12 +903,16 @@ class TestNASRAirspaceSource:
         mock_resp.json.return_value = api_response
         mock_resp.raise_for_status = MagicMock()
 
-        with patch("hyplan.airspace._get_airspace_cache_dir",
-                    return_value=str(tmp_path / "airspace_cache")):
-            with patch("hyplan.airspace.requests.get", return_value=mock_resp):
-                result = source.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
-                assert len(result) == 1
-                assert result[0].name == "MOA Test"
+        with (
+            patch(
+                "hyplan.airspace._get_airspace_cache_dir",
+                return_value=str(tmp_path / "airspace_cache"),
+            ),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp),
+        ):
+            result = source.fetch_airspaces((-118.0, 33.0, -117.0, 34.0))
+            assert len(result) == 1
+            assert result[0].name == "MOA Test"
 
 
 # ---------------------------------------------------------------------------
@@ -986,12 +998,16 @@ class TestSFRA:
         mock_resp.json.return_value = api_response
         mock_resp.raise_for_status = MagicMock()
 
-        with patch("hyplan.airspace._get_airspace_cache_dir",
-                    return_value=str(tmp_path / "airspace_cache")):
-            with patch("hyplan.airspace.requests.get", return_value=mock_resp):
-                result = source.fetch_sfras((-78.0, 38.0, -76.0, 39.5))
-                assert len(result) == 1
-                assert result[0].airspace_class == "SFRA"
+        with (
+            patch(
+                "hyplan.airspace._get_airspace_cache_dir",
+                return_value=str(tmp_path / "airspace_cache"),
+            ),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp),
+        ):
+            result = source.fetch_sfras((-78.0, 38.0, -76.0, 39.5))
+            assert len(result) == 1
+            assert result[0].airspace_class == "SFRA"
 
 
 # ---------------------------------------------------------------------------
@@ -1078,12 +1094,16 @@ class TestClassAirspace:
         mock_resp.json.return_value = api_response
         mock_resp.raise_for_status = MagicMock()
 
-        with patch("hyplan.airspace._get_airspace_cache_dir",
-                    return_value=str(tmp_path / "airspace_cache")):
-            with patch("hyplan.airspace.requests.get", return_value=mock_resp):
-                result = source.fetch_class_airspace((-118.0, 33.0, -117.0, 34.0))
-                assert len(result) == 1
-                assert result[0].airspace_class == "B"
+        with (
+            patch(
+                "hyplan.airspace._get_airspace_cache_dir",
+                return_value=str(tmp_path / "airspace_cache"),
+            ),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp),
+        ):
+            result = source.fetch_class_airspace((-118.0, 33.0, -117.0, 34.0))
+            assert len(result) == 1
+            assert result[0].airspace_class == "B"
 
 
 # ---------------------------------------------------------------------------

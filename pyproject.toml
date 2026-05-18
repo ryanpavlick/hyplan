@@ -105,10 +105,10 @@ extend-include = ["*.ipynb"]
 # see TODO.md.
 extend-select = [
     "B",    # flake8-bugbear (real bug-class issues)
-    "SIM115",  # open() without context manager (file-leak risk)
     "UP",   # pyupgrade (PEP 585 generics, PEP 604 unions, etc.)
     "RUF",  # Ruff-specific (with selective ignores below)
     "RET",  # flake8-return (unnecessary-assign, etc.)
+    "SIM",  # flake8-simplify (with SIM108 ignored — see below)
 ]
 # B017 — test_radar uses pytest.raises(Exception) intentionally for
 #        broad-stack-trace assertions.
@@ -130,9 +130,14 @@ extend-select = [
 # RUF059 — unused-unpacked-variable — 49 sites, mostly in
 #        algorithmic code that unpacks tuples and uses a subset.
 #        Defer to a focused pass.
+# SIM108 — if-else-as-expression.  Some sites compress nicely as
+#        ternaries; others (especially with long branches or pint
+#        Quantity arithmetic) hurt readability.  Opt out and apply
+#        case-by-case via local refactors.
 ignore = [
     "B017", "B008", "B023", "B018",
     "RUF001", "RUF002", "RUF003", "RUF046", "RUF059",
+    "SIM108",
 ]
 
 [tool.ruff.lint.per-file-ignores]

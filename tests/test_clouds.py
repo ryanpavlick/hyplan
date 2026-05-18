@@ -258,9 +258,11 @@ class TestOpenMeteoCloudFraction:
         gdf = _mock_gdf([("A", 34.0, -118.0)])
 
         import requests as _req
-        with patch.object(_req, "get", return_value=mock_resp):
-            with pytest.raises(Exception, match="500"):
-                OpenMeteoCloudFraction().fetch(gdf, 2023, 2023, 1, 10)
+        with (
+            patch.object(_req, "get", return_value=mock_resp),
+            pytest.raises(Exception, match="500"),
+        ):
+            OpenMeteoCloudFraction().fetch(gdf, 2023, 2023, 1, 10)
 
 
 class TestFetchCloudFraction:
@@ -499,9 +501,11 @@ class TestOpenMeteoCloudForecast:
         gdf = _mock_gdf([("A", 34.0, -118.0)])
 
         import requests as _req
-        with patch.object(_req, "get", return_value=mock_resp):
-            with pytest.raises(Exception, match="500"):
-                OpenMeteoCloudForecast().fetch(gdf, forecast_days=3)
+        with (
+            patch.object(_req, "get", return_value=mock_resp),
+            pytest.raises(Exception, match="500"),
+        ):
+            OpenMeteoCloudForecast().fetch(gdf, forecast_days=3)
 
     def test_models_param_passed(self):
         """The models parameter should be included in the request."""

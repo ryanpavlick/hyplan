@@ -868,12 +868,14 @@ def greedy_optimize(
                 daily_time += refuel_time
 
         # Return to airport at end of day
-        if current_node != return_airport.icao_code:
-            if G.has_edge(current_node, return_airport.icao_code):
-                return_t = G[current_node][return_airport.icao_code]["weight"]
-                daily_time += return_t
-                route.append(return_airport.icao_code)
-                current_node = return_airport.icao_code
+        if (
+            current_node != return_airport.icao_code
+            and G.has_edge(current_node, return_airport.icao_code)
+        ):
+            return_t = G[current_node][return_airport.icao_code]["weight"]
+            daily_time += return_t
+            route.append(return_airport.icao_code)
+            current_node = return_airport.icao_code
 
         daily_times.append(daily_time)
         total_time += daily_time

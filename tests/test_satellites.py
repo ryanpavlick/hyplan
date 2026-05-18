@@ -288,9 +288,11 @@ class TestFetchTle:
         tle_file.write_text("only one line\n")
 
         iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
-        with patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)):
-            with pytest.raises(RuntimeError, match="fewer than 2 lines"):
-                fetch_tle(iss_info, max_age_hours=999)
+        with (
+            patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)),
+            pytest.raises(RuntimeError, match="fewer than 2 lines"),
+        ):
+            fetch_tle(iss_info, max_age_hours=999)
 
     def test_fetch_tle_by_name(self, tmp_path):
         """Test that fetch_tle accepts a string name from the registry."""

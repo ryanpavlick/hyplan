@@ -16,6 +16,23 @@
   document the specific Any-returns we accept.  One additional
   ignore added in `hyplan/clouds/sources.py` for an
   `ee.Image.set(...) -> Any` return.
+* **Ruff `SIM` (flake8-simplify) enabled** with `SIM108`
+  (if-else-as-expression) ignored. 24 manual fixes across hyplan,
+  notebooks, and tests:
+  * 15× SIM117 (nested `with`) — combined with the parenthesized
+    multi-context syntax (`with (a as x, b as y): ...`). Touches 4
+    calibration fetchers (BAS_TwinOtter, FAAM_BAe146, SAFIRE_ATR42,
+    _hrd_fetch) and 7 test files (test_airspace, test_clouds,
+    test_frame_camera, test_satellites).
+  * 7× SIM102 (collapsible-if) — flattened into `and`-chained
+    conditions across `hyplan/dubins3d.py`, `flight_optimizer.py`,
+    `notebooks/calibration/NOAA_TwinOtter/calibrate.py`,
+    `NOAA_WP3D/calibrate.py`.
+  * 1× SIM105 (suppressible-exception) in `tests/test_download.py`:
+    `try/except/pass` → `contextlib.suppress(Exception)`.
+  * 1× SIM113 (manual counter in for-loop) in
+    `KingAirA90/_fetch_airplanes_live.py`: replaced `done = 0; ...
+    done += 1` with `for done, f in enumerate(..., start=1)`.
 * **Ruff `B905` (zip-without-explicit-strict)** removed from the
   ignore list. 99 `zip(a, b)` call sites swept to
   `zip(a, b, strict=False)` via `ruff --fix --unsafe-fixes` —

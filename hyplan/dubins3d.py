@@ -122,9 +122,13 @@ class _Dubins2D:
 
         # Handle degenerate case (same position, same heading)
         dist_2d = max(abs(self.qi[0] - self.qf[0]), abs(self.qi[1] - self.qf[1]))
-        if d < self.rhomin * 1e-5 and abs(a) < self.rhomin * 1e-5 and abs(b) < self.rhomin * 1e-5:
-            if dist_2d < self.rhomin * 1e-5:
-                paths = [_DubinsSegment(0, 2 * math.pi, 0, 2 * math.pi * self.rhomin, "RRR")]
+        if (
+            d < self.rhomin * 1e-5
+            and abs(a) < self.rhomin * 1e-5
+            and abs(b) < self.rhomin * 1e-5
+            and dist_2d < self.rhomin * 1e-5
+        ):
+            paths = [_DubinsSegment(0, 2 * math.pi, 0, 2 * math.pi * self.rhomin, "RRR")]
 
         paths.sort(key=lambda x: x.length)
         self.maneuver = paths[0]

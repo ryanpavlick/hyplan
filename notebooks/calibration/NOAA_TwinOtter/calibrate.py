@@ -70,12 +70,18 @@ def _load_with_unit_check(path: Path) -> pd.DataFrame:
     # Sanity threshold per aircraft class.  Twin Otter can't fly faster
     # than ~85 m/s air-mass-relative; if loaded TAS exceeds ~190 kt
     # (which would be 98 m/s native) something's wrong.
-    if "tas_kt" in df.columns and df["tas_kt"].notna().any():
-        if df["tas_kt"].quantile(0.95) > 190:
-            df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
-    if "wind_speed_kt" in df.columns and df["wind_speed_kt"].notna().any():
-        if df["wind_speed_kt"].quantile(0.95) > 100:  # 100 kt is rare; >100 likely m/s mislabel
-            df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
+    if (
+        "tas_kt" in df.columns
+        and df["tas_kt"].notna().any()
+        and df["tas_kt"].quantile(0.95) > 190
+    ):
+        df["tas_kt"] = df["tas_kt"] / 1.9438444924406046
+    if (
+        "wind_speed_kt" in df.columns
+        and df["wind_speed_kt"].notna().any()
+        and df["wind_speed_kt"].quantile(0.95) > 100  # 100 kt is rare; >100 likely m/s mislabel
+    ):
+        df["wind_speed_kt"] = df["wind_speed_kt"] / 1.9438444924406046
     return df
 
 

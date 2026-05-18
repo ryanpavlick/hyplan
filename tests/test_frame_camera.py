@@ -371,12 +371,14 @@ class TestCoverageBuffer:
 class TestFootprintCorners:
     def test_deprecation_warning(self):
         """footprint_corners emits DeprecationWarning."""
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            # Will fail on missing DEM, but the warning fires first
-            with contextlib.suppress(Exception):
-                FrameCamera.footprint_corners(
-                    34.0, -117.0, 5000.0, 36.0, 24.0, "__nonexistent__.tif"
-                )
+        # Will fail on missing DEM, but the warning fires first
+        with (
+            pytest.warns(DeprecationWarning, match="deprecated"),
+            contextlib.suppress(Exception),
+        ):
+            FrameCamera.footprint_corners(
+                34.0, -117.0, 5000.0, 36.0, 24.0, "__nonexistent__.tif"
+            )
 
 
 class TestGroundFootprint:

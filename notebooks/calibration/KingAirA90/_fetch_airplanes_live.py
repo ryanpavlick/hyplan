@@ -120,8 +120,7 @@ def main() -> None:
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
         futures = [ex.submit(_one, j) for j in jobs]
-        done = 0
-        for f in as_completed(futures):
+        for done, f in enumerate(as_completed(futures), start=1):
             n_rows, nd = f.result()
             if n_rows > 0:
                 written += 1
@@ -130,7 +129,6 @@ def main() -> None:
                 no_data += 1
             else:
                 skipped += 1
-            done += 1
             if done % 200 == 0:
                 print(f"  ... {done}/{len(jobs)}  written={written}  "
                       f"no_data={no_data}  rows={total_rows:,}")

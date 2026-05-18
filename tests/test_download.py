@@ -1,5 +1,6 @@
 """Tests for hyplan.download."""
 
+import contextlib
 import os
 import pytest
 
@@ -23,10 +24,8 @@ class TestDownloadFile:
         """Should create parent directories if they don't exist."""
         filepath = str(tmp_path / "subdir" / "nested" / "file.txt")
         # Will fail on actual download, but directory creation happens first
-        try:
+        with contextlib.suppress(Exception):  # Expected to fail on network
             download_file(filepath, "https://invalid.example.com/bogus", timeout=1)
-        except Exception:
-            pass  # Expected to fail on network
         # Parent directory should have been created
         assert os.path.isdir(os.path.dirname(filepath))
 
