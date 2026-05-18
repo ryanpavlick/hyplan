@@ -535,7 +535,7 @@ class FlightLine:
         )
 
         track_lon = wrap_to_180(track_lon)
-        return LineString(zip(track_lon, track_lat))  # type: ignore[arg-type]  # shapely LineString accepts zip iterable
+        return LineString(zip(track_lon, track_lat, strict=False))  # type: ignore[arg-type]  # shapely LineString accepts zip iterable
 
     def reverse(self) -> FlightLine:
         """

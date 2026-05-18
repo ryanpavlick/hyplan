@@ -83,7 +83,7 @@ def _approx_equal(a, b, tol=1e-6) -> bool:
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
         if len(a) != len(b):
             return False
-        return all(_approx_equal(x, y, tol) for x, y in zip(a, b))
+        return all(_approx_equal(x, y, tol) for x, y in zip(a, b, strict=False))
     if hasattr(a, "__dict__") and hasattr(b, "__dict__"):
         return _approx_equal(a.__dict__, b.__dict__, tol)
     if isinstance(a, dict) and isinstance(b, dict):

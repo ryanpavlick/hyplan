@@ -460,7 +460,7 @@ def compute_isochrone(
     )
 
     df = pd.DataFrame(rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     # Stash invocation context for the plotter / consumers.
@@ -666,7 +666,7 @@ def compute_concentric_isochrones(
         seed_d_lo = new_seed
 
     df = pd.DataFrame(all_rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     gdf.attrs.update({
@@ -907,7 +907,7 @@ def compute_refuel_isochrone(
     )
 
     df = pd.DataFrame(rows)
-    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"])]
+    geometry = [Point(lon, lat) for lat, lon in zip(df["target_lat"], df["target_lon"], strict=False)]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
 
     used = {
@@ -2157,7 +2157,7 @@ def _solve_rays(
     final_by_index: dict[int, dict[str, Any]] = {}
     if len(final_indices):
         _, final_diags = _evaluate_many(final_indices, d_lo[final_indices])
-        final_by_index = dict(zip(final_indices.tolist(), final_diags))
+        final_by_index = dict(zip(final_indices.tolist(), final_diags, strict=False))
 
     for i, azimuth_deg in enumerate(azimuths_deg):
         if zero_unflyable[i]:

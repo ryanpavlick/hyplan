@@ -322,7 +322,7 @@ def split_iwg1_alltracks(
     ends = [*boundaries.tolist(), len(data_lines)]
 
     written: list[Path] = []
-    for s, e in zip(starts, ends):
+    for s, e in zip(starts, ends, strict=False):
         date = timestamps[s].strftime("%Y-%m-%d")
         out_path = dest / f"{tail_label}_{date}.txt"
         with out_path.open("w") as f:

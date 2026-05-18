@@ -120,7 +120,7 @@ class OpenMeteoCloudForecast:
                 cc_low = h.get("cloud_cover_low", [])
                 cc_mid = h.get("cloud_cover_mid", [])
                 cc_high = h.get("cloud_cover_high", [])
-                for t, c, cl, cm, ch in zip(times, cc, cc_low, cc_mid, cc_high):
+                for t, c, cl, cm, ch in zip(times, cc, cc_low, cc_mid, cc_high, strict=False):
                     if c is None:
                         continue
                     dt = datetime.strptime(t, "%Y-%m-%dT%H:%M")
@@ -137,7 +137,7 @@ class OpenMeteoCloudForecast:
                 d = data.get("daily", {})
                 dates = d.get("time", [])
                 cloud_pct = d.get("cloud_cover_mean", [])
-                for date_str, pct in zip(dates, cloud_pct):
+                for date_str, pct in zip(dates, cloud_pct, strict=False):
                     if pct is None:
                         continue
                     rows.append({

@@ -16,6 +16,12 @@
   document the specific Any-returns we accept.  One additional
   ignore added in `hyplan/clouds/sources.py` for an
   `ee.Image.set(...) -> Any` return.
+* **Ruff `B905` (zip-without-explicit-strict)** removed from the
+  ignore list. 99 `zip(a, b)` call sites swept to
+  `zip(a, b, strict=False)` via `ruff --fix --unsafe-fixes` —
+  preserves the current silent-truncation semantics but makes the
+  intent explicit. Sites that should assert equal lengths
+  (`strict=True`) can opt in case-by-case in future work.
 * **Ruff `RET` (flake8-return) enabled** in
   `[tool.ruff.lint] extend-select`. 14 RET504 unnecessary-assign
   sites cleared by `ruff --fix --unsafe-fixes`.

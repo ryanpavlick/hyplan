@@ -130,7 +130,7 @@ def racetrack(
     rev_heading = (heading + 180.0) % 360.0
 
     lines = []
-    for i, (ct_offset, alt) in enumerate(zip(offsets_m, leg_alts)):
+    for i, (ct_offset, alt) in enumerate(zip(offsets_m, leg_alts, strict=False)):
         if ct_offset != 0:
             leg_center_lat, leg_center_lon = pymap3d.vincenty.vreckon(
                 center_lat, center_lon, abs(ct_offset),

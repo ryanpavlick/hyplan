@@ -737,7 +737,7 @@ class FrameCamera(Sensor):
             ys = t * rays[:, 1]
             coords = [
                 (float(x), float(y), 0.0)
-                for x, y, v in zip(xs, ys, valid) if v
+                for x, y, v in zip(xs, ys, valid, strict=False) if v
             ]
 
         return ShapelyPolygon(coords) if len(coords) >= 3 else ShapelyPolygon()

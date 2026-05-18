@@ -65,7 +65,7 @@ class TestRacetrack:
         pat = racetrack(CENTER, 0.0, alts[0], ureg.Quantity(30, "km"),
                         n_legs=3, offset=0, altitudes=alts)
         legs = list(pat.lines.values())
-        for leg, alt_expected in zip(legs, alts):
+        for leg, alt_expected in zip(legs, alts, strict=False):
             assert leg.altitude_msl.m_as(ureg.foot) == pytest.approx(
                 alt_expected.m_as(ureg.foot), rel=1e-3)
 
@@ -215,7 +215,7 @@ class TestSawtooth:
         pat = sawtooth(CENTER, 0.0, alt_min, alt_max,
                        ureg.Quantity(100, "km"), n_cycles=2)
         expected_ft = [10000, 5000, 10000, 5000, 10000]
-        for wp, exp in zip(pat.waypoints, expected_ft):
+        for wp, exp in zip(pat.waypoints, expected_ft, strict=False):
             assert wp.altitude_msl.m_as(ureg.foot) == pytest.approx(exp, rel=1e-3)
 
     def test_track_length(self):
@@ -851,7 +851,7 @@ class TestPatternMovement:
         moved = pat.translate(ureg.Quantity(20, "km"), ureg.Quantity(0, "km"))
         assert len(moved.waypoints) == n_wp
         # Every waypoint shifted north
-        for orig_wp, new_wp in zip(pat.waypoints, moved.waypoints):
+        for orig_wp, new_wp in zip(pat.waypoints, moved.waypoints, strict=False):
             assert new_wp.latitude > orig_wp.latitude
 
     def test_move_to_relocates_centre(self):
@@ -895,7 +895,7 @@ class TestPatternMovement:
             n_turns=2.0,
         )
         rotated = pat.rotate(45.0)
-        for orig_wp, new_wp in zip(pat.waypoints, rotated.waypoints):
+        for orig_wp, new_wp in zip(pat.waypoints, rotated.waypoints, strict=False):
             expected = (orig_wp.heading + 45.0) % 360
             assert new_wp.heading == pytest.approx(expected, abs=1e-6)
 

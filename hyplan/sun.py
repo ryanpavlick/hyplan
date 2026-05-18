@@ -259,7 +259,7 @@ def solar_threshold_times(
 
         if len(thresholds) == 2:
             lower, upper = sorted(thresholds)
-            for threshold, label in zip([lower, upper], [f'_{lower}', f'_{upper}']):
+            for threshold, label in zip([lower, upper], [f'_{lower}', f'_{upper}'], strict=False):
                 rise_time = None
                 fall_time = None
 

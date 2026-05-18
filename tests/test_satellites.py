@@ -57,7 +57,7 @@ def _make_ground_track_gdf(n=20, start=None, step_s=30.0, sat_name="ISS (ZARYA)"
     timestamps = np.array([start + timedelta(seconds=i * step_s) for i in range(n)])
     alt_km = np.full(n, 420.0)
     sza = np.full(n, 30.0)
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats, strict=False)]
     return gpd.GeoDataFrame(
         {
             "satellite_name": sat_name,

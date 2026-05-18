@@ -508,7 +508,7 @@ def _refine_agl_qc_with_dem(
     lons = np.asarray([r.waypoint.longitude for r in releases], dtype=float)
     elevs = get_elevations(lats, lons, dem_file)
     out: list[DropsondeRelease] = []
-    for r, e in zip(releases, elevs):
+    for r, e in zip(releases, elevs, strict=False):
         if r.waypoint.altitude_msl is None or np.isnan(e):
             qc_min: bool | None = None
         else:
@@ -580,7 +580,7 @@ def summarize_trajectories(
 
         if target_polygon is not None:
             hits = sum(
-                1 for la, lo in zip(lats, lons)
+                1 for la, lo in zip(lats, lons, strict=False)
                 if target_polygon.contains(Point(float(lo), float(la)))
             )
             frac_in = hits / len(group)

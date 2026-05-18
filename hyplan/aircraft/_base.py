@@ -173,7 +173,7 @@ class TasSchedule:
     def __repr__(self) -> str:
         items = ", ".join(
             f"({int(round(a))} * ureg.feet, {int(round(s))} * ureg.knot)"
-            for a, s in zip(self._alts_ft, self._tas_kt)
+            for a, s in zip(self._alts_ft, self._tas_kt, strict=False)
         )
         return f"TasSchedule(points=[{items}])"
 
@@ -243,7 +243,7 @@ class VerticalProfile:
     def __repr__(self) -> str:
         items = ", ".join(
             f"({int(round(a))} * ureg.feet, {int(round(r))} * ureg.feet / ureg.minute)"
-            for a, r in zip(self._alts_ft, self._rates_fpm)
+            for a, r in zip(self._alts_ft, self._rates_fpm, strict=False)
         )
         src = f", source={self.source!r}" if self.source else ""
         return f"VerticalProfile(points=[{items}]{src})"

@@ -137,10 +137,11 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
     code that unpacks tuples and uses a subset; defer.
   Pure cosmetic; no bug fixes; gradually opt in.
 
-* **B905 zip-without-explicit-strict** — ~40 sites.  `zip(a, b)` →
-  `zip(a, b, strict=True)` (length-mismatch detection) or
-  `strict=False` (silent truncation, current behavior).  Pure
-  defensive coding; would need per-site judgment of which.
+* ~~**B905 zip-without-explicit-strict**~~ — done in v1.11.x.  99
+  sites swept to `strict=False` (matches prior truncation semantics);
+  `B905` removed from the Ruff ignore list.  Sites that should
+  assert equal lengths via `strict=True` can be opted in case-by-
+  case in future work.
 
 * **`tests/test_radar.py`** uses `pytest.raises(Exception)` 19
   places (B017).  Would benefit from narrowing to specific

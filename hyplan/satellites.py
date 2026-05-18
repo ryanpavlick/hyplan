@@ -286,7 +286,7 @@ def compute_ground_track(
         radians=False,
     )
 
-    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
+    geometry = [Point(lon, lat) for lon, lat in zip(lons, lats, strict=False)]  # type: ignore[arg-type]  # numpy scalar vs shapely float
 
     return gpd.GeoDataFrame(
         {
@@ -459,7 +459,7 @@ def compute_swath_footprint(
                 f"Polygon may be invalid in EPSG:4326."
             )
 
-        polygon = Polygon(zip(poly_lons, poly_lats))
+        polygon = Polygon(zip(poly_lons, poly_lats, strict=False))
         ascending = p_lats[-1] > p_lats[0]
 
         rows.append({
@@ -589,7 +589,7 @@ def find_overpasses(
         is_usable = sza_center < max_sza
 
         ascending = p_lats[-1] > p_lats[0]
-        ground_track_line = LineString(zip(p_lons, p_lats))
+        ground_track_line = LineString(zip(p_lons, p_lats, strict=False))
 
         if include_swath:
             # Build swath polygon for this pass segment

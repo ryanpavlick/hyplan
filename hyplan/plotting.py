@@ -134,7 +134,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
         if isinstance(item, Pattern):
             if item.is_line_based:
                 for idx, fl in enumerate(item.lines.values()):
-                    x, y = zip(*fl.geometry.coords)
+                    x, y = zip(*fl.geometry.coords, strict=False)
                     label = item.name if idx == 0 else None
                     ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=label)
             else:
@@ -144,7 +144,7 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
         elif is_waypoint(item):
             ax.scatter(item.longitude, item.latitude, color='green', marker='o', s=100, label=item.name)
         elif isinstance(item, FlightLine):
-            x, y = zip(*item.geometry.coords)
+            x, y = zip(*item.geometry.coords, strict=False)
             ax.plot(x, y, color='black', linestyle='dashed', linewidth=2, label=item.site_name)
 
     ax.set_title("Flight Plan")
@@ -445,7 +445,7 @@ def plot_airspace_map(
         nm_indices = {nm.flight_line_index for nm in near_misses}
 
         for i, fl in enumerate(flight_lines):
-            lons, lats = zip(*fl.geometry.coords)
+            lons, lats = zip(*fl.geometry.coords, strict=False)
             if i in conflicting_indices:
                 color, style, lw = "red", "-", 2.5
             elif i in nm_indices:
@@ -464,7 +464,7 @@ def plot_airspace_map(
         parts = list(geom.geoms) if geom.geom_type.startswith("Multi") else [geom]
         for part in parts:
             if hasattr(part, "coords") and len(part.coords) >= 2:
-                x, y = zip(*part.coords)
+                x, y = zip(*part.coords, strict=False)
                 ax.plot(x, y, color="red", linewidth=5, alpha=0.4,
                         transform=transform)
 
@@ -528,7 +528,7 @@ def plot_airspace_map(
         # Prefer flight lines for extent if available
         if flight_lines:
             for fl in flight_lines:
-                lons, lats = zip(*fl.geometry.coords)
+                lons, lats = zip(*fl.geometry.coords, strict=False)
                 all_lons.extend(lons)
                 all_lats.extend(lats)
         if not all_lons:
@@ -772,7 +772,7 @@ def plot_vertical_profile(
     ax.set_ylim(bottom=0)
     # Deduplicate legend
     handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
+    by_label = dict(zip(labels, handles, strict=False))
     ax.legend(by_label.values(), by_label.keys(), fontsize=7, loc="upper right")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -828,7 +828,7 @@ def plot_oceanic_tracks(
         else:
             color, style = "gray", "--"
 
-        lons, lats = zip(*[(w[0], w[1]) for w in t.waypoints])
+        lons, lats = zip(*[(w[0], w[1]) for w in t.waypoints], strict=False)
         ax.plot(lons, lats, style, color=color, linewidth=1.8, alpha=0.8,
                 transform=transform)
 
@@ -851,7 +851,7 @@ def plot_oceanic_tracks(
     # Overlay flight lines if provided
     if flight_lines:
         for fl in flight_lines:
-            lons, lats = zip(*fl.geometry.coords)
+            lons, lats = zip(*fl.geometry.coords, strict=False)
             ax.plot(lons, lats, "-o", color="red", linewidth=2, markersize=4,
                     transform=transform)
 

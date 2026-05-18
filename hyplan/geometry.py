@@ -558,7 +558,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
         ybound = (xbound_r * np.sin(-azimuth_radians) + ybound_r * np.cos(-azimuth_radians)) + cy
 
         # Create rotated bounding box
-        rotated_bbox_utm = Polygon(zip(xbound, ybound))
+        rotated_bbox_utm = Polygon(zip(xbound, ybound, strict=False))
         rotated_bbox_wgs84 = transform(utm_to_wgs84, rotated_bbox_utm)
 
     except Exception as e:

@@ -187,7 +187,7 @@ class TestBuildGraphStructure:
         item_keys = G.graph["item_keys"]
         # item_keys is a list[(item, key)] — see build_graph for rationale.
         assert len(item_keys) == len(flight_lines)
-        assert all(item is fl for (item, _key), fl in zip(item_keys, flight_lines))
+        assert all(item is fl for (item, _key), fl in zip(item_keys, flight_lines, strict=False))
 
     def test_transit_edges_between_airports(self, b200, flight_lines, airports):
         G = build_graph(b200, flight_lines, airports)
@@ -783,7 +783,7 @@ class TestCoverageCounts:
         # as "{item_key}:{line_id}".
         assert len(result["lines_skipped"]) == 3
         item_key = result["items_skipped"][0]
-        for leg_key, line_id in zip(result["lines_skipped"], racetrack_pattern.line_ids):
+        for leg_key, line_id in zip(result["lines_skipped"], racetrack_pattern.line_ids, strict=False):
             assert leg_key.startswith(f"{item_key}:")
             assert leg_key == f"{item_key}:{line_id}"
 

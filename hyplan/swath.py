@@ -196,7 +196,7 @@ def generate_swath_polygon(
 
     swath_lats = np.concatenate([edge1_lats, edge2_lats[::-1]])
     swath_lons = np.concatenate([edge1_lons, edge2_lons[::-1]])
-    return Polygon(zip(swath_lons, swath_lats))
+    return Polygon(zip(swath_lons, swath_lats, strict=False))
 
 def calculate_swath_widths(swath_polygon: Polygon) -> dict[str, float]:
     """Calculate the minimum, mean, and maximum width of a swath polygon.

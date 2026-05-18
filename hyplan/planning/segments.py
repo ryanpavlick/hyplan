@@ -200,7 +200,7 @@ def loiter_orbit_geometry(
     xs = cx + radius_m * np.cos(sample_angles)
     ys = cy + radius_m * np.sin(sample_angles)
 
-    pts_utm = [Point(x, y) for x, y in zip(xs, ys)]
+    pts_utm = [Point(x, y) for x, y in zip(xs, ys, strict=False)]
     pts_wgs = [transform(from_utm, p) for p in pts_utm]
     return LineString([(p.x, p.y) for p in pts_wgs])
 

@@ -218,7 +218,7 @@ def _list_subdatasets(hdf_path: str) -> list[tuple[str, str]]:
     rio = _require_rasterio()
 
     with rio.open(hdf_path) as src:
-        return list(zip(src.subdatasets, src.subdatasets))
+        return list(zip(src.subdatasets, src.subdatasets, strict=False))
 
 
 def _read_hdf4_subdataset(

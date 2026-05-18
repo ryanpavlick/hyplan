@@ -355,7 +355,7 @@ class OpenMeteoCloudFraction:
             dates = daily.get("time", [])
             cloud_pct = daily.get("cloud_cover_mean", [])
 
-            for date_str, pct in zip(dates, cloud_pct):
+            for date_str, pct in zip(dates, cloud_pct, strict=False):
                 if pct is None:
                     continue
                 dt = datetime.strptime(date_str, "%Y-%m-%d")

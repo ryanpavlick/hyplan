@@ -117,10 +117,9 @@ extend-select = [
 # B023 — function-uses-loop-variable: 2 sites in isochrone.py use
 #        the closure intentionally; verify before fixing.
 # B018 — 1 site in dubins3d.py is intentional XXX-debugging code.
-# B905 — zip-without-explicit-strict: ~40 sites; pure stylistic, low
-#        value to enforce in CI.
 # B007 — already fixed; keep enabled.
 # B904 — already fixed; keep enabled.
+# B905 — already swept in v1.11.x hygiene; keep enabled.
 # RUF001/RUF002/RUF003 — ambiguous-unicode-character — flags
 #        intentional typography (en-dash, em-dash, curly quotes) in
 #        strings, docstrings, and comments.  HyPlan uses these for
@@ -132,7 +131,7 @@ extend-select = [
 #        algorithmic code that unpacks tuples and uses a subset.
 #        Defer to a focused pass.
 ignore = [
-    "B017", "B008", "B023", "B018", "B905",
+    "B017", "B008", "B023", "B018",
     "RUF001", "RUF002", "RUF003", "RUF046", "RUF059",
 ]
 
