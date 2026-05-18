@@ -167,8 +167,13 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
+# Project-wide strict mypy.  Every module in `hyplan/` passes
+# `mypy --strict` as of v1.11.x.  `ignore_missing_imports` is kept
+# at the global level for third-party libraries that lack stubs
+# (earthengine, earthaccess, geomag, rasterio, etc.); inline
+# `# type: ignore` comments at the library boundary document the
+# specific Any-returns we accept.
+strict = true
 ignore_missing_imports = true
 # pint's stubs vary across versions (newer numpy stub interactions
 # return PlainQuantity[Any] rather than the alias Quantity, breaking
@@ -177,15 +182,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pint.*"
 follow_imports = "skip"
-
-# Strict mypy on the two newest planner modules.
-[[tool.mypy.overrides]]
-module = "hyplan.planning.isochrone"
-strict = true
-
-[[tool.mypy.overrides]]
-module = "hyplan.aircraft.wind_path"
-strict = true
 
 [tool.coverage.run]
 source = ["hyplan"]

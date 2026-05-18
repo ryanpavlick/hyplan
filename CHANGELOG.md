@@ -4,6 +4,18 @@
 
 ### Lint ratchet
 
+* **Project-wide `mypy --strict`.** `[tool.mypy] strict = true` is
+  now the default for the whole `hyplan/` package. Every one of the
+  101 source files passes strict.  Previously only two modules
+  (`hyplan.planning.isochrone`, `hyplan.aircraft.wind_path`) had
+  per-module strict overrides; those overrides are now redundant
+  and have been removed.  `ignore_missing_imports = true` is kept
+  at the global level for third-party libraries that lack stubs
+  (earthengine, earthaccess, geomag, rasterio, etc.); inline
+  `# type: ignore` markers at the library boundary continue to
+  document the specific Any-returns we accept.  One additional
+  ignore added in `hyplan/clouds/sources.py` for an
+  `ee.Image.set(...) -> Any` return.
 * **Ruff `RET` (flake8-return) enabled** in
   `[tool.ruff.lint] extend-select`. 14 RET504 unnecessary-assign
   sites cleared by `ruff --fix --unsafe-fixes`.
