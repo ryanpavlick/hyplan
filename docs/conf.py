@@ -77,6 +77,7 @@ autodoc_mock_imports = [
     "tabulate",
     "pydantic",
     "pydantic_pint",
+    "xarray",       # [phenology]/[winds] extra
 ]
 
 # Intersphinx mappings
