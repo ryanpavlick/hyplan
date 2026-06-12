@@ -40,13 +40,19 @@ def fit_aircraft_from_adsb(
     callsign: str | list[str] | None = None,
     start: datetime.datetime | None = None,
     stop: datetime.datetime | None = None,
+    resample: str = "5s",
+    min_altitude_ft: float = 1000.0,
+    max_altitude_ft: float = 60000.0,
     # Wind correction
     wind_source: str | WindField | None = "still_air",
     # Phase labeling
     phase_backend: str = "heuristic",
+    field_elevation_ft: float = 0.0,
     # Fitting
     altitude_bin_ft: float = 2000.0,
+    min_points_per_bin: int = 5,
     max_schedule_points: int = 6,
+    outlier_sigma: float = 2.5,
     service_ceiling_ft: float | None = None,
     # Pipeline control
     aggregate: bool = True,
@@ -68,16 +74,32 @@ def fit_aircraft_from_adsb(
         callsign: Filter flights by callsign(s).
         start: Start of time window (UTC).
         stop: End of time window (UTC).
+        resample: Resample interval (pandas frequency string) passed to
+            :func:`~hyplan.aircraft.adsb.io.load_flights`.
+        min_altitude_ft: Drop trajectory points below this altitude
+            (AGL when ``field_elevation_ft`` is nonzero, else MSL).
+        max_altitude_ft: Drop trajectory points above this altitude
+            (pressure altitude, ft MSL).
         wind_source: Wind field specification — ``"still_air"``
             (default), ``"merra2"``, ``"gfs"``, ``"gmao"``, a
             :class:`~hyplan.winds.WindField` instance, or *None*.
         phase_backend: Phase labeling method (``"heuristic"``).
+        field_elevation_ft: Field elevation of the operating airport
+            (ft MSL).  ADS-B altitudes are MSL-referenced pressure
+            altitudes; when nonzero, the ground-proximity thresholds in
+            ingestion, phase labeling, and approach-speed estimation
+            are offset by this elevation so they behave as AGL.
         altitude_bin_ft: Altitude bin width for fitting.
+        min_points_per_bin: Minimum observations per altitude bin to
+            include in the fit.
         max_schedule_points: Maximum breakpoints per schedule.
+        outlier_sigma: Remove points beyond this many robust (MAD-based)
+            standard deviations from the bin median before fitting.
         service_ceiling_ft: Override service ceiling.
         aggregate: If *True* and multiple flights are loaded, aggregate
             their data before fitting.  If *False*, uses only the first
-            flight.
+            flight; provenance metadata (``n_flights``, ``flight_ids``,
+            ``time_range``) then covers only that flight.
 
     Returns:
         :class:`Aircraft` with fitted speed schedules, vertical profiles,
@@ -93,12 +115,21 @@ def fit_aircraft_from_adsb(
         callsign=callsign,
         start=start,
         stop=stop,
+        resample=resample,
+        min_altitude_ft=min_altitude_ft,
+        max_altitude_ft=max_altitude_ft,
+        field_elevation_ft=field_elevation_ft,
     )
     if not flights:
         raise HyPlanValueError("No valid flights found after filtering.")
 
     # --- Stage 2: Phase labeling ---
-    phased_dfs = [label_phases(f, backend=phase_backend) for f in flights]
+    phased_dfs = [
+        label_phases(
+            f, backend=phase_backend, field_elevation_ft=field_elevation_ft,
+        )
+        for f in flights
+    ]
 
     # --- Stage 3: Wind correction ---
     wind_field = resolve_wind_field(wind_source, phased_dfs)
@@ -108,14 +139,21 @@ def fit_aircraft_from_adsb(
     if aggregate and len(airdata_dfs) > 1:
         combined_df = pd.concat(airdata_dfs, ignore_index=True)
     else:
+        # Only the first flight is fitted; restrict the flight list so
+        # the provenance metadata below describes what was fitted.
+        flights = flights[:1]
+        airdata_dfs = airdata_dfs[:1]
         combined_df = airdata_dfs[0]
 
     # --- Stage 5: Fit schedules ---
     fit = fit_schedules(
         combined_df,
         altitude_bin_ft=altitude_bin_ft,
+        min_points_per_bin=min_points_per_bin,
         max_schedule_points=max_schedule_points,
+        outlier_sigma=outlier_sigma,
         service_ceiling_ft=service_ceiling_ft,
+        field_elevation_ft=field_elevation_ft,
     )
 
     # --- Enrich metadata ---
@@ -164,6 +202,7 @@ def fit_aircraft_from_adsb(
         engine_type=engine_type,
         confidence=confidence,
         sources=sources,
+        calibration_status="calibrated",
     )
 
 

@@ -32,6 +32,7 @@ space-varying wind.
 from __future__ import annotations
 
 import datetime
+import warnings
 
 import numpy as np
 import pymap3d.vincenty
@@ -47,6 +48,30 @@ __all__ = [
     "climb_with_wind_field",
     "descend_with_wind_field",
 ]
+
+
+def _warn_if_above_ceiling(aircraft: Aircraft, cruise_alt: Quantity) -> None:
+    """Warn (don't raise) when ``cruise_alt`` exceeds the service ceiling.
+
+    Mirrors :meth:`Aircraft._hybrid_path`'s lenient contract: aircraft
+    can sometimes operate transiently above their certified ceiling, so
+    planning continues with best-effort extrapolated profile values and
+    the user sees a single warning.  Callers pair this with
+    ``_allow_above_ceiling=True`` on :meth:`Aircraft._climb`.
+    """
+    if (
+        aircraft.service_ceiling is not None
+        and cruise_alt > aircraft.service_ceiling
+    ):
+        warnings.warn(
+            f"{aircraft.aircraft_type}: requested cruise altitude "
+            f"{cruise_alt.m_as(ureg.feet):.0f} ft exceeds "
+            f"service ceiling "
+            f"{aircraft.service_ceiling.m_as(ureg.feet):.0f} ft.  "
+            "Speed and climb / descent profiles are extrapolated "
+            "outside their calibrated range.",
+            stacklevel=3,
+        )
 
 
 def _project_wind_along_track(
@@ -115,7 +140,10 @@ def climb_with_wind_field(
         the signed wind component (positive = tailwind, knots) used
         in the wind-corrected climb call.
     """
-    t_seed_q, d_seed_q = aircraft._climb(start_alt, cruise_alt)
+    _warn_if_above_ceiling(aircraft, cruise_alt)
+    t_seed_q, d_seed_q = aircraft._climb(
+        start_alt, cruise_alt, _allow_above_ceiling=True,
+    )
     t_seed_min = t_seed_q.m_as(ureg.minute)
     d_seed_nmi = d_seed_q.m_as(ureg.nautical_mile)
     along_track_wind = _project_wind_along_track(
@@ -131,6 +159,7 @@ def climb_with_wind_field(
     )
     t_climb_q, d_climb_q = aircraft._climb(
         start_alt, cruise_alt, wind_along_track=along_track_wind,
+        _allow_above_ceiling=True,
     )
     return t_climb_q, d_climb_q, along_track_wind
 

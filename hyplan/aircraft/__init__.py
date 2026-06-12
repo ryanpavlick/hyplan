@@ -57,6 +57,7 @@ from ._profile_io import (
     profile_path,
     write_calibrated_profile,
 )
+from .icartt import load_icartt
 from .iwg1 import load_iwg1, split_iwg1_alltracks, trim_ground_taxi
 from .wind_path import climb_with_wind_field, descend_with_wind_field
 
@@ -96,8 +97,11 @@ __all__ = [
     "TasSchedule",
     "TurnModel",
     "VerticalProfile",
+    "climb_with_wind_field",
+    "descend_with_wind_field",
     "dump_aircraft_profile",
     "load_aircraft_profile",
+    "load_icartt",
     "load_iwg1",
     "load_planned_sortie",
     "parse_green_card_pdf",

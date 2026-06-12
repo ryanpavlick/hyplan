@@ -42,6 +42,7 @@ def load_flights(
     min_duration_minutes: float = 10.0,
     min_altitude_ft: float = 1000.0,
     max_altitude_ft: float = 60000.0,
+    field_elevation_ft: float = 0.0,
 ) -> list[Any]:
     """Load and clean ADS-B flights from file or Traffic object.
 
@@ -59,7 +60,16 @@ def load_flights(
             EKF.  ``None`` skips filtering.
         min_duration_minutes: Drop flights shorter than this.
         min_altitude_ft: Drop trajectory points below this altitude.
-        max_altitude_ft: Drop trajectory points above this altitude.
+            Compared against the ADS-B barometric (pressure) altitude,
+            which is MSL-referenced; with the default
+            ``field_elevation_ft=0.0`` this is an MSL threshold.
+        max_altitude_ft: Drop trajectory points above this altitude
+            (pressure altitude, ft MSL).
+        field_elevation_ft: Field elevation of the operating airport
+            (ft MSL).  When nonzero, ``min_altitude_ft`` is treated as
+            AGL and offset by this elevation before comparison, so the
+            ground-proximity cut behaves the same at a 5,500 ft
+            airport as at sea level.
 
     Returns:
         List of cleaned ``traffic.core.Flight`` objects.
@@ -114,7 +124,7 @@ def load_flights(
             flight,
             resample=resample,
             filter_strategy=filter_strategy,
-            min_altitude_ft=min_altitude_ft,
+            min_altitude_ft=min_altitude_ft + field_elevation_ft,
             max_altitude_ft=max_altitude_ft,
             min_duration_minutes=min_duration_minutes,
         )

@@ -28,6 +28,7 @@ def label_phases(
     level_band_ft: float = 200.0,
     min_phase_seconds: float = 60.0,
     ground_altitude_ft: float = 2000.0,
+    field_elevation_ft: float = 0.0,
 ) -> pd.DataFrame:
     """Assign flight phase labels to each observation in a trajectory.
 
@@ -48,7 +49,15 @@ def label_phases(
         min_phase_seconds: Minimum phase duration.  Phases shorter than
             this are merged into the adjacent longer phase.
         ground_altitude_ft: Points below this altitude (feet) are
-            labeled ``"ground"``.
+            labeled ``"ground"``.  Compared against the ADS-B
+            barometric (pressure) altitude, which is MSL-referenced;
+            with the default ``field_elevation_ft=0.0`` this is an MSL
+            threshold.
+        field_elevation_ft: Field elevation of the operating airport
+            (ft MSL).  When nonzero, ``ground_altitude_ft`` is treated
+            as AGL and offset by this elevation, so taxi at a
+            high-elevation airport is still labeled ``"ground"`` and
+            low airborne fixes at a sea-level airport are not.
 
     Returns:
         Copy of ``flight.data`` with an added ``"phase"`` column.
@@ -70,7 +79,7 @@ def label_phases(
         descent_threshold=descent_vs_threshold_fpm,
         level_band_ft=level_band_ft,
         min_phase_seconds=min_phase_seconds,
-        ground_altitude_ft=ground_altitude_ft,
+        ground_altitude_ft=ground_altitude_ft + field_elevation_ft,
     )
     df["phase"] = phases
     logger.debug(

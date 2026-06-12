@@ -22,6 +22,7 @@ schedule type is in use.
 from __future__ import annotations
 
 import datetime
+import itertools
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -389,9 +390,18 @@ class ClimbPlan:
     Each entry in ``pauses`` is ``(level_off_altitude, hold_duration)``
     — at the level-off altitude the aircraft holds (level orbit) for
     ``hold_duration``, gaining time but no forward distance.  Pauses
-    are applied in altitude order; pauses outside the
-    ``[start_altitude, cruise_altitude]`` range during planning are
-    silently skipped.
+    are applied in altitude order; pauses outside the climb range
+    during planning are silently skipped.
+
+    Boundary rule: a pause is in range when ``start_altitude <
+    level_off_altitude <= cruise_altitude`` (compared with a 1e-6 ft
+    tolerance so unit round-trips don't drop a boundary pause).  A
+    pause exactly at the cruise altitude is kept and modeled as a hold
+    at top-of-climb; one exactly at the start altitude is skipped (no
+    climb has happened yet).  :meth:`Aircraft.step_climb` totals and
+    the staged ``climb_<i>`` / ``climb_pause_<i>`` sub-phases emitted
+    by the planner both follow this rule, so sub-phase times and
+    distances sum exactly to the climb totals.
 
     Pass an instance to :func:`hyplan.planning.compute_flight_plan`
     via the ``climb_plan`` keyword to make the takeoff-phase planner
@@ -1068,6 +1078,7 @@ class Aircraft:
         end_altitude: Quantity,
         true_air_speed: Quantity | None = None,
         wind_along_track: Quantity | None = None,
+        _allow_above_ceiling: bool = False,
     ) -> tuple[Quantity, Quantity]:
         """Estimate time and horizontal distance during a continuous climb.
 
@@ -1085,11 +1096,22 @@ class Aircraft:
         Default ``None`` is still-air behavior (backwards-compatible
         with v1.3 and earlier).
 
+        Direct calls raise :class:`HyPlanValueError` when
+        ``end_altitude`` exceeds the service ceiling.
+        ``_allow_above_ceiling`` is the internal escape hatch for
+        :meth:`_hybrid_path`, which warns instead of raising so that
+        planning continues with best-effort extrapolated values
+        (``rate_at`` clamps to the endpoint rates above the calibrated
+        band, so the integration stays well-defined).
+
         For staged climbs with intermediate level-off pauses (e.g., a
         weight-driven hold during climb-out), see :meth:`step_climb`.
         """
         start_altitude = start_altitude.to(ureg.feet)
         end_altitude = end_altitude.to(ureg.feet)
+
+        if not _allow_above_ceiling and end_altitude > self.service_ceiling:
+            raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
 
         # Memoize on the (start_alt, end_alt, TAS, wind) tuple.  Hot
         # path for isochrone bisections that re-call _climb with
@@ -1111,8 +1133,6 @@ class Aircraft:
             true_air_speed = self.climb_speed_at(avg_alt)
         true_air_speed = true_air_speed.to(ureg.feet / ureg.minute)
 
-        if end_altitude > self.service_ceiling:
-            raise HyPlanValueError("End altitude cannot exceed the service ceiling.")
         if end_altitude <= start_altitude:
             return 0 * ureg.minute, 0 * ureg.nautical_mile
 
@@ -1134,10 +1154,25 @@ class Aircraft:
                     ureg.minute
                 )
             else:
-                C = self.service_ceiling
-                time_to_climb = (
-                    C / (roc_sl - roc_ceil) * np.log(roc_start / roc_end)
-                ).to(ureg.minute)
+                # Piecewise integral of 1/roc(h): rate_at clamps to the
+                # endpoint rates outside the [h1, h2] breakpoint band,
+                # so those portions are constant-rate; inside the band
+                # the linear-ROC model integrates to the log form.
+                h1_ft, h2_ft = self.climb_profile._alts_ft
+                a_ft = start_altitude.m_as(ureg.feet)
+                b_ft = end_altitude.m_as(ureg.feet)
+                roc_sl_fpm = roc_sl.m_as(ureg.feet / ureg.minute)
+                roc_ceil_fpm = roc_ceil.m_as(ureg.feet / ureg.minute)
+                lo = min(b_ft, max(a_ft, h1_ft))
+                hi = min(b_ft, max(a_ft, h2_ft))
+                minutes = (lo - a_ft) / roc_sl_fpm + (b_ft - hi) / roc_ceil_fpm
+                if hi > lo:
+                    roc_lo = self.climb_profile.rate_at(lo * ureg.feet)
+                    roc_hi = self.climb_profile.rate_at(hi * ureg.feet)
+                    minutes += (h2_ft - h1_ft) / delta_roc * float(
+                        np.log(roc_lo.magnitude / roc_hi.magnitude)
+                    )
+                time_to_climb = minutes * ureg.minute
 
         else:  # "full"
             n_steps = 64
@@ -1212,9 +1247,11 @@ class Aircraft:
             altitudes = start_altitude.magnitude + roc_sl * times
             return times, altitudes
 
-        # two_point: analytical exponential profile
+        # two_point: analytical exponential profile between the
+        # breakpoints, constant-rate (linear altitude) where rate_at
+        # clamps outside the [h1, h2] breakpoint band.
         h0 = start_altitude.magnitude
-        C = self.service_ceiling.magnitude
+        h_end = end_altitude.magnitude
         roc_sl = self.climb_profile.sea_level_rate.m_as(ureg.feet / ureg.minute)
         roc_ceil = self.climb_profile.ceiling_rate.m_as(ureg.feet / ureg.minute)
         delta_roc = roc_sl - roc_ceil
@@ -1224,17 +1261,28 @@ class Aircraft:
             times = np.linspace(0, total_time, n_points)
             altitudes = h0 + roc_sl * times
         else:
-            alpha = delta_roc / C
-            h_eq = C * roc_sl / delta_roc
-            roc_h0 = self.climb_profile.rate_at(start_altitude).m_as(
-                ureg.feet / ureg.minute
+            h1_ft, h2_ft = self.climb_profile._alts_ft
+            alpha = delta_roc / (h2_ft - h1_ft)
+            h_eq = h1_ft + roc_sl / alpha
+            p1 = min(h_end, max(h0, h1_ft))
+            p2 = min(h_end, max(h0, h2_ft))
+            t_below = (p1 - h0) / roc_sl
+            t_exp = (
+                (1 / alpha) * np.log((h_eq - p1) / (h_eq - p2))
+                if p2 > p1 else 0.0
             )
-            roc_h1 = self.climb_profile.rate_at(end_altitude).m_as(
-                ureg.feet / ureg.minute
-            )
-            total_time = (1 / alpha) * np.log(roc_h0 / roc_h1)
+            t_above = (h_end - p2) / roc_ceil
+            total_time = t_below + t_exp + t_above
             times = np.linspace(0, total_time, n_points)
-            altitudes = h_eq - (h_eq - h0) * np.exp(-alpha * times)
+            altitudes = np.where(
+                times <= t_below,
+                h0 + roc_sl * times,
+                np.where(
+                    times <= t_below + t_exp,
+                    h_eq - (h_eq - p1) * np.exp(-alpha * (times - t_below)),
+                    p2 + roc_ceil * (times - t_below - t_exp),
+                ),
+            )
 
         return times, altitudes
 
@@ -1244,6 +1292,7 @@ class Aircraft:
         end_altitude: Quantity,
         pauses: list[tuple[Quantity, Quantity]],
         wind_along_track: Quantity | None = None,
+        _allow_above_ceiling: bool = False,
     ) -> tuple[Quantity, Quantity]:
         """Total time and forward distance for a staged climb with pauses.
 
@@ -1263,7 +1312,11 @@ class Aircraft:
         :meth:`_climb`.
 
         Pauses are applied in altitude order; pauses outside the
-        ``[start_altitude, end_altitude]`` range are silently skipped.
+        climb range are silently skipped.  In-range means
+        ``start_altitude < level_off_altitude <= end_altitude`` — a
+        pause exactly at ``end_altitude`` is kept (a hold at
+        top-of-climb), one exactly at ``start_altitude`` is not (no
+        climb has happened yet).  See :class:`ClimbPlan`.
 
         Args:
             start_altitude: Starting altitude (e.g., airport elevation).
@@ -1303,18 +1356,24 @@ class Aircraft:
         active_t, total_dist = self._climb(
             start_altitude, end_altitude,
             wind_along_track=wind_along_track,
+            _allow_above_ceiling=_allow_above_ceiling,
         )
         total_time = active_t.to(minute)
 
         # Holds add time only; they hold ground position so contribute
-        # zero forward distance.  Pauses outside [start, end] are
-        # silently skipped (matches the docstring contract).
+        # zero forward distance.  Pauses outside (start, end] are
+        # silently skipped (matches the docstring contract).  The
+        # boundary tests use a 1e-6 ft tolerance so unit round-trips
+        # (feet → meters → feet in Waypoint) don't drop a pause placed
+        # exactly at the cruise altitude.
         if pauses:
+            start_ft = start_altitude.m_as(ft)
+            end_ft = end_altitude.m_as(ft)
             pauses_sorted = sorted(pauses, key=lambda p: p[0].m_as(ft))
             for level_alt, hold_dur in pauses_sorted:
                 if (
-                    level_alt.m_as(ft) <= start_altitude.m_as(ft)
-                    or level_alt.m_as(ft) > end_altitude.m_as(ft)
+                    level_alt.m_as(ft) <= start_ft + 1e-6
+                    or level_alt.m_as(ft) > end_ft + 1e-6
                 ):
                     continue
                 total_time = total_time + hold_dur.to(minute)
@@ -1482,18 +1541,20 @@ class Aircraft:
         :meth:`ApproachProfile.time_to_touchdown`.  When no profile is
         set, the legacy single-leg-to-runway behavior is preserved.
         """
-        _, arrival_heading = pymap3d.vincenty.vdist(
-            waypoint.latitude, waypoint.longitude,
+        # Inbound course at the airport: direction of travel on arrival,
+        # i.e. the reciprocal of the geodesic azimuth airport → waypoint.
+        _, outbound_azimuth = pymap3d.vincenty.vdist(
             airport.latitude, airport.longitude,
+            waypoint.latitude, waypoint.longitude,
         )
-        arrival_heading_deg = (arrival_heading + 180.0) % 360.0
+        inbound_course_deg = (outbound_azimuth + 180.0) % 360.0
 
         if self.approach_profile is None:
             # Legacy: Dubins descent all the way to runway elevation.
             airport_waypoint = Waypoint(
                 latitude=airport.latitude,
                 longitude=airport.longitude,
-                heading=arrival_heading_deg,
+                heading=inbound_course_deg,
                 altitude_msl=airport.elevation,
             )
             return self.time_to_cruise(
@@ -1509,6 +1570,11 @@ class Aircraft:
         # approach distance — without this offset the Dubins endpoint
         # would sit directly above the airport, leaving no horizontal
         # room for a non-degenerate approach geometry.
+        _, arrival_heading = pymap3d.vincenty.vdist(
+            waypoint.latitude, waypoint.longitude,
+            airport.latitude, airport.longitude,
+        )
+        arrival_heading_deg = (arrival_heading + 180.0) % 360.0
         approach_distance_nmi = self.approach_profile.approx_approach_distance_nmi
         approach_distance_m = approach_distance_nmi * 1852.0
         faf_lat, faf_lon = pymap3d.vincenty.vreckon(
@@ -1518,11 +1584,17 @@ class Aircraft:
         faf_lat = float(faf_lat)
         faf_lon = ((float(faf_lon) + 180.0) % 360.0) - 180.0  # wrap to [-180, 180)
 
+        # Direction of travel at the FAF: geodesic azimuth FAF → airport.
+        _, faf_inbound_course_deg = pymap3d.vincenty.vdist(
+            faf_lat, faf_lon,
+            airport.latitude, airport.longitude,
+        )
+
         top_of_approach_msl = airport.elevation + self.approach_profile.top_of_approach_agl
         top_of_approach_waypoint = Waypoint(
             latitude=faf_lat,
             longitude=faf_lon,
-            heading=arrival_heading_deg,
+            heading=faf_inbound_course_deg,
             altitude_msl=top_of_approach_msl,
         )
         cruise_descent = self.time_to_cruise(
@@ -1552,8 +1624,8 @@ class Aircraft:
             "start_lon": faf_lon,
             "end_lat": airport.latitude,
             "end_lon": airport.longitude,
-            "start_heading": arrival_heading_deg,
-            "end_heading": arrival_heading_deg,
+            "start_heading": faf_inbound_course_deg,
+            "end_heading": inbound_course_deg,
         }
 
         return {
@@ -1684,7 +1756,9 @@ class Aircraft:
         wind_along_q_descent = wind_along_q
 
         if start_alt < cruise_altitude:
-            t_seed_q, d_seed_q = self._climb(start_alt, cruise_altitude)
+            t_seed_q, d_seed_q = self._climb(
+                start_alt, cruise_altitude, _allow_above_ceiling=True,
+            )
             t_seed_min = t_seed_q.m_as(ureg.minute)
             d_seed_nmi = d_seed_q.m_as(ureg.nautical_mile)
             wind_along_q_climb = _project_wind_along_track(
@@ -1706,7 +1780,7 @@ class Aircraft:
             d_seed_d_nmi = d_seed_q_d.m_as(ureg.nautical_mile)
             if start_alt < cruise_altitude:
                 t_climb_seed_q, d_climb_seed_q = self._climb(
-                    start_alt, cruise_altitude,
+                    start_alt, cruise_altitude, _allow_above_ceiling=True,
                 )
                 t_climb_seed_min = t_climb_seed_q.m_as(ureg.minute)
                 d_climb_seed_nmi = d_climb_seed_q.m_as(ureg.nautical_mile)
@@ -1888,11 +1962,19 @@ class Aircraft:
             and phase == "climb"
             and start_alt < cruise_altitude
         ):
+            # In-range test matches step_climb: start < lvl <= cruise
+            # (1e-6 ft tolerance), so a pause exactly at the cruise
+            # altitude is emitted as a top-of-climb hold rather than
+            # silently absorbed.
+            start_alt_ft = start_alt.m_as(ureg.feet)
+            cruise_alt_ft = cruise_altitude.m_as(ureg.feet)
             climb_pauses_in_range = sorted(
                 (
                     (lvl.to(ureg.feet), dur.to(ureg.minute))
                     for lvl, dur in climb_plan.pauses
-                    if lvl > start_alt and lvl < cruise_altitude
+                    if start_alt_ft + 1e-6
+                    < lvl.m_as(ureg.feet)
+                    <= cruise_alt_ft + 1e-6
                 ),
                 key=lambda p: p[0].m_as(ureg.feet),
             )
@@ -1902,11 +1984,13 @@ class Aircraft:
                 climb_t_q, climb_d_q = self.step_climb(
                     start_alt, cruise_altitude, climb_pauses_in_range,
                     wind_along_track=wind_along_q_climb,
+                    _allow_above_ceiling=True,
                 )
             else:
                 climb_t_q, climb_d_q = self._climb(
                     start_alt, cruise_altitude,
                     wind_along_track=wind_along_q_climb,
+                    _allow_above_ceiling=True,
                 )
             climb_time_min = climb_t_q.m_as(ureg.minute)
             climb_dist_nmi = climb_d_q.m_as(ureg.nautical_mile)
@@ -2061,17 +2145,52 @@ class Aircraft:
                 # climb segment plus one "climb_pause_<i>" loiter-orbit
                 # phase per pause.  Forward distance accumulates only
                 # during climb segments; orbits hold ground position.
+                # Per-sub-segment _climb results are renormalized so
+                # the sub-phases sum exactly to the step_climb totals:
+                # each sub-segment uses its own midpoint TAS, so the
+                # raw pieces don't add up to the single full-range
+                # integral that step_climb (and the cruise sizing
+                # above) treats as authoritative.
                 from ..planning.segments import loiter_orbit_geometry
+                sub_bounds = [start_alt] + [
+                    lvl for lvl, _ in climb_pauses_in_range
+                ]
+                final_climb_needed = (
+                    sub_bounds[-1].m_as(ureg.feet) < cruise_alt_ft - 1e-6
+                )
+                if final_climb_needed:
+                    sub_bounds.append(cruise_altitude)
+                sub_raw = [
+                    self._climb(
+                        lo, hi,
+                        wind_along_track=wind_along_q_climb,
+                        _allow_above_ceiling=True,
+                    )
+                    for lo, hi in itertools.pairwise(sub_bounds)
+                ]
+                sub_t_raw = [t.m_as(ureg.minute) for t, _ in sub_raw]
+                sub_d_raw = [d.m_as(ureg.nautical_mile) for _, d in sub_raw]
+                hold_total_min = sum(
+                    dur.m_as(ureg.minute)
+                    for _, dur in climb_pauses_in_range
+                )
+                active_total_min = climb_time_min - hold_total_min
+                t_scale = (
+                    active_total_min / sum(sub_t_raw)
+                    if sum(sub_t_raw) > 0 else 0.0
+                )
+                d_scale = (
+                    climb_dist_nmi / sum(sub_d_raw)
+                    if sum(sub_d_raw) > 0 else 0.0
+                )
+                sub_t_scaled = [t * t_scale for t in sub_t_raw]
+                sub_d_scaled = [d * d_scale for d in sub_d_raw]
                 cum_d_m_climb = 0.0
                 cum_t_min_climb = 0.0
                 prev_alt_q = start_alt
                 for i, (level_alt, hold_dur) in enumerate(climb_pauses_in_range, start=1):
-                    sub_t_q, sub_d_q = self._climb(
-                        prev_alt_q, level_alt,
-                        wind_along_track=wind_along_q_climb,
-                    )
-                    sub_t_min = sub_t_q.m_as(ureg.minute)
-                    sub_d_nmi = sub_d_q.m_as(ureg.nautical_mile)
+                    sub_t_min = sub_t_scaled[i - 1]
+                    sub_d_nmi = sub_d_scaled[i - 1]
                     s_d_m = cum_d_m_climb
                     e_d_m = min(L_m, cum_d_m_climb + sub_d_nmi * nmi_to_m)
                     s_lat, s_lon, s_hdg = h_path.sample_at_distance(s_d_m)
@@ -2113,13 +2232,9 @@ class Aircraft:
                     cum_t_min_climb += hold_min
                     prev_alt_q = level_alt
                 # Final climb from last pause to cruise altitude.
-                if prev_alt_q < cruise_altitude:
-                    sub_t_q, sub_d_q = self._climb(
-                        prev_alt_q, cruise_altitude,
-                        wind_along_track=wind_along_q_climb,
-                    )
-                    sub_t_min = sub_t_q.m_as(ureg.minute)
-                    sub_d_nmi = sub_d_q.m_as(ureg.nautical_mile)
+                if final_climb_needed:
+                    sub_t_min = sub_t_scaled[-1]
+                    sub_d_nmi = sub_d_scaled[-1]
                     s_d_m = cum_d_m_climb
                     e_d_m = min(L_m, cum_d_m_climb + sub_d_nmi * nmi_to_m)
                     s_lat, s_lon, s_hdg = h_path.sample_at_distance(s_d_m)

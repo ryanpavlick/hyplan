@@ -32,6 +32,7 @@ def fit_schedules(
     max_schedule_points: int = 6,
     outlier_sigma: float = 2.5,
     service_ceiling_ft: float | None = None,
+    field_elevation_ft: float = 0.0,
 ) -> FitResult:
     """Fit speed schedules and vertical profiles from wind-corrected data.
 
@@ -47,6 +48,10 @@ def fit_schedules(
         service_ceiling_ft: Override service ceiling.  If *None*,
             inferred as max observed altitude rounded up to the nearest
             1000 ft.
+        field_elevation_ft: Field elevation of the operating airport
+            (ft MSL).  Offsets the MSL-referenced low-altitude window
+            used for the approach-speed estimate so it is
+            AGL-referenced when provided.
 
     Returns:
         :class:`FitResult` with fitted schedules, profiles, and metrics.
@@ -99,7 +104,9 @@ def fit_schedules(
         descent_vs = _default_vertical_profile(1000.0)
 
     # --- Approach speed ---
-    approach_speed_kt = _estimate_approach_speed(descent_df)
+    approach_speed_kt = _estimate_approach_speed(
+        descent_df, field_elevation_ft=field_elevation_ft,
+    )
 
     # --- Assemble metrics dict ---
     metrics = {}
@@ -420,12 +427,26 @@ def _compute_metrics(
     )
 
 
-def _estimate_approach_speed(descent_df: pd.DataFrame | None, ground_altitude_ft: float = 3000.0) -> float:
-    """Estimate approach speed from low-altitude descent observations."""
+def _estimate_approach_speed(
+    descent_df: pd.DataFrame | None,
+    ground_altitude_ft: float = 3000.0,
+    field_elevation_ft: float = 0.0,
+) -> float:
+    """Estimate approach speed from low-altitude descent observations.
+
+    Altitudes are ADS-B barometric (pressure) altitudes, MSL-referenced.
+    ``ground_altitude_ft`` selects the approach window; when
+    ``field_elevation_ft`` is nonzero the window is treated as AGL and
+    offset by the field elevation — otherwise a high-elevation airport
+    leaves the window empty and the estimate silently falls back to the
+    20 lowest observations.
+    """
     if descent_df is None or len(descent_df) == 0:
         return 130.0  # conservative default
 
-    low = descent_df[descent_df["altitude"] < ground_altitude_ft]
+    low = descent_df[
+        descent_df["altitude"] < ground_altitude_ft + field_elevation_ft
+    ]
     if len(low) == 0:
         # Fall back to lowest-altitude observations
         low = descent_df.nsmallest(20, "altitude")

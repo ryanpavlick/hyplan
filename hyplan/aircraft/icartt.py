@@ -260,21 +260,25 @@ def load_icartt(path: str | Path) -> pd.DataFrame:
     }
     # Add a global-sentinel fallback for older campaigns whose missing-
     # value line declares one sentinel but the data also contains other
-    # canonical NaN markers (LLOD/ULOD flags etc.).
+    # canonical NaN markers (LLOD/ULOD flags etc.).  Only applied to
+    # columns with a trivial scale factor: under integer storage a raw
+    # -999 in a scale-0.01 column (MMS on the WB-57) is a legitimate
+    # -9.99, and scaled columns already get their real sentinel from
+    # the per-column line-12 missing value.
     _GLOBAL_FALLBACK_SENTINELS = (-9999, -99999, -999999, -7777, -8888,
                                   -77777, -88888, -777777, -888888,
                                   -999, -9999999, -99999999)
     for col in columns[1:]:
         scale, missing = col_meta.get(col, (1.0, -9999.0))
         s = pd.to_numeric(raw[col], errors="coerce")
-        # Per-column declared missing first.
+        # Per-column declared missing first (raw, pre-scale units).
         if missing == missing:  # not NaN
             s = s.where(s != missing)
-        # Then the broader fallback set — only replace exact matches to
-        # avoid clobbering legitimate small-magnitude data.
-        s = s.where(~s.isin(_GLOBAL_FALLBACK_SENTINELS))
-        # Scale-factor.
-        if scale != 1.0:
+        if scale == 1.0:
+            # The broader fallback set — only replace exact matches to
+            # avoid clobbering legitimate small-magnitude data.
+            s = s.where(~s.isin(_GLOBAL_FALLBACK_SENTINELS))
+        else:
             s = s * scale
         raw[col] = s
 

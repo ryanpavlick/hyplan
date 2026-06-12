@@ -493,6 +493,38 @@ class TestScaleFactors:
         df = load_icartt(path)
         assert df["tas_kt"].iloc[0] == pytest.approx(173.3, rel=1e-2)
 
+    def test_scaled_column_sentinel_lookalike_survives(self, tmp_path):
+        # With integer storage and scale 0.01, a raw -999 is a
+        # legitimate -9.99 — the global fallback sentinels must not
+        # blank it.  The real sentinel for scaled columns comes from
+        # the per-column line-12 missing value.
+        rows = [
+            [0.0, 38.0, -77.0, 5000.0, -999, 250],
+            [1.0, 38.0, -77.0, 5000.0, -99999, -9999],
+        ]
+        path = _write_ict(
+            tmp_path,
+            columns=[
+                ("Latitude",         "deg"),
+                ("Longitude",        "deg"),
+                ("Pressure_Altitude","ft"),
+                ("Roll",             "deg"),
+                ("Pitch",            "deg"),
+            ],
+            data_rows=rows,
+            scale_factors=[1.0, 1.0, 1.0, 0.01, 1.0],
+            missing_values=[-9999, -9999, -9999, -99999, -99999],
+        )
+        df = load_icartt(path)
+        # Scaled roll: raw -999 survives as -9.99; raw -99999 (the
+        # declared per-column missing) is blanked.
+        assert df["roll_deg"].iloc[0] == pytest.approx(-9.99)
+        assert pd.isna(df["roll_deg"].iloc[1])
+        # Unscaled pitch: -9999 is not the declared missing value but
+        # is still blanked via the global fallback set.
+        assert df["pitch_deg"].iloc[0] == pytest.approx(250.0)
+        assert pd.isna(df["pitch_deg"].iloc[1])
+
     def test_default_scale_factor_one_does_not_alter_values(self, tmp_path):
         # Regression: when scale factors line is all 1.0 (typical),
         # the parser should produce the same values it did pre-patch.

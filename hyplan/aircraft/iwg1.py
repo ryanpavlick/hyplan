@@ -325,6 +325,16 @@ def split_iwg1_alltracks(
     for s, e in zip(starts, ends, strict=False):
         date = timestamps[s].strftime("%Y-%m-%d")
         out_path = dest / f"{tail_label}_{date}.txt"
+        # Two sorties on the same UTC date (e.g., morning + afternoon
+        # flights) would collide on the date-keyed name — disambiguate
+        # later sorties with their takeoff time.
+        if out_path in written:
+            takeoff = timestamps[s].strftime("%H%M")
+            out_path = dest / f"{tail_label}_{date}_{takeoff}.txt"
+            n = 2
+            while out_path in written:
+                out_path = dest / f"{tail_label}_{date}_{takeoff}_{n}.txt"
+                n += 1
         with out_path.open("w") as f:
             f.write(header)
             f.writelines(data_lines[s:e])

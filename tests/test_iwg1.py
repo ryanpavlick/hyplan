@@ -462,6 +462,16 @@ class TestSplitIwg1Alltracks:
             gap_threshold_hr=1.0,
         )
         assert len(written) == 2
+        # Both sorties fall on the same UTC date — the second must not
+        # clobber the first.
+        assert len(set(written)) == 2
+        assert all(p.exists() for p in written)
+        df_first = load_iwg1(written[0])
+        df_second = load_iwg1(written[1])
+        assert len(df_first) == 2
+        assert len(df_second) == 2
+        assert df_first["timestamp"].dt.hour.unique().tolist() == [8]
+        assert df_second["timestamp"].dt.hour.unique().tolist() == [10]
 
     def test_out_of_order_rows_are_sorted_into_correct_sortie(self, tmp_path):
         # Day-2 row appears physically first in the file; split should

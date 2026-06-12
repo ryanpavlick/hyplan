@@ -197,6 +197,34 @@ class TestLabelPhases:
         airborne = result[result["altitude"] >= 2000]
         assert "cruise" not in airborne["phase"].values
 
+    def test_field_elevation_offsets_ground_threshold(self):
+        """Taxi at a 5,500 ft-elevation airport sits at ~5,600 ft MSL —
+        labeled ground only when the threshold is AGL-referenced via
+        ``field_elevation_ft``."""
+        df = _make_cruise_df(n=20, altitude=5600, speed=30)
+        df["vertical_rate"] = 0.0
+        flight = _FakeFlight(df)
+        # Default thresholds are MSL-referenced: 5,600 ft MSL is above
+        # the 2,000 ft threshold, so nothing is labeled ground.
+        result_msl = label_phases(flight, ground_altitude_ft=2000)
+        assert not (result_msl["phase"] == "ground").any()
+        # With the field elevation supplied the threshold becomes AGL.
+        result_agl = label_phases(
+            flight, ground_altitude_ft=2000, field_elevation_ft=5500
+        )
+        assert (result_agl["phase"] == "ground").all()
+
+    def test_field_elevation_keeps_airborne_points_airborne(self):
+        """Cruise well above the AGL ground band at a high-elevation
+        field is not mislabeled ground."""
+        df = _make_cruise_df(n=50, altitude=12000)
+        df["vertical_rate"] = np.random.normal(0, 10, 50)
+        flight = _FakeFlight(df)
+        result = label_phases(
+            flight, ground_altitude_ft=2000, field_elevation_ft=5500
+        )
+        assert (result["phase"] == "cruise").all()
+
     def test_lstm_backend_raises(self):
         df = _make_cruise_df(n=10)
         flight = _FakeFlight(df)
@@ -397,6 +425,25 @@ class TestFitSchedules:
         df = self._make_airdata_df()
         result = fit_schedules(df)
         assert result.approach_speed_kt > 0
+
+    def test_approach_speed_field_elevation_offsets_window(self):
+        """Descent terminating at a 5,500 ft-elevation airport has no
+        points below 3,000 ft MSL; the AGL-referenced window selects
+        the genuinely low observations instead of the silent
+        nsmallest(20) fallback."""
+        from hyplan.aircraft.adsb.fitting import _estimate_approach_speed
+
+        df = pd.DataFrame({
+            "altitude": np.linspace(20000, 6000, 50),
+            "tas_kt": np.linspace(300, 120, 50),
+        })
+        v_agl = _estimate_approach_speed(df, field_elevation_ft=5500.0)
+        expected = float(df[df["altitude"] < 8500.0]["tas_kt"].median())
+        assert v_agl == pytest.approx(expected)
+        # MSL default falls back to the 20 lowest points — a wider,
+        # faster window.
+        v_msl = _estimate_approach_speed(df)
+        assert v_msl > v_agl
 
     def test_max_schedule_points_respected(self):
         df = self._make_airdata_df()
@@ -625,3 +672,56 @@ class TestRequireTraffic:
         path.write_bytes(b"")
         with pytest.raises(HyPlanRuntimeError, match="traffic"):
             load_flights(path)
+
+
+# ===================================================================
+# TestFitAircraftFromAdsb
+# ===================================================================
+
+
+class TestFitAircraftFromAdsb:
+    """End-to-end pipeline behavior with ingestion stubbed out (no
+    traffic dependency)."""
+
+    def _two_fake_flights(self):
+        df1 = _make_full_flight_df()
+        df2 = _make_full_flight_df()
+        # Second flight a day later under a different callsign so its
+        # presence in metadata is detectable.
+        df2["timestamp"] = df2["timestamp"] + np.timedelta64(1, "D")
+        df2["callsign"] = "TEST02"
+        return [_FakeFlight(df1), _FakeFlight(df2)]
+
+    def _fit(self, monkeypatch, **kwargs):
+        from hyplan.aircraft.adsb import pipeline
+
+        flights = self._two_fake_flights()
+        monkeypatch.setattr(
+            pipeline, "load_flights", lambda source, **kw: list(flights)
+        )
+        return pipeline.fit_aircraft_from_adsb(
+            "dummy.parquet",
+            aircraft_type="TestType",
+            tail_number="N123TT",
+            **kwargs,
+        )
+
+    def test_aggregate_false_metadata_covers_fitted_flight_only(
+        self, monkeypatch
+    ):
+        ac = self._fit(monkeypatch, aggregate=False)
+        record = ac.sources[0]
+        assert record.source_type == "adsb"
+        assert "1 flight(s)" in record.reference
+        assert "TEST02" not in record.notes
+
+    def test_aggregate_true_metadata_covers_all_flights(self, monkeypatch):
+        ac = self._fit(monkeypatch, aggregate=True)
+        record = ac.sources[0]
+        assert "2 flight(s)" in record.reference
+        assert "TEST02" in record.notes
+
+    def test_fitted_aircraft_is_calibrated(self, monkeypatch):
+        ac = self._fit(monkeypatch)
+        assert ac.calibration_status == "calibrated"
+        assert ac.sources[0].source_type == "adsb"

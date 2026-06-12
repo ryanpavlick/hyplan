@@ -1,5 +1,7 @@
 """Tests for hyplan.aircraft."""
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -341,9 +343,9 @@ class TestAircraftInstantiation:
     def test_gv(self):
         ac = NASA_GV()
         assert ac.aircraft_type == "Gulfstream V"
-        # Calibrated op-p99 of per-sortie peaks; not the brochure 51 kft
-        # envelope, which the science-mission profile rarely reaches.
-        assert ac.service_ceiling.m_as("feet") == pytest.approx(45000)
+        # Certificated ceiling; the bundled cruise schedule and climb
+        # profile are calibrated up to 51 kft (FL410-FL510 cruise band).
+        assert ac.service_ceiling.m_as("feet") == pytest.approx(51000)
 
     def test_nasa_c130(self):
         ac = NASA_C130()
@@ -567,6 +569,41 @@ class TestAircraftPerformance:
             _warnings.simplefilter("error")
             ac.time_to_cruise(wp1, wp2)
 
+    def test_service_ceiling_warning_climb_continues(self):
+        """A climbing leg whose cruise altitude exceeds the ceiling
+        emits exactly one warning and still returns a finite plan —
+        the lenient contract _hybrid_path documents."""
+        import warnings as _warnings
+
+        from hyplan.waypoint import Waypoint
+
+        ac = B200()
+        ceiling_ft = ac.service_ceiling.m_as(ureg.foot)
+        wp1 = Waypoint(34.0, -118.0, 90.0, altitude_msl=5000 * ureg.foot)
+        wp2 = Waypoint(
+            36.0, -114.0, 90.0,
+            altitude_msl=(ceiling_ft + 5000) * ureg.foot,
+        )
+        with _warnings.catch_warnings(record=True) as rec:
+            _warnings.simplefilter("always")
+            info = ac.time_to_cruise(wp1, wp2)
+        ceiling_warnings = [
+            w for w in rec if "service ceiling" in str(w.message)
+        ]
+        assert len(ceiling_warnings) == 1
+        total_min = info["total_time"].m_as(ureg.minute)
+        assert np.isfinite(total_min)
+        assert total_min > 0
+
+    def test_direct_climb_above_ceiling_raises(self):
+        """Direct _climb / step_climb calls keep the strict contract."""
+        ac = B200()
+        above = ac.service_ceiling + 5000 * ureg.foot
+        with pytest.raises(HyPlanValueError, match="service ceiling"):
+            ac._climb(0 * ureg.foot, above)
+        with pytest.raises(HyPlanValueError, match="service ceiling"):
+            ac.step_climb(0 * ureg.foot, above, pauses=[])
+
     def test_endurance_exists_and_reasonable(self):
         ac = B200()
         endurance_hrs = ac.endurance.m_as("hour")
@@ -630,6 +667,88 @@ class TestClimbAndDescend:
         t1, _ = ac._climb(ureg.Quantity(0, "feet"), ureg.Quantity(10000, "feet"))
         t2, _ = ac._climb(ureg.Quantity(0, "feet"), ureg.Quantity(20000, "feet"))
         assert t2.magnitude > t1.magnitude
+
+
+class TestTwoPointClimbIntegration:
+    """Two-point climb profiles whose breakpoints do not span
+    [0 ft, service_ceiling] — the shape fit_aircraft_from_adsb produces
+    (bin-center breakpoints).  Outside the breakpoint band rate_at
+    clamps, so those portions integrate as constant-rate segments."""
+
+    def _adsb_style_aircraft(self):
+        ac = B200()
+        ac.climb_profile = VerticalProfile(points=[
+            (2000 * ureg.feet, 2000 * ureg.feet / ureg.minute),
+            (20000 * ureg.feet, 500 * ureg.feet / ureg.minute),
+        ])
+        ac.service_ceiling = ureg.Quantity(30000, "feet")
+        return ac
+
+    def _numerical_climb_minutes(self, ac, start_ft: float, end_ft: float) -> float:
+        alts = np.linspace(start_ft, end_ft, 3001)
+        rates = np.array([
+            ac.climb_profile.rate_at(a * ureg.feet).m_as(ureg.feet / ureg.minute)
+            for a in alts
+        ])
+        return float(np.trapezoid(1.0 / rates, alts))
+
+    def test_offset_breakpoints_match_numerical_integration(self):
+        ac = self._adsb_style_aircraft()
+        time, _ = ac._climb(
+            ureg.Quantity(0, "feet"), ureg.Quantity(30000, "feet")
+        )
+        expected = self._numerical_climb_minutes(ac, 0.0, 30000.0)
+        assert time.m_as(ureg.minute) == pytest.approx(expected, rel=0.005)
+
+    def test_partial_range_matches_numerical_integration(self):
+        ac = self._adsb_style_aircraft()
+        time, _ = ac._climb(
+            ureg.Quantity(5000, "feet"), ureg.Quantity(25000, "feet")
+        )
+        expected = self._numerical_climb_minutes(ac, 5000.0, 25000.0)
+        assert time.m_as(ureg.minute) == pytest.approx(expected, rel=0.005)
+
+    def test_full_span_breakpoints_unchanged_vs_legacy_formula(self):
+        # Bundled two-point profiles span [0 ft, ceiling]; there the
+        # piecewise integral collapses to the legacy closed form.
+        ac = NASA_GIV()
+        assert ac.climb_profile._mode == "two_point"
+        time, _ = ac._climb(
+            ureg.Quantity(0, "feet"), ureg.Quantity(40000, "feet")
+        )
+        roc_sl = ac.climb_profile.sea_level_rate
+        roc_ceil = ac.climb_profile.ceiling_rate
+        roc_start = ac.climb_profile.rate_at(ureg.Quantity(0, "feet"))
+        roc_end = ac.climb_profile.rate_at(ureg.Quantity(40000, "feet"))
+        legacy = (
+            ac.service_ceiling / (roc_sl - roc_ceil)
+            * np.log(roc_start / roc_end)
+        ).to(ureg.minute)
+        assert time.m_as(ureg.minute) == pytest.approx(
+            legacy.m_as(ureg.minute), rel=1e-9,
+        )
+
+    def test_climb_altitude_profile_consistent_with_climb(self):
+        ac = self._adsb_style_aircraft()
+        times, altitudes = ac.climb_altitude_profile(
+            ureg.Quantity(0, "feet"), ureg.Quantity(30000, "feet"),
+            n_points=400,
+        )
+        time, _ = ac._climb(
+            ureg.Quantity(0, "feet"), ureg.Quantity(30000, "feet")
+        )
+        assert times[-1] == pytest.approx(time.m_as(ureg.minute), rel=1e-9)
+        assert altitudes[0] == pytest.approx(0.0, abs=1e-9)
+        assert altitudes[-1] == pytest.approx(30000.0, abs=1e-6)
+        assert np.all(np.diff(altitudes) > 0)
+        # Piecewise boundaries: 2000 ft after 1 min of constant-rate
+        # climb; 20000 ft after the 18000/1500 * ln(2000/500) exponential
+        # segment on top of that.
+        assert np.interp(1.0, times, altitudes) == pytest.approx(2000.0, abs=5.0)
+        t_top_of_band = 1.0 + 12.0 * np.log(4.0)
+        assert np.interp(t_top_of_band, times, altitudes) == pytest.approx(
+            20000.0, abs=5.0,
+        )
 
 
 class TestStepClimb:
@@ -1311,6 +1430,17 @@ class TestGVPerformance:
         assert time.m_as("minute") > 0
         assert dist.m_as("nautical_mile") > 0
 
+    def test_climb_to_fl490_within_ceiling(self):
+        """The GV's calibrated data extends to 51 kft, so FL490 climbs
+        are in-envelope and must not raise."""
+        ac = NASA_GV()
+        time, dist = ac._climb(
+            ureg.Quantity(0, "feet"), ureg.Quantity(49000, "feet")
+        )
+        assert np.isfinite(time.m_as("minute"))
+        assert time.m_as("minute") > 0
+        assert dist.m_as("nautical_mile") > 0
+
     def test_descend_time_positive(self):
         ac = NASA_GV()
         time, dist = ac._descend(
@@ -1698,6 +1828,43 @@ class TestClimbDescentWind:
         assert d.m_as(ureg.nautical_mile) == 0.0
         assert t.m_as(ureg.minute) > 0
 
+    def test_climb_with_wind_field_above_ceiling_warns_once(self):
+        """Wind-aware climb above the service ceiling follows the same
+        lenient contract as _hybrid_path: exactly one warning, finite
+        best-effort results instead of a raise."""
+        import datetime as _dt
+        import warnings as _warnings
+
+        from hyplan.aircraft.wind_path import climb_with_wind_field
+        from hyplan.winds.simple import ConstantWindField
+
+        ac = B200()
+        above = ac.service_ceiling + 5000 * ureg.foot
+        wind = ConstantWindField(20 * ureg.knot, wind_from_deg=270.0)
+        with _warnings.catch_warnings(record=True) as rec:
+            _warnings.simplefilter("always")
+            t, d, w = climb_with_wind_field(
+                ac,
+                start_lat=34.0,
+                start_lon=-118.0,
+                start_alt=5000 * ureg.foot,
+                cruise_alt=above,
+                track_deg=90.0,
+                t_anchor=_dt.datetime(
+                    2026, 6, 1, 18, 0, tzinfo=_dt.timezone.utc,
+                ),
+                wind_source=wind,
+            )
+        ceiling_warnings = [
+            rw for rw in rec if "service ceiling" in str(rw.message)
+        ]
+        assert len(ceiling_warnings) == 1
+        assert np.isfinite(t.m_as(ureg.minute))
+        assert t.m_as(ureg.minute) > 0
+        assert np.isfinite(d.m_as(ureg.nautical_mile))
+        assert d.m_as(ureg.nautical_mile) > 0
+        assert np.isfinite(w.m_as(ureg.knot))
+
 
 class TestHybridPathWind:
     """End-to-end: _hybrid_path projects wind onto great-circle bearing."""
@@ -1793,24 +1960,20 @@ class TestClimbPlan:
             for k in info["phases"]
             if k.startswith("climb_") or k == "climb"
         )
-        # Tolerance is generous because step_climb integrates the full
-        # [start, end] altitude range as a single _climb call (so its
-        # distance matches the no-ClimbPlan baseline), while the
-        # planner emits per-sub-segment phases via _climb on each
-        # piece — those time integrations differ by ~0.01 min from
-        # trapezoidal sampling.
-        assert climb_total_min == pytest.approx(ref_t_min, rel=1e-3)
+        # The planner renormalizes per-sub-segment _climb results to
+        # the authoritative step_climb totals, so the sums match to
+        # float precision.
+        assert climb_total_min == pytest.approx(ref_t_min, abs=1e-6)
 
-        # Forward climb distance (climb_1 + climb_2; pause is zero).
-        # The planner's per-sub-segment _climb calls each use their
-        # own midpoint TAS, so the sum is larger than step_climb's
-        # single-call midpoint-TAS distance.  Tolerance reflects that.
+        # Forward climb distance (climb_1 + climb_2; pause is zero)
+        # sums exactly to step_climb's single-call distance — the same
+        # figure _hybrid_path uses to size the cruise segment.
         climb_dist_nmi = sum(
             info["phases"][k]["distance"].m_as(ureg.nautical_mile)
             for k in info["phases"]
             if k.startswith("climb_") and "pause" not in k
         )
-        assert climb_dist_nmi == pytest.approx(ref_d_nmi, rel=0.15)
+        assert climb_dist_nmi == pytest.approx(ref_d_nmi, abs=1e-6)
 
     def test_pauses_render_as_loiter(self):
         """The pause sub-phase carries segment_type='loiter' and
@@ -1874,3 +2037,58 @@ class TestClimbPlan:
         # 25-minute hold dominates; climb-segment durations are very
         # close to one another so net increase ≈ 25 min.
         assert delta_min == pytest.approx(25.0, abs=2.0)
+
+    def test_pause_at_exact_cruise_altitude_kept(self):
+        """Boundary rule: a pause exactly at the cruise altitude is a
+        top-of-climb hold — counted in the step_climb total AND
+        emitted as a climb_pause phase, so timelines stay consistent."""
+        from hyplan.aircraft import ClimbPlan
+        ac = NASA_ER2()
+        start = self._wp(34.7, -118.0, 0)
+        end = self._wp(38.0, -114.0, 60000)
+        plan = ClimbPlan(pauses=[(60000 * ureg.feet, 10 * ureg.minute)])
+        info = ac._hybrid_path(start, end, phase="climb", climb_plan=plan)
+        assert "climb_pause_1" in info["phases"]
+        no_plan = ac._hybrid_path(start, end, phase="climb")
+        delta = (info["total_time"] - no_plan["total_time"]).m_as(ureg.minute)
+        assert delta == pytest.approx(10.0, abs=1e-6)
+
+    def test_staged_climb_phases_are_contiguous(self):
+        """ER-2 takeoff with the bundled climb plan: phase timelines
+        have no gaps or overlaps, and the climb sub-phase distances
+        sum to the climb distance used to size the cruise segment."""
+        from hyplan.airports import Airport
+        ac = NASA_ER2()
+        kcos = Airport("KCOS")
+        # Long leg so the climb fits horizontally and the staged
+        # branch emits explicit climb_<i> / climb_pause_<i> phases.
+        wp = self._wp(36.0, -100.0, 65000)
+        info = ac.time_to_takeoff(kcos, wp)  # climb_plan="auto"
+        phases = info["phases"]
+        assert any(k.startswith("climb_pause") for k in phases)
+
+        ordered = sorted(
+            phases.values(), key=lambda p: p["start_time"].m_as(ureg.minute)
+        )
+        assert ordered[0]["start_time"].m_as(ureg.minute) == pytest.approx(
+            0.0, abs=1e-6,
+        )
+        for prev, cur in itertools.pairwise(ordered):
+            assert cur["start_time"].m_as(ureg.minute) == pytest.approx(
+                prev["end_time"].m_as(ureg.minute), abs=1e-6,
+            )
+        assert ordered[-1]["end_time"].m_as(ureg.minute) == pytest.approx(
+            info["total_time"].m_as(ureg.minute), abs=1e-6,
+        )
+
+        # Sub-phase distances sum to the full-range climb distance
+        # that sized the cruise segment.
+        ref_d_nmi = ac._climb(
+            kcos.elevation, 65000 * ureg.feet,
+        )[1].m_as(ureg.nautical_mile)
+        climb_dist_nmi = sum(
+            p["distance"].m_as(ureg.nautical_mile)
+            for k, p in phases.items()
+            if k.startswith("climb_") and "pause" not in k
+        )
+        assert climb_dist_nmi == pytest.approx(ref_d_nmi, abs=1e-6)
