@@ -1,9 +1,34 @@
 """Shared fixtures for HyPlan tests."""
 
+import os
+import tempfile
+
 import pytest
 
 from hyplan.flight_line import FlightLine
 from hyplan.units import ureg
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _hyplan_cache_root():
+    """Keep all HyPlan caches out of the real home directory.
+
+    ``get_cache_root()`` defaults to ``~/.cache/hyplan``; tests must
+    never write there.  A stable per-user temp location (rather than a
+    fresh tmp_path) is used so large downloads (airports.csv, DEM
+    tiles) are still reused across test sessions.  An externally set
+    HYPLAN_CACHE_ROOT is respected.
+    """
+    if os.environ.get("HYPLAN_CACHE_ROOT"):
+        yield
+        return
+    root = os.path.join(tempfile.gettempdir(), "hyplan-test-cache")
+    os.makedirs(root, exist_ok=True)
+    os.environ["HYPLAN_CACHE_ROOT"] = root
+    try:
+        yield
+    finally:
+        os.environ.pop("HYPLAN_CACHE_ROOT", None)
 
 
 @pytest.fixture

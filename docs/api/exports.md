@@ -14,4 +14,5 @@ Export flight plans to various pilot, archival, and briefing formats.
 .. autofunction:: hyplan.exports.to_er2_csv
 .. autofunction:: hyplan.exports.to_icartt
 .. autofunction:: hyplan.exports.to_txt
+.. autofunction:: hyplan.exports.to_trackair
 ```

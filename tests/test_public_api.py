@@ -16,6 +16,9 @@ installed.
 from __future__ import annotations
 
 import importlib
+import pkgutil
+import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -95,3 +98,52 @@ def test_no_duplicate_names_in_all() -> None:
         if dupes:
             failures.append(f"{module_name}.__all__ duplicates: {dupes}")
     assert not failures, "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
+# Lazy top-level imports (PEP 562)
+# ---------------------------------------------------------------------------
+
+def test_import_hyplan_does_not_pull_heavy_dependencies() -> None:
+    """``import hyplan`` must stay lazy — no plotting/GIS stack at import.
+
+    Runs in a fresh subprocess so this test is immune to whatever the
+    current process has already imported.
+    """
+    code = (
+        "import sys\n"
+        "import hyplan\n"
+        "heavy = [m for m in ('matplotlib', 'folium', 'geopandas',\n"
+        "                     'rasterio', 'networkx', 'scipy', 'simplekml')\n"
+        "         if m in sys.modules]\n"
+        "assert not heavy, f'import hyplan eagerly imported {heavy}'\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_all_names_do_not_shadow_submodules() -> None:
+    """No top-level ``__all__`` name may collide with a hyplan submodule.
+
+    The lazy ``__getattr__`` resolves exported names from a name->module
+    map; a name that is also a submodule would fight the import system
+    over the package attribute.
+    """
+    import hyplan
+
+    submodules = {m.name for m in pkgutil.iter_modules(hyplan.__path__)}
+    collisions = submodules & set(hyplan.__all__)
+    assert not collisions, (
+        f"__all__ names shadow submodules: {sorted(collisions)}"
+    )
+
+
+def test_map_isochrone_is_alias_for_planning_plot_isochrone() -> None:
+    """``hyplan.map_isochrone`` is the interactive (Folium) isochrone
+    plotter under the ``map_*`` naming convention."""
+    import hyplan
+    from hyplan.planning.isochrone import plot_isochrone
+
+    assert hyplan.map_isochrone is plot_isochrone
