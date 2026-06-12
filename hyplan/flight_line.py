@@ -24,7 +24,7 @@ from pint import Quantity
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
 from .exceptions import HyPlanTypeError, HyPlanValueError
-from .geometry import wrap_to_180
+from .geometry import geodesic_midpoint, wrap_to_180
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
 
@@ -47,6 +47,10 @@ class FlightLine:
     Altitude is stored as MSL (above mean sea level), which is the standard
     aviation reference. Sensor calculations that depend on height above ground
     (AGL) must account for terrain elevation separately.
+
+    The constructor stores copies of the supplied waypoints, so a FlightLine
+    is fully value-like: mutating the line (e.g. via the ``altitude_msl``
+    setter) never writes through to caller-owned Waypoint objects.
     """
     def __init__(
         self,
@@ -59,11 +63,34 @@ class FlightLine:
         if not is_waypoint(waypoint1) or not is_waypoint(waypoint2):
             raise HyPlanTypeError("waypoint1 and waypoint2 must be Waypoint objects.")
 
-        self._waypoint1 = waypoint1
-        self._waypoint2 = waypoint2
+        self._waypoint1 = _copy_waypoint(waypoint1)
+        self._waypoint2 = _copy_waypoint(waypoint2)
         self.site_name = site_name
         self.site_description = site_description
         self.investigator = investigator
+
+    def __repr__(self) -> str:
+        alt = (
+            f"{self.altitude_msl.m_as('meter'):.0f} m"
+            if self.altitude_msl is not None else None
+        )
+        return (
+            f"FlightLine(site_name={self.site_name!r}, "
+            f"start=({self.lat1:.6f}, {self.lon1:.6f}), "
+            f"end=({self.lat2:.6f}, {self.lon2:.6f}), "
+            f"az12={float(self.az12.magnitude):.1f}, altitude_msl={alt})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FlightLine):
+            return NotImplemented
+        return (
+            self._waypoint1 == other._waypoint1
+            and self._waypoint2 == other._waypoint2
+            and self.site_name == other.site_name
+            and self.site_description == other.site_description
+            and self.investigator == other.investigator
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -135,7 +162,7 @@ class FlightLine:
         return self._waypoint1.altitude_msl
 
     @altitude_msl.setter
-    def altitude_msl(self, value: Quantity) -> None:
+    def altitude_msl(self, value: Quantity | None) -> None:
         """Set altitude on both waypoints."""
         validated = self._validate_altitude(value)
         self._waypoint1.altitude_msl = validated
@@ -194,7 +221,9 @@ class FlightLine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _validate_altitude(altitude: Quantity) -> Quantity:
+    def _validate_altitude(altitude: Quantity | None) -> Quantity | None:
+        if altitude is None:
+            return None
         if not isinstance(altitude, Quantity):
             altitude = ureg.Quantity(altitude, "meter")
         else:
@@ -566,10 +595,11 @@ class FlightLine:
 
         offset_north_m = offset_north.m_as("meter")
         offset_east_m = offset_east.m_as("meter")
+        alt_m = self.altitude_msl.magnitude if self.altitude_msl is not None else 0.0
 
         def compute_offset(lat: float, lon: float, north: float, east: float) -> tuple[float, float]:
             new_lat, new_lon, _ = pymap3d.ned2geodetic(
-                north, east, 0, lat, lon, self.altitude_msl.magnitude
+                north, east, 0, lat, lon, alt_m
             )
             return float(new_lat), float(wrap_to_180(float(new_lon)))
 
@@ -660,22 +690,22 @@ class FlightLine:
         if not isinstance(angle, (int, float)):
             raise HyPlanValueError(f"Angle must be a number. Received: {angle}")
 
-        angle_rad = np.radians(angle)
-        midpoint = self.geometry.interpolate(0.5, normalized=True)
+        mid_lat, mid_lon = geodesic_midpoint(self.lat1, self.lon1, self.lat2, self.lon2)
+        half_length_m = self.length.m_as("meter") / 2.0
+        _, az_mid = pymap3d.vincenty.vdist(mid_lat, mid_lon, self.lat2, self.lon2)
+        new_az = (float(az_mid) - float(angle)) % 360.0
 
-        def rotate_point(x: float, y: float, center_x: float, center_y: float, angle_radians: float) -> tuple[float, float]:
-            delta_x = x - center_x
-            delta_y = y - center_y
-            rotated_x = delta_x * np.cos(angle_radians) - delta_y * np.sin(angle_radians) + center_x
-            rotated_y = delta_x * np.sin(angle_radians) + delta_y * np.cos(angle_radians) + center_y
-            return rotated_x, rotated_y
+        new_lat1, new_lon1 = pymap3d.vincenty.vreckon(
+            mid_lat, mid_lon, half_length_m, (new_az + 180.0) % 360.0
+        )
+        new_lat2, new_lon2 = pymap3d.vincenty.vreckon(mid_lat, mid_lon, half_length_m, new_az)
 
-        rotated_coords = [
-            rotate_point(x, y, midpoint.x, midpoint.y, angle_rad)
-            for x, y in self.geometry.coords
-        ]
+        new_lon1, new_lon2 = float(wrap_to_180(new_lon1)), float(wrap_to_180(new_lon2))
 
-        return self._from_geometry(LineString(rotated_coords))
+        rotated_geometry = LineString([
+            (new_lon1, float(new_lat1)), (new_lon2, float(new_lat2)),
+        ])
+        return self._from_geometry(rotated_geometry)
 
     def split_by_length(self, max_length: Quantity, gap_length: Quantity | None = None) -> list[FlightLine]:
         """
@@ -708,8 +738,14 @@ class FlightLine:
             current_segment_length_m = min(max_length_m, remaining_length_m)
             remaining_length_m -= current_segment_length_m
 
+            # Recompute the forward azimuth toward the original endpoint at
+            # each step so segments follow the parent geodesic instead of
+            # drifting off along the initial azimuth.
+            _, az_to_end = pymap3d.vincenty.vdist(
+                current_start_lat, current_start_lon, self.lat2, self.lon2
+            )
             end_lat, end_lon = pymap3d.vincenty.vreckon(
-                current_start_lat, current_start_lon, current_segment_length_m, self.az12.magnitude
+                current_start_lat, current_start_lon, current_segment_length_m, float(az_to_end)
             )
             end_lon = wrap_to_180(end_lon)
 
@@ -720,8 +756,11 @@ class FlightLine:
 
             if gap_length and remaining_length_m > gap_length_m:
                 remaining_length_m -= gap_length_m
+                _, az_to_end = pymap3d.vincenty.vdist(
+                    float(end_lat), float(end_lon), self.lat2, self.lon2
+                )
                 current_start_lat, current_start_lon = pymap3d.vincenty.vreckon(
-                    end_lat, end_lon, gap_length_m, self.az12.magnitude
+                    end_lat, end_lon, gap_length_m, float(az_to_end)
                 )
                 current_start_lon = float(wrap_to_180(current_start_lon))
             elif gap_length:
@@ -750,7 +789,7 @@ class FlightLine:
             "lat2": self.lat2,
             "lon2": self.lon2,
             "length": self.length.magnitude,
-            "altitude_msl": self.altitude_msl.magnitude,
+            "altitude_msl": self.altitude_msl.magnitude if self.altitude_msl is not None else None,
             "site_name": self.site_name,
             "site_description": self.site_description,
             "investigator": self.investigator,
@@ -771,12 +810,26 @@ class FlightLine:
                 "coordinates": list(self.geometry.coords),
             },
             "properties": {
-                "altitude_msl": self.altitude_msl.magnitude,
+                "altitude_msl": self.altitude_msl.magnitude if self.altitude_msl is not None else None,
                 "site_name": self.site_name,
                 "site_description": self.site_description,
                 "investigator": self.investigator,
             },
         }
+
+
+def _copy_waypoint(wp: Waypoint) -> Waypoint:
+    """Copy a Waypoint (or duck-typed equivalent) into a fresh Waypoint."""
+    return Waypoint(
+        latitude=wp.latitude,
+        longitude=wp.longitude,
+        heading=wp.heading,
+        altitude_msl=wp.altitude_msl,
+        name=getattr(wp, "name", None),
+        speed=getattr(wp, "speed", None),
+        delay=getattr(wp, "delay", None),
+        segment_type=getattr(wp, "segment_type", None),
+    )
 
 
 def _validate_linestring(geometry: LineString) -> None:

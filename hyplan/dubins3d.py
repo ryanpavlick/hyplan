@@ -54,7 +54,7 @@ from pint import Quantity
 from shapely.geometry import LineString
 from shapely.ops import transform
 
-from .exceptions import HyPlanTypeError, HyPlanValueError
+from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 from .geometry import get_utm_transforms
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
@@ -119,14 +119,10 @@ class _Dubins2D:
             paths.append(self._RLR(a, b, d, sa, ca, sb, cb))
             paths.append(self._LRL(a, b, d, sa, ca, sb, cb))
 
-        # Handle degenerate case (same position, same heading)
+        # Handle degenerate case (same position, same heading):
+        # 1e-3 m position tolerance, 1e-6 rad heading tolerance.
         dist_2d = max(abs(self.qi[0] - self.qf[0]), abs(self.qi[1] - self.qf[1]))
-        if (
-            d < self.rhomin * 1e-5
-            and abs(a) < self.rhomin * 1e-5
-            and abs(b) < self.rhomin * 1e-5
-            and dist_2d < self.rhomin * 1e-5
-        ):
+        if dist_2d < 1e-3 and abs(a) < 1e-6 and abs(b) < 1e-6:
             paths = [_DubinsSegment(0, 2 * math.pi, 0, 2 * math.pi * self.rhomin, "RRR")]
 
         paths.sort(key=lambda x: x.length)
@@ -403,8 +399,10 @@ class _TrochoidDubins2D:
         # cases — where the proper trochoid and air-drift converge to
         # numerically equivalent paths — pick the rigorous solver.
         _MODE_RANK = {"ccc_trochoid": 0, "ccc_air_drift": 1, "bsb": 2}
-        candidates: list[tuple[float, str, Any]] = [(bsb_total_time, "bsb", None)]
-        if ccc_tro_sol is not None:
+        candidates: list[tuple[float, str, Any]] = []
+        if math.isfinite(bsb_total_time):
+            candidates.append((bsb_total_time, "bsb", None))
+        if ccc_tro_sol is not None and math.isfinite(ccc_tro_sol["total_time"]):
             candidates.append(
                 (ccc_tro_sol["total_time"], "ccc_trochoid", ccc_tro_sol),
             )
@@ -412,11 +410,17 @@ class _TrochoidDubins2D:
             candidates.append(
                 (ccc_air_time, "ccc_air_drift", ccc_air_solver),
             )
+        if not candidates:
+            raise HyPlanRuntimeError(
+                "No feasible trochoidal Dubins path found: the BSB solve "
+                "failed and no valid CCC candidate exists for this geometry."
+            )
         candidates.sort(key=lambda c: (round(c[0], 3), _MODE_RANK[c[1]]))
         best_time, best_mode, best_data = candidates[0]
 
         self._mode = best_mode
         self._total_time = best_time
+        self._ground_length: float | None = None
         air_len = best_time * airspeed
 
         if best_mode == "bsb":
@@ -447,14 +451,18 @@ class _TrochoidDubins2D:
 
     @property
     def ground_length(self) -> float:
-        """Approximate ground-track length in meters."""
+        """Approximate ground-track length in meters (cached after first access)."""
+        if self._ground_length is not None:
+            return self._ground_length
         if self._total_time <= 0:
-            return 0.0
+            self._ground_length = 0.0
+            return self._ground_length
         n = 50
         pts = np.array([self.get_coordinates_at(
             i * self._total_time / (n - 1)) for i in range(n)])
         diffs = np.diff(pts[:, :2], axis=0)
-        return float(np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)))
+        self._ground_length = float(np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)))
+        return self._ground_length
 
     def get_coordinates_at(self, time_offset: float) -> np.ndarray[Any, np.dtype[Any]]:
         """Get ground-frame (x, y, heading) at a given time offset.
@@ -554,6 +562,10 @@ class DubinsPath2D:
             raise HyPlanTypeError(
                 "speed must be float (m/s) or pint Quantity with speed units"
             )
+        if self._speed_mps <= 0:
+            raise HyPlanValueError(
+                f"speed must be positive; got {speed}"
+            )
 
         self._bank_angle_deg = float(bank_angle)
         self._wind = wind
@@ -583,9 +595,7 @@ class DubinsPath2D:
         if wind is None:
             self._solver = _Dubins2D(qi, qf, self._rhomin)
             self._length_m = float(self._solver.maneuver.length)
-            self._duration_s = (
-                self._length_m / self._speed_mps if self._speed_mps > 0 else 0.0
-            )
+            self._duration_s = self._length_m / self._speed_mps
         else:
             self._solver = _TrochoidDubins2D(
                 qi, qf, self._rhomin, self._speed_mps, wind[0], wind[1],
@@ -605,9 +615,8 @@ class DubinsPath2D:
     def _sample_points(self, n: int) -> np.ndarray[Any, np.dtype[Any]]:
         """Return (n, 3) array of (lat, lon, heading_deg) along the path."""
         if self._length_m <= 0:
-            return np.array([[
-                self.start.latitude, self.start.longitude, self.start.heading,
-            ]])
+            point = [self.start.latitude, self.start.longitude, self.start.heading]
+            return np.array([point, point])
         if self._wind is None:
             offsets = np.linspace(0.0, self._length_m, n)
             samples = [self._solver.get_coordinates_at(float(d)) for d in offsets]
@@ -658,8 +667,7 @@ class DubinsPath2D:
         if self._wind is None:
             sample = self._solver.get_coordinates_at(d_m)
         else:
-            t = d_m / self._speed_mps if self._speed_mps > 0 else 0.0
-            sample = self._solver.get_coordinates_at(t)
+            sample = self._solver.get_coordinates_at(d_m / self._speed_mps)
         x, y, heading_math = sample
         lon, lat = self._from_utm(float(x), float(y))
         heading_geo = (90.0 - math.degrees(float(heading_math))) % 360.0
@@ -697,8 +705,13 @@ class DubinsPath2D:
             return LineString([(lon, lat), (lon, lat)])
         n = max(int(n_samples), 2)
         distances = np.linspace(ds_m, de_m, n)
-        coords = []
-        for d in distances:
-            lat, lon, _ = self.sample_at_distance(float(d))
-            coords.append((lon, lat))
-        return LineString(coords)
+        if self._wind is None:
+            samples = [self._solver.get_coordinates_at(float(d)) for d in distances]
+        else:
+            samples = [
+                self._solver.get_coordinates_at(float(d) / self._speed_mps)
+                for d in distances
+            ]
+        utm = np.array([(s[0], s[1]) for s in samples])
+        lons, lats = self._from_utm(utm[:, 0], utm[:, 1])
+        return LineString(np.column_stack([lons, lats]))

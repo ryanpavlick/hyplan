@@ -89,6 +89,31 @@ class Waypoint:
         self.delay = _validate_quantity(delay, '[time]', ureg.second, 'delay')
         self.segment_type = segment_type
 
+    def __repr__(self) -> str:
+        alt = (
+            f"{self.altitude_msl.m_as(ureg.meter):.0f} m"
+            if self.altitude_msl is not None else None
+        )
+        return (
+            f"Waypoint(name={self.name!r}, latitude={self.latitude:.6f}, "
+            f"longitude={self.longitude:.6f}, heading={self.heading:.1f}, "
+            f"altitude_msl={alt})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Waypoint):
+            return NotImplemented
+        return (
+            self.latitude == other.latitude
+            and self.longitude == other.longitude
+            and self.heading == other.heading
+            and _optional_quantity_eq(self.altitude_msl, other.altitude_msl)
+            and self.name == other.name
+            and _optional_quantity_eq(self.speed, other.speed)
+            and _optional_quantity_eq(self.delay, other.delay)
+            and self.segment_type == other.segment_type
+        )
+
     def offset_north_east(
         self,
         offset_north: Quantity | float,
@@ -187,7 +212,7 @@ class Waypoint:
         anchor: Waypoint | tuple[float, float],
         *,
         bearing: float,
-        distance: Quantity | float,
+        distance: Quantity,
         heading: float | None = None,
         altitude_msl: Quantity | float | None = None,
         name: str | None = None,
@@ -209,10 +234,12 @@ class Waypoint:
             bearing: Initial great-circle bearing from ``anchor``,
                 in degrees true (clockwise from north).  Wrapped to
                 ``[0, 360)``.
-            distance: Geodesic distance along that bearing.  ``float``
-                values are interpreted as nautical miles (matches the
-                common flight-planning convention); pass a pint
-                :class:`Quantity` for other units.
+            distance: Geodesic distance along that bearing, as a pint
+                :class:`Quantity` with length units — e.g.
+                ``200 * ureg.nautical_mile`` or ``5 * ureg.km``.  Bare
+                numbers are rejected: the rest of the HyPlan API reads
+                them as meters while flight-planning shorthand reads
+                them as nautical miles, so an explicit unit is required.
             heading: Heading of the new waypoint in degrees true.
                 If ``None`` (default), copies ``bearing`` so the
                 waypoint faces the direction it was offset toward —
@@ -229,12 +256,14 @@ class Waypoint:
             A new Waypoint at the computed destination.
 
         Examples:
+            >>> from hyplan.units import ureg
             >>> edw = Waypoint(latitude=34.92, longitude=-117.87,
             ...                heading=0, name="EDW")
-            >>> wp_a = Waypoint.relative_to(edw, bearing=90, distance=200)
+            >>> wp_a = Waypoint.relative_to(
+            ...     edw, bearing=90, distance=200 * ureg.nautical_mile,
+            ... )
             >>> # wp_a is 200 nmi true east of EDW
 
-            >>> from hyplan.units import ureg
             >>> wp_b = Waypoint.relative_to(
             ...     (34.92, -117.87),
             ...     bearing=180,
@@ -248,12 +277,14 @@ class Waypoint:
         else:
             anchor_lat, anchor_lon = float(anchor[0]), float(anchor[1])
 
-        # Distance: float → nautical miles (planning convention);
-        # Quantity → m_as(meter).
-        if isinstance(distance, (int, float)):
-            distance_m = float(distance) * 1852.0
-        else:
-            distance_m = distance.m_as(ureg.meter)
+        if not isinstance(distance, Quantity) or not distance.check("[length]"):
+            raise HyPlanValueError(
+                "distance must be a pint Quantity with length units, e.g. "
+                "200 * ureg.nautical_mile or 5 * ureg.km. Bare numbers are "
+                "ambiguous (meters elsewhere in HyPlan vs. nautical miles in "
+                "flight-planning shorthand) and are not accepted."
+            )
+        distance_m = distance.m_as(ureg.meter)
 
         bearing_deg = float(wrap_to_360(float(bearing)))
 
@@ -275,6 +306,13 @@ class Waypoint:
             delay=delay,
             segment_type=segment_type,
         )
+
+
+def _optional_quantity_eq(a: Quantity | None, b: Quantity | None) -> bool:
+    """Compare two optional pint Quantities (unit-aware; None only equals None)."""
+    if a is None or b is None:
+        return a is b
+    return bool(a == b)
 
 
 def is_waypoint(obj: Any) -> TypeGuard[Waypoint]:

@@ -27,6 +27,7 @@ from functools import lru_cache
 from typing import Any
 
 import numpy as np
+from pint import Quantity
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
 from pyproj import CRS, Transformer
@@ -34,6 +35,7 @@ from shapely.affinity import affine_transform, translate
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, triangulate, unary_union
+from shapely.validation import explain_validity
 
 from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 
@@ -234,7 +236,7 @@ def _validate_polygon(polygon: Polygon | None) -> bool | None:
 
     if not polygon.is_valid:
         raise HyPlanValueError(
-            f"Input polygon is invalid: {polygon.explain_validity()}"
+            f"Input polygon is invalid: {explain_validity(polygon)}"
         )
 
     logger.debug("Polygon validation passed.")
@@ -290,6 +292,19 @@ def _utm_crs_from_epsg(epsg: int) -> CRS:
     return CRS.from_epsg(epsg)
 
 
+@lru_cache(maxsize=512)
+def _utm_transformers_from_epsg(epsg: int) -> tuple[Callable[..., Any], Callable[..., Any]]:
+    """Build (and cache) the WGS84↔UTM transform pair for a UTM EPSG code.
+
+    ``Transformer.from_crs`` is expensive; callers in swath/Dubins loops
+    hit the same handful of UTM zones repeatedly, so cache per EPSG code.
+    """
+    utm_crs = _utm_crs_from_epsg(epsg)
+    wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
+    utm_to_wgs84 = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True).transform
+    return wgs84_to_utm, utm_to_wgs84
+
+
 def get_utm_crs(lon: float, lat: float) -> CRS:
     """
     Determine the UTM CRS for a given WGS84 coordinate.
@@ -303,8 +318,17 @@ def get_utm_crs(lon: float, lat: float) -> CRS:
         lat (float): Latitude in decimal degrees (WGS84).
 
     Returns:
-        CRS: The appropriate UTM CRS for the coordinate.
+        CRS: The appropriate UTM CRS for the coordinate. Latitudes outside
+            UTM's defined validity range (84°N to 80°S) still map to the
+            nearest UTM zone, with a warning logged — polar work should use
+            a polar stereographic CRS instead.
     """
+    if lat > 84.0 or lat < -80.0:
+        logger.warning(
+            f"Latitude {lat:.2f}° is outside the UTM validity range "
+            "(84°N to 80°S); UTM distances and areas will be severely "
+            "distorted. Consider a polar stereographic CRS for polar work."
+        )
     zone = int((lon + 180.0) / 6.0) + 1
     if zone < 1:
         zone = 1
@@ -347,9 +371,12 @@ def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Cal
     except ValueError as e:
         raise HyPlanValueError(f"Failed to determine UTM CRS for centroid ({lon}, {lat}): {e}") from e
 
-    # Define transformation functions
-    wgs84_to_utm = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True).transform
-    utm_to_wgs84 = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True).transform
+    epsg = utm_crs.to_epsg()
+    if epsg is None:
+        raise HyPlanRuntimeError(
+            f"UTM CRS for centroid ({lat:.6f}, {lon:.6f}) has no EPSG code."
+        )
+    wgs84_to_utm, utm_to_wgs84 = _utm_transformers_from_epsg(epsg)
 
     logger.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
     return wgs84_to_utm, utm_to_wgs84
@@ -439,17 +466,30 @@ def random_points_in_polygon(polygon: Polygon, k: int) -> list[Point]:
     areas = []
     transforms = []
     for t in triangulate(polygon):
+        if not t.intersects(polygon):
+            continue
         areas.append(t.area)
         (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
-        transforms.append([x1 - x0, x2 - x0, y2 - y0, y1 - y0, x0, y0])
-    points = []
-    for tri_transform in random.choices(transforms, weights=areas, k=k):
-        x, y = [random.random() for _ in range(2)]
-        if x + y > 1:
-            p = Point(1 - x, 1 - y)
-        else:
-            p = Point(x, y)
-        points.append(affine_transform(p, tri_transform))
+        transforms.append([x1 - x0, x2 - x0, y1 - y0, y2 - y0, x0, y0])
+    points: list[Point] = []
+    max_attempts = max(1000, 100 * k)
+    attempts = 0
+    while len(points) < k:
+        if attempts >= max_attempts:
+            raise HyPlanRuntimeError(
+                f"random_points_in_polygon could not place {k} points inside "
+                f"the polygon after {max_attempts} attempts"
+            )
+        for tri_transform in random.choices(transforms, weights=areas, k=k - len(points)):
+            attempts += 1
+            x, y = [random.random() for _ in range(2)]
+            if x + y > 1:
+                p = Point(1 - x, 1 - y)
+            else:
+                p = Point(x, y)
+            candidate = affine_transform(p, tri_transform)
+            if polygon.contains(candidate):
+                points.append(candidate)
     return points
 
 
@@ -463,21 +503,15 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
         polygon (Polygon): Input polygon in WGS84 coordinates. Must be valid.
 
     Returns:
-        tuple: A tuple[Any, ...] containing:
-            - lat0 (float): Latitude of the rectangle's centroid.
-            - lon0 (float): Longitude of the rectangle's centroid.
-            - azimuth (float): Azimuth of the rectangle in degrees, wrapped to [-180, 180].
-            - length (float): Length of the rectangle's longer side (meters).
-            - width (float): Width of the rectangle's shorter side (meters).
-            - mrr_wgs84 (Polygon): Minimum rotated rectangle in WGS84 coordinates.
-            - hull_wgs84 (Polygon): Convex hull of the polygon in WGS84 coordinates.
+        Polygon: The minimum rotated rectangle in WGS84 coordinates.
+            Use :func:`rectangle_dimensions` to extract the centroid,
+            orientation, and side lengths from the returned rectangle.
 
     Raises:
         ValueError: If the input polygon is invalid or processing fails.
 
     Notes:
         - The input polygon is transformed to UTM for accurate geometry calculations.
-        - Returns both the rectangle and the convex hull in WGS84 coordinates.
     """
     _validate_polygon(polygon)
 
@@ -609,6 +643,7 @@ def rectangle_dimensions(
             length_m, width_m = float(length1), float(length2)
         else:
             length_m, width_m = float(length2), float(length1)
+        azimuth = float(wrap_to_180(azimuth))
 
     return float(lat0), float(lon0), float(azimuth), length_m, width_m
 
@@ -649,34 +684,62 @@ def translate_polygon(polygon: Polygon, distance: float, azimuth: float) -> Poly
 
 
 
-def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, across_track_distance: float, azimuth: float) -> Polygon:
+def buffer_polygon_along_azimuth(
+    polygon: Polygon,
+    along_track_distance: float | Quantity,
+    across_track_distance: float | Quantity,
+    azimuth: float,
+) -> Polygon:
     """
-    Translate a Shapely polygon in both a specified direction and its opposite,
-    then compute the convex hull of the union of the two translated polygons.
+    Expand a polygon along and across a flight azimuth.
+
+    Translates the polygon by ``along_track_distance`` in both the azimuth
+    direction and its opposite, unions the results with the original, then
+    repeats across-track (azimuth ± 90°) with ``across_track_distance``.
 
     Args:
-        polygon (Polygon): The input Shapely polygon to be buffered in WGS84 coordinates. Must be valid.
-        distance (ureg.Quantity): Distance to translate the polygon. Must be a positive length Quantity.
-        azimuth (float): Angle of translation in degrees, measured clockwise from north.
+        polygon (Polygon): The input Shapely polygon to be buffered in WGS84
+            coordinates. Must be valid.
+        along_track_distance (Union[float, ureg.Quantity]): Distance to expand
+            along the azimuth direction. Plain numbers are interpreted as
+            meters; Quantities must have length units. Must be positive.
+        across_track_distance (Union[float, ureg.Quantity]): Distance to expand
+            perpendicular to the azimuth. Plain numbers are interpreted as
+            meters; Quantities must have length units. Must be positive.
+        azimuth (float): Translation direction in degrees, measured clockwise
+            from north. Will be wrapped to [-180, 180].
 
     Returns:
-        Polygon: The convex hull of the union of the two translated polygons in WGS84 coordinates.
+        Polygon: The union of the translated polygons in WGS84 coordinates.
 
     Raises:
-        ValueError: If the input polygon is invalid or if distance is not a valid length.
+        ValueError: If the input polygon is invalid or if a distance is not a
+            valid positive length.
 
     Notes:
         - The input polygon is transformed to UTM for accurate geometry calculations.
-        - The resulting convex hull is returned in WGS84 coordinates.
     """
     # Validate inputs
     _validate_polygon(polygon)
 
-    for key, value in {'along_track_distance': along_track_distance, 'across_track_distance': across_track_distance}.items():
-        if not isinstance(value, float):
-            raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
-        if value <= 0:
-            raise HyPlanValueError("Distance must be greater than 0.")
+    def _to_meters(key: str, value: float | Quantity) -> float:
+        if isinstance(value, Quantity):
+            if not value.check("[length]"):
+                raise HyPlanValueError(
+                    f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}."
+                )
+            value = value.m_as("meter")
+        elif isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HyPlanValueError(
+                f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}."
+            )
+        value_m = float(value)
+        if value_m <= 0:
+            raise HyPlanValueError(f"Invalid value for '{key}': {value_m}. Distance must be greater than 0.")
+        return value_m
+
+    along_track_m = _to_meters('along_track_distance', along_track_distance)
+    across_track_m = _to_meters('across_track_distance', across_track_distance)
 
     azimuth = float(wrap_to_180(azimuth))
 
@@ -685,14 +748,14 @@ def buffer_polygon_along_azimuth(polygon: Polygon, along_track_distance: float, 
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(polygon)
         polygon_utm = transform(wgs84_to_utm, polygon)
 
-        translated_polygon_1 = translate_polygon(polygon_utm, along_track_distance, azimuth)
-        translated_polygon_2 = translate_polygon(polygon_utm, along_track_distance, azimuth-180)
+        translated_polygon_1 = translate_polygon(polygon_utm, along_track_m, azimuth)
+        translated_polygon_2 = translate_polygon(polygon_utm, along_track_m, azimuth-180)
 
         polygon_utm_translated = unary_union([translated_polygon_1, translated_polygon_2, polygon_utm])
 
         # Translate in both directions
-        translated_polygon_1 = translate_polygon(polygon_utm_translated, across_track_distance, azimuth+90)
-        translated_polygon_2 = translate_polygon(polygon_utm_translated, across_track_distance, azimuth-90)
+        translated_polygon_1 = translate_polygon(polygon_utm_translated, across_track_m, azimuth+90)
+        translated_polygon_2 = translate_polygon(polygon_utm_translated, across_track_m, azimuth-90)
 
         # Compute the union of the translated polygons
         polygon_utm = unary_union([translated_polygon_1, translated_polygon_2, polygon_utm_translated])
@@ -735,28 +798,26 @@ def process_linestring(linestring: LineString) -> tuple[
     # Wrap longitude to the range [-180, 180]
     track_lon = (track_lon + 180) % 360 - 180
 
-    # Calculate azimuths between consecutive track points
-    azimuths = []
-    distances = []
-
-    for i in range(len(track_lat) - 1):
-        distance, az12 = vdist(
-            track_lat[i], track_lon[i], track_lat[i + 1], track_lon[i + 1]
-        )
-        azimuths.append(float(az12))
-        distances.append(float(distance))
-
-    # Add reverse azimuth for the last point to match array sizes
+    # Calculate azimuths and distances between consecutive track points
+    # (vectorized vdist over all consecutive pairs, plus one reverse-azimuth
+    # call for the final point to match array sizes)
     if len(track_lat) > 1:
+        seg_distances, seg_azimuths = vdist(
+            track_lat[:-1], track_lon[:-1], track_lat[1:], track_lon[1:]
+        )
         _, reverse_az = vdist(
             track_lat[-1], track_lon[-1], track_lat[-2], track_lon[-2]
         )
-        azimuths.append(float((reverse_az + 180) % 360))  # Reverse azimuth with normalization
+        azimuths = np.append(
+            np.atleast_1d(seg_azimuths).astype(float),
+            (float(reverse_az) + 180.0) % 360.0,
+        )
+        distances = np.atleast_1d(seg_distances).astype(float)
     else:
-        azimuths.append(0.0)  # Single point, azimuth is undefined
+        azimuths = np.array([0.0])  # Single point, azimuth is undefined
+        distances = np.array([])
 
     # Compute cumulative along-track distances
-    distances = np.array(distances)  # type: ignore[assignment]  # list reassigned as ndarray
     along_track_distance = np.insert(np.cumsum(distances), 0, 0)
 
     return (
@@ -787,8 +848,9 @@ def magnetic_declination(lat: float, lon: float, alt_m: float = 0,
         date: Date for the calculation (default today).
 
     Returns:
-        Declination in degrees.  Add to true heading to get magnetic heading
-        would give the wrong sign — use :func:`true_to_magnetic` instead.
+        Declination in degrees, positive east.  Note that
+        ``magnetic = true − declination``; prefer :func:`true_to_magnetic`
+        over manual arithmetic.
     """
     try:
         import geomag
@@ -821,6 +883,18 @@ def true_to_magnetic(heading: float, declination: float) -> float:
 # Coordinate formatting helpers  (MovingLines-compatible)
 # ---------------------------------------------------------------------------
 
+def _split_deg_minutes(val: float, ndigits: int) -> tuple[int, float]:
+    """Split a non-negative decimal degree value into whole degrees and
+    decimal minutes, rounding minutes to ``ndigits`` and carrying a
+    rounded ``60.0`` into the degrees."""
+    deg = int(val)
+    minutes = round((val - deg) * 60.0, ndigits)
+    if minutes >= 60.0:
+        minutes -= 60.0
+        deg += 1
+    return deg, minutes
+
+
 def dd_to_ddm(lat: float, lon: float) -> tuple[str, str]:
     """Decimal degrees → ``'DD MM.MM'`` (e.g. ``'37 24.21'``, ``'-122 03.45'``).
 
@@ -829,8 +903,7 @@ def dd_to_ddm(lat: float, lon: float) -> tuple[str, str]:
     def _fmt(val: float, is_lon: bool = False) -> str:
         sign = -1 if val < 0 else 1
         val = abs(val)
-        deg = int(val)
-        minutes = (val - deg) * 60.0
+        deg, minutes = _split_deg_minutes(val, ndigits=2)
         prefix = "-" if sign < 0 else ""
         if is_lon:
             return f"{prefix}{deg:03d} {minutes:05.2f}"
@@ -847,7 +920,13 @@ def dd_to_ddms(lat: float, lon: float) -> tuple[str, str]:
         deg = int(val)
         rem = (val - deg) * 60.0
         minutes = int(rem)
-        sec = (rem - minutes) * 60.0
+        sec = round((rem - minutes) * 60.0, 1)
+        if sec >= 60.0:
+            sec -= 60.0
+            minutes += 1
+        if minutes >= 60:
+            minutes -= 60
+            deg += 1
         prefix = "-" if sign < 0 else ""
         if is_lon:
             return f"{prefix}{deg:03d} {minutes:02d} {sec:04.1f}"
@@ -860,16 +939,12 @@ def dd_to_nddmm(lat: float, lon: float) -> tuple[str, str]:
     """Decimal degrees → ``'N37 24.21'`` / ``'W122 03.45'`` (Honeywell FMS style)."""
     def _fmt_lat(val: float) -> str:
         hemi = "N" if val >= 0 else "S"
-        val = abs(val)
-        deg = int(val)
-        minutes = (val - deg) * 60.0
+        deg, minutes = _split_deg_minutes(abs(val), ndigits=2)
         return f"{hemi}{deg:02d} {minutes:05.2f}"
 
     def _fmt_lon(val: float) -> str:
         hemi = "E" if val >= 0 else "W"
-        val = abs(val)
-        deg = int(val)
-        minutes = (val - deg) * 60.0
+        deg, minutes = _split_deg_minutes(abs(val), ndigits=2)
         return f"{hemi}{deg:03d} {minutes:05.2f}"
 
     return _fmt_lat(lat), _fmt_lon(lon)
@@ -879,16 +954,12 @@ def dd_to_foreflight_oneline(lat: float, lon: float) -> str:
     """Decimal degrees → ``'N3724.210/W12203.450'`` (ForeFlight one-liner)."""
     def _fmt_lat(val: float) -> str:
         hemi = "N" if val >= 0 else "S"
-        val = abs(val)
-        deg = int(val)
-        minutes = (val - deg) * 60.0
+        deg, minutes = _split_deg_minutes(abs(val), ndigits=3)
         return f"{hemi}{deg:02d}{minutes:06.3f}"
 
     def _fmt_lon(val: float) -> str:
         hemi = "E" if val >= 0 else "W"
-        val = abs(val)
-        deg = int(val)
-        minutes = (val - deg) * 60.0
+        deg, minutes = _split_deg_minutes(abs(val), ndigits=3)
         return f"{hemi}{deg:03d}{minutes:06.3f}"
 
     return f"{_fmt_lat(lat)}/{_fmt_lon(lon)}"

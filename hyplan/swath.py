@@ -7,6 +7,7 @@ accounting for cross-track field of view and altitude.
 """
 
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -17,10 +18,13 @@ import simplekml
 from shapely.geometry import Polygon
 from shapely.ops import transform
 
+from .exceptions import HyPlanValueError
 from .flight_line import FlightLine
 from .geometry import get_utm_transforms, process_linestring
 from .instruments import ScanningSensor
 from .terrain import ray_terrain_intersection
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "analyze_swath_gaps_overlaps",
@@ -119,6 +123,10 @@ def generate_swath_polygon(
     Returns:
         A Shapely Polygon representing the swath.
     """
+    if flight_line.altitude_msl is None:
+        raise HyPlanValueError(
+            "flight line has no altitude_msl; set one before generating a swath"
+        )
     altitude_msl = flight_line.altitude_msl.magnitude
     lats, lons, azimuths, *_ = process_linestring(
         flight_line.track(precision=along_precision)
@@ -172,18 +180,16 @@ def generate_swath_polygon(
             tilt_deg: npt.NDArray[np.float64],
         ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
             offset_m = altitude_msl * np.tan(np.deg2rad(tilt_deg))
-            out_lats = np.empty_like(lats, dtype=float)
-            out_lons = np.empty_like(lons, dtype=float)
-            for i in range(len(lats)):
-                if offset_m[i] <= 0:
-                    out_lats[i], out_lons[i] = lats[i], lons[i]
-                    continue
+            out_lats = np.array(lats, dtype=float)
+            out_lons = np.array(lons, dtype=float)
+            positive = offset_m > 0
+            if np.any(positive):
                 vlat, vlon = _vincenty.vreckon(
-                    float(lats[i]), float(lons[i]),
-                    float(offset_m[i]), float(az[i]),
+                    out_lats[positive], out_lons[positive],
+                    offset_m[positive], np.asarray(az, dtype=float)[positive],
                 )
-                out_lats[i] = float(vlat)
-                out_lons[i] = float(wrap_to_180(vlon))
+                out_lats[positive] = vlat
+                out_lons[positive] = np.asarray(wrap_to_180(vlon), dtype=float)
             return out_lats, out_lons
 
         edge1_lats, edge1_lons = _flat_edge(edge1_az, edge1_tilt)
@@ -209,17 +215,24 @@ def calculate_swath_widths(swath_polygon: Polygon) -> dict[str, float]:
         dict: A dictionary containing the min, mean, and max widths in meters.
     """
     coords = np.array(swath_polygon.exterior.coords)
+    # Drop the closing coordinate (exterior rings repeat the first point)
+    if len(coords) > 1 and np.array_equal(coords[0], coords[-1]):
+        coords = coords[:-1]
     mid_index = len(coords) // 2
 
-    # Split into port and starboard points
+    # Split into port and starboard edges; the ring is the port edge
+    # followed by the reversed starboard edge (see generate_swath_polygon)
     port_coords = coords[:mid_index]
-    starboard_coords = coords[mid_index:][::-1]  # Reverse to align correctly
+    starboard_coords = coords[mid_index:][::-1]  # Reverse to align stations
 
-    # Ensure equal lengths for port and starboard
-    if len(port_coords) > len(starboard_coords):
-        port_coords = port_coords[:len(starboard_coords)]
-    elif len(starboard_coords) > len(port_coords):
-        starboard_coords = starboard_coords[:len(port_coords)]
+    if len(coords) % 2 != 0:
+        logger.warning(
+            "Swath polygon has unequal port and starboard edge lengths "
+            f"({len(coords)} ring points); pairing only the common stations."
+        )
+        common = min(len(port_coords), len(starboard_coords))
+        port_coords = port_coords[:common]
+        starboard_coords = starboard_coords[:common]
 
     # Extract latitudes and longitudes
     port_lats, port_lons = port_coords[:, 1], port_coords[:, 0]
@@ -238,9 +251,9 @@ def calculate_swath_widths(swath_polygon: Polygon) -> dict[str, float]:
         return {"min_width": 0.0, "mean_width": 0.0, "max_width": 0.0}
 
     return {
-        "min_width": np.min(valid_distances),
-        "mean_width": np.mean(valid_distances),
-        "max_width": np.max(valid_distances),
+        "min_width": float(np.min(valid_distances)),
+        "mean_width": float(np.mean(valid_distances)),
+        "max_width": float(np.max(valid_distances)),
     }
 
 def analyze_swath_gaps_overlaps(
@@ -334,4 +347,4 @@ def export_polygon_to_kml(swath_polygon: Polygon, kml_filename: str, name: str =
 
     # Save the KML to a file
     kml.save(kml_filename)
-    print(f"Polygon exported to KML file: {kml_filename}")
+    logger.info(f"Polygon exported to KML file: {kml_filename}")

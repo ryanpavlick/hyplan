@@ -38,7 +38,9 @@ def solve_trochoid(
 
     Returns:
         dict with keys: total_time, t1, t2, del1, del2, phi1, phi2,
-        xt10, yt10, xt20, yt20, cos_w, sin_w, t2pi, vw, psi_w
+        xt10, yt10, xt20, yt20, cos_w, sin_w, t2pi, vw, psi_w.
+        ``total_time`` is ``math.inf`` when no valid BSB solution was
+        found; callers must check finiteness before using the solution.
     """
     Va = airspeed
     vw = math.sqrt(wind_u**2 + wind_v**2)
@@ -98,9 +100,6 @@ def solve_trochoid(
                 phi1, phi2, xt10, yt10, xt20, yt20, E, G,
                 cos_w, sin_w, best,
             )
-
-    if not math.isfinite(best["total_time"]):
-        best["total_time"] = 0.0
 
     return best
 

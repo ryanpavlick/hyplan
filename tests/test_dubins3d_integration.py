@@ -1,8 +1,10 @@
 """Tests for hybrid-Dubins integration into the flight planning pipeline."""
 
+import pymap3d.vincenty
 import pytest
 
 from hyplan.aircraft import (
+    NASA_ER2,
     NASA_GIII,
     KingAirB200,
 )
@@ -108,6 +110,45 @@ class TestTakeoffAndReturn:
 
         assert result["total_time"].magnitude > 0
         assert result["dubins_path"].geometry is not None
+
+    def test_return_heading_is_inbound_course(self, b200, palmdale):
+        """The destination heading is the inbound course (direction of
+        travel at arrival), not its reciprocal — a reversed heading makes
+        the Dubins solver append superfluous turn arcs at the airport."""
+        wp = Waypoint(
+            palmdale.latitude + 1.0, palmdale.longitude, 180.0,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+        )
+        result = b200.time_to_return(wp, palmdale)
+
+        # Due-south leg: the aircraft arrives heading south (~180 deg).
+        descent = result["phases"]["descent"]
+        assert descent["end_heading"] == pytest.approx(180.0, abs=1.0)
+
+        # With the correct arrival heading the path is near-direct.
+        direct_m, _ = pymap3d.vincenty.vdist(
+            wp.latitude, wp.longitude,
+            palmdale.latitude, palmdale.longitude,
+        )
+        direct_nmi = float(direct_m) / 1852.0
+        length_nmi = result["dubins_path"].length.m_as(ureg.nautical_mile)
+        assert length_nmi == pytest.approx(direct_nmi, rel=0.02)
+
+    def test_return_approach_headings_are_inbound_course(self, palmdale):
+        """With an ApproachProfile, the FAF waypoint and approach phase
+        carry the inbound course, while the FAF itself stays offset back
+        along the inbound track."""
+        er2 = NASA_ER2()
+        wp = Waypoint(
+            palmdale.latitude + 1.0, palmdale.longitude, 180.0,
+            altitude_msl=ureg.Quantity(60000, "feet"),
+        )
+        result = er2.time_to_return(wp, palmdale)
+
+        approach = result["phases"]["approach"]
+        assert approach["start_heading"] == pytest.approx(180.0, abs=1.0)
+        assert approach["end_heading"] == pytest.approx(180.0, abs=1.0)
+        assert approach["start_lat"] > palmdale.latitude
 
 
 class TestComputeFlightPlan:

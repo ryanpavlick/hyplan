@@ -406,6 +406,28 @@ class TestValidateInputs:
         with pytest.raises(HyPlanValueError):
             _validate_inputs(azimuth="north")
 
+    def test_bool_azimuth_raises(self):
+        with pytest.raises(HyPlanValueError):
+            _validate_inputs(azimuth=True)
+
+    def test_int_azimuth_accepted(self):
+        validated = _validate_inputs(azimuth=90)
+        assert validated["azimuth"] == pytest.approx(90.0)
+
+    def test_returned_azimuth_is_wrapped(self):
+        validated = _validate_inputs(azimuth=270.0)
+        assert validated["azimuth"] == pytest.approx(-90.0)
+
+    def test_int_box_dimensions_accepted(self):
+        validated = _validate_inputs(
+            altitude=6000, box_length=50000, box_width=10000,
+        )
+        assert validated["box_length"] == 50000
+
+    def test_bool_box_dimension_raises(self):
+        with pytest.raises(HyPlanValueError):
+            _validate_inputs(box_length=True)
+
 
 class TestBoxAroundCenterLineValidation:
     """Input validation edge cases for box_around_center_line."""
@@ -455,3 +477,50 @@ class TestBoxAroundCenterLineValidation:
             starting_point="edge",
         )
         assert len(lines) > 0
+
+    def test_invalid_starting_point_raises(self):
+        """An unsupported starting_point must raise instead of crashing
+        with an UnboundLocalError."""
+        sensor = AVIRIS3()
+        with pytest.raises(HyPlanValueError, match="starting_point"):
+            box_around_center_line(
+                instrument=sensor,
+                altitude_msl=ureg.Quantity(6000, "meter"),
+                lat0=34.0, lon0=-118.0,
+                azimuth=0.0,
+                box_length=ureg.Quantity(50000, "meter"),
+                box_width=ureg.Quantity(10000, "meter"),
+                starting_point="middle",
+            )
+
+    def test_int_azimuth_accepted(self):
+        """An integer azimuth must be accepted like a float."""
+        sensor = AVIRIS3()
+        lines = box_around_center_line(
+            instrument=sensor,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            lat0=34.0, lon0=-118.0,
+            azimuth=90,
+            box_length=ureg.Quantity(50000, "meter"),
+            box_width=ureg.Quantity(10000, "meter"),
+        )
+        assert len(lines) > 0
+        assert lines[0].az12.magnitude % 360 == pytest.approx(90.0, abs=1.0)
+
+    def test_first_line_honors_requested_azimuth(self):
+        """With alternate_direction=True the first line flies the
+        requested azimuth; subsequent lines alternate."""
+        sensor = AVIRIS3()
+        lines = box_around_center_line(
+            instrument=sensor,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            lat0=34.0, lon0=-118.0,
+            azimuth=0.0,
+            box_length=ureg.Quantity(50000, "meter"),
+            box_width=ureg.Quantity(10000, "meter"),
+            alternate_direction=True,
+        )
+        assert len(lines) >= 2
+        azimuths = [fl.az12.magnitude % 360 for fl in lines]
+        assert min(azimuths[0], 360 - azimuths[0]) < 1.0  # ~0° (on-azimuth)
+        assert azimuths[1] == pytest.approx(180.0, abs=1.0)  # reversed

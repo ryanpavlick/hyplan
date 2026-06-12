@@ -37,21 +37,26 @@ from .units import altitude_to_flight_level, ureg
 logger = logging.getLogger(__name__)
 
 
-def _validate_inputs(**kwargs: Any) -> None:
+def _validate_inputs(**kwargs: Any) -> dict[str, Any]:
     """
-    Validate input parameters for various operations using dynamic rules.
+    Validate input parameters for various operations and return their
+    normalized values.
 
     Args:
         **kwargs: Arbitrary keyword arguments representing parameters to validate.
             Supported parameters and their rules:
-            - altitude: Must be a positive float (meters) or a `ureg.Quantity` with length dimensionality.
-            - box_length: Must be a positive float (meters) or a `ureg.Quantity` with length dimensionality.
-            - box_width: Must be a positive float (meters) or a `ureg.Quantity` with length dimensionality.
-            - overlap: Must be a float between 0 and 100 (inclusive).
+            - altitude: Must be a positive int/float (meters) or a `ureg.Quantity` with length dimensionality.
+            - box_length: Must be a positive int/float (meters) or a `ureg.Quantity` with length dimensionality.
+            - box_width: Must be a positive int/float (meters) or a `ureg.Quantity` with length dimensionality.
+            - overlap: Must be a number between 0 and 100 (inclusive).
             - starting_point: Must be either "edge" or "center".
-            - azimuth: Must be a float, wrapped to [-180, 180] degrees.
+            - azimuth: Must be an int or float; wrapped to [-180, 180] degrees in the returned dict.
             - polygon: If provided, must be a valid Shapely Polygon.
             - clip_to_polygon: Must be a boolean.
+
+    Returns:
+        Dict mapping each input key to its normalized value: ``azimuth`` is
+        wrapped to [-180, 180]; all other values pass through unchanged.
 
     Raises:
         ValueError: If any parameter fails its validation rule.
@@ -60,17 +65,14 @@ def _validate_inputs(**kwargs: Any) -> None:
         - Length-related parameters (`altitude`, `box_length`, `box_width`) are checked for dimensionality if they are `ureg.Quantity` and converted to meters.
         - Unknown parameters will be ignored, with a warning logged.
     """
-    rules: dict[str, Callable[[float | Quantity | Polygon | bool | None], bool | None]] = {
-        'altitude': lambda x: isinstance(x, (float, Quantity)) and x > 0,
-        'box_length': lambda x: isinstance(x, (float, Quantity)) and x > 0,
-        'box_width': lambda x: isinstance(x, (float, Quantity)) and x > 0,
+    rules: dict[str, Callable[[Any], bool | None]] = {
         'overlap': lambda x: isinstance(x, (float, int)) and 0 <= x <= 100,
         'starting_point': lambda x: x in {"edge", "center"},
-        'azimuth': lambda x: isinstance(x, float),
         'polygon': lambda x: x is None or _validate_polygon(x),
         'clip_to_polygon': lambda x: isinstance(x, bool),
     }
 
+    validated = dict(kwargs)
     for key, value in kwargs.items():
         if key in {'altitude', 'box_length', 'box_width'}:
             # Validate and process length-related parameters
@@ -78,21 +80,17 @@ def _validate_inputs(**kwargs: Any) -> None:
                 if not value.check("[length]"):
                     raise HyPlanValueError(f"Invalid unit for '{key}': Expected a length unit. Got {value.dimensionality}.")
                 value = value.m_as("meter")  # Convert to meters
-            elif not isinstance(value, float):
-                raise HyPlanValueError(f"Invalid type for '{key}': Expected float (meters) or ureg.Quantity. Got {type(value)}.")
+            elif isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise HyPlanValueError(f"Invalid type for '{key}': Expected int/float (meters) or ureg.Quantity. Got {type(value)}.")
 
             if value <= 0:
                 raise HyPlanValueError(f"Invalid value for '{key}': {value}. Must be greater than 0.")
 
         elif key == 'azimuth':
             # Validate and wrap azimuth
-            if not isinstance(value, float):
-                raise HyPlanValueError(f"Invalid type for 'azimuth': Expected float. Got {type(value)}.")
-            kwargs[key] = wrap_to_180(value)
-
-        # elif key == 'polygon' and value is not None:
-        #     # Validate polygon
-        #     _validate_polygon(value)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise HyPlanValueError(f"Invalid type for 'azimuth': Expected int or float. Got {type(value)}.")
+            validated[key] = float(wrap_to_180(float(value)))
 
         elif key in rules:
             # Validate other parameters using rules
@@ -103,6 +101,7 @@ def _validate_inputs(**kwargs: Any) -> None:
             logger.warning(f"Unknown parameter '{key}' provided. No validation rule exists.")
 
     logger.debug("All inputs passed validation.")
+    return validated
 
 
 def box_around_center_line(
@@ -152,14 +151,16 @@ def box_around_center_line(
         - Clipping is applied to each line if a polygon is provided.
     """
     # Validate inputs
-    _validate_inputs(
+    validated = _validate_inputs(
         altitude=altitude_msl,
         box_length=box_length,
         box_width=box_width,
         overlap=overlap,
         azimuth=azimuth,
-        polygon=polygon
+        polygon=polygon,
+        starting_point=starting_point,
     )
+    azimuth = validated["azimuth"]
 
     if not hasattr(instrument, "swath_width") or not callable(instrument.swath_width):
         raise HyPlanValueError("Instrument must have a callable method `swath_width(altitude_agl)`.")
@@ -203,7 +204,7 @@ def box_around_center_line(
 
     for idx, dist in enumerate(dists_from_center):
         line = first_line.offset_across(dist)
-        if alternate_direction and idx % 2 == 0:
+        if alternate_direction and idx % 2 == 1:
             line = line.reverse()
 
         line.site_name = f"{box_name}_L{idx + start_numbering:02d}_{flight_level}"
@@ -253,7 +254,6 @@ def box_around_polygon(
         overlap (float): Overlap percentage between adjacent swaths.
         alternate_direction (bool): Whether to alternate flight line directions.
         clip_to_polygon (bool): Whether to clip flight lines to the convex hull of the polygon.
-        starting_point (str): Whether to start the first line from the "edge" or "center".
 
     Returns:
         List[flight_line.FlightLine]: A list of generated flight lines.
@@ -333,12 +333,15 @@ def box_around_polygon_terrain(
     candidate line position, ensuring the requested overlap is maintained even
     over variable terrain.
 
-    **Mode 3:** Pass ``target_agl`` instead of relying solely on
-    ``altitude_msl``.  Each flight line is assigned an individual altitude
-    derived from the mean terrain elevation along its nadir track plus
-    ``target_agl``, so GSD and overlap remain stable across mountainous
-    terrain (Zhao et al. 2021).  Raise :class:`~hyplan.exceptions.HyPlanValueError`
-    if both ``altitude_msl`` and ``target_agl`` are provided.
+    **Mode 3:** Pass ``target_agl`` in addition to ``altitude_msl``.  Each
+    flight line is assigned an individual altitude derived from the mean
+    terrain elevation along its nadir track plus ``target_agl``, so GSD and
+    overlap remain stable across mountainous terrain (Zhao et al. 2021).
+    ``altitude_msl`` is still required and serves only as the reference
+    altitude for the box geometry; the Mode-2 global clearance pre-check is
+    skipped, and per-line clearance is instead checked against the local
+    maximum terrain (a warning is logged when it falls below
+    ``safe_altitude``).
 
     Unlike :func:`box_around_polygon`, which uses a flat-earth
     ``swath_width()`` for line spacing, this function calls
@@ -376,9 +379,9 @@ def box_around_polygon_terrain(
         min_line_length: Drop clipped segments shorter than this value.
         target_agl: Desired altitude above ground level for Mode 3.  When
             provided each flight line receives an individual ``altitude_msl``
-            computed as ``mean nadir terrain + target_agl``.  Cannot be used
-            together with a custom ``altitude_msl`` — raise
-            :class:`~hyplan.exceptions.HyPlanValueError` if both are supplied.
+            computed as ``mean nadir terrain + target_agl``, and the
+            caller-supplied ``altitude_msl`` is used only as the
+            box-geometry reference.
 
     Returns:
         List of :class:`~hyplan.flight_line.FlightLine` objects with
@@ -386,8 +389,8 @@ def box_around_polygon_terrain(
         ``altitude_msl`` derived from local terrain.
 
     Raises:
-        HyPlanValueError: For invalid inputs, conflicting altitude arguments,
-            or insufficient terrain clearance.
+        HyPlanValueError: For invalid inputs, or insufficient terrain
+            clearance in Mode 2.
     """
     if not isinstance(polygon, Polygon):
         raise HyPlanValueError("polygon must be a Shapely Polygon.")
@@ -673,7 +676,7 @@ def box_around_center_terrain(
         HyPlanValueError: If inputs fail validation or altitude clearance
             is insufficient.
     """
-    _validate_inputs(
+    validated = _validate_inputs(
         altitude=altitude_msl,
         box_length=box_length,
         box_width=box_width,
@@ -681,7 +684,7 @@ def box_around_center_terrain(
         azimuth=azimuth,
         polygon=polygon,
     )
-    azimuth = wrap_to_180(azimuth)  # type: ignore[assignment]  # ndarray return vs float
+    azimuth = validated["azimuth"]
 
     rect = _rectangle_polygon(
         lat0, lon0, azimuth,

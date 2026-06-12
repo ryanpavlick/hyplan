@@ -1,6 +1,7 @@
 """Tests for hyplan.swath."""
 
 import numpy as np
+import pymap3d.vincenty
 import pytest
 from shapely.geometry import Polygon
 
@@ -35,6 +36,17 @@ class TestGenerateSwathPolygon:
         assert widths["max_width"] >= widths["min_width"]
 
 
+class TestGenerateSwathPolygonNoAltitude:
+    def test_none_altitude_raises(self):
+        from hyplan.exceptions import HyPlanValueError
+        sensor = AVIRIS3()
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        with pytest.raises(HyPlanValueError, match="no altitude_msl"):
+            generate_swath_polygon(fl, sensor, terrain_aware=False)
+
+
 class TestCalculateSwathWidths:
     def test_rectangular_polygon(self):
         """A known rectangular polygon should give consistent widths."""
@@ -57,6 +69,22 @@ class TestCalculateSwathWidths:
         ])
         widths = calculate_swath_widths(poly)
         assert isinstance(widths, dict)
+
+    def test_constant_width_recovered_with_coarse_stations(self):
+        """A rectangular swath whose along-track spacing equals its width
+        must measure the true width, not the station diagonal."""
+        # Straight northward track: port edge at -0.005 deg lon, starboard
+        # at +0.005 deg lon, stations every 0.01 deg lat (spacing ~ width).
+        station_lats = np.linspace(0.0, 0.1, 11)
+        port = [(-0.005, lat) for lat in station_lats]
+        starboard = [(0.005, lat) for lat in station_lats]
+        poly = Polygon(port + starboard[::-1])
+
+        expected, _ = pymap3d.vincenty.vdist(0.0, -0.005, 0.0, 0.005)
+        widths = calculate_swath_widths(poly)
+        assert widths["min_width"] == pytest.approx(float(expected), rel=0.01)
+        assert widths["mean_width"] == pytest.approx(float(expected), rel=0.01)
+        assert widths["max_width"] == pytest.approx(float(expected), rel=0.01)
 
 
 class TestRadarSwathPolygon:
@@ -247,6 +275,62 @@ class TestResolveBoresightAzimuths:
         np.testing.assert_array_almost_equal(result, [45.0, 45.0, 45.0])
 
 
+class TestFlatEarthSwath:
+    """Vectorized flat-earth edge projection (terrain_aware=False)."""
+
+    @pytest.fixture
+    def northward_line(self):
+        return FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(30, "kilometer"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            site_name="FlatEdge",
+        )
+
+    def test_width_matches_analytic_flat_earth(self, northward_line):
+        """Flat-earth swath width must equal altitude·(tan|port|+tan|stbd|)."""
+        sensor = AVIRIS3()
+        poly = generate_swath_polygon(
+            northward_line, sensor, along_precision=5000.0, terrain_aware=False,
+        )
+        port_angle, starboard_angle = sensor.swath_offset_angles()
+        alt_m = northward_line.altitude_msl.m_as("meter")
+        expected = alt_m * (
+            np.tan(np.deg2rad(abs(port_angle)))
+            + np.tan(np.deg2rad(abs(starboard_angle)))
+        )
+        widths = calculate_swath_widths(poly)
+        assert widths["mean_width"] == pytest.approx(expected, rel=1e-3)
+
+    def test_vertices_match_per_point_vreckon(self, northward_line):
+        """Each vectorized edge vertex must match a scalar vreckon call."""
+        from hyplan.geometry import process_linestring, wrap_to_180
+
+        sensor = AVIRIS3()
+        poly = generate_swath_polygon(
+            northward_line, sensor, along_precision=10000.0, terrain_aware=False,
+        )
+        lats, lons, azimuths, _ = process_linestring(
+            northward_line.track(precision=10000.0)
+        )
+        port_angle, _ = sensor.swath_offset_angles()
+        alt_m = northward_line.altitude_msl.m_as("meter")
+        offset = alt_m * np.tan(np.deg2rad(abs(port_angle)))
+        az_port = (azimuths + 270.0) % 360.0
+
+        ring = np.array(poly.exterior.coords)[:-1]
+        port_ring = ring[: len(lats)]
+        for i in range(len(lats)):
+            vlat, vlon = pymap3d.vincenty.vreckon(
+                float(lats[i]), float(lons[i]), float(offset), float(az_port[i]),
+            )
+            assert port_ring[i][1] == pytest.approx(float(vlat), abs=1e-9)
+            assert port_ring[i][0] == pytest.approx(
+                float(wrap_to_180(float(vlon))), abs=1e-9
+            )
+
+
 class TestExportPolygonToKml:
     def test_export(self, tmp_path):
         poly = Polygon([
@@ -256,3 +340,14 @@ class TestExportPolygonToKml:
         kml_path = str(tmp_path / "test_swath.kml")
         export_polygon_to_kml(poly, kml_path, name="Test")
         assert (tmp_path / "test_swath.kml").exists()
+
+    def test_logs_instead_of_printing(self, tmp_path, capsys, caplog):
+        poly = Polygon([
+            (-118.0, 34.0), (-118.0, 34.1),
+            (-117.9, 34.1), (-117.9, 34.0), (-118.0, 34.0)
+        ])
+        kml_path = str(tmp_path / "log_swath.kml")
+        with caplog.at_level("INFO", logger="hyplan.swath"):
+            export_polygon_to_kml(poly, kml_path, name="Test")
+        assert capsys.readouterr().out == ""
+        assert any("Polygon exported" in rec.message for rec in caplog.records)

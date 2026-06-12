@@ -272,15 +272,18 @@ class Pattern:
     def regenerate(self, **overrides: Any) -> Pattern:
         """Return a new Pattern by re-invoking the generator with params.
 
-        Any keyword overrides are merged into :attr:`params` for the
-        regeneration call.  The returned Pattern is not yet added to a
-        campaign; use :meth:`Campaign.replace_pattern` to swap it in.
+        Keyword overrides are merged into :attr:`params` for the
+        regeneration call.  Overrides may use either the stored params
+        spelling (``radius_m=50_000``) or the generator-style name with
+        pint-aware units (``radius=50 * ureg.km``); unknown keys raise
+        :class:`HyPlanValueError`.  The returned Pattern is not yet added
+        to a campaign; use :meth:`Campaign.replace_pattern` to swap it in.
         """
         from . import flight_patterns  # lazy import to avoid cycles
 
         generator = getattr(flight_patterns, self.kind)
         merged = copy.deepcopy(self.params)
-        merged.update(overrides)
+        merged.update(_normalize_overrides(self.kind, overrides))
         new_pattern = _invoke_generator(generator, self.kind, merged)
         new_pattern.name = self.name
         return new_pattern
@@ -461,7 +464,7 @@ class Pattern:
         anchor: Waypoint | tuple[float, float],
         *,
         bearing: float,
-        distance: Quantity | float,
+        distance: Quantity,
         generator: Callable[..., Pattern],
         **generator_kwargs: Any,
     ) -> Pattern:
@@ -477,8 +480,9 @@ class Pattern:
             anchor: A :class:`Waypoint` or ``(latitude, longitude)``
                 tuple.
             bearing: Initial true bearing from ``anchor`` (compass deg).
-            distance: Geodesic distance.  ``float`` interpreted as
-                nautical miles (matches :meth:`Waypoint.relative_to`).
+            distance: Geodesic distance as a pint :class:`Quantity` with
+                length units (matches :meth:`Waypoint.relative_to`, which
+                rejects bare numbers).
             generator: A pattern generator from
                 :mod:`hyplan.flight_patterns` (e.g. ``racetrack``,
                 ``rosette``, ``polygon``, ``sawtooth``, ``spiral``).
@@ -497,7 +501,7 @@ class Pattern:
             >>> pattern = Pattern.from_relative(
             ...     edw,
             ...     bearing=90,
-            ...     distance=200,                       # 200 nmi east
+            ...     distance=200 * ureg.nautical_mile,  # 200 nmi east
             ...     generator=racetrack,
             ...     heading=0,
             ...     altitude=35_000 * ureg.foot,
@@ -595,6 +599,105 @@ def _translated_params(
         new_params["center_lat"] = float(new_lat)
         new_params["center_lon"] = float(wrap_to_180(float(new_lon)))
     return new_params
+
+
+# Generator-keyword spellings accepted by Pattern.regenerate(), mapped to
+# the internal params keys the generators store (see _invoke_generator for
+# the reverse mapping). Length-valued aliases are coerced to plain metres
+# and speed to metres per second, matching the generators' own coercion.
+_PARAM_ALIASES: dict[str, str] = {
+    "altitude": "altitude_msl_m",
+    "altitude_end": "altitude_end_m",
+    "altitude_max": "altitude_max_m",
+    "altitude_min": "altitude_min_m",
+    "altitude_start": "altitude_start_m",
+    "altitudes": "altitudes_m",
+    "collection_length": "collection_length_m",
+    "leg_length": "leg_length_m",
+    "offset": "offset_m",
+    "radius": "radius_m",
+    "speed": "speed_mps",
+    "stack_altitudes": "stack_altitudes_m",
+}
+
+# Params keys _invoke_generator reads for each pattern kind.
+_KNOWN_PARAM_KEYS: dict[str, frozenset[str]] = {
+    "rosette": frozenset({
+        "center_lat", "center_lon", "heading", "altitude_msl_m",
+        "radius_m", "n_lines", "angles",
+    }),
+    "racetrack": frozenset({
+        "center_lat", "center_lon", "heading", "altitude_msl_m",
+        "leg_length_m", "n_legs", "offset_m", "altitudes_m",
+        "stack_altitudes_m",
+    }),
+    "polygon": frozenset({
+        "center_lat", "center_lon", "heading", "altitude_msl_m",
+        "radius_m", "n_sides", "aspect_ratio", "closed",
+    }),
+    "sawtooth": frozenset({
+        "center_lat", "center_lon", "heading", "altitude_min_m",
+        "altitude_max_m", "leg_length_m", "n_cycles",
+    }),
+    "spiral": frozenset({
+        "center_lat", "center_lon", "heading", "altitude_start_m",
+        "altitude_end_m", "radius_m", "n_turns", "direction",
+        "points_per_turn",
+    }),
+    "glint_arc": frozenset({
+        "center_lat", "center_lon", "altitude_msl_m", "speed_mps",
+        "observation_datetime", "bank_angle", "bank_direction",
+        "collection_length_m", "densify_m",
+    }),
+}
+
+
+def _coerce_override_value(target_key: str, value: Any) -> Any:
+    """Convert an aliased override value to its stored-params representation.
+
+    Mirrors the unit coercion the generators apply: lengths become plain
+    metres (pint Quantities converted, bare floats taken as metres) and
+    speeds become metres per second.
+    """
+    if value is None:
+        return None
+    if target_key == "speed_mps":
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(value.m_as(ureg.meter / ureg.second))
+    if target_key.endswith("_m"):
+        if isinstance(value, (list, tuple)):
+            return [_length_m(v) for v in value]
+        return _length_m(value)
+    return value
+
+
+def _normalize_overrides(kind: str, overrides: dict[str, Any]) -> dict[str, Any]:
+    """Validate :meth:`Pattern.regenerate` overrides for a pattern kind.
+
+    Keys already spelled as stored params pass through unchanged;
+    generator-style aliases are mapped to their params spelling with
+    unit coercion.  Unknown keys raise :class:`HyPlanValueError`.
+    """
+    known = _KNOWN_PARAM_KEYS[kind]
+    valid_aliases = {
+        alias: target for alias, target in _PARAM_ALIASES.items()
+        if target in known
+    }
+    normalized: dict[str, Any] = {}
+    for key, value in overrides.items():
+        if key in known:
+            normalized[key] = value
+        elif key in valid_aliases:
+            target = valid_aliases[key]
+            normalized[target] = _coerce_override_value(target, value)
+        else:
+            valid = sorted(known | set(valid_aliases))
+            raise HyPlanValueError(
+                f"Unknown regenerate() override {key!r} for pattern kind "
+                f"'{kind}'. Valid keys: {', '.join(valid)}."
+            )
+    return normalized
 
 
 def _invoke_generator(generator: Any, kind: str, params: dict[str, Any]) -> Pattern:

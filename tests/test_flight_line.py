@@ -167,6 +167,32 @@ class TestSplitByLength:
         for i, part in enumerate(parts):
             assert f"seg_{i}" in part.site_name
 
+    def test_segments_follow_geodesic_on_long_high_latitude_line(self):
+        """Splitting a 1000 km east-west line at 60°N must keep segments on
+        the parent geodesic: the last segment's endpoint lands on the
+        parent line's endpoint instead of drifting off along the initial
+        azimuth."""
+        import pymap3d.vincenty
+
+        fl = FlightLine.start_length_azimuth(
+            lat1=60.0, lon1=0.0,
+            length=ureg.Quantity(1000, "km"), az=90.0,
+            altitude_msl=ureg.Quantity(10000, "meter"),
+            site_name="Geodesic",
+        )
+        parts = fl.split_by_length(ureg.Quantity(100, "km"))
+        assert len(parts) == 10
+
+        last = parts[-1]
+        miss_m, _ = pymap3d.vincenty.vdist(last.lat2, last.lon2, fl.lat2, fl.lon2)
+        assert float(miss_m) < 10.0
+
+        # Consecutive segments stay contiguous
+        import itertools
+        for prev, nxt in itertools.pairwise(parts):
+            gap_m, _ = pymap3d.vincenty.vdist(prev.lat2, prev.lon2, nxt.lat1, nxt.lon1)
+            assert float(gap_m) < 1.0
+
 
 class TestOffsetAcross:
     def test_positive_offset_preserves_length(self, sample_flight_line):
@@ -220,14 +246,24 @@ class TestRotateAroundMidpoint:
         )
 
     def test_rotation_preserves_length(self, short_flight_line):
-        """Rotation should approximately preserve length. Note that
-        rotate_around_midpoint operates in planar lon/lat space, so
-        some distortion is expected, especially at higher latitudes
-        and larger rotation angles."""
+        """Rotation reconstructs the line geodesically, so length is
+        preserved regardless of latitude or rotation angle."""
         rotated = short_flight_line.rotate_around_midpoint(10.0)
         assert rotated.length.m_as("meter") == pytest.approx(
-            short_flight_line.length.m_as("meter"), rel=0.10
+            short_flight_line.length.m_as("meter"), rel=1e-3
         )
+
+    def test_high_latitude_rotation_geodesic(self):
+        """At 60N a 90 deg CCW rotation must preserve length and decrease
+        the compass azimuth by 90 deg (compass azimuth increases CW)."""
+        fl = FlightLine.center_length_azimuth(
+            lat=60.0, lon=10.0,
+            length=ureg.Quantity(50, "km"), az=0.0,
+            altitude_msl=ureg.Quantity(3000, "meter"),
+        )
+        rotated = fl.rotate_around_midpoint(90.0)
+        assert rotated.length.m_as("meter") == pytest.approx(50000, rel=1e-3)
+        assert rotated.az12.magnitude % 360 == pytest.approx(270.0, abs=0.5)
 
     def test_rotation_preserves_altitude(self, sample_flight_line):
         rotated = sample_flight_line.rotate_around_midpoint(90.0)
@@ -322,6 +358,118 @@ class TestErrorPaths:
         )
         assert fl.geometry.is_valid
         assert fl.site_name == "EP"
+
+
+class TestNoneAltitude:
+    """FlightLine factories and serializers must handle altitude_msl=None."""
+
+    def test_start_length_azimuth_default_altitude(self):
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(10, "km"), az=90.0,
+        )
+        assert fl.altitude_msl is None
+        assert fl.length.m_as("meter") == pytest.approx(10000, rel=0.01)
+
+    def test_from_endpoints_default_altitude(self):
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        assert fl.altitude_msl is None
+        assert fl.geometry.is_valid
+
+    def test_center_length_azimuth_default_altitude(self):
+        fl = FlightLine.center_length_azimuth(
+            lat=34.0, lon=-118.0,
+            length=ureg.Quantity(10, "km"), az=0.0,
+        )
+        assert fl.altitude_msl is None
+        assert fl.length.m_as("meter") == pytest.approx(10000, rel=0.01)
+
+    def test_to_dict_none_altitude(self):
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        d = fl.to_dict()
+        assert d["altitude_msl"] is None
+
+    def test_to_geojson_roundtrip_none_altitude(self):
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        gj = fl.to_geojson()
+        assert gj["properties"]["altitude_msl"] is None
+        restored = FlightLine.from_geojson(gj)
+        assert restored.altitude_msl is None
+        assert restored.lat1 == pytest.approx(fl.lat1, abs=1e-4)
+        assert restored.lon2 == pytest.approx(fl.lon2, abs=1e-4)
+
+    def test_offset_north_east_preserves_none_altitude(self):
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        moved = fl.offset_north_east(
+            ureg.Quantity(1000, "meter"), ureg.Quantity(500, "meter"),
+        )
+        assert moved.altitude_msl is None
+        assert moved.length.m_as("meter") == pytest.approx(
+            fl.length.m_as("meter"), rel=0.01
+        )
+
+
+class TestFlightLineReprEq:
+    def test_repr_contains_name_and_coordinates(self, sample_flight_line):
+        r = repr(sample_flight_line)
+        assert "Test Line" in r
+        assert f"{sample_flight_line.lat1:.6f}" in r
+        assert f"{sample_flight_line.lon1:.6f}" in r
+        assert f"{sample_flight_line.lat2:.6f}" in r
+        assert "6000 m" in r
+
+    def test_repr_none_altitude(self):
+        fl = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9,
+        )
+        assert "altitude_msl=None" in repr(fl)
+
+    def test_equal_by_value(self):
+        def make():
+            return FlightLine.start_length_azimuth(
+                lat1=34.0, lon1=-118.0,
+                length=ureg.Quantity(10, "km"), az=45.0,
+                altitude_msl=ureg.Quantity(3000, "meter"),
+                site_name="EQ", site_description="desc", investigator="PI",
+            )
+        assert make() == make()
+
+    def test_unequal_on_field_difference(self):
+        a = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9, site_name="A",
+        )
+        b = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.1, lon2=-117.9, site_name="B",
+        )
+        c = FlightLine.from_endpoints(
+            lat1=34.0, lon1=-118.0, lat2=34.2, lon2=-117.9, site_name="A",
+        )
+        assert a != b
+        assert a != c
+        assert a != "not a flight line"
+
+    def test_init_copies_caller_waypoints(self):
+        """Mutating a line's altitude must not write through to the
+        Waypoint objects the caller passed in."""
+        from hyplan.waypoint import Waypoint
+
+        wp1 = Waypoint(34.0, -118.0, 90.0, altitude_msl=ureg.Quantity(3000, "meter"))
+        wp2 = Waypoint(34.0, -117.9, 90.0, altitude_msl=ureg.Quantity(3000, "meter"))
+        fl = FlightLine(waypoint1=wp1, waypoint2=wp2, site_name="Alias")
+
+        fl.altitude_msl = ureg.Quantity(6000, "meter")
+
+        assert fl.altitude_msl.m_as("meter") == pytest.approx(6000)
+        assert wp1.altitude_msl.m_as("meter") == pytest.approx(3000)
+        assert wp2.altitude_msl.m_as("meter") == pytest.approx(3000)
 
 
 class TestToGDF:

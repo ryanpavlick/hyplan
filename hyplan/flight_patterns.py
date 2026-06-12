@@ -4,9 +4,11 @@ Each generator returns a :class:`~hyplan.pattern.Pattern` object that
 bundles the generated flight lines or waypoints with the parameters used
 to produce them.  Line-based patterns (``racetrack``, ``rosette``) carry
 ``FlightLine`` objects.  Continuous-track patterns (``polygon``,
-``sawtooth``, ``spiral``) carry ``Waypoint`` objects with
-``segment_type="pattern"`` so ``compute_flight_plan()`` labels the
-connecting legs accordingly.  ``compute_flight_plan`` accepts
+``spiral``) carry ``Waypoint`` objects with ``segment_type="pattern"``
+so ``compute_flight_plan()`` connects them with direct great-circle
+hops; ``sawtooth`` instead marks every waypoint
+``segment_type="pattern_turn"`` so the engine routes each altitude
+reversal through Dubins geometry.  ``compute_flight_plan`` accepts
 :class:`Pattern` in its flight sequence and expands it inline.
 """
 
@@ -106,6 +108,8 @@ def racetrack(
 
     # Per-leg altitudes
     if stack_altitudes is not None:
+        if altitudes is not None and len(altitudes) != n_legs:
+            raise HyPlanValueError(f"altitudes length ({len(altitudes)}) must equal n_legs ({n_legs})")
         stack_alts = [_to_length_quantity(a, "stack_altitudes") for a in stack_altitudes]
         all_offsets = []
         all_alts = []
@@ -130,7 +134,7 @@ def racetrack(
     rev_heading = (heading + 180.0) % 360.0
 
     lines = []
-    for i, (ct_offset, alt) in enumerate(zip(offsets_m, leg_alts, strict=False)):
+    for i, (ct_offset, alt) in enumerate(zip(offsets_m, leg_alts, strict=True)):
         if ct_offset != 0:
             leg_center_lat, leg_center_lon = pymap3d.vincenty.vreckon(
                 center_lat, center_lon, abs(ct_offset),
@@ -187,9 +191,8 @@ def rosette(
 ) -> Pattern:
     """Generate radial flight lines through a center point.
 
-    Creates a FlightLine centered on the point along the first angle, then
-    rotates it for each subsequent line angle. Each line is a full diameter
-    crossing through center.
+    Creates a FlightLine centered on the point at each line angle. Each
+    line is a full diameter crossing through center.
 
     Args:
         center: (lat, lon) center point.
@@ -217,22 +220,14 @@ def rosette(
     else:
         line_angles = [heading + i * (180.0 / n_lines) for i in range(n_lines)]
 
-    base_line = FlightLine.center_length_azimuth(
-        lat=center_lat, lon=center_lon,
-        length=diameter, az=line_angles[0],
-        altitude_msl=alt,
-        site_name="L1",
-    )
-
     lines = []
     for i, angle in enumerate(line_angles):
-        rotation = angle - line_angles[0]
-        if rotation == 0:
-            fl = base_line
-        else:
-            fl = base_line.rotate_around_midpoint(rotation)
-            fl.site_name = f"L{i+1}"
-        lines.append(fl)
+        lines.append(FlightLine.center_length_azimuth(
+            lat=center_lat, lon=center_lon,
+            length=diameter, az=angle,
+            altitude_msl=alt,
+            site_name=f"L{i+1}",
+        ))
 
     params = {
         "center_lat": float(center_lat),

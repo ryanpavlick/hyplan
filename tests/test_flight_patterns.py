@@ -80,6 +80,23 @@ class TestRacetrack:
             racetrack(CENTER, 0.0, ALT, ureg.Quantity(10, "km"),
                       n_legs=2, altitudes=[ALT])
 
+    def test_stacked_with_altitudes_wrong_length(self):
+        stack = [ureg.Quantity(a, "feet") for a in [9000, 7000]]
+        with pytest.raises(ValueError, match="altitudes length"):
+            racetrack(CENTER, 0.0, ALT, ureg.Quantity(10, "km"),
+                      n_legs=3, offset=ureg.Quantity(2, "km"),
+                      altitudes=[ALT], stack_altitudes=stack)
+
+    def test_stacked_with_altitudes_matched(self):
+        stack = [ureg.Quantity(a, "feet") for a in [9000, 7000]]
+        alts = [ureg.Quantity(a, "feet") for a in [5000, 6000]]
+        pat = racetrack(CENTER, 0.0, ALT, ureg.Quantity(10, "km"),
+                        n_legs=2, offset=ureg.Quantity(2, "km"),
+                        altitudes=alts, stack_altitudes=stack)
+        assert len(pat.lines) == 4  # 2 legs * 2 stack levels
+        leg_alts_ft = [fl.altitude_msl.m_as(ureg.foot) for fl in pat.lines.values()]
+        assert leg_alts_ft == pytest.approx([5000, 6000, 5000, 6000], rel=1e-6)
+
     def test_leg_length_accuracy(self):
         pat = racetrack(CENTER, 0.0, ALT, ureg.Quantity(50, "km"))
         leg = next(iter(pat.lines.values()))
@@ -148,6 +165,21 @@ class TestRosette:
     def test_site_names(self):
         pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
         assert [fl.site_name for fl in pat.lines.values()] == ["L1", "L2", "L3"]
+
+    def test_azimuths_and_lengths_at_latitude(self):
+        """Rotated lines must hold their requested compass azimuth and full
+        diameter length away from the equator."""
+        pat = rosette((34.4, -118.0), 0.0, ALT, ureg.Quantity(50, "km"),
+                      n_lines=4)
+        expected_azimuths = [0.0, 45.0, 90.0, 135.0]
+        for line, expected_az in zip(pat.lines.values(), expected_azimuths,
+                                     strict=True):
+            dist, az = pymap3d.vincenty.vdist(line.lat1, line.lon1,
+                                              line.lat2, line.lon2)
+            assert float(dist) == pytest.approx(100000, rel=1e-3)
+            az_mod = float(az) % 180.0
+            diff = min(abs(az_mod - expected_az), 180.0 - abs(az_mod - expected_az))
+            assert diff < 0.5
 
 
 class TestPolygon:
@@ -512,6 +544,50 @@ class TestPatternRegenerate:
                      n_turns=2, points_per_turn=18)
         regen = pat.regenerate()
         assert len(regen.waypoints) == len(pat.waypoints)
+
+    def test_regenerate_alias_radius_quantity_changes_geometry(self):
+        pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
+        regen = pat.regenerate(radius=50 * ureg.km)
+        assert regen.params["radius_m"] == pytest.approx(50_000)
+        first = next(iter(regen.lines.values()))
+        dist, _ = pymap3d.vincenty.vdist(first.lat1, first.lon1,
+                                         first.lat2, first.lon2)
+        assert float(dist) == pytest.approx(100_000, rel=1e-3)  # full diameter
+
+    def test_regenerate_alias_float_interpreted_as_meters(self):
+        pat = spiral(CENTER, 0.0, ALT, ALT, ureg.Quantity(5, "km"), n_turns=1)
+        regen = pat.regenerate(radius=8_000)
+        assert regen.params["radius_m"] == pytest.approx(8_000)
+
+    def test_regenerate_alias_altitude_with_units(self):
+        pat = racetrack(CENTER, 0.0, ALT, ureg.Quantity(20, "km"), n_legs=2,
+                        offset=ureg.Quantity(3, "km"))
+        regen = pat.regenerate(altitude=10_000 * ureg.foot)
+        assert regen.params["altitude_msl_m"] == pytest.approx(3048, rel=1e-6)
+
+    def test_regenerate_params_spelling_still_works(self):
+        pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
+        regen = pat.regenerate(radius_m=60_000)
+        assert regen.params["radius_m"] == pytest.approx(60_000)
+
+    def test_regenerate_unknown_key_raises_with_valid_keys(self):
+        from hyplan.exceptions import HyPlanValueError
+        pat = rosette(CENTER, 0.0, ALT, ureg.Quantity(10, "km"), n_lines=3)
+        with pytest.raises(HyPlanValueError, match="Unknown regenerate"):
+            pat.regenerate(radius_km=50)
+        with pytest.raises(HyPlanValueError, match="radius_m"):
+            pat.regenerate(radius_km=50)
+
+    def test_regenerate_unknown_key_names_other_kinds_params(self):
+        from hyplan.exceptions import HyPlanValueError
+        pat = sawtooth(CENTER, 0.0,
+                       altitude_min=ureg.Quantity(5000, "feet"),
+                       altitude_max=ureg.Quantity(10000, "feet"),
+                       leg_length=ureg.Quantity(50, "km"),
+                       n_cycles=2)
+        # radius is not a sawtooth parameter — must raise, not silently no-op.
+        with pytest.raises(HyPlanValueError, match="sawtooth"):
+            pat.regenerate(radius=5_000)
 
 
 class TestPatternReplaceLine:
@@ -940,7 +1016,7 @@ class TestPatternMovement:
         pat = Pattern.from_relative(
             anchor,
             bearing=0.0,
-            distance=10.0,  # 10 nmi north (float ⇒ nautical miles)
+            distance=ureg.Quantity(10, "nautical_mile"),  # 10 nmi north
             generator=racetrack,
             heading=0.0,
             altitude=ALT,

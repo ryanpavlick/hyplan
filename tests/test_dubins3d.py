@@ -5,7 +5,9 @@ import math
 import numpy as np
 import pytest
 
-from hyplan.dubins3d import _Dubins2D, _TrochoidDubins2D
+from hyplan.dubins3d import DubinsPath2D, _Dubins2D, _TrochoidDubins2D
+from hyplan.exceptions import HyPlanRuntimeError, HyPlanValueError
+from hyplan.waypoint import Waypoint
 
 
 class TestDubins2DInternal:
@@ -39,6 +41,36 @@ class TestDubins2DInternal:
         qf = np.array([1.0, 0.0, math.pi])
         d = _Dubins2D(qi, qf, 1.0, disable_ccc=True)
         assert d.maneuver.case not in ("RLR", "LRL")
+
+    def test_coincident_pose_gives_full_loop(self):
+        """Same position and heading still yields the 2πρ loop."""
+        qi = np.array([100.0, 200.0, 0.0])
+        rho = 500.0
+        d = _Dubins2D(qi, qi.copy(), rho)
+        assert d.maneuver.length == pytest.approx(2 * math.pi * rho, rel=1e-9)
+
+    def test_jet_scale_near_pose_keeps_goal_heading(self):
+        """At a jet's 36 km rhomin, a sub-meter offset with a 0.3 rad
+        heading change must be solved properly — the old meters-scaled
+        angle gate (~21° at this rhomin) snapped it to a same-heading
+        2πρ loop that lands with the wrong final heading."""
+        rho = 36_000.0
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([0.2, 0.0, 0.3])
+        d = _Dubins2D(qi, qf, rho)
+        assert d.maneuver.case != "RRR"
+        end = d.get_coordinates_at(d.maneuver.length)
+        assert end[2] == pytest.approx(0.3, abs=1e-6)
+
+    def test_uas_scale_coincident_pose_still_loops(self):
+        """A small-UAS rhomin must not shrink the degenerate gate below
+        sensible numerical noise."""
+        rho = 20.0
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([1e-4, 0.0, 1e-7])
+        d = _Dubins2D(qi, qf, rho)
+        assert d.maneuver.case == "RRR"
+        assert d.maneuver.length == pytest.approx(2 * math.pi * rho, rel=1e-9)
 
 
 class TestDubinsSegmentValid:
@@ -192,3 +224,155 @@ class TestTrochoidDubins2D:
         # Both methods solve the same physical problem; they should
         # agree to within numerical noise.
         assert abs(tro_sol["total_time"] - t_air) / t_air < 1e-3
+
+
+class TestDubinsPath2DSpeedValidation:
+    """DubinsPath2D must reject non-positive speeds up front."""
+
+    @pytest.fixture
+    def waypoints(self):
+        start = Waypoint(34.0, -118.0, 90.0, name="A")
+        end = Waypoint(34.0, -117.5, 90.0, name="B")
+        return start, end
+
+    def test_zero_speed_raises(self, waypoints):
+        start, end = waypoints
+        with pytest.raises(HyPlanValueError, match="speed"):
+            DubinsPath2D(start, end, speed=0.0, bank_angle=30.0)
+
+    def test_negative_speed_raises(self, waypoints):
+        start, end = waypoints
+        with pytest.raises(HyPlanValueError, match="speed"):
+            DubinsPath2D(start, end, speed=-50.0, bank_angle=30.0)
+
+    def test_zero_speed_quantity_raises(self, waypoints):
+        from hyplan.units import ureg
+        start, end = waypoints
+        with pytest.raises(HyPlanValueError, match="speed"):
+            DubinsPath2D(start, end, speed=ureg.Quantity(0, "m/s"), bank_angle=30.0)
+
+    def test_coincident_waypoints_give_valid_linestring(self):
+        """Same start/end pose yields the 2πρ loop and a valid geometry."""
+        wp = Waypoint(34.0, -118.0, 90.0, name="A")
+        path = DubinsPath2D(wp, wp, speed=100.0, bank_angle=30.0)
+        assert path.length.m_as("meter") == pytest.approx(
+            2 * math.pi * path.min_turn_radius.m_as("meter"), rel=1e-6,
+        )
+        assert path.geometry.is_valid
+        assert len(path.geometry.coords) >= 2
+
+    def test_degenerate_sample_points_yield_valid_linestring(self):
+        """A forced zero-length path must sample to a 2-point LineString
+        instead of crashing LineString construction."""
+        from shapely.geometry import LineString
+
+        start = Waypoint(34.0, -118.0, 90.0, name="A")
+        end = Waypoint(34.0, -117.5, 90.0, name="B")
+        path = DubinsPath2D(start, end, speed=100.0, bank_angle=30.0)
+        path._length_m = 0.0
+        pts = path._sample_points(10)
+        assert pts.shape == (2, 3)
+        geom = LineString(np.column_stack([pts[:, 1], pts[:, 0]]))
+        assert not geom.is_empty
+        assert len(geom.coords) == 2
+
+
+class TestDubinsPath2DSublinestring:
+    def test_matches_per_point_sampling(self):
+        """Batched sublinestring must match per-point sample_at_distance."""
+        start = Waypoint(34.0, -118.0, 90.0, name="A")
+        end = Waypoint(34.3, -117.5, 0.0, name="B")
+        path = DubinsPath2D(start, end, speed=100.0, bank_angle=30.0)
+
+        n = 12
+        length_m = path.length.m_as("meter")
+        sub = path.sublinestring(0.1 * length_m, 0.9 * length_m, n_samples=n)
+        coords = list(sub.coords)
+        assert len(coords) == n
+
+        distances = np.linspace(0.1 * length_m, 0.9 * length_m, n)
+        for (lon, lat), d in zip(coords, distances, strict=True):
+            exp_lat, exp_lon, _ = path.sample_at_distance(float(d))
+            assert lat == pytest.approx(exp_lat, abs=1e-9)
+            assert lon == pytest.approx(exp_lon, abs=1e-9)
+
+    def test_matches_per_point_sampling_with_wind(self):
+        start = Waypoint(34.0, -118.0, 90.0, name="A")
+        end = Waypoint(34.3, -117.5, 0.0, name="B")
+        path = DubinsPath2D(
+            start, end, speed=100.0, bank_angle=30.0, wind=(10.0, -5.0),
+        )
+
+        n = 8
+        length_m = path.length.m_as("meter")
+        sub = path.sublinestring(0.0, length_m, n_samples=n)
+        coords = list(sub.coords)
+        distances = np.linspace(0.0, length_m, n)
+        for (lon, lat), d in zip(coords, distances, strict=True):
+            exp_lat, exp_lon, _ = path.sample_at_distance(float(d))
+            assert lat == pytest.approx(exp_lat, abs=1e-9)
+            assert lon == pytest.approx(exp_lon, abs=1e-9)
+
+
+class TestTrochoidGroundLengthCache:
+    def test_cached_value_stable(self):
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([5000.0, 1000.0, 0.5])
+        d = _TrochoidDubins2D(qi, qf, 200.0, 100.0, 10.0, -5.0)
+        first = d.ground_length
+        assert first > 0
+        assert d.ground_length == first
+
+
+class TestTrochoidSolverFailureHandling:
+    """A failed BSB solve must never beat valid candidates."""
+
+    @staticmethod
+    def _patch_failed_bsb(monkeypatch):
+        """Patch solve_trochoid so it reports failure (total_time = inf)."""
+        import hyplan._trochoid_solver as ts
+
+        real_solve = ts.solve_trochoid
+
+        def failed(qi, qf, rhomin, airspeed, wind_u, wind_v):
+            sol = dict(real_solve(qi, qf, rhomin, airspeed, wind_u, wind_v))
+            sol["total_time"] = math.inf
+            return sol
+
+        monkeypatch.setattr(ts, "solve_trochoid", failed)
+
+    def test_solve_trochoid_failure_keeps_inf(self, monkeypatch):
+        """With every BSB family suppressed, total_time stays inf
+        (not the old 0.0 sentinel)."""
+        import hyplan._trochoid_solver as ts
+
+        monkeypatch.setattr(ts, "_try_analytical", lambda *a, **k: None)
+        monkeypatch.setattr(ts, "_try_numerical", lambda *a, **k: None)
+        qi = np.array([0.0, 0.0, 0.0])
+        qf = np.array([1000.0, 0.0, 0.0])
+        sol = ts.solve_trochoid(qi, qf, 200.0, 100.0, 10.0, 0.0)
+        assert math.isinf(sol["total_time"])
+
+    def test_failed_bsb_never_wins_selection(self, monkeypatch):
+        """When BSB fails but CCC candidates exist, the solver must pick
+        a CCC mode instead of a zero-time failed BSB."""
+        self._patch_failed_bsb(monkeypatch)
+
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])
+        d = _TrochoidDubins2D(qi, qf, 7.2 * nmi, 218.6, 13.4, 0.0)
+        assert d._mode in ("ccc_trochoid", "ccc_air_drift")
+        assert math.isfinite(d.total_time)
+        assert d.total_time > 0
+
+    def test_all_candidates_failing_raises(self, monkeypatch):
+        self._patch_failed_bsb(monkeypatch)
+
+        nmi = 1852.0
+        qi = np.array([0.0, 0.0, math.pi / 2])
+        qf = np.array([5.0 * nmi, 0.0, -math.pi / 2])
+        with pytest.raises(HyPlanRuntimeError, match="No feasible"):
+            _TrochoidDubins2D(
+                qi, qf, 7.2 * nmi, 218.6, 13.4, 0.0, disable_ccc=True,
+            )

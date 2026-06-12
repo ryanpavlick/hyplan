@@ -1,5 +1,7 @@
 """Tests for hyplan.geometry."""
 
+import random
+
 import numpy as np
 import pytest
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
@@ -21,6 +23,7 @@ from hyplan.geometry import (
     minimum_rotated_rectangle,
     process_linestring,
     random_points_in_polygon,
+    rectangle_dimensions,
     rotated_rectangle,
     translate_polygon,
     true_to_magnetic,
@@ -84,6 +87,21 @@ class TestUTM:
         # EPSG codes for UTM zones are 326xx (north) and 327xx (south)
         assert "326" in crs.to_string() or "327" in crs.to_string()
 
+    def test_polar_latitude_warns(self, caplog):
+        with caplog.at_level("WARNING", logger="hyplan.geometry"):
+            get_utm_crs(-50.0, 87.0)
+        assert any("UTM validity range" in rec.message for rec in caplog.records)
+
+    def test_deep_southern_latitude_warns(self, caplog):
+        with caplog.at_level("WARNING", logger="hyplan.geometry"):
+            get_utm_crs(0.0, -85.0)
+        assert any("UTM validity range" in rec.message for rec in caplog.records)
+
+    def test_in_range_latitude_does_not_warn(self, caplog):
+        with caplog.at_level("WARNING", logger="hyplan.geometry"):
+            get_utm_crs(-118.25, 34.05)
+        assert not any("UTM validity range" in rec.message for rec in caplog.records)
+
 
 class TestGeographicMean:
     def test_point_mean(self):
@@ -136,6 +154,11 @@ class TestValidatePolygon:
         with pytest.raises(HyPlanValueError, match="Input must be a Shapely Polygon"):
             _validate_polygon(Point(0, 0))
 
+    def test_self_intersecting_polygon_raises_with_explanation(self):
+        bowtie = Polygon([(0, 0), (1, 1), (1, 0), (0, 1)])
+        with pytest.raises(HyPlanValueError, match="Self-intersection"):
+            _validate_polygon(bowtie)
+
 
 class TestGetUtmTransforms:
     def test_round_trip(self, simple_polygon):
@@ -165,6 +188,28 @@ class TestGetUtmTransforms:
     def test_invalid_input_raises(self):
         with pytest.raises(HyPlanTypeError):
             get_utm_transforms("not a geometry")
+
+    def test_transforms_cached_per_zone(self, simple_polygon):
+        """Repeat calls in the same UTM zone reuse the cached transformer pair."""
+        first = get_utm_transforms(simple_polygon)
+        second = get_utm_transforms(simple_polygon)
+        assert first[0] is second[0]
+        assert first[1] is second[1]
+
+
+class TestRectangleDimensions:
+    def test_supplied_azimuth_is_wrapped(self, simple_polygon):
+        rect = rotated_rectangle(simple_polygon, azimuth=270.0)
+        _, _, azimuth, _, _ = rectangle_dimensions(rect, azimuth=270.0)
+        assert -180.0 <= azimuth <= 180.0
+        assert azimuth == pytest.approx(-90.0)
+
+    def test_in_range_azimuth_passes_through(self, simple_polygon):
+        rect = rotated_rectangle(simple_polygon, azimuth=45.0)
+        _, _, azimuth, length_m, width_m = rectangle_dimensions(rect, azimuth=45.0)
+        assert azimuth == pytest.approx(45.0)
+        assert length_m > 0
+        assert width_m > 0
 
 
 class TestRotatedRectangle:
@@ -213,6 +258,51 @@ class TestBufferPolygonAlongAzimuth:
                 azimuth=0.0,
             )
 
+    def test_quantity_and_int_match_float(self, simple_polygon):
+        """Quantity and int distances must match the plain-float result."""
+        from hyplan.units import ureg
+
+        ref = buffer_polygon_along_azimuth(
+            simple_polygon,
+            along_track_distance=2000.0,
+            across_track_distance=1000.0,
+            azimuth=30.0,
+        )
+        via_quantity = buffer_polygon_along_azimuth(
+            simple_polygon,
+            along_track_distance=ureg.Quantity(2, "km"),
+            across_track_distance=ureg.Quantity(1000, "meter"),
+            azimuth=30.0,
+        )
+        via_int = buffer_polygon_along_azimuth(
+            simple_polygon,
+            along_track_distance=2000,
+            across_track_distance=1000,
+            azimuth=30.0,
+        )
+        assert ref.equals_exact(via_quantity, tolerance=1e-9)
+        assert ref.equals_exact(via_int, tolerance=1e-9)
+
+    def test_non_length_quantity_raises(self, simple_polygon):
+        from hyplan.units import ureg
+
+        with pytest.raises(HyPlanValueError, match="length unit"):
+            buffer_polygon_along_azimuth(
+                simple_polygon,
+                along_track_distance=ureg.Quantity(5, "second"),
+                across_track_distance=1000.0,
+                azimuth=0.0,
+            )
+
+    def test_bool_distance_raises(self, simple_polygon):
+        with pytest.raises(HyPlanValueError, match="Invalid type"):
+            buffer_polygon_along_azimuth(
+                simple_polygon,
+                along_track_distance=True,
+                across_track_distance=1000.0,
+                azimuth=0.0,
+            )
+
 
 class TestProcessLinestring:
     def test_basic_output(self):
@@ -250,6 +340,38 @@ class TestProcessLinestring:
     def test_invalid_input_raises(self):
         with pytest.raises(HyPlanValueError):
             process_linestring("not a linestring")
+
+    def test_matches_per_segment_vdist(self):
+        """Vectorized output must match the per-segment vdist loop."""
+        from pymap3d.vincenty import vdist
+
+        coords = [
+            (-118.25, 34.0), (-118.20, 34.05), (-118.10, 34.12),
+            (-118.05, 34.30), (-117.90, 34.31),
+        ]
+        ls = LineString(coords)
+        lats, lons, azimuths, along = process_linestring(ls)
+
+        exp_az = []
+        exp_dist = []
+        for i in range(len(coords) - 1):
+            d, az = vdist(lats[i], lons[i], lats[i + 1], lons[i + 1])
+            exp_az.append(float(az))
+            exp_dist.append(float(d))
+        _, rev_az = vdist(lats[-1], lons[-1], lats[-2], lons[-2])
+        exp_az.append((float(rev_az) + 180.0) % 360.0)
+        exp_along = np.insert(np.cumsum(exp_dist), 0, 0)
+
+        np.testing.assert_allclose(azimuths, exp_az, atol=1e-9)
+        np.testing.assert_allclose(along, exp_along, atol=1e-6)
+
+    def test_two_identical_points(self):
+        """Two identical points form the minimal degenerate case."""
+        ls = LineString([(0.0, 0.0), (0.0, 0.0)])
+        lats, lons, azimuths, along = process_linestring(ls)
+        assert len(lats) == 2
+        assert len(azimuths) == 2
+        assert along[-1] == pytest.approx(0.0)
 
 
 class TestDdToDdms:
@@ -314,6 +436,34 @@ class TestDdToForeflightOneline:
         assert len(parts) == 2
 
 
+class TestCoordinateFormatterOverflow:
+    """Rounded minutes/seconds of 60 must carry into the next field."""
+
+    def test_ddm_carries_minutes_into_degrees(self):
+        lat_str, lon_str = dd_to_ddm(36.999999, -122.999999)
+        assert lat_str == "37 00.00"
+        assert lon_str == "-123 00.00"
+
+    def test_ddms_carries_seconds_and_minutes(self):
+        lat_str, lon_str = dd_to_ddms(36.9999999, -122.9999999)
+        assert lat_str == "37 00 00.0"
+        assert lon_str == "-123 00 00.0"
+
+    def test_nddmm_carries_minutes_into_degrees(self):
+        lat_str, lon_str = dd_to_nddmm(36.999999, -122.999999)
+        assert lat_str == "N37 00.00"
+        assert lon_str == "W123 00.00"
+
+    def test_foreflight_carries_minutes_into_degrees(self):
+        result = dd_to_foreflight_oneline(36.9999999, -122.9999999)
+        assert result == "N3700.000/W12300.000"
+
+    def test_ddms_seconds_carry_within_degree(self):
+        # 37 deg 29' 59.99" rounds to 37 30 00.0 (carry stops at minutes)
+        lat_str, _ = dd_to_ddms(37.4999997, 0.0)
+        assert lat_str == "37 30 00.0"
+
+
 class TestTranslatePolygon:
     def test_centroid_shifts(self):
         poly = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
@@ -351,6 +501,20 @@ class TestRandomPointsInPolygon:
         points = random_points_in_polygon(poly, 5)
         for pt in points:
             assert isinstance(pt, Point)
+
+    def test_all_points_inside_convex_triangle(self):
+        random.seed(42)
+        triangle = Polygon([(0, 0), (7, 1), (2, 5)])
+        points = random_points_in_polygon(triangle, 2000)
+        assert len(points) == 2000
+        assert all(triangle.contains(p) for p in points)
+
+    def test_all_points_inside_concave_polygon(self):
+        random.seed(42)
+        l_shape = Polygon([(0, 0), (4, 0), (4, 1), (1, 1), (1, 4), (0, 4)])
+        points = random_points_in_polygon(l_shape, 2000)
+        assert len(points) == 2000
+        assert all(l_shape.contains(p) for p in points)
 
 
 class TestTrueToMagnetic:

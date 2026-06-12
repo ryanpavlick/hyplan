@@ -249,25 +249,34 @@ class TestRelativeTo:
     def test_east_offset_at_equator(self):
         # 60 nmi east at the equator → ≈ 1° of longitude.
         anchor = Waypoint(0.0, 0.0, 0.0, name="EQ0")
-        wp = Waypoint.relative_to(anchor, bearing=90.0, distance=60.0)
+        wp = Waypoint.relative_to(
+            anchor, bearing=90.0, distance=ureg.Quantity(60, "nautical_mile"),
+        )
         assert wp.latitude == pytest.approx(0.0, abs=1e-3)
         assert wp.longitude == pytest.approx(1.0, abs=0.01)
 
     def test_north_offset_one_degree(self):
         # 60 nmi north at the equator → ≈ 1° of latitude.
-        wp = Waypoint.relative_to((0.0, 0.0), bearing=0.0, distance=60.0)
+        wp = Waypoint.relative_to(
+            (0.0, 0.0), bearing=0.0, distance=ureg.Quantity(60, "nautical_mile"),
+        )
         assert wp.latitude == pytest.approx(1.0, abs=0.01)
         assert wp.longitude == pytest.approx(0.0, abs=1e-3)
 
     def test_anchor_can_be_tuple(self):
-        wp = Waypoint.relative_to((34.0, -118.0), bearing=270.0, distance=100.0)
+        wp = Waypoint.relative_to(
+            (34.0, -118.0), bearing=270.0,
+            distance=ureg.Quantity(100, "nautical_mile"),
+        )
         # 100 nmi west → longitude shifts westward, latitude ~unchanged
         assert wp.longitude < -118.0
         assert wp.latitude == pytest.approx(34.0, abs=0.5)
 
     def test_anchor_can_be_waypoint(self):
         edw = Waypoint(34.92, -117.87, heading=0.0, name="EDW")
-        wp = Waypoint.relative_to(edw, bearing=90.0, distance=200.0)
+        wp = Waypoint.relative_to(
+            edw, bearing=90.0, distance=ureg.Quantity(200, "nautical_mile"),
+        )
         # 200 nmi true east; verify against vreckon (which returns
         # longitude in [0, 360); the classmethod wraps to [-180, 180)).
         import pymap3d.vincenty as vinc
@@ -286,24 +295,27 @@ class TestRelativeTo:
         # ~1° east at the equator
         assert wp.longitude == pytest.approx(1.0, abs=0.005)
 
-    def test_distance_quantity_nm_matches_float_nm(self):
-        # Float-as-nautical-miles must agree with Quantity(...) in nm.
-        wp_float = Waypoint.relative_to((40.0, -100.0), bearing=45.0, distance=150.0)
-        wp_q = Waypoint.relative_to(
-            (40.0, -100.0),
-            bearing=45.0,
-            distance=ureg.Quantity(150, "nautical_mile"),
-        )
-        assert wp_float.latitude == pytest.approx(wp_q.latitude, abs=1e-6)
-        assert wp_float.longitude == pytest.approx(wp_q.longitude, abs=1e-6)
+    def test_bare_float_distance_raises(self):
+        # Bare numbers are ambiguous (meters vs nautical miles) — rejected.
+        with pytest.raises(HyPlanValueError, match="nautical_mile"):
+            Waypoint.relative_to((40.0, -100.0), bearing=45.0, distance=150.0)
+
+    def test_non_length_quantity_distance_raises(self):
+        with pytest.raises(HyPlanValueError, match="length units"):
+            Waypoint.relative_to(
+                (40.0, -100.0), bearing=45.0, distance=ureg.Quantity(5, "second"),
+            )
 
     def test_heading_defaults_to_bearing(self):
-        wp = Waypoint.relative_to((0.0, 0.0), bearing=137.0, distance=10.0)
+        wp = Waypoint.relative_to(
+            (0.0, 0.0), bearing=137.0, distance=ureg.Quantity(10, "nautical_mile"),
+        )
         assert wp.heading == 137.0
 
     def test_heading_can_override(self):
         wp = Waypoint.relative_to(
-            (0.0, 0.0), bearing=137.0, distance=10.0, heading=270.0,
+            (0.0, 0.0), bearing=137.0,
+            distance=ureg.Quantity(10, "nautical_mile"), heading=270.0,
         )
         assert wp.heading == 270.0
 
@@ -311,7 +323,7 @@ class TestRelativeTo:
         wp = Waypoint.relative_to(
             (34.0, -118.0),
             bearing=0.0,
-            distance=30.0,
+            distance=ureg.Quantity(30, "nautical_mile"),
             altitude_msl=ureg.Quantity(35_000, "foot"),
             name="WP_N30",
             speed=ureg.Quantity(420, "knot"),
@@ -326,23 +338,71 @@ class TestRelativeTo:
 
     def test_bearing_wraps_to_0_360(self):
         # bearing=450 should be equivalent to bearing=90
-        wp_450 = Waypoint.relative_to((0.0, 0.0), bearing=450.0, distance=60.0)
-        wp_90  = Waypoint.relative_to((0.0, 0.0), bearing=90.0,  distance=60.0)
+        wp_450 = Waypoint.relative_to(
+            (0.0, 0.0), bearing=450.0, distance=ureg.Quantity(60, "nautical_mile"),
+        )
+        wp_90 = Waypoint.relative_to(
+            (0.0, 0.0), bearing=90.0, distance=ureg.Quantity(60, "nautical_mile"),
+        )
         assert wp_450.latitude == pytest.approx(wp_90.latitude, abs=1e-6)
         assert wp_450.longitude == pytest.approx(wp_90.longitude, abs=1e-6)
 
     def test_round_trip_via_reverse_bearing(self):
         # offset 100 nmi at heading 45°, then offset back at 225° → original.
         start = Waypoint(40.0, -100.0, heading=0.0)
-        away = Waypoint.relative_to(start, bearing=45.0, distance=100.0)
+        away = Waypoint.relative_to(
+            start, bearing=45.0, distance=ureg.Quantity(100, "nautical_mile"),
+        )
         # Reverse bearing on a great circle isn't simply +180°; use vdist
         # to get the back-azimuth.
         import pymap3d.vincenty as vinc
         _dist, back_az = vinc.vdist(away.latitude, away.longitude,
                                     start.latitude, start.longitude)
-        back = Waypoint.relative_to(away, bearing=float(back_az), distance=100.0)
+        back = Waypoint.relative_to(
+            away, bearing=float(back_az), distance=ureg.Quantity(100, "nautical_mile"),
+        )
         assert back.latitude == pytest.approx(start.latitude, abs=1e-4)
         assert back.longitude == pytest.approx(start.longitude, abs=1e-4)
+
+
+class TestWaypointReprEq:
+    def test_repr_contains_name_and_coordinates(self):
+        wp = Waypoint(34.0, -118.25, 90.0, altitude_msl=5000.0, name="WP1")
+        r = repr(wp)
+        assert "WP1" in r
+        assert "34.000000" in r
+        assert "-118.250000" in r
+        assert "90.0" in r
+        assert "5000 m" in r
+
+    def test_repr_none_altitude(self):
+        wp = Waypoint(0.0, 0.0, 0.0, name="A")
+        assert "altitude_msl=None" in repr(wp)
+
+    def test_equal_by_value(self):
+        kwargs = {
+            "latitude": 34.0, "longitude": -118.0, "heading": 90.0,
+            "altitude_msl": ureg.Quantity(5000, "meter"), "name": "A",
+            "speed": ureg.Quantity(75, "m/s"), "delay": ureg.Quantity(30, "s"),
+            "segment_type": "pattern",
+        }
+        assert Waypoint(**kwargs) == Waypoint(**kwargs)
+
+    def test_equal_across_compatible_units(self):
+        a = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(5, "km"))
+        b = Waypoint(34.0, -118.0, 0.0, altitude_msl=ureg.Quantity(5000, "meter"))
+        assert a == b
+
+    def test_unequal_on_field_difference(self):
+        a = Waypoint(34.0, -118.0, 0.0, name="A")
+        assert a != Waypoint(34.0, -118.0, 1.0, name="A")
+        assert a != Waypoint(34.0, -118.0, 0.0, name="B")
+        assert a != Waypoint(34.0, -118.0, 0.0, name="A", altitude_msl=100.0)
+
+    def test_non_waypoint_comparison(self):
+        wp = Waypoint(0.0, 0.0, 0.0)
+        assert wp != "not a waypoint"
+        assert wp != 42
 
 
 class TestIsWaypoint:
