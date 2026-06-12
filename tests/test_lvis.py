@@ -564,9 +564,14 @@ class TestEffectiveSwathOnTerrain:
             lat=35.0, lon=-111.0, altitude_msl=8500.0,
             heading=0.0, speed=150 * ureg.knot, dem_file=flat_dem,
         )
+        # Over flat terrain every scan position has equal density, so
+        # min/mean/max collapse to the same value up to float rounding;
+        # compare with a tolerance rather than strict ordering.
+        tol = 1e-9 * result["density_mean"]
         assert result["density_min"] > 0
-        assert result["density_max"] >= result["density_min"]
-        assert result["density_min"] <= result["density_mean"] <= result["density_max"]
+        assert result["density_max"] >= result["density_min"] - tol
+        assert result["density_min"] <= result["density_mean"] + tol
+        assert result["density_mean"] <= result["density_max"] + tol
         assert result["density_std"] >= 0
 
     def test_sloped_terrain_density_varies(self, sloped_dem):

@@ -476,6 +476,7 @@ class TestFetchPhenologySpatialMultiTile:
     """Granules clipped to different grids must align before stacking."""
 
     def test_granules_align_to_first_grid(self, tmp_path):
+        pytest.importorskip("xarray")
         import rasterio
 
         from hyplan.phenology.sources import fetch_phenology_spatial
