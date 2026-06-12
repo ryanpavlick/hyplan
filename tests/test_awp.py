@@ -85,6 +85,34 @@ class TestAwpHelpers:
         assert gdf.iloc[0]["time_utc"] == dt.datetime(2025, 1, 1, 12, 0, 4)
         assert gdf.iloc[0]["los_surface_separation_m"] == pytest.approx(9800.0, rel=0.03)
 
+    def test_flight_line_msl_fallback_assumes_sea_level(self, flight_line):
+        gdf = awp_profile_locations_for_flight_line(
+            flight_line,
+            ground_speed=225 * ureg.meter / ureg.second,
+        )
+        assert not gdf.empty
+        assert np.allclose(gdf["altitude_agl_m"].to_numpy(), 12000.0)
+
+    def test_flight_line_surface_elevation_msl(self):
+        line = FlightLine.start_length_azimuth(
+            lat1=34.0,
+            lon1=-118.0,
+            length=50 * ureg.kilometer,
+            az=0.0,
+            altitude_msl=3000 * ureg.meter,
+            site_name="Plateau",
+        )
+        gdf = awp_profile_locations_for_flight_line(
+            line,
+            ground_speed=225 * ureg.meter / ureg.second,
+            surface_elevation_msl=1000 * ureg.meter,
+        )
+        assert not gdf.empty
+        assert np.allclose(gdf["altitude_agl_m"].to_numpy(), 2000.0)
+        assert gdf.iloc[0]["altitude_msl_ft"] == pytest.approx(
+            (3000 * ureg.meter).m_as("foot")
+        )
+
     def test_profile_locations_for_short_leg_return_empty(self):
         short_line = FlightLine.start_length_azimuth(
             lat1=34.0,
@@ -224,6 +252,31 @@ class TestAwpHelpers:
         assert set(profiles["source_segment_name"]) == {"Stable"}
         assert profiles["stable_platform_ok"].all()
         assert profiles.iloc[0]["time_utc"] >= dt.datetime(2025, 1, 1, 12, 0, 0)
+
+    def test_profile_locations_for_plan_surface_elevation_msl(self):
+        alt_ft = (3000 * ureg.meter).m_as("foot")
+        plan = gpd.GeoDataFrame(
+            [
+                {
+                    "geometry": LineString([(-118.0, 34.0), (-118.0, 34.25)]),
+                    "segment_type": "flight_line",
+                    "segment_name": "Plateau",
+                    "start_altitude": alt_ft,
+                    "end_altitude": alt_ft,
+                    "time_to_segment": 8.0,
+                    "distance": 55.0,
+                    "groundspeed_kts": 437.0,
+                }
+            ],
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+        profiles = awp_profile_locations_for_plan(
+            plan,
+            surface_elevation_msl=1000 * ureg.meter,
+        )
+        assert not profiles.empty
+        assert np.allclose(profiles["altitude_agl_m"].to_numpy(), 2000.0)
 
     def test_profile_locations_for_plan_wind_aware_uses_crab_angle(self):
         plan = gpd.GeoDataFrame(

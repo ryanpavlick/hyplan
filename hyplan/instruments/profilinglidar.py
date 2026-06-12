@@ -124,8 +124,11 @@ class ProfilingLidar(Sensor):
     def footprint_diameter(self, altitude_agl: Quantity) -> Quantity:
         """Laser footprint diameter on the ground at the given altitude AGL.
 
-        Requires ``beam_divergence`` to have been set at construction; raises
-        ``HyPlanValueError`` otherwise.
+        ``beam_divergence`` is interpreted as the **full-angle** beam
+        divergence (the full cone angle, not the half-angle), so
+        ``footprint = altitude_agl * beam_divergence`` (small-angle
+        approximation).  Requires ``beam_divergence`` to have been set at
+        construction; raises ``HyPlanValueError`` otherwise.
         """
         if self.beam_divergence is None:
             raise HyPlanValueError(

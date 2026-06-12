@@ -2,6 +2,7 @@
 
 import pytest
 
+from hyplan.exceptions import HyPlanValueError
 from hyplan.instruments import (
     AVIRIS3,
     LVIS,
@@ -10,6 +11,7 @@ from hyplan.instruments import (
     SENSOR_REGISTRY,
     FrameCamera,
     HyTES,
+    LineScanner,
     ScanningSensor,
     SidelookingRadar,
     UAVSAR_Lband,
@@ -72,6 +74,35 @@ class TestLineScanner:
     def test_prism(self):
         s = PRISM()
         assert s.swath_width(ureg.Quantity(8000, "meter")).magnitude > 0
+
+
+class TestGroundSampleDistanceModes:
+    @pytest.fixture
+    def scanner(self):
+        return LineScanner("WideFOV", fov=40.0, across_track_pixels=1000,
+                           frame_rate=100.0 * ureg.Hz)
+
+    def test_edge_gsd_coarser_than_nadir(self, scanner):
+        alt = ureg.Quantity(5000, "meter")
+        nadir = scanner.ground_sample_distance(alt, mode="nadir")
+        edge = scanner.ground_sample_distance(alt, mode="edge")
+        assert edge.m_as("meter") > nadir.m_as("meter")
+        # h·(tan(20°) − tan(20° − 0.04°)) at 5 km
+        assert nadir.m_as("meter") == pytest.approx(3.4907, abs=1e-3)
+        assert edge.m_as("meter") == pytest.approx(3.9521, abs=1e-3)
+
+    def test_edge_round_trip(self, scanner):
+        gsd = ureg.Quantity(2.0, "meter")
+        alt = scanner.altitude_agl_for_ground_sample_distance(gsd, mode="edge")
+        recovered = scanner.ground_sample_distance(alt, mode="edge")
+        assert recovered.m_as("meter") == pytest.approx(2.0, rel=1e-9)
+
+    def test_unknown_mode_raises(self, scanner):
+        with pytest.raises(HyPlanValueError, match="mode"):
+            scanner.ground_sample_distance(ureg.Quantity(5000, "meter"), mode="bogus")
+        with pytest.raises(HyPlanValueError, match="mode"):
+            scanner.altitude_agl_for_ground_sample_distance(
+                ureg.Quantity(2, "meter"), mode="bogus")
 
 
 class TestSwathOffsetAngles:
@@ -199,6 +230,21 @@ class TestSensorRegistry:
         from hyplan.instruments import UAVSAR_Kaband
         s = create_sensor("GLISTIN-A")
         assert isinstance(s, UAVSAR_Kaband)
+
+    def test_unknown_sensor_lists_registered_names(self):
+        with pytest.raises(HyPlanValueError) as exc:
+            create_sensor("definitely-not-a-sensor")
+        msg = str(exc.value)
+        # Error enumerates the registered names so the caller can see options.
+        for name in sorted(SENSOR_REGISTRY):
+            assert name in msg
+
+    def test_unknown_sensor_suggests_close_match(self):
+        with pytest.raises(HyPlanValueError) as exc:
+            create_sensor("AVIRIS3 ")  # trailing space — close to "AVIRIS3"
+        msg = str(exc.value)
+        assert "Did you mean" in msg
+        assert "AVIRIS3" in msg
 
     @pytest.mark.parametrize("name", sorted(SENSOR_REGISTRY.keys()))
     def test_every_registry_entry_constructs(self, name):

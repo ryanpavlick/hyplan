@@ -76,7 +76,7 @@ def check_lband_radar_exclusions(
         geojson: Exclusion zone data.  One of:
 
             * ``None`` — load the bundled
-              ``hyplan/data/faa_lband_radar_exclusion_zones.geojson`` file.
+              ``hyplan/data/faa_radar_exclusion_zones.geojson`` file.
             * ``str`` — path to a GeoJSON FeatureCollection file on disk.
             * ``dict`` — an already-parsed GeoJSON FeatureCollection.
 

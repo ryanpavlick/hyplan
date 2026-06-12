@@ -402,6 +402,70 @@ class TestCoverageDiagnostic:
         assert d["edge_density_pts_m2"] <= d["nadir_density_pts_m2"]
 
 
+class TestFullCircleDutyCycle:
+    @pytest.fixture
+    def full_circle(self) -> ALSLidar:
+        """VQ-480II-class config with a full-circle scanner geometry."""
+        return ALSLidar(
+            name="FULL-CIRCLE",
+            prf=1200 * ureg.kilohertz,
+            scan_rate=200 * ureg.hertz,
+            scan_half_angle=37.5 * ureg.degree,
+            beam_divergence=0.35 * ureg.milliradian,
+            wavelength=1550 * ureg.nanometer,
+            max_range=1050 * ureg.meter,
+            scan_geometry="rotating_polygon_full_circle",
+        )
+
+    def test_swath_mean_density_not_above_nadir_peak(
+        self, full_circle: ALSLidar,
+    ) -> None:
+        # Without the scan_half_angle/π duty derate the swath-mean
+        # density exceeded the nadir peak — physically impossible.
+        diag = full_circle.coverage_diagnostic(
+            500 * ureg.meter, 60 * ureg.knot,
+        )
+        assert (
+            diag["swath_mean_density_pts_m2"]
+            <= diag["nadir_density_pts_m2"]
+        )
+
+    def test_density_derated_by_duty_fraction(
+        self, full_circle: ALSLidar, vq480ii: ALSLidar,
+    ) -> None:
+        alt = 500 * ureg.meter
+        spd = 60 * ureg.knot
+        duty = np.radians(37.5) / np.pi
+        d_full = full_circle.point_density(alt, spd).m_as(1 / ureg.meter**2)
+        d_arc = vq480ii.point_density(alt, spd).m_as(1 / ureg.meter**2)
+        assert d_full == pytest.approx(d_arc * duty, rel=1e-9)
+
+    def test_active_arc_density_unchanged(self, vq480ii: ALSLidar) -> None:
+        # Pinned: 1.2 MHz / (30.87 m/s × 767.3 m swath) at 500 m AGL, 60 kn.
+        d = vq480ii.point_density(
+            500 * ureg.meter, 60 * ureg.knot,
+        ).m_as(1 / ureg.meter**2)
+        assert d == pytest.approx(50.665, rel=1e-4)
+
+    def test_full_circle_solver_round_trips(
+        self, full_circle: ALSLidar,
+    ) -> None:
+        spd = 60 * ureg.knot
+        target = 5.0 / ureg.meter**2
+        alt = full_circle.solve_for_altitude(
+            target, spd, strict_contiguity=False,
+        )
+        d = full_circle.point_density(alt, spd).m_as(1 / ureg.meter**2)
+        assert d == pytest.approx(5.0, rel=1e-6)
+        spd2 = full_circle.solve_for_groundspeed(
+            target, 500 * ureg.meter, strict_contiguity=False,
+        )
+        d2 = full_circle.point_density(500 * ureg.meter, spd2).m_as(
+            1 / ureg.meter**2,
+        )
+        assert d2 == pytest.approx(5.0, rel=1e-6)
+
+
 class TestGenericClassIndependentOfSensor:
     """The class must not bake in VQ-480II-specific values."""
 
@@ -898,6 +962,16 @@ class TestGLIHTDualReference:
             1/ureg.meter**2,
         )
         assert 10.0 < d < 18.0
+
+    def test_mta_practical_max_altitude_four_zones(self) -> None:
+        # 4 MTA zones × c/(2 × 300 kHz) ≈ 1999 m unambiguous range;
+        # the 1850 m radiometric max range is the binding ceiling.
+        unit = GLIHT_DUAL_VQ_480I.units[0].lidar
+        assert unit.mta_zones == 4
+        unambig = unit.mta_max_unambiguous_range().m_as("meter")
+        expected = 4 * SPEED_OF_LIGHT_M_PER_S / (2.0 * 300_000.0)
+        assert unambig == pytest.approx(expected, rel=1e-9)
+        assert unit.mta_practical_max_altitude().m_as("meter") == pytest.approx(1850.0)
 
     def test_docstring_mentions_user_guide(self) -> None:
         assert "G-LiHT" in (GLIHT_DUAL_VQ_480I.__doc__ or "")

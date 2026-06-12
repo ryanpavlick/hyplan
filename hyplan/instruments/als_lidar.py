@@ -262,10 +262,13 @@ class ALSLidar(Sensor):
         """Laser spot diameter on flat ground.
 
         At nadir: ``footprint = altitude_agl * beam_divergence`` (small-
-        angle approximation).  At off-nadir scan angle θ, the slant range
-        grows by ``1 / cos(θ)``, so the along-scan-line diameter is
-        ``footprint_nadir / cos(θ)``.  Returns the along-track diameter
-        of the elliptical ground footprint.
+        angle approximation).  At off-nadir scan angle θ the ground spot
+        is elliptical.  This method returns the along-track (minor) axis
+        = ``footprint_nadir / cos(θ)`` — stretched only by the slant-range
+        growth.  The along-scan-line (cross-track, major) axis grows
+        faster, as ``footprint_nadir / cos²(θ)``, because the beam also
+        sweeps across the tilted line of sight; that is the convention
+        used by :meth:`effective_swath_on_terrain`.
         """
         alt = self._validate_quantity(altitude_agl, ureg.meter)
         div_rad = self.beam_divergence.m_as("radian")
@@ -278,6 +281,18 @@ class ALSLidar(Sensor):
     # ------------------------------------------------------------------
     # Density and spacing
     # ------------------------------------------------------------------
+
+    def _ground_duty_fraction(self) -> float:
+        """Fraction of emitted pulses that reach the ground swath.
+
+        ``"rotating_polygon_full_circle"`` scanners fire continuously
+        around the facet rotation, so only the ``scan_half_angle / π``
+        fraction of pulses falls within the ±scan_half_angle ground
+        arc.  Active-arc scanners fire only inside the arc → 1.0.
+        """
+        if self.scan_geometry == "rotating_polygon_full_circle":
+            return float(self.scan_half_angle.m_as("radian")) / float(np.pi)
+        return 1.0
 
     def point_density(
         self,
@@ -299,6 +314,11 @@ class ALSLidar(Sensor):
         expression suitable for both forward calculation and inverse
         solving.
 
+        For ``"rotating_polygon_full_circle"`` scan geometry only the
+        ``scan_half_angle / π`` fraction of pulses reaches the ground
+        swath, so the pulse rate is derated accordingly (consistent
+        with :meth:`cross_track_spacing_at_nadir`).
+
         Pass ``effective_prf`` to override ``self.prf`` (e.g. for
         derated MTA operation).
 
@@ -314,7 +334,9 @@ class ALSLidar(Sensor):
             else self.prf
         )
         sw = self.swath_width(alt)
-        return (prf / (spd * sw)).to(1 / ureg.meter**2)
+        return (prf * self._ground_duty_fraction() / (spd * sw)).to(
+            1 / ureg.meter**2
+        )
 
     def along_track_spacing(self, groundspeed: Quantity) -> Quantity:
         """Ground distance between adjacent scan lines.
@@ -482,8 +504,11 @@ class ALSLidar(Sensor):
         ``target_density`` at the given ``groundspeed``.
 
         Solves the closed-form
-        ``altitude = prf / (target_density * groundspeed * 2 *
-        tan(scan_half_angle))``.
+        ``altitude = ground_prf / (target_density * groundspeed * 2 *
+        tan(scan_half_angle))`` where ``ground_prf`` is the pulse rate
+        reaching the ground swath (``prf`` derated by
+        ``scan_half_angle / π`` for full-circle scanners, matching
+        :meth:`point_density`).
 
         If ``strict_contiguity`` (default), raises
         :class:`ContiguityError` when the solved altitude would leave
@@ -496,7 +521,7 @@ class ALSLidar(Sensor):
         if spd.magnitude <= 0:
             raise HyPlanValueError("groundspeed must be positive")
 
-        prf_hz = self.prf.m_as("hertz")
+        prf_hz = self.prf.m_as("hertz") * self._ground_duty_fraction()
         d_per_m2 = d.m_as(1 / ureg.meter**2)
         spd_mps = spd.m_as("meter / second")
         tan_ha = float(np.tan(self.scan_half_angle.m_as("radian")))
@@ -535,7 +560,7 @@ class ALSLidar(Sensor):
         if alt.magnitude <= 0:
             raise HyPlanValueError("altitude_agl must be positive")
 
-        prf_hz = self.prf.m_as("hertz")
+        prf_hz = self.prf.m_as("hertz") * self._ground_duty_fraction()
         d_per_m2 = d.m_as(1 / ureg.meter**2)
         sw_m = self.swath_width(alt).m_as("meter")
 
@@ -575,10 +600,15 @@ class ALSLidar(Sensor):
         typical operational practice.
 
         When ``target_density`` and ``groundspeed`` are both supplied,
-        returns the overlap that makes the *combined* density across
-        the line boundary equal ``target_density``: the overlap zone
-        is sampled by both adjacent passes, so spacing is chosen such
-        that the edge density rises to target after summation.
+        returns the overlap that makes the *area-mean* combined density
+        equal ``target_density``.  The formula ``1 − mean/target``
+        equates the multiplicity-weighted (overlap-counted) density
+        averaged over the swath to the target.  Note this is an
+        area-average guarantee, not a worst-case one: single-covered
+        strips between overlap zones remain at the single-pass density
+        (``mean``), which stays below target — only the doubly-covered
+        overlap zones exceed it.  Plan to a minimum-density requirement
+        separately if uniform target coverage is needed.
         """
         if target_density is None or groundspeed is None:
             return float(default_overlap_percent)
@@ -594,10 +624,12 @@ class ALSLidar(Sensor):
         d_target = d.m_as(1 / ureg.meter**2)
         if mean_density >= d_target:
             return float(default_overlap_percent)
-        # density doubles in the overlap zone; spacing must contract so
-        # the non-overlapping centre still meets target.  Fraction of
-        # swath needed at target density = d_target / mean_density;
-        # overlap = 1 - swath_used / swath_total = 1 - mean/target.
+        # Set the area-mean multiplicity-weighted density to target: a
+        # fraction f of the swath is double-covered (2 × mean) and the
+        # rest single-covered (mean), so mean·(1 + f) = target gives
+        # f = target/mean − 1.  Equivalently the overlap fraction of the
+        # swath is 1 − mean/target.  This equalises the AREA average; the
+        # single-covered strips stay at mean (below target).
         overlap_fraction = 1.0 - mean_density / d_target
         return float(min(99.0, max(default_overlap_percent, overlap_fraction * 100.0)))
 
@@ -1298,7 +1330,10 @@ class MultiALSLidarRig(Sensor):
         spd = self.units[0].lidar._validate_quantity(
             groundspeed, ureg.meter / ureg.second,
         )
-        total_prf_hz = sum(u.lidar.prf.m_as("hertz") for u in self.units)
+        total_prf_hz = sum(
+            u.lidar.prf.m_as("hertz") * u.lidar._ground_duty_fraction()
+            for u in self.units
+        )
         sw_m = self.swath_width(alt).m_as("meter")
         spd_mps = spd.m_as("meter / second")
         return (total_prf_hz / (spd_mps * sw_m)) / ureg.meter**2
@@ -1363,7 +1398,10 @@ class MultiALSLidarRig(Sensor):
         if alt.magnitude <= 0:
             raise HyPlanValueError("altitude_agl must be positive")
 
-        total_prf_hz = sum(u.lidar.prf.m_as("hertz") for u in self.units)
+        total_prf_hz = sum(
+            u.lidar.prf.m_as("hertz") * u.lidar._ground_duty_fraction()
+            for u in self.units
+        )
         d_per_m2 = d.m_as(1 / ureg.meter**2)
         sw_m = self.swath_width(alt).m_as("meter")
         spd_mps = total_prf_hz / (d_per_m2 * sw_m)
@@ -1507,7 +1545,7 @@ _GLIHT_VQ_480I_UNIT = ALSLidar(
     wavelength=1550 * ureg.nanometer,
     max_range=1850 * ureg.meter,  # at 60% reflectivity, single-unit datasheet
     max_range_reflectivity=0.6,
-    mta_zones=2,  # c/(2·300 kHz) = 500 m per zone; max range 1850 m → 4 zones
+    mta_zones=4,  # c/(2·300 kHz) = 500 m per zone; max range 1850 m → 4 zones
     scan_geometry="rotating_polygon_active_arc",
     source=(
         "RIEGL VQ-480i datasheet (60° FOV, 300 kHz max PRR, 0.3 mrad beam "

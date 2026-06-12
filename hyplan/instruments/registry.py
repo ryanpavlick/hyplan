@@ -26,6 +26,7 @@ inline registration inside each module.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Callable, Iterable
 
 from ..exceptions import HyPlanValueError
@@ -89,5 +90,10 @@ def create_sensor(sensor_type: str) -> Sensor:
     try:
         factory = SENSOR_REGISTRY[sensor_type]
     except KeyError as exc:
-        raise HyPlanValueError(f"Unknown sensor type: {sensor_type}") from exc
+        available = sorted(SENSOR_REGISTRY)
+        msg = f"Unknown sensor type: {sensor_type!r}. Registered names: {available}"
+        close = difflib.get_close_matches(sensor_type, available, n=1)
+        if close:
+            msg += f". Did you mean {close[0]!r}?"
+        raise HyPlanValueError(msg) from exc
     return factory()

@@ -24,6 +24,7 @@ Campaigns."
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 from collections.abc import Iterable
 from typing import Any
 
@@ -49,6 +50,8 @@ __all__ = [
     "flag_awp_stable_segments",
 ]
 
+
+logger = logging.getLogger(__name__)
 
 _LIGHT_SPEED_MPS = 299_792_458.0
 
@@ -365,9 +368,20 @@ def _as_awp(sensor: AerosolWindProfiler | None) -> AerosolWindProfiler:
     return sensor
 
 
-def _altitude_agl_or_default(value: Quantity | None, fallback: Quantity) -> Quantity:
+def _altitude_agl_or_default(
+    value: Quantity | None,
+    fallback_msl: Quantity,
+    surface_elevation_msl: Quantity,
+) -> Quantity:
+    """Resolve altitude AGL, falling back to MSL minus surface elevation."""
     if value is None:
-        return fallback.to("meter")
+        if surface_elevation_msl.magnitude == 0.0:
+            logger.debug(
+                "No altitude_agl given; using altitude MSL %s as altitude AGL "
+                "(surface_elevation_msl=0 m, i.e. sea-level terrain assumed).",
+                fallback_msl,
+            )
+        return fallback_msl.to("meter") - surface_elevation_msl.to("meter")
     return _as_quantity(value, "meter", "altitude_agl")
 
 
@@ -821,6 +835,7 @@ def awp_profile_locations_for_flight_line(
     altitude_agl: Quantity | None = None,
     dwell_time_per_los: Quantity | None = None,
     nadir_dwell_time: Quantity | None = None,
+    surface_elevation_msl: Quantity | float = 0.0,
     terrain_aware: bool = False,
     dem_file: str | None = None,
     terrain_precision: Quantity | float = 30.0,
@@ -831,6 +846,24 @@ def awp_profile_locations_for_flight_line(
     Bedka et al. (2024) and Bedka (2025). When ``terrain_aware=True`` the
     LOS intercepts are computed by ray-terrain intersection against a DEM and
     the returned ``altitude_agl_m`` varies with local terrain beneath the line.
+
+    .. warning::
+        When ``terrain_aware=False`` and ``altitude_agl`` is not given,
+        altitude AGL is derived as ``flight_line.altitude_msl -
+        surface_elevation_msl``.  With the default
+        ``surface_elevation_msl=0 m`` this treats the MSL altitude as
+        AGL — correct only over sea-level terrain.  The value drives the
+        LOS intercept radius/separation and is reported in the
+        ``altitude_agl_m`` output column.  Pass ``surface_elevation_msl``
+        (mean terrain elevation under the line) or use
+        ``terrain_aware=True`` over elevated terrain.
+
+    Args:
+        surface_elevation_msl: Surface elevation MSL subtracted from
+            ``flight_line.altitude_msl`` when deriving altitude AGL in
+            the non-terrain-aware path (default 0 m — sea-level
+            terrain).  Ignored when ``altitude_agl`` is given or
+            ``terrain_aware=True``.
     """
     if not isinstance(flight_line, FlightLine):
         raise HyPlanTypeError("flight_line must be a FlightLine")
@@ -857,7 +890,11 @@ def awp_profile_locations_for_flight_line(
             dem_file=dem_file,
             terrain_precision=_as_quantity(terrain_precision, "meter", "terrain_precision"),
         )
-    altitude = _altitude_agl_or_default(altitude_agl, flight_line.altitude_msl)
+    altitude = _altitude_agl_or_default(
+        altitude_agl,
+        flight_line.altitude_msl,
+        _as_quantity(surface_elevation_msl, "meter", "surface_elevation_msl"),
+    )
     return _profiles_for_geometry(
         flight_line.geometry,
         altitude_agl=altitude,
@@ -882,6 +919,7 @@ def awp_profile_locations_for_plan(
     dwell_time_per_los: Quantity | None = None,
     nadir_dwell_time: Quantity | None = None,
     stable_only: bool = True,
+    surface_elevation_msl: Quantity | float = 0.0,
     terrain_aware: bool = False,
     dem_file: str | None = None,
     terrain_precision: Quantity | float = 30.0,
@@ -896,10 +934,35 @@ def awp_profile_locations_for_plan(
     metadata (``crab_angle_deg`` or ``wind_corrected_heading``) when present,
     so the LOS geometry follows the crabbed aircraft heading rather than the
     nominal ground track.
+
+    .. warning::
+        When ``terrain_aware=False``, altitude AGL for each segment is
+        derived as the segment's mean MSL altitude minus
+        ``surface_elevation_msl``.  With the default
+        ``surface_elevation_msl=0 m`` this treats MSL altitudes as AGL —
+        correct only over sea-level terrain.  The value drives the LOS
+        intercept radius/separation and is reported in the
+        ``altitude_agl_m`` output column.  Pass ``surface_elevation_msl``
+        (mean terrain elevation under the plan) or use
+        ``terrain_aware=True`` over elevated terrain.
+
+    Args:
+        surface_elevation_msl: Surface elevation MSL subtracted from
+            segment MSL altitudes when deriving altitude AGL in the
+            non-terrain-aware path (default 0 m — sea-level terrain).
+            Ignored when ``terrain_aware=True``.
     """
     flagged = flag_awp_stable_segments(plan, sensor=sensor)
     awp = _as_awp(sensor)
     terrain_precision_q = _as_quantity(terrain_precision, "meter", "terrain_precision")
+    surface_elevation_q = _as_quantity(
+        surface_elevation_msl, "meter", "surface_elevation_msl"
+    )
+    if not terrain_aware and surface_elevation_q.magnitude == 0.0:
+        logger.debug(
+            "terrain_aware=False with surface_elevation_msl=0 m; segment MSL "
+            "altitudes are used as altitude AGL (sea-level terrain assumed)."
+        )
 
     all_profiles: list[gpd.GeoDataFrame] = []
     cumulative_seconds = 0.0
@@ -920,7 +983,9 @@ def awp_profile_locations_for_plan(
             alt1 = row.get("end_altitude")
             if pd.notna(alt0) and pd.notna(alt1):
                 alt_ft = (float(alt0) + float(alt1)) / 2.0
-                altitude_agl = ureg.Quantity(alt_ft, "foot").to("meter")
+                altitude_agl = (
+                    ureg.Quantity(alt_ft, "foot").to("meter") - surface_elevation_q
+                )
                 seg_start_time = (
                     takeoff_time + _dt.timedelta(seconds=cumulative_seconds)
                     if takeoff_time is not None

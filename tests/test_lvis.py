@@ -236,7 +236,7 @@ class TestPointDensity:
 
 class TestSurveysolvers:
     def test_solve_for_speed_positive(self, lvis_default, altitude):
-        target = 0.001 / ureg.meter ** 2
+        target = 0.02 / ureg.meter ** 2
         v = lvis_default.solve_for_speed(target, altitude)
         assert v.magnitude > 0
 
@@ -244,18 +244,29 @@ class TestSurveysolvers:
         """Speed from solver should yield density >= target."""
         lvis = LVIS(lens="wide", rep_rate=10000 * ureg.Hz)
         alt = 8000 * ureg.meter
-        target = 0.004 / ureg.meter ** 2
+        target = 0.02 / ureg.meter ** 2
         v = lvis.solve_for_speed(target, alt)
         actual = lvis.point_density(alt, v)
         assert actual.magnitude >= target.magnitude * 0.99
 
-    def test_solve_for_speed_impossible_density(self, altitude):
-        """Density above 1/fp^2 is impossible — should raise."""
+    def test_solve_for_speed_closure(self, altitude):
+        """Targets above the 1/fp^2 floor are achievable by flying
+        slower; the solved speed reproduces the target density."""
         lvis = LVIS(lens="wide")
         fp = lvis.footprint_diameter(altitude).magnitude
-        impossible = (2.0 / fp ** 2) / ureg.meter ** 2
-        with pytest.raises(ValueError, match="exceeds"):
-            lvis.solve_for_speed(impossible, altitude)
+        target = (2.0 / fp ** 2) / ureg.meter ** 2
+        v = lvis.solve_for_speed(target, altitude)
+        actual = lvis.point_density(altitude, v)
+        assert actual.magnitude == pytest.approx(target.magnitude, rel=1e-9)
+
+    def test_solve_for_speed_below_floor_raises(self, altitude):
+        """Below the 1/fp^2 floor the density is met at every speed,
+        so no maximum speed exists — should raise."""
+        lvis = LVIS(lens="wide")
+        fp = lvis.footprint_diameter(altitude).magnitude
+        below_floor = (0.5 / fp ** 2) / ureg.meter ** 2
+        with pytest.raises(ValueError, match="floor"):
+            lvis.solve_for_speed(below_floor, altitude)
 
     def test_solve_for_altitude_positive(self, lvis_default, speed):
         target = 0.001 / ureg.meter ** 2
@@ -278,8 +289,8 @@ class TestSurveysolvers:
         """Higher target density → lower max speed."""
         lvis = LVIS(lens="wide", rep_rate=10000 * ureg.Hz)
         alt = 3000 * ureg.meter
-        v_hi_density = lvis.solve_for_speed(0.01 / ureg.meter ** 2, alt)
-        v_lo_density = lvis.solve_for_speed(0.005 / ureg.meter ** 2, alt)
+        v_hi_density = lvis.solve_for_speed(0.2 / ureg.meter ** 2, alt)
+        v_lo_density = lvis.solve_for_speed(0.1 / ureg.meter ** 2, alt)
         assert v_hi_density.magnitude < v_lo_density.magnitude
 
     def test_negative_density_raises(self, lvis_default, altitude, speed):
@@ -568,6 +579,32 @@ class TestEffectiveSwathOnTerrain:
         # Just verify the range is non-degenerate
         if result["density_max"] > 0:
             assert result["density_max"] >= result["density_min"]
+
+    def test_flat_terrain_density_matches_flat_earth(self, flat_dem):
+        """Over flat terrain, the terrain-aware density must reproduce
+        the flat-earth point_density, not a multiple of it."""
+        lvis = LVIS(lens="wide")
+        speed = 150 * ureg.knot
+        result = lvis.effective_swath_on_terrain(
+            lat=35.0, lon=-111.0, altitude_msl=8500.0,
+            heading=0.0, speed=speed, dem_file=flat_dem,
+        )
+        flat_density = lvis.point_density(8000 * ureg.meter, speed).magnitude
+        assert result["density_mean"] == pytest.approx(flat_density, rel=0.05)
+
+    def test_density_independent_of_discretization(self, flat_dem):
+        """Densities must not scale with n_scan_positions."""
+        lvis = LVIS(lens="wide")
+        speed = 150 * ureg.knot
+        means = []
+        for n in (11, 41):
+            result = lvis.effective_swath_on_terrain(
+                lat=35.0, lon=-111.0, altitude_msl=8500.0,
+                heading=0.0, speed=speed, dem_file=flat_dem,
+                n_scan_positions=n,
+            )
+            means.append(result["density_mean"])
+        assert means[1] == pytest.approx(means[0], rel=0.02)
 
 
 class TestTerrainSummary:

@@ -49,12 +49,21 @@ _DEFAULT_HALF_SCAN_ANGLE_DEG = np.degrees(np.arctan(0.1))
 
 @dataclass
 class LVISLens:
-    """LVIS lens option defined by its beam divergence."""
+    """LVIS lens option defined by its beam divergence.
+
+    ``divergence_mrad`` is the **full-angle** beam divergence (the full
+    cone angle, not the half-angle), consistent with the ALS-lidar
+    convention.  The footprint diameter is therefore
+    ``tan(divergence) * altitude``.
+    """
     name: str
     divergence_mrad: float
 
     def footprint_diameter(self, altitude_agl: Quantity) -> Quantity:
         """Footprint diameter on the ground for a given altitude AGL.
+
+        Uses the full-angle ``divergence_mrad``:
+        ``footprint = tan(divergence) * altitude_agl``.
 
         Args:
             altitude_agl: Flight altitude above ground level.
@@ -352,18 +361,18 @@ class LVIS(Sensor):
 
         Two regimes apply:
 
-        * **Geometry-limited** (effective swath = max swath):
-          ``density = rep_rate / (speed * max_swath)``, so
-          ``speed = rep_rate / (density * max_swath)``.
+        * **Geometry-limited** (``target_density >= 1 / fp^2``):
+          slowing down raises the density without bound, so the target
+          is met at ``speed = rep_rate / (density * max_swath)`` and at
+          every slower speed.  That closed form is the maximum speed at
+          which ``point_density >= target_density``.
 
-        * **Sampling-limited** (effective swath < max swath):
-          ``density = 1 / fp^2``, independent of speed.  In this regime
-          the density is always at least the target (since 1/fp^2 >=
-          target_density), so faster speeds are feasible — the effective
-          swath narrows but density within it stays constant.
-
-        The returned speed is the maximum speed at which
-        ``point_density >= target_density``.
+        * **Below the sampling-limited floor** (``target_density <
+          1 / fp^2``): at high speed the effective swath narrows while
+          the density within it plateaus at ``1 / fp^2``, so the density
+          never drops below the floor at any speed.  Every speed meets
+          the target and no maximum speed exists — raises
+          :class:`~hyplan.exceptions.HyPlanValueError`.
 
         Args:
             target_density: Desired point density (1/m^2).
@@ -373,8 +382,9 @@ class LVIS(Sensor):
             Maximum speed that achieves at least the target density.
 
         Raises:
-            HyPlanValueError: If the target density exceeds 1/fp^2
-                (impossible at this altitude/lens regardless of speed).
+            HyPlanValueError: If the target density is below the
+                sampling-limited floor 1/fp^2 (achieved at any speed,
+                so no maximum speed exists).
         """
         rr = self.rep_rate.magnitude
         ms = self.swath_width(altitude_agl).magnitude
@@ -384,14 +394,15 @@ class LVIS(Sensor):
         if d_target <= 0:
             raise HyPlanValueError("target_density must be positive")
 
-        # In the sampling-limited regime, density = 1/fp^2.
-        # If target exceeds that, it's physically impossible.
-        if fp > 0 and (1.0 / fp ** 2) < d_target:
+        # In the sampling-limited regime, density plateaus at 1/fp^2 —
+        # the floor that point_density never drops below at any speed.
+        if fp > 0 and d_target < (1.0 / fp ** 2):
             raise HyPlanValueError(
-                f"Target density {d_target:.4f} pts/m^2 exceeds the "
-                f"maximum achievable density {1.0 / fp ** 2:.4f} pts/m^2 "
-                f"at this altitude and lens.  Reduce altitude or use a "
-                f"narrower lens."
+                f"Target density {d_target:.4f} pts/m^2 is below the "
+                f"sampling-limited density floor {1.0 / fp ** 2:.4f} "
+                f"pts/m^2 at this altitude and lens — the target is met "
+                f"at any speed, so no maximum speed exists.  Choose the "
+                f"speed from other constraints."
             )
 
         # Geometry-limited: speed = rep_rate / (density * max_swath)
@@ -664,6 +675,9 @@ class LVIS(Sensor):
         Discretises the scan into *n_scan_positions* angles from port to
         starboard and evaluates the terrain-aware footprint at each.
         Returns per-position metrics and the overall effective swath.
+        Each scan position's share of the rep rate is proportional to
+        its strip width, so local densities and contiguity are
+        independent of the discretization *n_scan_positions*.
 
         Args:
             lat: Aircraft latitude (degrees).
@@ -772,27 +786,23 @@ class LVIS(Sensor):
                 )
                 cross_spacings[i] = float(d)
 
-        # --- Local spacing per position (average of neighbours) ---
-        local_spacings = np.full(n, np.nan)
-        for i in range(n):
-            neighbours = []
-            if i > 0 and not np.isnan(cross_spacings[i - 1]):
-                neighbours.append(cross_spacings[i - 1])
-            if i < n - 1 and not np.isnan(cross_spacings[i]):
-                neighbours.append(cross_spacings[i])
-            if neighbours:
-                local_spacings[i] = np.mean(neighbours)
+        # --- Total cross-track ground span ---
+        finite_spacings = cross_spacings[np.isfinite(cross_spacings)]
+        swath_total = float(finite_spacings.sum()) if len(finite_spacings) else 0.0
 
         # --- Per-position local density ---
-        # density_i = rep_rate / (speed * local_spacing_i)
+        # Each scan position's share of the rep rate is proportional to
+        # its strip width, so the shots tile the terrain-stretched swath
+        # uniformly:
+        # density_i = rep_rate / (speed * swath_total)
         local_densities = np.full(n, np.nan)
-        density_valid = np.isfinite(local_spacings) & (local_spacings > 0)
-        local_densities[density_valid] = rr / (spd * local_spacings[density_valid])
+        if swath_total > 0:
+            local_densities[valid] = rr / (spd * swath_total)
 
         # --- Contiguity check per position ---
         # Two independent conditions:
-        #   cross-track:  fp^2 * rr / speed >= local_spacing
-        #                 (can the shot rate tile the local cross-track strip?)
+        #   cross-track:  fp^2 * rr / speed >= swath_total
+        #                 (can the shot rate tile the terrain-stretched swath?)
         #   along-track:  speed / rr <= footprint
         #                 (do consecutive shots overlap along the flight line?)
         along_track_gap = spd / rr  # meters between consecutive shots
@@ -803,10 +813,10 @@ class LVIS(Sensor):
             if np.isnan(fp_diams[i]):
                 continue
             contiguous_along[i] = along_track_gap <= fp_diams[i] * (1.0 + 1e-9)
-            if not np.isnan(local_spacings[i]):
+            if swath_total > 0:
                 contiguous_cross[i] = (
                     fp_diams[i] ** 2 * rr / spd
-                ) >= local_spacings[i] * (1.0 - 1e-9)
+                ) >= swath_total * (1.0 - 1e-9)
                 contiguous[i] = contiguous_cross[i] and contiguous_along[i]
 
         # --- Effective swath: largest contiguous block ---

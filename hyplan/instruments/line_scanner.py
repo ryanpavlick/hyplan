@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 from pint import Quantity
 
-from ..exceptions import HyPlanTypeError
+from ..exceptions import HyPlanTypeError, HyPlanValueError
 from ..units import ureg
 from ._base import Sensor
 from .registry import SENSOR_REGISTRY, create_sensor  # re-export (see footer)
@@ -134,8 +134,30 @@ class LineScanner(Sensor):
         d_starboard = h * np.tan(np.radians(starboard))
         return abs(d_starboard - d_port) * ureg.meter
 
+    def _edge_gsd_factor(self) -> float:
+        """Cross-track edge-GSD factor: ``tan(θ_edge) − tan(θ_edge − ifov)``.
+
+        Exact projection of the outermost pixel's IFOV onto flat ground,
+        where ``θ_edge = fov / 2``.  Multiply by altitude AGL to get the
+        edge GSD.
+        """
+        edge_rad = np.radians(self.half_angle)
+        return float(np.tan(edge_rad) - np.tan(edge_rad - np.radians(self.ifov)))
+
     def ground_sample_distance(self, altitude_agl: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL)."""
+        """Calculate the ground sample distance (GSD) for a given altitude above ground level (AGL).
+
+        Args:
+            altitude_agl (Quantity): Altitude above ground level.
+            mode (str): One of ``"nadir"`` (GSD directly below the
+                aircraft), ``"average"`` (swath width / pixel count), or
+                ``"edge"`` (cross-track GSD of the outermost pixel,
+                exact form ``h · (tan(θ_edge) − tan(θ_edge − ifov))``
+                with ``θ_edge = fov / 2``).
+
+        Raises:
+            HyPlanValueError: when ``mode`` is not recognized.
+        """
         altitude_agl = self._validate_quantity(altitude_agl, ureg.meter)
 
         if mode == "nadir":
@@ -145,13 +167,19 @@ class LineScanner(Sensor):
             return self.swath_width(altitude_agl) / self.across_track_pixels
 
         if mode == "edge":
-            edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
-            return 2 * altitude_agl * np.tan(np.radians(edge_ifov / 2))
+            return altitude_agl * self._edge_gsd_factor()
 
-        return 2 * altitude_agl * np.tan(np.radians(self.ifov / 2))
+        raise HyPlanValueError(f"mode must be 'nadir', 'average', or 'edge', got {mode!r}")
 
     def altitude_agl_for_ground_sample_distance(self, gsd: Quantity, mode: str = "nadir") -> Quantity:
-        """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD)."""
+        """Calculate the required altitude AGL (Above Ground Level) for a given ground sample distance (GSD).
+
+        Inverts :meth:`ground_sample_distance` for the same ``mode``, so
+        the two methods round-trip exactly.
+
+        Raises:
+            HyPlanValueError: when ``mode`` is not recognized.
+        """
         gsd = self._validate_quantity(gsd, ureg.meter)
 
         if mode == "nadir":
@@ -161,10 +189,9 @@ class LineScanner(Sensor):
             return (self.across_track_pixels * gsd) / (2 * np.tan(np.radians(self.fov / 2)))
 
         if mode == "edge":
-            edge_ifov = self.fov / 2.0 / (self.across_track_pixels / 2.0)
-            return gsd / (2 * np.tan(np.radians(edge_ifov / 2)))
+            return gsd / self._edge_gsd_factor()
 
-        return gsd / (2 * np.tan(np.radians(self.ifov / 2)))
+        raise HyPlanValueError(f"mode must be 'nadir', 'average', or 'edge', got {mode!r}")
 
     def critical_ground_speed(self, altitude_agl: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
@@ -182,11 +209,11 @@ class LineScanner(Sensor):
 
     def along_track_pixel_size(self, aircraft_speed: Quantity, along_track_sampling: float = 1.0) -> Quantity:
         """
-        Calculate the along-track pixel size for a given aircraft speed and oversampling rate.
+        Calculate the along-track pixel size for a given aircraft speed and along-track sampling factor.
 
         Args:
             aircraft_speed (Quantity): Speed of the aircraft in m/s.
-            oversampling_rate (float): Oversampling factor (default = 1.0).
+            along_track_sampling (float): Along-track sampling (oversampling) factor (default = 1.0).
 
         Returns:
             Quantity: Along-track pixel size in meters.
@@ -233,20 +260,39 @@ class LineScanner(Sensor):
 # ── Sensor Specifications ─────────────────────────────────────────────────────
 # Each entry maps class_name -> (display_name, fov_deg, across_track_pixels, frame_rate_hz)
 
+# FOV (deg) and across-track pixel counts verified against the cited
+# instrument pages/publications (retrieved 2026-06).  Frame rates are the
+# nominal maximum where given; rows marked "spec source unverified" could
+# not be confirmed against an authoritative source within review scope and
+# carry forward HyPlan's prior values unchanged.
 _SENSOR_SPECS = {
+    # source: aviris.jpl.nasa.gov/aviris/instrument.html (34° scan, 677 px, 12 Hz whiskbroom), retrieved 2026-06
     "AVIRISClassic":  ("AVIRIS Classic",                              34.0,  677,  12.0),
+    # source: avirisng.jpl.nasa.gov/specifications.html (36°±2 FOV, 600 resolved elements, up to 100 fps), retrieved 2026-06
     "AVIRISNextGen":  ("AVIRIS Next Gen",                             36.0,  600, 100.0),
+    # source: earth.jpl.nasa.gov AVIRIS-3 / ORNL DAAC AV3_L1B (~39.5–39.6° FOV, 1234 px), retrieved 2026-06
     "AVIRIS3":        ("AVIRIS 3",                                    39.6, 1234, 216.0),
+    # spec source unverified (AVIRIS-5 is EMIT-design; airborne FOV/pixel count not confirmed)
     "AVIRIS5":        ("AVIRIS 5",                                    40.2, 1239, 148.0),
+    # source: hytes.jpl.nasa.gov/specifications (50° FOV, 512 px cross-track), retrieved 2026-06
     "HyTES":          ("HyTES",                                       50.0,  512,  36.0),
+    # source: Mouroulis et al. 2014 (Appl. Opt. 53, 1363) / JPL PRISM (30.8° swath, 608 px), retrieved 2026-06
     "PRISM":          ("PRISM",                                       30.7,  608, 176.0),
+    # source: MASTER ASAP datasheet / master.jpl.nasa.gov (85.92° FOV, 716 px, 6.25–25 Hz), retrieved 2026-06
     "MASTER":         ("MASTER",                                      85.92, 716,  25.0),
+    # spec source unverified (Headwall Microhyperspec E; FOV in degrees not confirmed)
     "GLiHT_VNIR":     ("G-LiHT VNIR (Headwall Microhyperspec E)",   55.3,  645,  75.0),
+    # spec source unverified (Headwall Microhyperspec SWIR; FOV in degrees not confirmed)
     "GLiHT_SWIR":     ("G-LiHT SWIR (Headwall Microhyperspec SWIR)",20.9,  192,  75.0),
+    # spec source unverified (Headwall FIREFLY SIF; FOV in degrees not confirmed)
     "GLiHT_SIF":      ("G-LiHT SIF (Headwall FIREFLY)",             23.5, 1600,  37.5),
+    # spec source unverified (GCAS UV-Vis; FOV/pixel count not confirmed against a GSFC source)
     "GCAS_UV_Vis":    ("GCAS UV-Vis Spectrometer",                    45.0, 1024,  12.0),
+    # spec source unverified (GCAS VNIR; FOV/pixel count not confirmed against a GSFC source)
     "GCAS_VNIR":      ("GCAS Visible Near-Infrared (VNIR) Spectrometer", 70.0, 1024, 12.0),
+    # spec source unverified (eMAS shares the MAS-family 85.92°/716 px scanner geometry; rate not independently confirmed)
     "eMAS":           ("eMAS",                                        85.92, 716,   6.25),
+    # spec source unverified (PICARD; FOV/pixel count not confirmed against an authoritative source)
     "PICARD":         ("PICARD",                                      50.0,  412, 100.0),
 }
 

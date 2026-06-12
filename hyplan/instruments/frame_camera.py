@@ -192,6 +192,11 @@ class FrameCamera(Sensor):
         """
         Calculate the required altitude AGL for a given ground sample distance (GSD) at nadir.
 
+        Each GSD is treated as a not-to-exceed requirement: the returned
+        altitude is the highest at which *both* axes satisfy their
+        requested GSD (the binding axis is met exactly; the other is
+        finer than requested).
+
         Args:
             gsd_x (Quantity): Desired ground sample distance in meters along the x-axis (across-track).
             gsd_y (Quantity): Desired ground sample distance in meters along the y-axis (along-track).
@@ -202,7 +207,7 @@ class FrameCamera(Sensor):
         gsd_x = self._validate_quantity(gsd_x, ureg.meter)
         gsd_y = self._validate_quantity(gsd_y, ureg.meter)
 
-        return max(
+        return min(
             gsd_x / (2 * np.tan(np.radians(self.fov_x / (2 * self.resolution_x)))),
             gsd_y / (2 * np.tan(np.radians(self.fov_y / (2 * self.resolution_y))))
         )
@@ -213,6 +218,11 @@ class FrameCamera(Sensor):
         Returns a dict with near/far ground distances along the tilt axis
         and the cross-tilt width at the center slant range.  When
         ``tilt_angle == 0`` this reduces to the symmetric nadir case.
+
+        Raises:
+            HyPlanValueError: when the far edge of the field of view
+                reaches the horizon (``tilt + fov_along/2 >= 90°``), so
+                the footprint is unbounded on flat ground.
         """
         h = altitude_agl
         tilt_rad = np.radians(self.tilt_angle)
@@ -233,6 +243,13 @@ class FrameCamera(Sensor):
         # Ground distances from nadir along tilt axis
         near_angle = tilt_rad - half_along_rad
         far_angle = tilt_rad + half_along_rad
+
+        if far_angle >= np.pi / 2:
+            raise HyPlanValueError(
+                f"camera footprint extends to the horizon: tilt + fov_along/2 "
+                f"must be < 90°, got {self.tilt_angle} + {fov_along / 2:.1f} = "
+                f"{self.tilt_angle + fov_along / 2:.1f}°"
+            )
 
         if near_angle >= 0:
             near_ground_dist = h * np.tan(near_angle)
@@ -881,14 +898,16 @@ class MultiCameraRig(Sensor):
     """A rig of multiple :class:`FrameCamera` instances with known orientations.
 
     Each camera carries its own ``tilt_angle`` and ``tilt_direction``.
-    The rig stores optional lateral/longitudinal offsets for each camera.
+    The rig stores an optional angular cross-track offset and a
+    longitudinal mount offset for each camera.
 
     Args:
         name: Rig name.
         cameras: List of dicts, each with keys:
             ``"camera"`` (:class:`FrameCamera`),
             ``"label"`` (str),
-            ``"dx"`` (Quantity, lateral offset, default 0 m),
+            ``"cross_track_offset"`` (Quantity, angular cross-track
+            offset in degrees, default 0°),
             ``"dy"`` (Quantity, longitudinal offset, default 0 m).
     """
 
@@ -896,10 +915,20 @@ class MultiCameraRig(Sensor):
         super().__init__(name)
         self.cameras = []
         for entry in cameras:
+            offset = entry.get("cross_track_offset", 0.0 * ureg.degree)
+            if isinstance(offset, Quantity):
+                if offset.dimensionality != ureg.degree.dimensionality:
+                    raise HyPlanValueError(
+                        f"cross_track_offset must be an angular quantity "
+                        f"(degrees), got {offset}"
+                    )
+                offset = offset.to(ureg.degree)
+            else:
+                offset = float(offset) * ureg.degree
             cam = {
                 "camera": entry["camera"],
                 "label": entry.get("label", entry["camera"].name),
-                "dx": entry.get("dx", 0.0 * ureg.meter),
+                "cross_track_offset": offset,
                 "dy": entry.get("dy", 0.0 * ureg.meter),
             }
             self.cameras.append(cam)
@@ -907,12 +936,42 @@ class MultiCameraRig(Sensor):
     def __len__(self) -> int:
         return len(self.cameras)
 
+    def _edge_angles_deg(self) -> tuple[float, float]:
+        """Combined cross-track edge angles (port, starboard) in degrees.
+
+        Each camera contributes ``offset + cross_tilt ± fov_cross / 2``,
+        where ``cross_tilt`` is the cross-track component of its tilt
+        and ``fov_cross`` its cross-track field of view.
+        """
+        port = float("inf")
+        starboard = float("-inf")
+        for entry in self.cameras:
+            cam = entry["camera"]
+            dir_rad = np.radians(cam.tilt_direction)
+            cross_tilt = cam.tilt_angle * np.sin(dir_rad)
+            fov_cross = np.sqrt(
+                (cam.fov_x * np.cos(dir_rad)) ** 2
+                + (cam.fov_y * np.sin(dir_rad)) ** 2
+            )
+            center = entry["cross_track_offset"].m_as("degree") + cross_tilt
+            port = min(port, center - fov_cross / 2)
+            starboard = max(starboard, center + fov_cross / 2)
+        return float(port), float(starboard)
+
     def swath_width(self, altitude_agl: Quantity) -> Quantity:
-        """Combined across-track swath width (union of all cameras)."""
-        widths = [c["camera"].swath_width(altitude_agl) for c in self.cameras]
-        # Simple approach: sum unique cross-track contributions
-        # For cameras at different cross-track angles this is an approximation
-        return max(widths, key=lambda w: w.magnitude)
+        """Combined across-track swath width (union of all cameras).
+
+        ``swath = altitude × (tan(starboard_edge) - tan(port_edge))``
+        where the edges are the outermost cross-track view angles
+        across all cameras (mount offset ± half cross-track FOV).
+        """
+        altitude_agl = self.cameras[0]["camera"]._validate_quantity(
+            altitude_agl, ureg.meter,
+        )
+        port, starboard = self._edge_angles_deg()
+        return altitude_agl * (
+            np.tan(np.radians(starboard)) - np.tan(np.radians(port))
+        )
 
     def ground_sample_distance(self, altitude_agl: Quantity) -> dict[str, Quantity]:
         """Finest GSD across all cameras."""
@@ -944,7 +1003,7 @@ class MultiCameraRig(Sensor):
     ) -> list[dict[str, Any]]:
         """Project each camera's sensor perimeter onto the ground.
 
-        Uses each camera's tilt geometry and the ``dx`` cross-track
+        Uses each camera's tilt geometry and the ``cross_track_offset``
         angular offset stored in the rig layout.
 
         Returns:
@@ -958,8 +1017,7 @@ class MultiCameraRig(Sensor):
 
         result = []
         for entry in self.cameras:
-            dx = entry["dx"]
-            cross_offset = dx.m_as("degree") if isinstance(dx, Quantity) else float(dx)
+            cross_offset = entry["cross_track_offset"].m_as("degree")
             poly = entry["camera"].ground_footprint(
                 altitude_agl, cross_track_offset=cross_offset,
                 edge_points=edge_points, **terrain_kwargs,
@@ -1050,7 +1108,12 @@ class MultiCameraRig(Sensor):
         res_x = 5120   # pixels cross-track
         res_y = 3840   # pixels along-track
         frame_rate = 2.0 * ureg.Hz
-        f_speed = 2.8  # T2.1 lens (Schneider Xenon FF 100 mm)
+        # f_speed is the operating f-number.  The lens is a Schneider Xenon
+        # FF 100 mm, a T2.1 cine prime (T-stop T2.1 ≈ f/2.0 wide open); 2.8
+        # is taken to be the stopped-down aperture used in flight.  Donnellan
+        # et al. (2025) document the camera/lens but do not state the in-flight
+        # f-number, so this operating value is unverified.
+        f_speed = 2.8
 
         tilt = 11.3  # degrees from nadir (each main plate, total 22.6° fwd-aft)
 
@@ -1080,7 +1143,7 @@ class MultiCameraRig(Sensor):
                 cameras.append({
                     "camera": cam,
                     "label": f"{prefix}_{cam_idx + 1}",
-                    "dx": cross_off * ureg.degree,  # angular offset stored for reference
+                    "cross_track_offset": cross_off * ureg.degree,
                 })
 
         return cls(name="QUAKES-I", cameras=cameras)

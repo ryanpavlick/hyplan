@@ -135,6 +135,13 @@ class TestAltitudeForGSD:
         recovered_alt = camera.altitude_agl_for_ground_sample_distance(gsd["x"], gsd["y"])
         assert recovered_alt.m_as("meter") == pytest.approx(alt.magnitude, rel=0.02)
 
+    def test_both_axes_satisfy_requested_gsd(self, camera):
+        requested = 0.05 * ureg.meter
+        alt = camera.altitude_agl_for_ground_sample_distance(requested, requested)
+        gsd = camera.ground_sample_distance(alt)
+        assert gsd["x"].m_as("meter") <= requested.m_as("meter") * (1 + 1e-9)
+        assert gsd["y"].m_as("meter") <= requested.m_as("meter") * (1 + 1e-9)
+
     def test_positive(self, camera):
         alt = camera.altitude_agl_for_ground_sample_distance(
             0.1 * ureg.meter, 0.1 * ureg.meter
@@ -561,6 +568,42 @@ class TestTiltGeometry:
                 tilt_angle=90.0,
             )
 
+    def test_footprint_past_horizon_raises(self, altitude):
+        # tilt 75° + fov_along/2 ≈ 31° reaches past the horizon
+        cam = FrameCamera(
+            name="Horizon",
+            sensor_width=36 * ureg.mm,
+            sensor_height=24 * ureg.mm,
+            focal_length=20 * ureg.mm,
+            resolution_x=6000,
+            resolution_y=4000,
+            frame_rate=1 * ureg.Hz,
+            f_speed=2.8,
+            tilt_angle=75.0,
+            tilt_direction=0.0,
+        )
+        with pytest.raises(ValueError, match="horizon"):
+            cam.footprint_at(altitude)
+        with pytest.raises(ValueError, match="horizon"):
+            cam.trigger_distance(altitude)
+
+    def test_steep_tilt_below_horizon_works(self, altitude):
+        cam = FrameCamera(
+            name="Oblique",
+            sensor_width=36 * ureg.mm,
+            sensor_height=24 * ureg.mm,
+            focal_length=20 * ureg.mm,
+            resolution_x=6000,
+            resolution_y=4000,
+            frame_rate=1 * ureg.Hz,
+            f_speed=2.8,
+            tilt_angle=30.0,
+            tilt_direction=0.0,
+        )
+        fp = cam.footprint_at(altitude)
+        assert fp["height"].magnitude > 0
+        assert cam.trigger_distance(altitude).magnitude > 0
+
     def test_forward_tilt_line_spacing_unchanged(self, camera, tilted_camera, altitude):
         # Forward tilt should not change across-track width significantly
         # (tilted along-track, not cross-track)
@@ -671,6 +714,34 @@ class TestMultiCameraRig:
         sw = simple_rig.swath_width(1000 * ureg.meter)
         assert sp.magnitude == pytest.approx(sw.magnitude * 0.4, rel=0.01)
 
+    def test_rig_ground_footprint_default_offsets(self, simple_rig):
+        fps = simple_rig.ground_footprint(1000 * ureg.meter)
+        assert len(fps) == 2
+        for fp in fps:
+            assert isinstance(fp["polygon"], ShapelyPolygon)
+            assert not fp["polygon"].is_empty
+
+    def test_rig_rejects_length_cross_track_offset(self, simple_rig):
+        cam = simple_rig.cameras[0]["camera"]
+        with pytest.raises(ValueError, match="cross_track_offset"):
+            MultiCameraRig("Bad Rig", [
+                {"camera": cam, "label": "bad",
+                 "cross_track_offset": 5 * ureg.meter},
+            ])
+
+    def test_rig_offset_widens_swath(self, simple_rig):
+        cam = simple_rig.cameras[0]["camera"]
+        offset_rig = MultiCameraRig("Offset Rig", [
+            {"camera": cam, "label": "port",
+             "cross_track_offset": -10 * ureg.degree},
+            {"camera": cam, "label": "starboard",
+             "cross_track_offset": 10 * ureg.degree},
+        ])
+        alt = 1000 * ureg.meter
+        assert offset_rig.swath_width(alt).magnitude > (
+            cam.swath_width(alt).magnitude
+        )
+
 
 # ── QUAKES-I factory ─────────────────────────────────────────────────────────
 
@@ -687,9 +758,11 @@ class TestQUAKESI:
     def test_quakes_i_gv_swath(self, quakes):
         alt = 12500 * ureg.meter
         sw = quakes.swath_width(alt)
-        # Paper: ~12 km swath at 12.5 km AGL
-        # Individual camera swath is smaller; rig swath is max of 8 cameras
-        assert sw.magnitude > 0
+        # Union of the cross-track FOVs: outer cameras at ±20.25° plus
+        # ~19.85° per-camera FOV → ≈ 2 × 12500 × tan(30.2°) ≈ 14.5 km
+        # at 12.5 km AGL over sea-level terrain (paper's "12 km" is at
+        # ~2 km MSL terrain elevation).
+        assert 14_000 < sw.m_as("meter") < 15_000
 
     def test_quakes_i_stereo_pairs(self, quakes):
         pairs = quakes.stereo_pairs()
