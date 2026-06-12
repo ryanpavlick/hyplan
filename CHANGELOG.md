@@ -2,6 +2,434 @@
 
 ## Unreleased
 
+## v1.11.0 — 2026-06-12
+
+Correctness release. A full-codebase review (six parallel subsystem
+audits over all ~41k source lines) surfaced ~130 findings; this
+release lands all of them in three waves — 21 critical/high bugs
+(each verified by execution before fixing), ~35 medium-severity
+fixes, and a docs/usability/performance sweep.  Every behavioural
+fix shipped with a regression test; the suite grew to 2,624 tests
+and the whole package remains `ruff` + `mypy --strict` clean.
+
+**If you have saved planning outputs, expect numbers to move.**
+Several fixes correct silent wrong answers (flight-line geometry,
+swath widths, climb times, return legs, instrument densities); the
+Bug fixes section below quantifies the largest shifts.
+
+### Breaking changes
+
+* **`MultiCameraRig` field `dx` renamed to `cross_track_offset`**
+  and redefined as an *angular* cross-track mount offset (degree
+  `Quantity`, default 0°).  The old field was semantically
+  overloaded — documented as a lateral offset in metres but consumed
+  as degrees — so every user-built rig crashed in
+  `ground_footprint()` with a `pint.DimensionalityError`.
+  Length-dimensioned values now raise `HyPlanValueError` at
+  construction.  The bundled `quakes_i()` rig is unaffected.
+* **`Waypoint.relative_to` / `Pattern.from_relative` require a pint
+  `Quantity` distance.**  Bare numbers were previously interpreted
+  as *nautical miles* while every other HyPlan API treats bare
+  floats as metres — a silent 1852× trap.  Bare numbers now raise
+  `HyPlanValueError`; write `200 * ureg.nautical_mile` (or
+  `5 * ureg.km`) explicitly.
+* **`LVIS.solve_for_speed` regime logic corrected (old behaviour
+  was inverted).**  Geometry-limited targets (`d ≥ 1/footprint²`)
+  now return the closed-form maximum speed — these are exactly the
+  achievable, fly-slower cases the old code wrongly rejected with
+  "exceeds the maximum achievable density".  Targets *below* the
+  full-swath sampling floor (satisfied at any speed, so no maximum
+  exists) now raise `HyPlanValueError` explaining that.
+* **`FlightLine` and `Waypoint` gained value-based `__eq__` (and
+  `__repr__`) and are therefore no longer hashable.**  Nothing in
+  HyPlan hashed them (verified), but downstream code using them in
+  sets/dict-keys must switch to an explicit key.  `FlightLine` also
+  now *copies* its waypoints at construction, so
+  `line.altitude_msl = ...` no longer silently mutates a
+  caller-owned `Waypoint`.
+* **Cache root unified and moved.**  `get_cache_root()` now
+  defaults to `~/.cache/hyplan` instead of `$TMPDIR/hyplan`
+  (precedence: explicit argument > `HYPLAN_CACHE_ROOT` env var >
+  default), so DEM/TLE/airspace/phenology caches survive reboots;
+  the airports cache derives from the same root instead of its own
+  hardcoded directory, and logs an INFO hint when `airports.csv` is
+  more than 30 days old.  Delete the old temp-dir cache manually if
+  disk space matters.
+* **`isochrone_polygon` may return a `MultiPolygon`.**  Unflyable
+  rays (zero-distance rows) are now excluded from the ring — they
+  previously dragged vertices back to the start point, producing
+  bowtie self-intersections — and residual invalidity is repaired
+  with `buffer(0)`, which can legitimately split the reachable
+  region.  Isochrones crossing the antimeridian are built in a
+  continuous longitude frame (lons shifted +360°; documented in the
+  module docstring) instead of self-crossing.
+* **Failed wind-aware Dubins solves now raise.**  A trochoid solver
+  failure was previously masked as `total_time = 0.0`, which *won*
+  the candidate sort and produced silent zero-length manoeuvres.
+  Infeasible solves now raise `HyPlanRuntimeError`;
+  `DubinsPath2D` also rejects `speed <= 0` up front.
+* **`greedy_optimize` accounting and scheduling semantics.**
+  Takeoff/landing overhead is now charged to the reported
+  `daily_times`/`total_time` exactly as the feasibility model
+  assumes it (reported schedules previously understated the model);
+  the day-end return leg is endurance-checked and routed via a
+  refuel stop when needed; day *N+1* starts where day *N* actually
+  ended instead of teleporting back to the takeoff airport; a day
+  that completes zero items ends the schedule instead of padding
+  `max_days`; and a new `result["issues"]` list records anything
+  the optimizer had to warn about.
+* **`to_kml` no longer writes an unrequested companion `.kmz`** —
+  pass `write_kmz=True` for the old behaviour.  `to_foreflight_csv`
+  gained `write_oneline=True` (companion kept by default for
+  ForeFlight content-pack parity) and builds the companion path
+  with `splitext` instead of `str.replace`, fixing paths containing
+  ".csv" mid-string.
+* **`Pattern.regenerate` raises on unknown override keys** instead
+  of silently returning an unchanged pattern, and now accepts the
+  natural generator spellings (`radius`, `leg_length`, `altitude`,
+  …) with pint-aware coercion in addition to the internal
+  `radius_m`-style keys.
+* **`find_all_overpasses` validates `region`/`start_time`/`end_time`
+  up front** (`HyPlanValueError`) — a `None` region previously
+  crashed inside a swallowed `except` and returned a deceptive
+  empty result.
+* **`Airport.iata_code` and `Airport.municipality` return `None`**
+  (typed `str | None`) for airports without those fields, instead
+  of the literal string `"nan"`.
+* **`hyplan.aircraft.eol_ncar` removed.**  Dead aspirational
+  module: every entry in its `_NCAR_COLUMN_HINTS` was already
+  covered by `icartt._COLUMN_PATTERNS`, and the `NCAR_C130`
+  calibration it promised never existed.
+* **`environment.yml` now requires `python>=3.10`**, matching
+  `pyproject.toml` (it previously allowed 3.9, where the package
+  cannot install).
+
+### Bug fixes — geometry & flight lines
+
+* **`rosette()` produced wrong azimuths and wrong lengths at any
+  non-equatorial latitude.**  Lines were derived by rotating the
+  first line's raw lon/lat coordinates in degree space — ignoring
+  cos(lat) scaling *and* inverting the compass sign.  At 34.4°N a
+  0/45/90/135° rosette actually flew 0/320/270/220° with the 90°
+  line 17 % short (34 % short at 60°N).  Lines are now generated
+  independently at their requested azimuths, and
+  `FlightLine.rotate_around_midpoint` was rebuilt geodesically
+  (360° rotation is now exact).
+* **`calculate_swath_widths` paired port/starboard stations
+  off-by-one** (the polygon ring's closing coordinate misaligned
+  the halves), inflating widths by the diagonal — +41 % when
+  along-track spacing ≈ width — and skewing
+  `box_around_polygon_terrain` line stepping toward coverage gaps.
+* **`random_points_in_polygon` was doubly broken**: transposed
+  shapely affine coefficients put ~18 % of samples outside even a
+  convex triangle, and `triangulate()` tiles the convex hull, so
+  concave polygons sampled ~40 % of points outside the boundary.
+  Now uses corrected affines plus rejection sampling (100 %
+  containment, tested on convex and L-shaped polygons).
+* **All three `FlightLine` factories crashed on their documented
+  default `altitude_msl=None`.**  `None` is now a supported state
+  end-to-end (`to_dict`/`to_geojson` emit null;
+  `offset_north_east` preserves it); swath generation raises a
+  clear `HyPlanValueError` instead of an `AttributeError`.
+* **Pilot-facing coordinate formatters overflowed at rounding
+  boundaries** — `dd_to_ddm(36.999999, …)` produced `"36 60.00"`
+  (invalid for FMS/ForeFlight import).  `dd_to_ddm`, `dd_to_ddms`,
+  `dd_to_nddmm`, and `dd_to_foreflight_oneline` now carry
+  seconds→minutes→degrees overflow with correct signs.
+* **Invalid polygons crashed the error path itself**:
+  `_validate_polygon` called a nonexistent
+  `polygon.explain_validity()` method; it now uses
+  `shapely.validation.explain_validity` and raises
+  `HyPlanValueError` with the explanation.
+* `box_around_center_line` raised `UnboundLocalError` for an
+  invalid `starting_point` (the validation rule existed but was
+  never invoked); `_validate_inputs` now returns normalized values
+  (its azimuth wrap was a dead store) and accepts `int` azimuths
+  and dimensions; `alternate_direction` parity is consistent across
+  both box generators — **the first line now honours the requested
+  azimuth** (it previously flew the reciprocal in
+  `box_around_center_line`).
+* `split_by_length` laid every segment along the parent line's
+  *initial* azimuth, drifting off the geodesic on long lines (a
+  1000 km line at 60°N now reconstructs to within metres); the
+  azimuth is recomputed toward the endpoint at each step.
+* `_Dubins2D`'s degenerate-pose gates compared radians against a
+  metres-scaled epsilon (a ~21° snap window for jet-class turn
+  radii); replaced with explicit unit-correct constants.
+* `rectangle_dimensions` now wraps a caller-supplied azimuth to
+  [−180, 180] as its docstring always claimed;
+  `buffer_polygon_along_azimuth` accepts `int`/`Quantity` distances
+  as its error message always promised.
+
+### Bug fixes — aircraft performance & data ingest
+
+* **`time_to_return` reversed the arrival heading**, asking the
+  Dubins solver to arrive pointing 180° away from the direction of
+  flight and appending two superfluous turn arcs to *every* return
+  leg (B200 test leg: 67.2 → 59.9 nmi vs 59.9 direct; worse for
+  fast jets).  Waypoint and approach-phase headings are now the
+  inbound course; the reciprocal is used only to position the FAF.
+* **The two-point climb integral hardcoded breakpoints at
+  [0 ft, service ceiling].**  Profiles with offset breakpoints —
+  exactly what `fit_aircraft_from_adsb` produces — got climb times
+  up to +67 % wrong.  Replaced with a piecewise integral over the
+  actual breakpoint altitudes (matches numerical integration to
+  2e-10; bit-identical for the bundled full-span profiles).
+  `climb_altitude_profile` got the matching correction.
+* **ER-2 staged-climb phase bookkeeping was internally
+  inconsistent** (sub-phase times/distances didn't sum to the
+  step-climb totals, leaving gaps/overlaps in exported timelines);
+  sub-phases are now renormalized to the authoritative totals and
+  the pause-at-cruise boundary rule is consistent and documented.
+* **Above-ceiling contract unified**: `_hybrid_path` *and* the
+  wind-aware climb paths now warn once and continue with clamped
+  rates (as the warning always promised) instead of warning and
+  then crashing in `_climb`; direct climb calls still raise.
+* **`NASA_GV.service_ceiling_ft` corrected 45,000 → 51,000 ft** —
+  the JSON's own calibrated cruise schedule and climb profile
+  extend to FL510, and the 45 kft value made FL470–FL510 plans fail.
+* **`split_iwg1_alltracks` silently overwrote one sortie when two
+  shared a UTC date** (morning + afternoon flights → one file).
+  Colliding filenames now gain the takeoff time (`_HHMM`).
+* **ICARTT global fallback sentinels (−999 …) were blanked before
+  scale factors**, clobbering legitimate values in scaled integer
+  columns (raw −999 × 0.01 = a real −9.99).  Fallback sentinels now
+  apply only to unscaled columns.
+* ADS-B pipeline thresholds (`min_altitude_ft`,
+  `ground_altitude_ft`, the approach-speed window) are documented
+  as MSL and accept a new `field_elevation_ft` offset, fixing
+  phase-labeling bias at high-elevation airports;
+  `fit_aircraft_from_adsb(aggregate=False)` no longer reports
+  all-flight provenance for a single-flight fit, labels its output
+  `calibration_status="calibrated"` (matching the bundled ADS-B
+  profiles), and exposes the ingest/fitting tuning knobs.
+
+### Bug fixes — optimizer & planning
+
+* **`greedy_optimize` burned entire days on phantom refuel stops**
+  when the daily clock (not endurance) was the binding constraint —
+  reproduced: 3 days, 6 refuels, zero items flown, reported as
+  3.0 h of flight time.  The refuel-helps check now mirrors the
+  item-selection feasibility exactly (endurance *and* daily budget
+  *and* return leg).
+* The optimizer's in-pattern cost model timed dense pattern
+  waypoints with full Dubins solves while the engine flies them
+  direct — overestimating pattern time and wasting ~100 solves per
+  pattern; intra-pattern transitions are now timed direct,
+  matching `compute_flight_plan`.
+* `racetrack(stack_altitudes=…, altitudes=…)` silently dropped or
+  shifted legs on a length mismatch (`zip(strict=False)` masking a
+  missing validation); it now validates and zips strictly.
+* `flag_below_min_safe_speed` treated a sea-level 0.0 end altitude
+  as missing (falsy) and never checked `takeoff`/`approach`
+  segments — the most stall-critical phases; both fixed.
+  `compute_flight_plan` now raises when `wind_direction` is given
+  without `wind_speed` (previously a silent still-air plan).
+* Adaptive isochrone refinement re-solved every ray from scratch
+  each pass; it now seeds converged distances onto matching
+  azimuths (34 % fewer leg solves on the test scenario, identical
+  results).  Outbound-refuel probes no longer compute an unused
+  direct leg.
+
+### Bug fixes — instruments
+
+* **`MultiCameraRig.swath_width()` returned the max single-camera
+  width, ignoring mount angles** — QUAKES-I at 12.5 km AGL: 4.5 km
+  reported vs the true ~14.5 km union (the module's own comment
+  says "≈ 14 km"), driving `line_spacing()` to plan ~3.3× too many
+  flight lines.  Now computes the combined cross-track extent like
+  the lidar rig does.
+* **LVIS terrain-aware density scaled with the discretization
+  parameter** (default `n_scan_positions=21` → ~21× inflated
+  densities); now derives from the physical shot-share model, so
+  results are independent of `n_scan_positions` and consistent with
+  the flat-earth `point_density` — the same fix the ALS module
+  already had.
+* **ALS `point_density` ignored the scan duty cycle for full-circle
+  scanners**, reporting a swath-mean density 4× its own nadir peak
+  (physically impossible); the effective pulse rate is now scaled
+  by the ground-duty fraction.  Bundled active-arc instruments are
+  bit-identical.
+* **`LineScanner` "edge" GSD mode was algebraically a no-op**
+  (edge ≡ nadir); it now computes the true edge geometry
+  (`h·(tan θₑ − tan(θₑ − ifov))`; 3.95 m vs 3.49 m nadir for the
+  40°/1000-px reference case) with an exact solve round-trip, and
+  unknown GSD modes raise instead of silently computing nadir.
+* Tilted frame cameras whose far edge crossed the horizon silently
+  returned negative footprints and trigger distances; they now
+  raise `HyPlanValueError`.
+  `altitude_agl_for_ground_sample_distance(gsd_x, gsd_y)` returns
+  `min(h_x, h_y)` so *both* axes satisfy their not-to-exceed
+  requirement (it previously returned an altitude at which one axis
+  violated the request).
+* **G-LiHT VQ-480i `mta_zones` corrected 2 → 4** per its own inline
+  derivation, raising the practical MTA altitude ceiling from
+  ~1,000 m to the instrument's documented 1,850 m.
+* AWP profile helpers accept `surface_elevation_msl` and document
+  the sea-level assumption in their MSL-as-AGL fallback paths.
+
+### Bug fixes — environmental data
+
+* **Phenology granule statistics were biased toward zero**:
+  out-of-polygon pixels in the clip's bounding box were filled with
+  0, passed QA (reliability 0 = "good"), and entered spatial means
+  (test case: true mean 0.5 reported as 0.23).  Clips now use
+  masked reads and propagate the geometry mask.  The AppEEARS
+  backend (the default source) applied an NDVI valid range to all
+  products, **silently discarding LAI > 1.5** — ranges are now
+  per-product.  Multi-tile polygons now reproject onto the first
+  granule's grid instead of crashing in `np.ma.stack` (and
+  coordinates no longer come from whichever granule happened to be
+  last).
+* **`compute_overpass_overlap` treated `time_to_segment` as hours;
+  the planner stores minutes** — a 60× error in satellite
+  underflight matching.  Satellite pass segmentation now also
+  splits at latitude reversals and >180° longitude jumps as its
+  docstring promised, so multi-orbit ground tracks no longer
+  produce one self-intersecting footprint polygon.  `fetch_tle`
+  validates payloads (a CelesTrak HTML error page can no longer
+  poison the cache) and falls back to a stale cached TLE with a
+  warning when the network is down.
+* **Overnight airspace schedules ("2200 – 0600") were always
+  classified inactive** — night MOAs/restricted areas were silently
+  dropped by `filter_by_schedule`.  Wrapping time ranges are now
+  handled like wrapping day ranges.
+* **`fetch_and_check` returned a false "all clear" outside FAA data
+  coverage**: the old "is US" test was a bounding box spanning most
+  of North America, so e.g. an Alberta campaign queried US-only
+  sources, got nothing, and reported zero conflicts.  Coverage is
+  now a union of realistic NASR boxes (CONUS/AK/HI/territories);
+  out-of-coverage queries use OpenAIP when a key is available and
+  otherwise warn prominently that conflicts cannot be assessed.
+* **`check_airspace_proximity` distances are now geodesic**
+  (`shortest_line` + haversine).  The old blanket
+  `°×111 km×cos(lat)` conversion under-reported meridional
+  distances by up to cos(lat) *and* used a candidate buffer that
+  missed genuine east-west near-misses at high latitude.
+* **OpenAIP parsing honours `referenceDatum`** — "GND–2500 ft AGL"
+  airspaces were stored as 0–2500 ft MSL, which
+  `convert_agl_floors` could then never correct; surface-referenced
+  floors are now tagged `SFC`, and the unit-code mapping is fixed
+  (code 2 is not FL).  Cached airspace fetches snap their bounds
+  outward to the 0.1° cache grid, closing a ~5 km fringe in which
+  conflicts could be silently missed by nearby cached queries.
+* **`airports_within_radius` missed airports at high latitude**
+  (degree-space circular buffer without cos(lat) scaling — a
+  100 km search at 70°N missed an airport ~65 km due east);
+  nearest-airport ranking now uses haversine instead of Euclidean
+  degree distance and is antimeridian-safe (Aleutians tested).
+* **Terrain sampling was shifted half a pixel** (`round()` on
+  corner-origin pixel indices — up to a full 30 m wrong-pixel
+  pick); now floor-based.  `terrain_aspect_azimuth` applies the
+  cos(lat) east-gradient scaling that `surface_normal_at` already
+  had (a metric NE slope at 60°N now reports 45°, not 26.6°).
+* Gridded wind interpolation warns (once per axis per field) when
+  queries fall outside the fetched slab instead of silently
+  clamping, and renormalizes around NaN corners instead of
+  poisoning the result.  GFS cycle selection honours past target
+  windows (re-running yesterday's plan no longer fetches *today's*
+  winds).  MERRA-2 URLs special-case the reprocessed stream-401
+  months (2020-09, 2021-06…09) and fall back to the alternate
+  stream on a 404.
+* Sun threshold/position sampling covers the full first local day
+  for UTC+ sites; `compute_glint_vectorized` keeps port/starboard
+  tilt signs in its output column and geometry (values were always
+  correct); cloud-plot go/no-go rectangles and visit stars align
+  with imshow cell centres; `simulate_visits(debug=True)` no longer
+  permanently raises the root logger level.
+
+### Bug fixes — exports, plotting, campaign
+
+* **`Campaign.save()` resurrected deleted data** — collection files
+  were only written when non-empty and stale files from a previous
+  save survived, so a deleted flight line came back on the next
+  `load()`.  Saves now always reflect in-memory state for flight
+  lines, groups, and patterns, and remove a stale `airspaces.json`.
+* `to_icartt` defaulted the header date (and solar-zenith geometry)
+  to *export day* instead of the takeoff date.  KML and ER-2 CSV
+  UTC labels wrap past midnight ("25:14" → "01:14").  The
+  MovingLines Excel export populates its headwind columns from
+  wind-aware plans instead of hardcoding 0.  `extract_waypoints`
+  numbers waypoints sequentially regardless of the DataFrame index.
+* `plot_airspace_map`'s near-miss halo crashed on MultiPolygon
+  airspaces; `plot_flight_plan` and `plot_altitude_trajectory` now
+  return `(fig, ax)` like every other plotter (no more leaked
+  pyplot figures in batch use) and stop stomping the geopandas
+  legend; the three divergent airspace colour tables are
+  consolidated into one palette (TFR is magenta everywhere).
+
+### Performance
+
+* **`import hyplan` is now lazy (PEP 562): ~0.9–1.6 s → <0.01 s**
+  (~2,400 → 89 modules).  matplotlib/folium/geopandas/pint load on
+  first use; the full import block is preserved under
+  `TYPE_CHECKING` for mypy/IDEs, and a regression test asserts the
+  heavy stacks stay out of `sys.modules`.
+* Vectorized `process_linestring` and the flat-earth swath edge
+  (array `vdist`/`vreckon` instead of per-point Python loops);
+  UTM `Transformer` pairs are `lru_cache`d; trochoid
+  `ground_length` is cached and `sublinestring` batches its
+  coordinate transform; isochrone refinement seeding and the
+  optimizer's direct pattern transitions (above) also cut planning
+  wall-clock substantially.
+
+### New API surface
+
+* Top-level exports: `map_isochrone` (alias of
+  `planning.isochrone.plot_isochrone`, establishing the
+  `map_*` = interactive / `plot_*` = static convention),
+  `to_trackair`, and `flag_below_min_safe_speed` (also re-exported
+  from `hyplan.planning`).  `hyplan.aircraft` now exports
+  `load_icartt`, `climb_with_wind_field`, `descend_with_wind_field`.
+* New keywords: `to_kml(write_kmz=)`,
+  `to_foreflight_csv(write_oneline=)`, ADS-B `field_elevation_ft`,
+  AWP `surface_elevation_msl`, `fit_aircraft_from_adsb` ingest and
+  fitting knobs, `greedy_optimize` result `issues` list.
+* `create_sensor` errors list the registered sensor names and
+  suggest close matches.  `Waypoint`/`FlightLine` have informative
+  `__repr__`s for notebook work.
+
+### Docs
+
+* README: complete optional-extras table (13 extras; `plots`,
+  `mag`, `phenology`, `adsb`, `sun`, … were previously
+  undocumented), corrected docs-build recipe
+  (`pip install -e ".[docs]"`), BibTeX no longer hardcodes a stale
+  version.  CONTRIBUTING: dev-extra install and a "Before you push"
+  block matching the actual CI gates.  CITATION.cff version/date
+  corrected.
+* The package docstring's first example no longer imports a
+  nonexistent `FlightBox` class.  The isochrone module docstring
+  now documents the full output column schema (including the
+  `limiting_leg` vocabulary) and the track-hold-vs-geodesic bearing
+  limitation.
+* ~25 stale/garbled docstrings corrected, including
+  `magnetic_declination`'s sign convention,
+  `minimum_rotated_rectangle`'s return contract,
+  `box_around_polygon_terrain`'s phantom both-args check,
+  `convert_agl_floors`' "worst-case" overstatement, the Earthdata
+  login strategy list (and its env-var guidance, verified against
+  the installed earthaccess), MODIS `FparLai_QC` bit labels
+  (the mask filters SCF_QC, not cloud state — behaviour unchanged,
+  now documented), beam-divergence full-angle conventions, and the
+  ALS footprint axis convention.  `_SENSOR_SPECS` rows carry
+  datasheet provenance where verifiable (AVIRIS-3, HyTES, PRISM,
+  MASTER, AVIRIS Classic/NG) and are explicitly marked unverified
+  otherwise.
+
+### Tests
+
+* +~390 regression tests across the three waves (suite: 2,624).
+  Notable new classes of assertion: geometry *values* (azimuths,
+  lengths, containment) rather than structure; schedule-accounting
+  replay invariants for the optimizer; solver closure checks
+  (solve → evaluate round-trips); density sanity invariants
+  (swath-mean ≤ nadir peak); figure-leak guards; a fresh-subprocess
+  import-laziness gate.  The time-dependent TFR test is frozen via
+  an injectable reference date, and a session-scoped fixture points
+  `HYPLAN_CACHE_ROOT` at a stable temp cache so tests never touch
+  `~/.cache`.
+
 ## v1.10.1 — 2026-05-18
 
 Maintenance release. No new science features, no API changes. Project-wide

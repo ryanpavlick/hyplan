@@ -75,9 +75,22 @@ pip install hyplan        # or pip install -e ".[dev]" from a clone
 
 ### Optional dependencies
 
-- **Google Earth Engine** (`earthengine-api`) — optional for `hyplan.clouds` (MODIS path); the Open-Meteo path requires no extra dependencies
-- **Wind fields** (`xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib`) — install with `pip install hyplan[winds]` for MERRA-2, GFS, and GEOS-FP wind data
-- **Planned-sortie ingest** (`openpyxl`, `pdfplumber`) — install with `pip install hyplan[planned]` to parse Green Card mission data cards (XLSX or PDF) and KML route files (used by the ER-2 calibration / planned-vs-flown workflow)
+HyPlan keeps the core install lightweight and gates niche features behind optional dependency groups. Install with `pip install "hyplan[<extra>]"`, combining several as needed (e.g. `pip install "hyplan[winds,plots]"`):
+
+| Extra | Installs | Needed for |
+|-------|----------|------------|
+| `clouds` | `earthengine-api` | `hyplan.clouds` MODIS path via Google Earth Engine; the default Open-Meteo path needs no extra dependencies |
+| `winds` | `xarray`, `netcdf4`, `earthaccess`, `pydap`, `cfgrib` | MERRA-2, GFS, and GEOS-FP wind fields in `hyplan.winds` |
+| `plots` | `cartopy` | Static map plotters `plot_airspace_map`, `plot_isochrone_static`, and `plot_oceanic_tracks` (cartopy is imported when these functions are called) |
+| `mag` | `geomag` | Magnetic headings in `to_pilot_excel(include_mag_heading=True)` and `hyplan.geometry.magnetic_declination` |
+| `phenology` | `earthaccess`, `xarray` | `hyplan.phenology` — MODIS NDVI/EVI/LAI/FPAR seasonality and transition dates (requires NASA Earthdata credentials) |
+| `adsb` | `traffic>=2.8` | `hyplan.aircraft.adsb` — fitting aircraft performance models from ADS-B surveillance data |
+| `planned` | `openpyxl`, `pdfplumber` | Parsing Green Card mission data cards (XLSX or PDF) and KML route files (used by the ER-2 calibration / planned-vs-flown workflow) |
+| `sun` | `sunposition` | Standalone sun-position cross-checks in the `glint_analysis` and `validation` notebooks (independent of `hyplan.sun`) |
+| `secrets` | `python-dotenv` | Loading API keys/tokens from `.env` files in tutorial notebooks |
+| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy` | Test, lint, and type-check toolchain matching CI |
+| `docs` | `sphinx>=7`, `myst-nb`, `furo`, `sphinx-autodoc-typehints` | Building the documentation locally |
+| `notebooks` | `papermill`, `ipykernel`, `jupyter`, `nbconvert` | Notebook execution tooling (used by the notebook CI workflow) |
 
 ### API keys
 
@@ -102,10 +115,10 @@ Google Earth Engine (required for `hyplan.clouds`) uses OAuth — run
 
 Full API documentation is available at **[ryanpavlick.github.io/hyplan](https://ryanpavlick.github.io/hyplan/)**.
 
-To build the documentation locally:
+To build the documentation locally (the `docs` extra installs Sphinx, MyST-NB, Furo, and sphinx-autodoc-typehints):
 
 ```bash
-pip install sphinx myst-parser furo sphinx-autodoc-typehints
+pip install -e ".[docs]"
 cd docs
 make html
 ```
@@ -381,12 +394,11 @@ If you use HyPlan in your research, please cite it as:
   author = {Pavlick, Ryan},
   title = {HyPlan: Planning Software for Airborne Remote Sensing Campaigns},
   url = {https://github.com/ryanpavlick/hyplan},
-  license = {Apache-2.0},
-  version = {1.8.0}
+  license = {Apache-2.0}
 }
 ```
 
-Machine-readable citation metadata is also available in [`CITATION.cff`](https://github.com/ryanpavlick/hyplan/blob/main/CITATION.cff).
+For version-specific, machine-readable citation metadata (updated with each release), see [`CITATION.cff`](https://github.com/ryanpavlick/hyplan/blob/main/CITATION.cff).
 
 ## License
 

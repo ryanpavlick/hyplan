@@ -24,9 +24,9 @@ We aim to respond to issues within a few working days; this is a small project s
    git clone https://github.com/<your-username>/hyplan.git
    cd hyplan
    ```
-3. **Install** in development mode:
+3. **Install** in development mode (the `dev` extra pulls in `pytest`, `pytest-cov`, `ruff`, and `mypy` — the same toolchain CI runs):
    ```bash
-   pip install -e .
+   pip install -e ".[dev]"
    ```
 4. **Create a branch** for your changes:
    ```bash
@@ -43,6 +43,16 @@ HyPlan uses [pytest](https://docs.pytest.org/) for testing:
 pytest
 ```
 
+### Before You Push
+
+CI gates every pull request on linting (Ruff), strict type checking (mypy), and the test suite. Run the same checks locally before pushing:
+
+```bash
+ruff check hyplan tests
+mypy hyplan
+python -m pytest
+```
+
 ### Code Style
 
 - Follow [PEP 8](https://peps.python.org/pep-0008/) conventions.
@@ -53,16 +63,16 @@ pytest
 
 - Add docstrings (NumPy/Google style) to public functions and classes.
 - Update or add notebooks in `notebooks/` when introducing new features.
-- To build the docs locally:
+- To build the docs locally (the `docs` extra installs Sphinx, MyST-NB, Furo, and sphinx-autodoc-typehints):
   ```bash
-  pip install sphinx myst-parser furo sphinx-autodoc-typehints
+  pip install -e ".[docs]"
   cd docs
   make html
   ```
 
 ## Submitting Changes
 
-1. Ensure all tests pass (`pytest`).
+1. Ensure lint, type checks, and tests all pass (see [Before You Push](#before-you-push)).
 2. Commit your changes with a clear, descriptive message.
 3. Push to your fork and open a **pull request** against `main`.
 4. Describe what your PR does and why.
