@@ -22,6 +22,7 @@ from ..geometry import (
     magnetic_declination,
     true_to_magnetic,
 )
+from ..units import ureg
 from ._common import (
     _compute_solar_azimuth,
     _compute_sza,
@@ -48,6 +49,12 @@ def to_excel(
 
     This produces the 24-column format (A-X) that MovingLines uses as its
     internal working format, enabling round-tripping between tools.
+
+    The ``HdWind [kt]`` / ``HdWind [m/s]`` columns are populated from the
+    plan's per-segment along-track wind (``tailwind_kts``, written by
+    wind-aware ``compute_flight_plan()`` runs) and are 0 for plans
+    computed without wind.  ``delayT`` and ``ClimbT`` are always written
+    as 0 — hyplan folds delays and climb time into segment timing.
 
     Args:
         plan: Flight plan GeoDataFrame from ``compute_flight_plan()``.
@@ -140,8 +147,10 @@ def to_excel(
         ws.write(row, 19, 0.0, dec_fmt)                            # ClimbT
         ws.write(row, 20, wp["segment_type"], cell_fmt)            # Comments
         ws.write(row, 21, wp_names[idx] if idx < len(wp_names) else "", cell_fmt)  # WP names
-        ws.write(row, 22, 0.0, dec_fmt)                            # HdWind kt
-        ws.write(row, 23, 0.0, dec_fmt)                            # HdWind m/s
+        hdwind_kt = wp["headwind_kt"]
+        hdwind_mps = (hdwind_kt * ureg.knot).m_as("meter/second")
+        ws.write(row, 22, hdwind_kt, dec_fmt)                      # HdWind kt
+        ws.write(row, 23, hdwind_mps, dec_fmt)                     # HdWind m/s
 
     # Metadata cells (column W+ area, matching MovingLines)
     meta_row = 0

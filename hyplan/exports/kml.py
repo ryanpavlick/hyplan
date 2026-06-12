@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 
 import geopandas as gpd
 
@@ -16,6 +17,7 @@ def to_kml(
     filepath: str,
     takeoff_time: datetime.datetime | None = None,
     altitude_exaggeration: float = 1.0,
+    write_kmz: bool = False,
 ) -> None:
     """Write a KML (and optionally KMZ) file for Google Earth.
 
@@ -27,6 +29,8 @@ def to_kml(
         takeoff_time: Optional UTC takeoff time.
         altitude_exaggeration: Multiplier for altitude in the KML
             coordinates (default 1.0 = true scale; MovingLines uses 10).
+        write_kmz: If True and *filepath* is a ``.kml`` path, also write
+            a ``.kmz`` companion alongside it (default False).
     """
     import simplekml
 
@@ -58,7 +62,7 @@ def to_kml(
         alt_display = (wp["alt_m"] or 0) * altitude_exaggeration
 
         utc_min = base_minutes + wp["cum_time_min"]
-        utc_h = int(utc_min // 60)
+        utc_h = int(utc_min // 60) % 24
         utc_m = int(utc_min % 60)
 
         desc = (
@@ -96,6 +100,6 @@ def to_kml(
         kml.savekmz(filepath)
     else:
         kml.save(filepath)
-        # Also save KMZ companion
-        kmz_path = filepath.rsplit(".", 1)[0] + ".kmz"
-        kml.savekmz(kmz_path)
+        if write_kmz:
+            kmz_path = os.path.splitext(filepath)[0] + ".kmz"
+            kml.savekmz(kmz_path)

@@ -479,6 +479,41 @@ class TestCampaignPersistence:
         assert loaded.revision == original_rev
         assert loaded.updated_at is not None
 
+    def test_save_after_delete_does_not_resurrect(self, tmp_path):
+        """Re-saving after deletions must not resurrect stale data on load."""
+        from hyplan.flight_patterns import rosette
+
+        c = Campaign("Del Test", bounds=SAMPLE_BOUNDS)
+        with patch("hyplan.campaign.OpenAIPClient") as MockClient:
+            MockClient.return_value.fetch_airspaces_raw = MagicMock(
+                side_effect=_mock_fetch_raw
+            )
+            c.fetch_airspaces(api_key="test-key")
+        c.add_flight_lines([_make_flight_line()])
+        pat = rosette(
+            center=(34.0, -118.0), heading=0.0,
+            altitude=ureg.Quantity(3000, "meter"),
+            radius=ureg.Quantity(10, "km"),
+            n_lines=3,
+        )
+        pid = c.add_pattern(pat)
+
+        save_path = str(tmp_path / "del_campaign")
+        c.save(save_path)
+
+        c.remove_flight_line("line_001")
+        c.remove_pattern(pid)
+        c._airspaces = None
+        c._raw_airspace_items = None
+        c.save(save_path)
+
+        loaded = Campaign.load(save_path)
+        assert loaded.flight_lines == []
+        assert loaded.groups == []
+        assert loaded.patterns == []
+        assert not loaded.is_fetched
+        assert loaded.airspaces is None
+
     def test_revision_metadata_in_campaign_json(self, tmp_path):
         c = Campaign("Meta Test", bounds=SAMPLE_BOUNDS)
         c.add_flight_lines([_make_flight_line()])

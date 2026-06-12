@@ -13,7 +13,8 @@ The entire campaign is stored as a plain folder::
     ├── flight_lines/
     │   ├── all_lines.geojson
     │   └── groups.json
-    └── waypoints.geojson
+    └── patterns/
+        └── all_patterns.json
 
 Each file uses its natural format (GeoJSON for geometry, JSON for
 structured data) and can be opened independently in QGIS, Python, etc.
@@ -37,8 +38,6 @@ from .airspace import (
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .flight_line import FlightLine
 from .pattern import Pattern
-from .units import ureg
-from .waypoint import Waypoint
 
 logger = logging.getLogger(__name__)
 
@@ -608,44 +607,48 @@ class Campaign:
         }
         _write_json(os.path.join(path, "domain.geojson"), domain_geojson)
 
-        # airspaces.json (raw items for re-parsing)
+        # airspaces.json (raw items for re-parsing).  Removed when no
+        # airspace data is loaded so a stale file from a previous save
+        # cannot resurrect on load.
+        airspace_file = os.path.join(path, "airspaces.json")
         if self._raw_airspace_items is not None:
-            _write_json(os.path.join(path, "airspaces.json"), {
+            _write_json(airspace_file, {
                 "source": "openaip",
                 "fetched_at": self._fetch_timestamp,
                 "count": len(self._raw_airspace_items),
                 "items": self._raw_airspace_items,
             })
+        elif os.path.exists(airspace_file):
+            os.remove(airspace_file)
 
         # flight_lines/ — only free-standing lines (pattern-owned lines
-        # are persisted inside their patterns).
-        if self._flight_lines:
-            fl_dir = os.path.join(path, "flight_lines")
-            os.makedirs(fl_dir, exist_ok=True)
+        # are persisted inside their patterns).  Always written so the
+        # saved folder reflects the in-memory state.
+        fl_dir = os.path.join(path, "flight_lines")
+        os.makedirs(fl_dir, exist_ok=True)
 
-            # all_lines.geojson — FeatureCollection with IDs
-            free_standing = {
-                "type": "FeatureCollection",
-                "features": [
-                    {**fl.to_geojson(), "id": lid,
-                     "properties": {**fl.to_geojson()["properties"], "line_id": lid}}
-                    for lid, fl in self._flight_lines.items()
-                ],
-            }
-            _write_json(os.path.join(fl_dir, "all_lines.geojson"), free_standing)
+        # all_lines.geojson — FeatureCollection with IDs
+        free_standing = {
+            "type": "FeatureCollection",
+            "features": [
+                {**fl.to_geojson(), "id": lid,
+                 "properties": {**fl.to_geojson()["properties"], "line_id": lid}}
+                for lid, fl in self._flight_lines.items()
+            ],
+        }
+        _write_json(os.path.join(fl_dir, "all_lines.geojson"), free_standing)
 
-            # groups.json
-            _write_json(os.path.join(fl_dir, "groups.json"), {
-                "groups": self._groups,
-            })
+        # groups.json
+        _write_json(os.path.join(fl_dir, "groups.json"), {
+            "groups": self._groups,
+        })
 
         # patterns/all_patterns.json
-        if self._patterns:
-            patterns_dir = os.path.join(path, "patterns")
-            os.makedirs(patterns_dir, exist_ok=True)
-            _write_json(os.path.join(patterns_dir, "all_patterns.json"), {
-                "patterns": [p.to_dict() for p in self._patterns.values()],
-            })
+        patterns_dir = os.path.join(path, "patterns")
+        os.makedirs(patterns_dir, exist_ok=True)
+        _write_json(os.path.join(patterns_dir, "all_patterns.json"), {
+            "patterns": [p.to_dict() for p in self._patterns.values()],
+        })
 
         logger.info("Saved campaign '%s' to %s", self._name, path)
 
@@ -788,42 +791,3 @@ def _read_json(filepath: str) -> dict[str, Any]:
     """Read a JSON file and return the parsed dict."""
     with open(filepath) as f:
         return json.load(f)  # type: ignore[no-any-return]  # json.load returns Any
-
-
-def _flight_line_from_geojson(feature: dict[str, Any]) -> FlightLine:
-    """Reconstruct a FlightLine from a GeoJSON Feature dict."""
-    coords = feature["geometry"]["coordinates"]
-    props = feature.get("properties", {})
-
-    lon1, lat1 = coords[0]
-    lon2, lat2 = coords[-1]
-    alt_m = props.get("altitude_msl")
-
-    if lat1 == lat2 and lon1 == lon2:
-        raise HyPlanValueError(
-            f"Degenerate flight line in GeoJSON: start == end ({lat1}, {lon1})"
-        )
-
-    import pymap3d.vincenty
-    _, az12 = pymap3d.vincenty.vdist(lat1, lon1, lat2, lon2)
-    _, az21 = pymap3d.vincenty.vdist(lat2, lon2, lat1, lon1)
-
-    alt = ureg.Quantity(alt_m, "meter") if alt_m is not None else None
-
-    wp1 = Waypoint(
-        latitude=lat1, longitude=lon1,
-        heading=float(az12) % 360,
-        altitude_msl=alt,
-    )
-    wp2 = Waypoint(
-        latitude=lat2, longitude=lon2,
-        heading=(float(az21) + 180.0) % 360,
-        altitude_msl=alt,
-    )
-    return FlightLine(
-        waypoint1=wp1,
-        waypoint2=wp2,
-        site_name=props.get("site_name"),
-        site_description=props.get("site_description"),
-        investigator=props.get("investigator"),
-    )

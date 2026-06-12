@@ -8,6 +8,7 @@ all build a comma-separated waypoint listing from the same shared
 from __future__ import annotations
 
 import datetime
+import os
 
 import geopandas as gpd
 
@@ -25,16 +26,20 @@ def to_foreflight_csv(
     plan: gpd.GeoDataFrame,
     filepath: str,
     takeoff_time: datetime.datetime | None = None,
+    write_oneline: bool = True,
 ) -> None:
     """Write a ForeFlight-compatible CSV file.
 
-    Matches the MovingLines ``_FOREFLIGHT.csv`` format.  Also writes a
-    companion ``_FOREFLIGHT_oneline.txt`` file.
+    Matches the MovingLines ``_FOREFLIGHT.csv`` format.  By default also
+    writes a companion ``_oneline.txt`` file next to *filepath* for
+    ForeFlight content-pack parity.
 
     Args:
         plan: Flight plan GeoDataFrame.
         filepath: Output ``.csv`` path.
         takeoff_time: Optional UTC takeoff time (used for waypoint naming).
+        write_oneline: If True (default), write the ``_oneline.txt``
+            companion file.
     """
     wps = extract_waypoints(plan)
     wp_names = generate_wp_names(
@@ -60,12 +65,13 @@ def to_foreflight_csv(
         f.write("\n".join(lines) + "\n")
 
     # Companion one-liner
-    oneline_path = filepath.replace(".csv", "_oneline.txt")
-    oneline_parts = []
-    for _, wp in wps.iterrows():
-        oneline_parts.append(dd_to_foreflight_oneline(wp["lat"], wp["lon"]))
-    with open(oneline_path, "w") as f:
-        f.write(" ".join(oneline_parts) + "\n")
+    if write_oneline:
+        oneline_path = os.path.splitext(filepath)[0] + "_oneline.txt"
+        oneline_parts = []
+        for _, wp in wps.iterrows():
+            oneline_parts.append(dd_to_foreflight_oneline(wp["lat"], wp["lon"]))
+        with open(oneline_path, "w") as f:
+            f.write(" ".join(oneline_parts) + "\n")
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +153,7 @@ def to_er2_csv(
         name = wp_names[idx] if idx < len(wp_names) else f"WP{idx:02d}"
         alt_kft = wp["alt_kft"] or 0
         utc_min = base_minutes + wp["cum_time_min"]
-        utc_h = int(utc_min // 60)
+        utc_h = int(utc_min // 60) % 24
         utc_m = int(utc_min % 60)
         comment = (wp["segment_type"] or "").replace(",", "")
         lines.append(

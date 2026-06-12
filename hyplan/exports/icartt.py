@@ -43,7 +43,8 @@ def to_icartt(
         pi_name: Principal investigator name.
         institution: PI institution.
         mission_name: Campaign name.
-        flight_date: Flight date (default today).
+        flight_date: Flight date.  Defaults to the (UTC) date of
+            *takeoff_time* when given, otherwise today.
         aircraft: Aircraft object (for platform name).
         takeoff_time: UTC takeoff time.  If *None*, Start_UTC begins at 0.
         interval_seconds: Interpolation interval in seconds (default 60).
@@ -53,7 +54,15 @@ def to_icartt(
         normal_comments: Additional normal comment lines.
     """
     if flight_date is None:
-        flight_date = datetime.date.today()
+        if takeoff_time is not None:
+            utc_takeoff = (
+                takeoff_time.astimezone(datetime.timezone.utc)
+                if takeoff_time.tzinfo is not None
+                else takeoff_time
+            )
+            flight_date = utc_takeoff.date()
+        else:
+            flight_date = datetime.date.today()
     today = datetime.date.today()
 
     if takeoff_time:

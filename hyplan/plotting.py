@@ -8,6 +8,11 @@ Provides Folium interactive maps (:func:`map_flight_lines`,
 (:func:`plot_conflict_matrix`), oceanic track maps
 (:func:`plot_oceanic_tracks`), and terrain profile extraction
 (:func:`terrain_profile_along_track`).
+
+Naming convention: ``map_*`` functions return interactive Folium maps;
+``plot_*`` functions return static Matplotlib figures. The one
+historical exception, :func:`hyplan.planning.isochrone.plot_isochrone`
+(Folium), is also exposed at the top level as ``hyplan.map_isochrone``.
 """
 
 from __future__ import annotations
@@ -110,7 +115,7 @@ def map_flight_lines(
     return m
 
 
-def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport, return_airport: Airport, flight_sequence: list[Any]) -> None:
+def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport, return_airport: Airport, flight_sequence: list[Any]) -> tuple[Any, Any]:
     """
     Plot the computed flight plan on a 2D map with airports, waypoints, and flight lines.
 
@@ -122,6 +127,9 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
             objects. Patterns are rendered by drawing each of their internal
             FlightLine legs (line-based) or Waypoint elements (waypoint-based)
             with the pattern name as the legend label on the first child only.
+
+    Returns:
+        Matplotlib Figure and Axes.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     flight_plan_gdf.plot(ax=ax, column="segment_type", legend=True, cmap="viridis")
@@ -151,8 +159,9 @@ def plot_flight_plan(flight_plan_gdf: gpd.GeoDataFrame, takeoff_airport: Airport
     ax.set_title("Flight Plan")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    plt.legend()
-    plt.grid()
+    ax.legend()
+    ax.grid(True)
+    return fig, ax
 
 
 def terrain_profile_along_track(
@@ -214,7 +223,7 @@ def terrain_profile_along_track(
     return times_arr, elevations_ft
 
 
-def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Aircraft | None = None, dem_file: str | None = None, show_terrain: bool = True) -> None:
+def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Aircraft | None = None, dem_file: str | None = None, show_terrain: bool = True) -> tuple[Any, Any]:
     """
     Plot altitude vs. time trajectory with optional terrain profile.
 
@@ -227,6 +236,9 @@ def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Aircra
         aircraft (Aircraft, optional): Aircraft used for the flight plan.
         dem_file (str, optional): Path to DEM file for terrain. If None, auto-downloaded.
         show_terrain (bool): If True, overlay terrain elevation beneath the flight path.
+
+    Returns:
+        Matplotlib Figure and Axes.
     """
     fig, ax = plt.subplots(figsize=(10, 5))
 
@@ -282,17 +294,20 @@ def plot_altitude_trajectory(flight_plan_gdf: gpd.GeoDataFrame, aircraft: Aircra
     ax.set_title("Altitude vs. Time Trajectory")
     ax.legend()
     ax.grid(True)
+    return fig, ax
 
 
 # ---------------------------------------------------------------------------
 # Airspace visualization
 # ---------------------------------------------------------------------------
 
-# Color map for airspace classes
+# Canonical (color, fill alpha) per airspace class, shared by the static
+# cartopy map, the vertical profile, and the folium map.
 _AIRSPACE_COLORS = {
     "RESTRICTED": ("red", 0.25),
     "PROHIBITED": ("darkred", 0.30),
     "DANGER": ("orange", 0.25),
+    "WARNING_AREA": ("#e65100", 0.20),
     "SFRA": ("darkorange", 0.30),
     "TFR": ("magenta", 0.25),
     "B": ("blue", 0.20),
@@ -402,15 +417,17 @@ def plot_airspace_map(
 
         # Choose style based on source/class
         if a.airspace_class == "TFR" or a.source == "faa_tfr":
-            color, alpha = "magenta", 0.20
+            color, alpha = _AIRSPACE_COLORS["TFR"][0], 0.20
             hatch = "xx"
             seen_classes.add("TFR")
         elif a.airspace_class == "SFRA":
-            color, alpha = "darkorange", 0.25
+            color, alpha = _AIRSPACE_COLORS["SFRA"][0], 0.25
             hatch = "//"
             seen_classes.add("SFRA")
         else:
-            color, alpha = _AIRSPACE_COLORS.get(a.airspace_class, ("gray", 0.15))
+            color, alpha = _AIRSPACE_COLORS.get(
+                a.airspace_class, _AIRSPACE_COLORS["OTHER"]
+            )
             hatch = None
             seen_classes.add(a.airspace_class)
 
@@ -435,10 +452,16 @@ def plot_airspace_map(
         for a in airspaces:
             if id(a) in nm_airspace_ids:
                 buffered = a.geometry.buffer(buf_deg)
-                x, y = buffered.exterior.xy
-                ax.fill(x, y, alpha=0.08, color="gold", transform=transform)
-                ax.plot(x, y, ":", color="gold", linewidth=1.5, alpha=0.5,
-                        transform=transform)
+                polys = (
+                    list(buffered.geoms)
+                    if buffered.geom_type == "MultiPolygon"
+                    else [buffered]
+                )
+                for poly in polys:
+                    x, y = poly.exterior.xy
+                    ax.fill(x, y, alpha=0.08, color="gold", transform=transform)
+                    ax.plot(x, y, ":", color="gold", linewidth=1.5, alpha=0.5,
+                            transform=transform)
 
     # Flight lines
     if flight_lines:
@@ -511,7 +534,7 @@ def plot_airspace_map(
     if flight_lines:
         legend_items.append(mpatches.Patch(color="green", alpha=0.5, label="Clear line"))
     for cls in sorted(seen_classes):
-        color, _ = _AIRSPACE_COLORS.get(cls, ("gray", 0.15))
+        color, _ = _AIRSPACE_COLORS.get(cls, _AIRSPACE_COLORS["OTHER"])
         legend_items.append(mpatches.Patch(color=color, alpha=0.3, label=f"{cls}"))
     if inactive_airspaces:
         legend_items.append(mpatches.Patch(
@@ -692,21 +715,7 @@ def plot_vertical_profile(
         except Exception:
             pass
 
-    # Airspace bands — color by class, not just severity
-    _profile_colors = {
-        "RESTRICTED": ("#d32f2f", 0.25),
-        "PROHIBITED": ("#b71c1c", 0.30),
-        "WARNING_AREA": ("#e65100", 0.20),
-        "SFRA": ("#ff6f00", 0.25),
-        "TFR": ("#9c27b0", 0.20),
-        "B": ("#1565c0", 0.20),
-        "C": ("#7b1fa2", 0.18),
-        "D": ("#00695c", 0.18),
-        "E": ("#78909c", 0.10),
-        "DANGER": ("#e65100", 0.20),
-        "OTHER": ("#90a4ae", 0.12),
-    }
-    from .airspace import classify_severity
+    # Airspace bands — color by class
     for a in airspaces:
         if not fl_geom.intersects(a.geometry):
             continue
@@ -721,8 +730,9 @@ def plot_vertical_profile(
         d_start = start_frac * total_dist_nm
         d_end = end_frac * total_dist_nm
 
-        classify_severity(a.airspace_type)
-        color, alpha = _profile_colors.get(a.airspace_class, ("#90a4ae", 0.12))
+        color, alpha = _AIRSPACE_COLORS.get(
+            a.airspace_class, _AIRSPACE_COLORS["OTHER"]
+        )
         hatch = "///" if getattr(a, "floor_reference", "MSL") == "SFC" else None
 
         ax.fill_between(
@@ -920,19 +930,13 @@ def map_airspace(
     m = folium.Map(location=center, zoom_start=zoom_start, tiles="CartoDB positron")
 
     # Group airspaces by type for layer control
-    _color_map = {
-        "RESTRICTED": "red", "PROHIBITED": "darkred", "DANGER": "orange",
-        "SFRA": "darkorange", "TFR": "purple", "B": "blue", "C": "purple",
-        "D": "teal", "E": "steelblue", "OTHER": "gray",
-    }
-
     layer_groups = {}
     for a in airspaces:
-        group_name = a.airspace_class if a.airspace_class in _color_map else "OTHER"
+        group_name = a.airspace_class if a.airspace_class in _AIRSPACE_COLORS else "OTHER"
         if group_name not in layer_groups:
             layer_groups[group_name] = folium.FeatureGroup(name=group_name)
 
-        color = _color_map.get(group_name, "gray")
+        color = _AIRSPACE_COLORS[group_name][0]
         severity = classify_severity(a.airspace_type)
 
         tooltip_text = (

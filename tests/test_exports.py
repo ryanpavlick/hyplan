@@ -148,6 +148,74 @@ def flight_plan():
     return plan, b200
 
 
+@pytest.fixture
+def overnight_plan():
+    """Single-segment plan whose cumulative time exceeds 24 hours."""
+    import geopandas as gpd
+    from shapely.geometry import LineString
+
+    records = [{
+        "geometry": LineString([(-118.0, 34.0), (-117.0, 34.0)]),
+        "start_lat": 34.0,
+        "start_lon": -118.0,
+        "end_lat": 34.0,
+        "end_lon": -117.0,
+        "start_altitude": 10000.0,
+        "end_altitude": 10000.0,
+        "segment_type": "transit",
+        "segment_name": "Overnight",
+        "distance": 50.0,
+        "time_to_segment": 25.5 * 60.0,
+        "start_heading": 90.0,
+        "end_heading": 90.0,
+    }]
+    return gpd.GeoDataFrame(records, crs="EPSG:4326")
+
+
+def _make_minimal_plan_gdf(tailwind_kts=None):
+    """Three-segment plan mirroring compute_flight_plan output.
+
+    When *tailwind_kts* is given, the middle flight_line segment carries
+    the wind-aware ``tailwind_kts`` column (other segments get NaN, as
+    in real wind-aware plans).
+    """
+    import geopandas as gpd
+    from shapely.geometry import LineString
+
+    records = [
+        {
+            "geometry": LineString([(-118.0, 34.0), (-117.5, 34.0)]),
+            "start_lat": 34.0, "start_lon": -118.0,
+            "end_lat": 34.0, "end_lon": -117.5,
+            "start_altitude": 0.0, "end_altitude": 15000.0,
+            "segment_type": "takeoff", "segment_name": "Departure",
+            "distance": 25.0, "time_to_segment": 12.0,
+            "start_heading": 90.0, "end_heading": 90.0,
+        },
+        {
+            "geometry": LineString([(-117.5, 34.0), (-117.0, 34.0)]),
+            "start_lat": 34.0, "start_lon": -117.5,
+            "end_lat": 34.0, "end_lon": -117.0,
+            "start_altitude": 15000.0, "end_altitude": 15000.0,
+            "segment_type": "flight_line", "segment_name": "FL-1",
+            "distance": 25.0, "time_to_segment": 10.0,
+            "start_heading": 90.0, "end_heading": 90.0,
+        },
+        {
+            "geometry": LineString([(-117.0, 34.0), (-116.5, 34.0)]),
+            "start_lat": 34.0, "start_lon": -117.0,
+            "end_lat": 34.0, "end_lon": -116.5,
+            "start_altitude": 15000.0, "end_altitude": 0.0,
+            "segment_type": "approach", "segment_name": "Return",
+            "distance": 25.0, "time_to_segment": 12.0,
+            "start_heading": 90.0, "end_heading": 90.0,
+        },
+    ]
+    if tailwind_kts is not None:
+        records[1]["tailwind_kts"] = tailwind_kts
+    return gpd.GeoDataFrame(records, crs="EPSG:4326")
+
+
 # -------------------------------------------------------------------------
 # Extract waypoints
 # -------------------------------------------------------------------------
@@ -174,6 +242,31 @@ class TestExtractWaypoints:
         wps = extract_waypoints(plan)
         cum = wps["cum_dist_nm"].values
         assert all(cum[i] <= cum[i + 1] for i in range(len(cum) - 1))
+
+    def test_sequential_wp_numbers(self, flight_plan):
+        plan, _ = flight_plan
+        wps = extract_waypoints(plan)
+        assert wps["wp"].tolist() == list(range(len(plan) + 1))
+
+    def test_non_contiguous_index_yields_sequential_wp(self):
+        """Filtered/concatenated plans (index [0, 2, 5]) must still number
+        waypoints 0..n with no gaps or collisions."""
+        plan = _make_minimal_plan_gdf()
+        plan.index = [0, 2, 5]
+        wps = extract_waypoints(plan)
+        assert wps["wp"].tolist() == list(range(len(plan) + 1))
+
+    def test_headwind_from_wind_aware_plan(self):
+        """tailwind_kts on a segment becomes a sign-flipped headwind_kt."""
+        plan = _make_minimal_plan_gdf(tailwind_kts=-12.0)
+        wps = extract_waypoints(plan)
+        # Middle (flight_line) segment: 12 kt headwind; others 0.
+        assert wps["headwind_kt"].tolist() == [0.0, 12.0, 0.0, 0.0]
+
+    def test_headwind_zero_without_wind_columns(self):
+        plan = _make_minimal_plan_gdf()
+        wps = extract_waypoints(plan)
+        assert (wps["headwind_kt"] == 0.0).all()
 
 
 # -------------------------------------------------------------------------
@@ -218,9 +311,31 @@ class TestExportFiles:
         assert lines[0].strip() == "Waypoint,Description,LAT,LONG"
         assert len(lines) > 1
 
-        # Check companion file
-        oneline_path = path.replace(".csv", "_oneline.txt")
-        assert os.path.exists(oneline_path)
+        # Companion file is written by default
+        assert os.path.exists(str(tmp_path / "test_FOREFLIGHT_oneline.txt"))
+
+    def test_to_foreflight_csv_no_oneline(self, flight_plan, tmp_path):
+        plan, _ = flight_plan
+        path = str(tmp_path / "no_oneline.csv")
+        to_foreflight_csv(plan, path, write_oneline=False)
+        assert os.path.exists(path)
+        assert not os.path.exists(str(tmp_path / "no_oneline_oneline.txt"))
+
+    def test_to_foreflight_csv_dot_csv_in_directory_name(self, flight_plan, tmp_path):
+        plan, _ = flight_plan
+        subdir = tmp_path / "plans.csv"
+        subdir.mkdir()
+        path = str(subdir / "ff.csv")
+        to_foreflight_csv(plan, path, takeoff_time=self.TAKEOFF)
+        assert os.path.exists(path)
+        assert os.path.exists(str(subdir / "ff_oneline.txt"))
+
+    def test_to_foreflight_csv_non_csv_suffix(self, flight_plan, tmp_path):
+        plan, _ = flight_plan
+        path = str(tmp_path / "ff_export.txt")
+        to_foreflight_csv(plan, path, takeoff_time=self.TAKEOFF)
+        assert os.path.exists(path)
+        assert os.path.exists(str(tmp_path / "ff_export_oneline.txt"))
 
     def test_to_honeywell_fms(self, flight_plan, tmp_path):
         plan, _ = flight_plan
@@ -263,15 +378,39 @@ class TestExportFiles:
         assert "Longitude" in content
         assert "Altitude" in content
 
+    def test_to_icartt_default_flight_date_from_takeoff(self, flight_plan, tmp_path):
+        """Without flight_date, the header date is the takeoff date, not today."""
+        plan, b200 = flight_plan
+        path = str(tmp_path / "takeoff_date.ict")
+        to_icartt(plan, path, pi_name="Test PI", mission_name="TEST",
+                  aircraft=b200, takeoff_time=self.TAKEOFF)
+
+        with open(path) as f:
+            lines = f.readlines()
+
+        today = datetime.date.today()
+        takeoff_date = self.TAKEOFF.date()
+        assert lines[6].strip() == (
+            f"{takeoff_date.year}, {takeoff_date.month}, {takeoff_date.day}, "
+            f"{today.year}, {today.month}, {today.day}"
+        )
+
     def test_to_kml(self, flight_plan, tmp_path):
         plan, _ = flight_plan
         path = str(tmp_path / "test.kml")
         to_kml(plan, path, takeoff_time=self.TAKEOFF)
         assert os.path.exists(path)
 
-        # KMZ companion should also be created
+        # No KMZ companion unless requested
         kmz_path = str(tmp_path / "test.kmz")
-        assert os.path.exists(kmz_path)
+        assert not os.path.exists(kmz_path)
+
+    def test_to_kml_with_kmz_companion(self, flight_plan, tmp_path):
+        plan, _ = flight_plan
+        path = str(tmp_path / "companion.kml")
+        to_kml(plan, path, takeoff_time=self.TAKEOFF, write_kmz=True)
+        assert os.path.exists(path)
+        assert os.path.exists(str(tmp_path / "companion.kmz"))
 
     def test_to_kml_altitude_exaggeration(self, flight_plan, tmp_path):
         plan, _ = flight_plan
@@ -529,6 +668,50 @@ class TestExportContentValidation:
             # LON should start with E or W
             lon_field = parts[4].strip()
             assert lon_field[0] in ("E", "W")
+
+    def test_er2_csv_utc_wraps_past_midnight(self, overnight_plan, tmp_path):
+        """A cumulative time of 25.5 h labels the final waypoint 1:30."""
+        path = str(tmp_path / "er2_wrap.csv")
+        to_er2_csv(overnight_plan, path)
+
+        with open(path) as f:
+            data_lines = [line for line in f.readlines()[1:] if line.strip()]
+
+        last_utc = data_lines[-1].split(",")[5].strip()
+        assert last_utc == "1:30"
+
+    def test_kml_utc_wraps_past_midnight(self, overnight_plan, tmp_path):
+        """A cumulative time of 25.5 h labels the final waypoint 01:30."""
+        path = str(tmp_path / "kml_wrap.kml")
+        to_kml(overnight_plan, path)
+
+        with open(path) as f:
+            content = f.read()
+
+        assert "UTC: 01:30" in content
+        assert "UTC: 25:" not in content
+
+    def test_excel_headwind_columns_from_wind_aware_plan(self, tmp_path):
+        """to_excel writes HdWind [kt]/[m/s] from the plan's tailwind_kts."""
+        openpyxl = pytest.importorskip("openpyxl")
+
+        plan = _make_minimal_plan_gdf(tailwind_kts=-12.0)
+        path = str(tmp_path / "wind.xlsx")
+        to_excel(plan, path, takeoff_time=self.TAKEOFF)
+
+        ws = openpyxl.load_workbook(path).active
+        headers = [c.value for c in ws[1]]
+        kt_col = headers.index("HdWind [kt]") + 1
+        mps_col = headers.index("HdWind [m/s]") + 1
+
+        # Data row 3 = flight_line waypoint (rows: header, takeoff, line, ...)
+        assert ws.cell(row=3, column=kt_col).value == pytest.approx(12.0)
+        assert ws.cell(row=3, column=mps_col).value == pytest.approx(
+            (12.0 * ureg.knot).m_as("meter/second")
+        )
+        # Still-air segments stay 0
+        assert ws.cell(row=2, column=kt_col).value == pytest.approx(0.0)
+        assert ws.cell(row=4, column=mps_col).value == pytest.approx(0.0)
 
 
 # -------------------------------------------------------------------------

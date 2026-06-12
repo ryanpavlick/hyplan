@@ -8,7 +8,9 @@ import folium
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pytest
-from shapely.geometry import LineString, Polygon
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 # cartopy is an optional plotting dependency used by plot_airspace_map and
 # plot_oceanic_tracks. Gate the dependent classes rather than failing the
@@ -22,6 +24,7 @@ except ImportError:  # pragma: no cover
 from hyplan.airspace import Airspace, AirspaceConflict, OceanicTrack
 from hyplan.flight_line import FlightLine
 from hyplan.plotting import (
+    _AIRSPACE_COLORS,
     map_airspace,
     map_flight_lines,
     plot_airspace_map,
@@ -153,7 +156,7 @@ def _make_simple_flight_plan_gdf():
 class TestPlotFlightPlan:
     """Smoke tests for plot_flight_plan (Agg backend, no display)."""
 
-    def test_returns_without_error(self):
+    def _plot(self):
         gdf = _make_simple_flight_plan_gdf()
         takeoff = _MockAirport(34.0, -118.0)
         ret = _MockAirport(34.0, -116.5)
@@ -164,10 +167,20 @@ class TestPlotFlightPlan:
             altitude_msl=ureg.Quantity(6000, "meter"),
             site_name="FL-1",
         )
-        # plot_flight_plan calls plt.show(); with Agg backend this is a no-op
-        plot_flight_plan(gdf, takeoff, ret, [fl])
-        # If we get here without error the smoke test passes
+        return plot_flight_plan(gdf, takeoff, ret, [fl])
+
+    def test_returns_fig_ax(self):
+        fig, ax = self._plot()
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close(fig)
+
+    def test_no_leaked_figures(self):
         plt.close("all")
+        n_before = len(plt.get_fignums())
+        fig, _ = self._plot()
+        plt.close(fig)
+        assert len(plt.get_fignums()) == n_before
 
 
 class TestPlotAltitudeTrajectory:
@@ -176,15 +189,27 @@ class TestPlotAltitudeTrajectory:
     def test_without_terrain(self):
         gdf = _make_simple_flight_plan_gdf()
         # Disable terrain to avoid DEM download
-        plot_altitude_trajectory(gdf, aircraft=None, show_terrain=False)
-        plt.close("all")
+        fig, ax = plot_altitude_trajectory(gdf, aircraft=None, show_terrain=False)
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close(fig)
 
     def test_with_aircraft_no_terrain(self):
         from hyplan.aircraft import KingAirB200
         gdf = _make_simple_flight_plan_gdf()
         ac = KingAirB200()
-        plot_altitude_trajectory(gdf, aircraft=ac, show_terrain=False)
+        fig, ax = plot_altitude_trajectory(gdf, aircraft=ac, show_terrain=False)
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close(fig)
+
+    def test_no_leaked_figures(self):
+        gdf = _make_simple_flight_plan_gdf()
         plt.close("all")
+        n_before = len(plt.get_fignums())
+        fig, _ = plot_altitude_trajectory(gdf, aircraft=None, show_terrain=False)
+        plt.close(fig)
+        assert len(plt.get_fignums()) == n_before
 
 
 class TestTerrainProfileAlongTrack:
@@ -311,6 +336,33 @@ class TestPlotAirspaceMap:
 
     def test_with_near_misses(self, sample_flight_line):
         airspace = _make_airspace()
+        nm = _make_near_miss(airspace)
+        fig, ax = plot_airspace_map(
+            [airspace],
+            flight_lines=[sample_flight_line],
+            near_misses=[nm],
+            buffer_m=10000,
+        )
+        assert fig is not None
+        plt.close("all")
+
+    def test_multipolygon_near_miss_buffer(self, sample_flight_line):
+        geometry = MultiPolygon([
+            Polygon([(-117.75, 33.75), (-117.25, 33.75),
+                     (-117.25, 34.25), (-117.75, 34.25)]),
+            Polygon([(-115.25, 33.75), (-114.75, 33.75),
+                     (-114.75, 34.25), (-115.25, 34.25)]),
+        ])
+        airspace = Airspace(
+            name="R-Multi",
+            airspace_class="RESTRICTED",
+            airspace_type=1,
+            floor_ft=0.0,
+            ceiling_ft=18000.0,
+            geometry=geometry,
+            country="US",
+            source="faa_nasr",
+        )
         nm = _make_near_miss(airspace)
         fig, ax = plot_airspace_map(
             [airspace],
@@ -526,3 +578,51 @@ class TestMapAirspace:
         a.effective_start = "2026-01-01T00:00:00Z"
         m = map_airspace([a])
         assert isinstance(m, folium.Map)
+
+
+# ---------------------------------------------------------------------------
+# Canonical airspace palette
+# ---------------------------------------------------------------------------
+
+class TestAirspacePalette:
+    """The single module-level palette drives all three airspace plotters."""
+
+    def test_canonical_values(self):
+        # Static-map values are canonical: TFR is magenta, DANGER is orange.
+        assert _AIRSPACE_COLORS["TFR"] == ("magenta", 0.25)
+        assert _AIRSPACE_COLORS["DANGER"][0] == "orange"
+
+    def test_superset_of_classes(self):
+        # Union of the three formerly-divergent tables.
+        expected = {
+            "RESTRICTED", "PROHIBITED", "DANGER", "WARNING_AREA", "SFRA",
+            "TFR", "B", "C", "D", "E", "MODE_C", "OTHER",
+        }
+        assert expected <= set(_AIRSPACE_COLORS)
+
+    def test_map_airspace_uses_canonical_palette(self):
+        # Folium map previously colored TFR purple; canonical is magenta.
+        tfr = _make_airspace(name="TFR-01", airspace_class="TFR",
+                             airspace_type=31)
+        html = map_airspace([tfr]).get_root().render()
+        assert "magenta" in html
+
+    def test_map_airspace_groups_warning_area(self):
+        # WARNING_AREA was missing from the folium table and fell into OTHER.
+        wa = _make_airspace(name="W-291", airspace_class="WARNING_AREA",
+                            airspace_type=2)
+        html = map_airspace([wa]).get_root().render()
+        assert "WARNING_AREA" in html
+        assert _AIRSPACE_COLORS["WARNING_AREA"][0] in html
+
+    def test_vertical_profile_with_palette_classes(self, sample_flight_line):
+        # Smoke: classes from each formerly-divergent table render fine.
+        airspaces = [
+            _make_airspace(name="W-291", airspace_class="WARNING_AREA",
+                           airspace_type=2),
+            _make_airspace(name="Mode C Veil", airspace_class="MODE_C",
+                           airspace_type=4),
+        ]
+        fig, ax = plot_vertical_profile(sample_flight_line, airspaces)
+        assert fig is not None
+        plt.close("all")

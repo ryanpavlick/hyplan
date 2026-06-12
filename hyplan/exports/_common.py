@@ -34,19 +34,23 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
     out one waypoint per segment boundary (start of each segment + end of
     the last segment).
 
+    Waypoint numbers are sequential ordinals starting at 0, independent
+    of the plan's index — filtered or concatenated plans with
+    non-contiguous indexes still yield 0..n.
+
     Returns:
         DataFrame with columns: ``wp``, ``lat``, ``lon``, ``alt_m``,
-        ``alt_kft``, ``heading``, ``speed_mps``, ``speed_kt``,
-        ``dist_km``, ``dist_nm``, ``cum_dist_km``, ``cum_dist_nm``,
-        ``leg_time_min``, ``cum_time_min``, ``segment_type``,
-        ``segment_name``.
+        ``alt_ft``, ``alt_kft``, ``heading``, ``speed_mps``,
+        ``speed_kt``, ``dist_km``, ``dist_nm``, ``cum_dist_km``,
+        ``cum_dist_nm``, ``leg_time_min``, ``cum_time_min``,
+        ``headwind_kt``, ``segment_type``, ``segment_name``.
     """
     rows = []
     cum_dist_km = 0.0
     cum_dist_nm = 0.0
     cum_time = 0.0
 
-    for i, row in plan.iterrows():
+    for seq, (_, row) in enumerate(plan.iterrows()):
         alt_ft = _safe_float(row.get("start_altitude"), default=0.0, field="start_altitude")
         alt_m = (alt_ft * ureg.foot).m_as(ureg.meter)
         alt_kft = alt_ft / 1000.0
@@ -63,8 +67,13 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
             speed_kt = 0.0
             speed_mps = 0.0
 
+        # Along-track wind, sign-flipped to headwind (positive = headwind).
+        # Only wind-aware flight-line segments carry ``tailwind_kts``.
+        tailwind_kt = _safe_float(row.get("tailwind_kts"))
+        headwind_kt = -tailwind_kt if tailwind_kt else 0.0
+
         rows.append({
-            "wp": i,
+            "wp": seq,
             "lat": row["start_lat"],
             "lon": row["start_lon"],
             "alt_m": alt_m,
@@ -79,6 +88,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
             "cum_dist_nm": cum_dist_nm,
             "leg_time_min": leg_time,
             "cum_time_min": cum_time,
+            "headwind_kt": headwind_kt,
             "segment_type": row.get("segment_type", ""),
             "segment_name": row.get("segment_name", ""),
         })
@@ -107,6 +117,7 @@ def extract_waypoints(plan: gpd.GeoDataFrame) -> pd.DataFrame:
             "cum_dist_nm": cum_dist_nm,
             "leg_time_min": 0.0,
             "cum_time_min": cum_time,
+            "headwind_kt": 0.0,
             "segment_type": "",
             "segment_name": last.get("segment_name", ""),
         })
