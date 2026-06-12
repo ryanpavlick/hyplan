@@ -177,6 +177,51 @@ class TestMERRA2URL:
         assert "goldsmr5.gesdisc.eosdis.nasa.gov" in url
         assert "M2I3NPASM" in url
 
+    def test_reprocessed_months_use_stream_401(self):
+        assert _merra2_stream(2020, 9) == 401
+        assert _merra2_stream(2021, 7) == 401
+        assert "MERRA2_401" in _merra2_url(datetime.date(2020, 9, 15))
+        assert "MERRA2_401" in _merra2_url(datetime.date(2021, 7, 1))
+
+    def test_non_reprocessed_months_use_stream_400(self):
+        assert _merra2_stream(2021, 5) == 400
+        assert "MERRA2_400" in _merra2_url(datetime.date(2021, 5, 15))
+
+    def test_open_dataset_falls_back_to_alternate_stream(self):
+        from unittest.mock import MagicMock
+
+        from hyplan.winds.providers.merra2 import MERRA2WindField
+
+        url = _merra2_url(datetime.date(2021, 5, 15))
+        alt_url = url.replace("MERRA2_400", "MERRA2_401")
+
+        wf = object.__new__(MERRA2WindField)
+        wf._session = MagicMock()
+        wf._xr = MagicMock()
+        wf._xr.backends.PydapDataStore.open.side_effect = [
+            OSError("404 Not Found"), MagicMock(),
+        ]
+        wf._xr.open_dataset.return_value = MagicMock()
+
+        ds = wf._open_dataset(url)
+        assert ds is wf._xr.open_dataset.return_value
+        calls = wf._xr.backends.PydapDataStore.open.call_args_list
+        assert calls[0].args[0] == url
+        assert calls[1].args[0] == alt_url
+
+    def test_open_dataset_raises_when_both_streams_fail(self):
+        from unittest.mock import MagicMock
+
+        from hyplan.winds.providers.merra2 import MERRA2WindField
+
+        wf = object.__new__(MERRA2WindField)
+        wf._session = MagicMock()
+        wf._xr = MagicMock()
+        wf._xr.backends.PydapDataStore.open.side_effect = OSError("404")
+
+        with pytest.raises(OSError, match="404"):
+            wf._open_dataset(_merra2_url(datetime.date(2021, 5, 15)))
+
 
 # ---------------------------------------------------------------------------
 # compute_flight_plan with ConstantWindField
@@ -412,6 +457,32 @@ class TestGFSFilter:
         date, cycle = _gfs_best_cycle(dt)
         assert cycle in (0, 6, 12, 18)
         assert isinstance(date, datetime.date)
+
+    def test_past_target_selects_cycle_near_target(self):
+        # Target 24 h in the past must pick a cycle near the target,
+        # not the latest available one.
+        now = datetime.datetime(2024, 6, 16, 18, 0)
+        target = datetime.datetime(2024, 6, 15, 18, 0)
+        date, cycle = _gfs_best_cycle(target, now=now)
+        assert date == datetime.date(2024, 6, 15)
+        assert cycle == 18
+
+    def test_future_target_limited_by_availability(self):
+        # A future target can't pick a cycle that isn't published yet:
+        # latest available at 12:00Z (5 h latency) is the 06Z cycle.
+        now = datetime.datetime(2024, 6, 15, 12, 0)
+        target = datetime.datetime(2024, 6, 16, 12, 0)
+        date, cycle = _gfs_best_cycle(target, now=now)
+        assert date == datetime.date(2024, 6, 15)
+        assert cycle == 6
+
+    def test_tz_aware_target(self):
+        now = datetime.datetime(2024, 6, 16, 18, 0)
+        target = datetime.datetime(
+            2024, 6, 15, 18, 0, tzinfo=datetime.timezone.utc,
+        )
+        date, cycle = _gfs_best_cycle(target, now=now)
+        assert (date, cycle) == (datetime.date(2024, 6, 15), 18)
 
 
 # ---------------------------------------------------------------------------
@@ -840,6 +911,85 @@ class TestGriddedInterpolation:
         # Should clamp to nearest grid corner: lat=30, lon=-120
         assert u.m_as("m/s") == pytest.approx(30.0, abs=0.5)
         assert v.m_as("m/s") == pytest.approx(-120.0, abs=0.5)
+
+    def test_out_of_range_query_warns_once_per_axis(self, caplog):
+        """Out-of-slab queries warn once per axis and still clamp."""
+        wf = self._make_field()
+        with caplog.at_level("WARNING", logger="hyplan.winds.gridded"):
+            u, _ = wf.wind_at(
+                28.0, -118.0,  # lat below grid, lon inside
+                ureg.Quantity(18000, "feet"),
+                datetime.datetime(2024, 1, 1),
+            )
+            # Repeat — must not warn again for the same axis
+            wf.wind_at(
+                27.0, -118.0,
+                ureg.Quantity(18000, "feet"),
+                datetime.datetime(2024, 1, 1),
+            )
+        assert u.m_as("m/s") == pytest.approx(30.0, abs=0.5)  # clamped
+        lat_warnings = [
+            r for r in caplog.records if "lat=" in r.getMessage()
+        ]
+        assert len(lat_warnings) == 1
+        assert "outside the fetched slab extent" in lat_warnings[0].getMessage()
+        assert "[30, 36]" in lat_warnings[0].getMessage()
+
+    def test_in_range_query_does_not_warn(self, caplog):
+        wf = self._make_field()
+        with caplog.at_level("WARNING", logger="hyplan.winds.gridded"):
+            wf.wind_at(
+                32.0, -118.0,
+                ureg.Quantity(18000, "feet"),
+                datetime.datetime(2024, 1, 1),
+            )
+        assert not [
+            r for r in caplog.records
+            if "outside the fetched slab extent" in r.getMessage()
+        ]
+
+    def test_nan_corner_renormalizes(self):
+        """A NaN corner is skipped and the rest renormalized."""
+        lats = np.array([30.0, 32.0])
+        lons = np.array([-120.0, -118.0])
+        levs = np.array([500.0])
+        t = np.datetime64("2024-01-01T00:00:00")
+        times = np.array([
+            (t - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
+        ], dtype=float)
+        u_data = np.array([[[[1.0, 2.0], [3.0, np.nan]]]])
+        wf = _SyntheticGriddedWind(u_data, -u_data, times, levs, lats, lons)
+        u, _ = wf.wind_at(
+            31.0, -119.0,
+            ureg.Quantity(18000, "feet"),
+            datetime.datetime(2024, 1, 1),
+        )
+        # Equal 0.25 weights on (1, 2, 3, NaN) → (1+2+3)*0.25 / 0.75 = 2.0
+        assert u.m_as("m/s") == pytest.approx(2.0)
+
+    def test_all_nan_corners_returns_nan_and_warns(self, caplog):
+        lats = np.array([30.0, 32.0])
+        lons = np.array([-120.0, -118.0])
+        levs = np.array([500.0])
+        t = np.datetime64("2024-01-01T00:00:00")
+        times = np.array([
+            (t - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
+        ], dtype=float)
+        u_data = np.full((1, 1, 2, 2), np.nan)
+        wf = _SyntheticGriddedWind(u_data, u_data, times, levs, lats, lons)
+        with caplog.at_level("WARNING", logger="hyplan.winds.gridded"):
+            u, v = wf.wind_at(
+                31.0, -119.0,
+                ureg.Quantity(18000, "feet"),
+                datetime.datetime(2024, 1, 1),
+            )
+        assert np.isnan(u.m_as("m/s"))
+        assert np.isnan(v.m_as("m/s"))
+        nan_warnings = [
+            r for r in caplog.records
+            if "All interpolation corners are NaN" in r.getMessage()
+        ]
+        assert len(nan_warnings) == 1
 
 
 # ---------------------------------------------------------------------------

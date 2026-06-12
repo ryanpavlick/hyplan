@@ -230,13 +230,14 @@ def plot_cloud_forecast(
     ]
     ax.set_xticklabels(date_labels, rotation=0, ha="center")
 
-    # Draw green borders around "go" cells
+    # Draw green borders around "go" cells (imshow cells are centered on
+    # integer coordinates, so edges sit at +/-0.5)
     for i in range(pivot.shape[0]):
         for j in range(pivot.shape[1]):
             if pivot.iloc[i, j] <= threshold:
                 ax.add_patch(
                     mpatches.Rectangle(
-                        (j, i), 1, 1,
+                        (j - 0.5, i - 0.5), 1, 1,
                         fill=False, edgecolor="green", linewidth=2.5,
                     )
                 )
@@ -293,8 +294,8 @@ def plot_yearly_cloud_fraction_heatmaps_with_visits(
                 visit_days_list = sorted(visit_tracker[year][polygon_id])
                 for visit_day in visit_days_list:
                     if day_start <= visit_day <= day_stop:
-                        stars_x.append(visit_day - day_start + 0.5)
-                        stars_y.append(i + 0.5)
+                        stars_x.append(visit_day - day_start)
+                        stars_y.append(i)
 
                         for day in range(visit_day + 1, day_stop + 1):
                             if exclude_weekends:

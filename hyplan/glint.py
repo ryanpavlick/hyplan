@@ -26,10 +26,11 @@ remote sensing and emission quantification of offshore shallow water
 oil and gas platforms in the Gulf of Mexico. *Environmental Research
 Letters*, 17(8), 084039. doi:10.1088/1748-9326/ac8566
 
-Solar position via the ``sunposition`` library:
-Reda, I. and Andreas, A. (2004). Solar position algorithm for solar
-radiation applications. *Solar Energy*, 76(5), 577-589.
-doi:10.1016/j.solener.2003.12.003
+Solar position is computed with Skyfield via
+:func:`hyplan.sun.sunpos` (a drop-in replacement for
+``sunposition.sunpos``):
+Rhodes, B. (2019). Skyfield: High precision research-grade positions
+for planets and Earth satellites. ascl:1907.024.
 """
 
 import logging
@@ -615,7 +616,7 @@ def compute_glint_vectorized(
     # Vectorized: starboard (+90) for tilt>=0, port (-90) otherwise
     sign = np.where(tilt_angles >= 0, 90.0, -90.0)
     view_azimuths = ((azimuths[:, None] + sign[None, :]) % 360.0).ravel()
-    tilt_angles_tiled = np.tile(np.abs(tilt_angles), n_track)
+    tilt_angles_tiled = np.tile(tilt_angles, n_track)
 
     # Sample solar geometry along the track once and interpolate per point
     solar_az_track, solar_zen_track = _sample_solar_geometry(
@@ -634,7 +635,7 @@ def compute_glint_vectorized(
         sensor_lon=longitudes_t,
         sensor_alt=altitudes_t,
         viewing_azimuth=view_azimuths,
-        tilt_angle=tilt_angles_tiled,
+        tilt_angle=np.abs(tilt_angles_tiled),
         solar_azimuth=solar_az_tiled,
         solar_zenith=solar_zen_tiled,
     )

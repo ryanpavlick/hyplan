@@ -14,8 +14,10 @@ Licensed under the Public Domain (CC0).
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
+import time
 from pathlib import Path
 
 import geopandas as gpd
@@ -25,6 +27,7 @@ from shapely.geometry import Point
 from .download import download_file
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
 from .geometry import haversine
+from .terrain.io import get_cache_root
 from .units import convert_distance, ureg
 
 __all__ = [
@@ -43,9 +46,29 @@ __all__ = [
 
 OUR_AIRPORTS_URL = "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/airports.csv"
 RUNWAYS_URL = "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/runways.csv"
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "hyplan"
+_STALE_CACHE_DAYS = 30
 
 logger = logging.getLogger(__name__)
+
+
+def _warn_if_stale(filepath: str) -> None:
+    """Log a hint when a cached OurAirports CSV is older than ~30 days.
+
+    OurAirports publishes updates daily, but the cache is never
+    auto-refreshed: a cached file is reused until it is deleted or
+    ``initialize_data(refresh=True)`` is called.
+    """
+    try:
+        age_days = (time.time() - os.path.getmtime(filepath)) / 86400.0
+    except OSError:
+        return
+    if age_days > _STALE_CACHE_DAYS:
+        logger.info(
+            "Cached %s is %.0f days old (OurAirports updates daily). "
+            "Delete the file or call initialize_data(refresh=True) to "
+            "refresh it.",
+            filepath, age_days,
+        )
 
 
 class _AirportDB:
@@ -67,12 +90,13 @@ class _AirportDB:
     ) -> None:
         """Download (if needed) and load airport/runway data."""
         with self._lock:
-            cache_path = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+            cache_path = Path(cache_dir) if cache_dir else Path(get_cache_root())
             cache_path.mkdir(parents=True, exist_ok=True)
 
             airports_file = str(cache_path / "airports.csv")
             runways_file = str(cache_path / "runways.csv")
 
+            _warn_if_stale(airports_file)
             download_file(airports_file, OUR_AIRPORTS_URL, replace=refresh)
             download_file(runways_file, RUNWAYS_URL, replace=refresh)
 
@@ -186,8 +210,10 @@ class Airport:
         return str(self._icao)
 
     @property
-    def iata_code(self) -> str:
-        """IATA code of the airport."""
+    def iata_code(self) -> str | None:
+        """IATA code of the airport, or None if it has none."""
+        if pd.isna(self._iata):
+            return None
         return str(self._iata)
 
     @property
@@ -201,8 +227,10 @@ class Airport:
         return str(self._iso_country)
 
     @property
-    def municipality(self) -> str:
-        """Municipality of the airport."""
+    def municipality(self) -> str | None:
+        """Municipality of the airport, or None if not recorded."""
+        if pd.isna(self._municipality):
+            return None
         return str(self._municipality)
 
     @property
@@ -371,12 +399,19 @@ def initialize_data(
 ) -> None:
     """Initialize airport and runway data with filtering options.
 
+    Downloaded CSVs are cached and never auto-refreshed; OurAirports
+    publishes updates daily, so pass ``refresh=True`` (or delete the
+    cached files) to pick up new data.  A log hint is emitted when the
+    cached ``airports.csv`` is older than ~30 days.
+
     Args:
         countries: ISO country codes to filter airports by.
         min_runway_length: Minimum runway length in feet.
         runway_surface: Runway surface type(s) to filter by.
         airport_types: Airport types to include (default: large, medium, small).
-        cache_dir: Directory to store downloaded data files. Defaults to ~/.cache/hyplan/.
+        cache_dir: Directory to store downloaded data files.  Defaults
+            to :func:`hyplan.terrain.io.get_cache_root` (``~/.cache/hyplan``,
+            overridable via the ``HYPLAN_CACHE_ROOT`` environment variable).
         refresh: If True, re-download data files even if they already exist.
     """
     _db.load(
@@ -394,11 +429,7 @@ def find_nearest_airport(lat: float, lon: float) -> str:
     Returns:
         str: ICAO code of the nearest airport.
     """
-    gdf_airports = _db.require_airports()
-    point = Point(lon, lat)
-    # sindex.nearest returns (input_indices, tree_indices) arrays
-    _, tree_idx = gdf_airports.sindex.nearest(point)
-    return str(gdf_airports.iloc[tree_idx[0]]['icao_code'])
+    return find_nearest_airports(lat, lon, n=1)[0]
 
 def find_nearest_airports(lat: float, lon: float, n: int = 5) -> list[str]:
     """Find the N nearest airports to a given latitude and longitude.
@@ -407,8 +438,17 @@ def find_nearest_airports(lat: float, lon: float, n: int = 5) -> list[str]:
         List[str]: ICAO codes of the nearest airports, ordered by proximity.
     """
     gdf_airports = _db.require_airports()
-    point = Point(lon, lat)
-    distances = gdf_airports.geometry.distance(point)
+    # Vectorized haversine — great-circle distance, valid at high latitude
+    # and across the antimeridian
+    distances = pd.Series(
+        haversine(
+            lat,
+            lon,
+            gdf_airports['latitude'].values,
+            gdf_airports['longitude'].values,
+        ),
+        index=gdf_airports.index,
+    )
     nearest_idxs = distances.nsmallest(n).index
     return list(gdf_airports.loc[nearest_idxs, 'icao_code'])
 
@@ -431,11 +471,20 @@ def airports_within_radius(
     """
     gdf_airports = _db.require_airports()
 
-    point = Point(lon, lat)
     radius_m = convert_distance(radius, unit, "meters")
 
-    buffer = point.buffer(radius_m / 111139.0)  # Approximate degree buffer
-    possible_matches = gdf_airports[gdf_airports.intersects(buffer)].copy()
+    # Latitude-aware prefilter box; the haversine post-filter below is exact
+    delta_lat = radius_m / 111_000.0
+    candidates = gdf_airports[
+        gdf_airports['latitude'].between(lat - delta_lat, lat + delta_lat)
+    ]
+    if abs(lat) + delta_lat < 89.0:
+        delta_lon = radius_m / (
+            111_000.0 * math.cos(math.radians(abs(lat) + delta_lat))
+        )
+        lon_diff = (candidates['longitude'] - lon + 180.0) % 360.0 - 180.0
+        candidates = candidates[lon_diff.abs() <= delta_lon]
+    possible_matches = candidates.copy()
 
     # Vectorized haversine — avoids row-by-row Python loop
     possible_matches['distance_m'] = haversine(

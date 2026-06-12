@@ -85,7 +85,8 @@ def wind_field_from_plan(
     lon_min = min(lons) - margin_deg
     lon_max = max(lons) + margin_deg
 
-    # Estimate flight duration (~8 hours if we can't compute it)
+    # Fixed conservative flight-duration window: no aircraft model is
+    # available here to time the sequence, so always budget 8 hours.
     estimated_duration_hours = 8.0
     time_start = takeoff_time - datetime.timedelta(hours=margin_hours)
     time_end = takeoff_time + datetime.timedelta(
@@ -100,7 +101,8 @@ def wind_field_from_plan(
     else:
         max_alt = 15000 * ureg.meter  # ~FL500 default
 
-    # Convert to pressure; add margin (go 20% higher in altitude)
+    # Convert to pressure; halving the pressure adds roughly 4-5 km of
+    # altitude headroom above the highest planned level.
     pressure_at_alt = pressure_at(max_alt).m_as(ureg.hectopascal)
     pressure_min_hpa = max(1.0, pressure_at_alt * 0.5)  # higher alt = lower pressure
     pressure_max_hpa = 1000.0  # surface

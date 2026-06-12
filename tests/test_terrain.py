@@ -52,10 +52,12 @@ def _write_synthetic_dem(filepath, lat_center, lon_center, elevation_func, size=
 
 
 class TestGetCacheRoot:
-    def test_default_path(self):
+    def test_default_path(self, monkeypatch):
+        from pathlib import Path
+
+        monkeypatch.delenv("HYPLAN_CACHE_ROOT", raising=False)
         root = get_cache_root()
-        assert root.endswith("hyplan")
-        assert tempfile.gettempdir() in root
+        assert root == str(Path.home() / ".cache" / "hyplan")
 
     def test_custom_path(self):
         root = get_cache_root(custom_path="/tmp/custom_hyplan_cache")
@@ -208,6 +210,52 @@ class TestGetElevations:
         from_file = get_elevations(lats, lons, gradient_dem_path)
         from_grid = get_elevations_from_grid(lats, lons, dem)
         np.testing.assert_array_equal(from_file, from_grid)
+
+
+class TestPixelSampling:
+    """The geotransform origin is the top-left pixel corner: sampling must
+    use floor(), not round(), or the grid is shifted by half a pixel."""
+
+    @pytest.fixture
+    def labeled_dem_path(self, tmp_path):
+        """3×3 DEM over lon [0, 0.003], lat [0, 0.003]; pixel (r, c) = 10r + c."""
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        import rasterio
+        from rasterio.crs import CRS
+        from rasterio.transform import from_bounds
+
+        path = str(tmp_path / "labeled.tif")
+        raster = np.array(
+            [[0.0, 1.0, 2.0], [10.0, 11.0, 12.0], [20.0, 21.0, 22.0]],
+            dtype=np.float32,
+        )
+        transform = from_bounds(0.0, 0.0, 0.003, 0.003, 3, 3)
+        with rasterio.open(
+            path, "w", driver="GTiff",
+            height=3, width=3, count=1,
+            dtype=raster.dtype, crs=CRS.from_epsg(4326),
+            transform=transform,
+        ) as dst:
+            dst.write(raster, 1)
+        return path
+
+    def test_pixel_center_samples_own_pixel(self, labeled_dem_path):
+        # Center of pixel (row 1, col 1): lon 0.0015, lat 0.0015
+        elev = get_elevations(np.array([0.0015]), np.array([0.0015]), labeled_dem_path)
+        assert elev[0] == 11.0
+
+    def test_point_near_pixel_edges_samples_own_pixel(self, labeled_dem_path):
+        # Just inside the left edge of pixel (1, 1)
+        elev = get_elevations(np.array([0.0015]), np.array([0.0010001]), labeled_dem_path)
+        assert elev[0] == 11.0
+        # 90% across pixel (1, 1) toward its right/bottom edges: round()
+        # would shift to pixel (2, 2); floor() stays in (1, 1).
+        elev = get_elevations(np.array([0.0011]), np.array([0.0019]), labeled_dem_path)
+        assert elev[0] == 11.0
+        # 75% across pixel (0, 0): round() would shift to pixel (1, 1).
+        elev = get_elevations(np.array([0.00225]), np.array([0.00075]), labeled_dem_path)
+        assert elev[0] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -474,3 +522,29 @@ class TestTerrainAspectAzimuth:
     def test_returns_float_in_range(self, east_slope_dem_path, survey_polygon):
         azimuth = terrain_aspect_azimuth(survey_polygon, dem_file=east_slope_dem_path)
         assert 0.0 <= azimuth < 360.0
+
+    def test_metric_diagonal_slope_at_high_latitude(self, tmp_path):
+        """Downslope toward metric northeast at 60°N returns ~45°.
+
+        A degree of longitude at 60°N spans half the distance of a degree
+        of latitude.  Without the cos(lat) correction on the east-west
+        gradient the dominant aspect is biased toward N-S (~27° here).
+        """
+        if not _has_rasterio():
+            pytest.skip("rasterio not available")
+        path = str(tmp_path / "ne_slope.tif")
+        # Metric pixel sizes at 60°N: east-west ≈ half of north-south
+        h = 0.001 * 111_320.0          # m per pixel, north-south
+        w = h * np.cos(np.radians(60.0))  # m per pixel, east-west
+        # z = s*(r*h - c*w)^3: gradient direction is constant (ascent
+        # toward metric southwest, downslope toward northeast at 45°)
+        # while its magnitude varies, so the 25th-percentile filter in
+        # terrain_aspect_azimuth keeps the strongly sloped pixels.
+        s = 1e-9
+        _write_synthetic_dem(
+            path, 60.0, 10.0,
+            lambda r, c: s * (r * h - c * w) ** 3,
+            size=100,
+        )
+        azimuth = terrain_aspect_azimuth(box(9.98, 59.98, 10.02, 60.02), dem_file=path)
+        assert azimuth == pytest.approx(45.0, abs=3.0)

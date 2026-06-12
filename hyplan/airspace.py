@@ -56,19 +56,20 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import requests
-from shapely import STRtree
+from shapely import STRtree, shortest_line
 from shapely.geometry import MultiPolygon, Polygon, shape
 from shapely.geometry import box as box_geom
 from shapely.geometry.base import BaseGeometry
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from datetime import date, datetime
 
     from shapely.geometry import LineString
 
 import contextlib
 
 from .exceptions import HyPlanRuntimeError, HyPlanValueError
+from .geometry import haversine
 from .terrain import get_cache_root
 from .units import ureg
 
@@ -325,11 +326,22 @@ def check_airspace_proximity(
     if not airspaces or not flight_lines:
         return []
 
-    # Approximate buffer in degrees (at mid-latitudes)
-    buf_deg = buffer_m / 111_000.0
+    # Candidate prefilter buffer in degrees.  One degree of latitude is
+    # ~111 km everywhere, but a degree of longitude shrinks by cos(lat),
+    # so widen the buffer by 1/cos(lat) (capped near the poles) to avoid
+    # missing east-west near-misses at high latitude.  The geodesic
+    # distance check below is exact; this buffer only selects candidates.
+    buf_deg_lat = buffer_m / 111_000.0
+
+    def _candidate_buffer(geom: BaseGeometry) -> BaseGeometry:
+        _, min_lat, _, max_lat = geom.bounds
+        cos_lat = max(
+            math.cos(math.radians(max(abs(min_lat), abs(max_lat)))), 0.05,
+        )
+        return geom.buffer(buf_deg_lat / cos_lat)
 
     # Build buffered geometries for spatial indexing
-    buffered_geoms = [a.geometry.buffer(buf_deg) for a in airspaces]
+    buffered_geoms = [_candidate_buffer(a.geometry) for a in airspaces]
     tree = STRtree(buffered_geoms)
 
     near_misses: list[AirspaceConflict] = []
@@ -353,11 +365,10 @@ def check_airspace_proximity(
             if overlap_floor > overlap_ceil:
                 continue
 
-            # Compute distance in degrees, convert to meters
-            dist_deg = fl_geom.distance(airspace.geometry)
-            # Approximate conversion using mid-latitude
-            mid_lat = (fl_geom.centroid.y + airspace.geometry.centroid.y) / 2
-            dist_m = dist_deg * 111_000 * math.cos(math.radians(mid_lat))
+            # Geodesic distance between the closest pair of points
+            connector = shortest_line(fl_geom, airspace.geometry)
+            (lon_a, lat_a), (lon_b, lat_b) = connector.coords
+            dist_m = float(haversine(lat_a, lon_a, lat_b, lon_b))
 
             if dist_m <= buffer_m:
                 near_misses.append(
@@ -380,10 +391,13 @@ def convert_agl_floors(
 ) -> list[Airspace]:
     """Convert AGL (SFC-referenced) floors to MSL using terrain elevations.
 
-    For each airspace whose ``floor_reference`` is ``"SFC"``, computes
-    the maximum terrain elevation within its boundary and adds the AGL
-    floor to it.  This is a conservative estimate — the worst-case MSL
-    floor across the airspace polygon.
+    For each airspace whose ``floor_reference`` is ``"SFC"``, samples
+    terrain elevation at the vertices of the boundary perimeter
+    (exterior ring) and adds the AGL floor to the maximum sampled
+    value.  Interior peaks are *not* sampled, so the result can
+    understate the true worst-case MSL floor when terrain inside the
+    polygon rises above the boundary.  For a MultiPolygon, only the
+    first polygon's exterior ring is sampled.
 
     Args:
         airspaces: List of airspaces (modified in place and returned).
@@ -503,8 +517,13 @@ def _is_schedule_active(
     if time_match:
         start_time = int(time_match.group(1))
         end_time = int(time_match.group(2))
-        if not (start_time <= local_hour <= end_time):
-            return False
+        if start_time <= end_time:
+            if not (start_time <= local_hour <= end_time):
+                return False
+        else:
+            # Wraps around midnight (e.g., 2200-0600)
+            if not (local_hour >= start_time or local_hour <= end_time):
+                return False
 
     # Parse day range: "MON - FRI", "DAILY", "MON-SAT"
     if "DAILY" in sched_upper:
@@ -682,13 +701,33 @@ def clear_airspace_cache() -> None:
         logger.info("Airspace cache directory does not exist: %s", cache_dir)
 
 
+def _snap_bounds(
+    bounds: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Snap bounds outward to the 0.1° cache grid (floor mins, ceil maxes).
+
+    Cache keys are derived from the snapped bounds and fetches request the
+    snapped bounds, so every query that maps to a given key is fully
+    covered by that key's cached payload.
+    """
+    import math
+
+    min_lon, min_lat, max_lon, max_lat = bounds
+    return (
+        math.floor(min_lon * 10.0) / 10.0,
+        math.floor(min_lat * 10.0) / 10.0,
+        math.ceil(max_lon * 10.0) / 10.0,
+        math.ceil(max_lat * 10.0) / 10.0,
+    )
+
+
 def _cache_key(
     bounds: tuple[float, float, float, float],
     country: str | Sequence[str | None] | None,
 ) -> str:
     """Compute a deterministic cache filename from query parameters."""
-    # Round bounds to 1 decimal degree so nearby queries share cache
-    rounded = tuple(round(b, 1) for b in bounds)
+    # Snap bounds outward to the 0.1° grid so nearby queries share cache
+    rounded = _snap_bounds(bounds)
     if isinstance(country, str) or country is None:
         country_str = country or "all"
     else:
@@ -724,7 +763,7 @@ def _parse_airspace_item(item: dict[str, Any]) -> Airspace | None:
 
         # Altitude limits — stored in feet MSL
         # OpenAIP unit codes: 0=meters, 1=feet, 6=flight level (FL)
-        # referenceDatum: 0=GND, 1=MSL, 2=STD
+        # referenceDatum: 0=GND, 1=MSL, 2=STD (flight levels)
         def _parse_alt_ft(alt_obj: dict[str, Any], default: float) -> float:
             if not alt_obj:
                 return default
@@ -732,13 +771,16 @@ def _parse_airspace_item(item: dict[str, Any]) -> Airspace | None:
             unit = alt_obj.get("unit", 0)
             if unit == 0:  # meters → feet
                 value = value * 3.28084
-            elif unit in (2, 6):  # flight level → feet
+            elif unit == 6 or alt_obj.get("referenceDatum") == 2:
+                # flight level / STD → feet
                 value = value * 100
             # unit == 1 (feet) → use as-is
             return float(value)
 
         floor_ft = _parse_alt_ft(item.get("lowerLimit", {}), 0.0)
         ceiling_ft = _parse_alt_ft(item.get("upperLimit", {}), 60000.0)
+        lower_datum = (item.get("lowerLimit") or {}).get("referenceDatum", 1)
+        floor_reference = "SFC" if lower_datum == 0 else "MSL"
         ceiling_unlimited = (
             not item.get("upperLimit")
             or ceiling_ft >= 60000.0
@@ -767,6 +809,7 @@ def _parse_airspace_item(item: dict[str, Any]) -> Airspace | None:
             country=country,
             source="openaip",
             ceiling_unlimited=ceiling_unlimited,
+            floor_reference=floor_reference,
         )
     except (KeyError, TypeError, ValueError) as exc:
         logger.debug("Skipping unparseable airspace item: %s", exc)
@@ -876,12 +919,14 @@ class OpenAIPClient:
                 items = json.load(f)
             return parse_airspace_items(items), items
 
-        min_lon, min_lat, max_lon, max_lat = bounds
+        # Fetch the snapped (cache-grid-aligned) bounds so the cached
+        # payload covers every query that maps to this cache key.
+        fetch_bounds = _snap_bounds(bounds)
 
         seen_ids: set[str] = set()
         items: list[dict[str, Any]] = []  # type: ignore[no-redef]  # intentional rebind with widened type
         for c in countries:
-            page_items = self._fetch_all_pages(bounds, c)
+            page_items = self._fetch_all_pages(fetch_bounds, c)
             for it in page_items:
                 item_id = it.get("_id") or it.get("id")
                 if item_id is None:
@@ -966,14 +1011,34 @@ class OpenAIPClient:
 # ---------------------------------------------------------------------------
 
 
-def _bounds_within_us(bounds: tuple[float, float, float, float]) -> bool:
-    """Return True if the bounding box falls within US airspace.
+# FAA NASR data coverage, approximated as (min_lon, min_lat, max_lon, max_lat)
+# boxes.  NASR covers CONUS, Alaska, Hawaii, and the US territories
+# (Puerto Rico / US Virgin Islands, Guam / Northern Marianas, American Samoa).
+_US_COVERAGE_BOXES: tuple[tuple[float, float, float, float], ...] = (
+    (-125.5, 24.0, -66.0, 49.5),     # CONUS
+    (-180.0, 51.0, -129.0, 72.0),    # Alaska (Aleutians east of the antimeridian)
+    (-161.0, 18.0, -154.0, 23.0),    # Hawaii
+    (-68.0, 17.0, -64.0, 19.0),      # Puerto Rico / US Virgin Islands
+    (144.0, 13.0, 146.5, 21.0),      # Guam / Northern Mariana Islands
+    (-171.5, -15.0, -168.0, -10.8),  # American Samoa
+)
 
-    Uses a generous box covering CONUS, Alaska, Hawaii, and territories.
+
+def _bounds_within_us(bounds: tuple[float, float, float, float]) -> bool:
+    """Return True if the bounding box falls within FAA NASR data coverage.
+
+    Coverage is a union of boxes over CONUS, Alaska, Hawaii, and US
+    territories.  Bounds not fully contained in a single box (e.g.
+    Canada, Mexico, the Caribbean) are outside US data coverage.
     """
     min_lon, min_lat, max_lon, max_lat = bounds
-    # US territory: lon ∈ [-180, -60], lat ∈ [17, 72]
-    return min_lon >= -180 and max_lon <= -60 and min_lat >= 17 and max_lat <= 72
+    return any(
+        min_lon >= b_min_lon
+        and max_lon <= b_max_lon
+        and min_lat >= b_min_lat
+        and max_lat <= b_max_lat
+        for b_min_lon, b_min_lat, b_max_lon, b_max_lat in _US_COVERAGE_BOXES
+    )
 
 
 def fetch_and_check(
@@ -997,7 +1062,9 @@ def fetch_and_check(
     For US queries (when *use_faa* is True and bounds fall within US
     territory), airspace data is sourced from the FAA ArcGIS portal
     and GeoServer — **no API key required**.  For international queries,
-    an OpenAIP API key is needed.
+    an OpenAIP API key is needed.  If the bounds fall outside US data
+    coverage and no OpenAIP API key is available, no source covers the
+    region: a warning is logged and an empty list is returned.
 
     Args:
         flight_lines: Iterable of objects with ``.geometry`` and
@@ -1053,6 +1120,14 @@ def fetch_and_check(
         if type_codes is not None:
             airspaces = [a for a in airspaces if a.airspace_type in type_codes]
     else:
+        if use_faa and not (api_key or os.environ.get("OPENAIP_API_KEY")):
+            logger.warning(
+                "No airspace data source covers bounds %s: FAA data is "
+                "US-only and no OpenAIP API key is set. Airspace conflicts "
+                "cannot be assessed for this region.",
+                bounds,
+            )
+            return []
         client = OpenAIPClient(api_key=api_key)
         airspaces = client.fetch_airspaces(
             bounds=bounds, country=country, max_age_hours=max_age_hours,
@@ -1234,15 +1309,24 @@ class FAATFRClient:
         return None
 
     @staticmethod
-    def _filter_effective(airspaces: list[Airspace]) -> list[Airspace]:
-        """Remove TFRs whose start date is in the future."""
+    def _filter_effective(
+        airspaces: list[Airspace],
+        today: date | None = None,
+    ) -> list[Airspace]:
+        """Remove TFRs whose start date is in the future.
+
+        Args:
+            airspaces: Parsed TFR airspaces.
+            today: Reference date for the comparison.  Defaults to the
+                current local date; injectable for deterministic tests.
+        """
         from datetime import date as _date
 
-        today = _date.today().isoformat()
+        today_iso = (today if today is not None else _date.today()).isoformat()
         result = []
         for a in airspaces:
             start = a.effective_start
-            if start is None or start <= today:
+            if start is None or start <= today_iso:
                 result.append(a)
             else:
                 logger.debug("Filtering future TFR: %s (starts %s)", a.name, start)
@@ -1431,10 +1515,10 @@ class NASRAirspaceSource:
         """
         cache_dir = os.path.join(_get_airspace_cache_dir(), "nasr")
         os.makedirs(cache_dir, exist_ok=True)
-        rounded = tuple(round(b, 1) for b in bounds)
+        snapped = _snap_bounds(bounds)
         cache_file = os.path.join(
             cache_dir,
-            hashlib.md5(str(rounded).encode()).hexdigest() + ".json",
+            hashlib.md5(str(snapped).encode()).hexdigest() + ".json",
         )
 
         if not _is_cache_stale(cache_file, self._cache_ttl_hours):
@@ -1442,7 +1526,7 @@ class NASRAirspaceSource:
             with open(cache_file) as f:
                 features = json.load(f)
         else:
-            features = self._fetch_arcgis(bounds)
+            features = self._fetch_arcgis(snapped)
             try:
                 with open(cache_file, "w") as f:
                     json.dump(features, f)
@@ -1530,7 +1614,14 @@ class NASRAirspaceSource:
                 ceiling_unlimited = True
             # Handle flight-level ceilings (e.g. 180 = FL180 = 18,000 ft)
             upper_uom = props.get("UPPER_UOM", "")
-            if upper_uom == "FL" or (not upper_uom and 0 < ceiling_ft <= 600):
+            if upper_uom == "FL":
+                ceiling_ft *= 100.0
+            elif not upper_uom and 0 < ceiling_ft <= 600:
+                logger.debug(
+                    "No UPPER_UOM for %s; assuming ceiling %g is a flight "
+                    "level (%g ft)",
+                    name, ceiling_ft, ceiling_ft * 100.0,
+                )
                 ceiling_ft *= 100.0
             lower_uom = props.get("LOWER_UOM", "")
             if lower_uom == "FL":
@@ -1594,10 +1685,10 @@ class NASRAirspaceSource:
         """
         cache_dir = os.path.join(_get_airspace_cache_dir(), "nasr")
         os.makedirs(cache_dir, exist_ok=True)
-        rounded = tuple(round(b, 1) for b in bounds)
+        snapped = _snap_bounds(bounds)
         cache_file = os.path.join(
             cache_dir,
-            "sfra_" + hashlib.md5(str(rounded).encode()).hexdigest() + ".json",
+            "sfra_" + hashlib.md5(str(snapped).encode()).hexdigest() + ".json",
         )
 
         if not _is_cache_stale(cache_file, self._cache_ttl_hours):
@@ -1605,7 +1696,7 @@ class NASRAirspaceSource:
             with open(cache_file) as f:
                 features = json.load(f)
         else:
-            features = self._fetch_sfra_arcgis(bounds)
+            features = self._fetch_sfra_arcgis(snapped)
             try:
                 with open(cache_file, "w") as f:
                     json.dump(features, f)
@@ -1727,12 +1818,12 @@ class NASRAirspaceSource:
 
         cache_dir = os.path.join(_get_airspace_cache_dir(), "nasr")
         os.makedirs(cache_dir, exist_ok=True)
-        rounded = tuple(round(b, 1) for b in bounds)
+        snapped = _snap_bounds(bounds)
         cls_key = "_".join(sorted(c.upper() for c in classes))
         cache_file = os.path.join(
             cache_dir,
             f"class_{cls_key}_"
-            + hashlib.md5(str(rounded).encode()).hexdigest() + ".json",
+            + hashlib.md5(str(snapped).encode()).hexdigest() + ".json",
         )
 
         if not _is_cache_stale(cache_file, self._cache_ttl_hours):
@@ -1740,7 +1831,7 @@ class NASRAirspaceSource:
             with open(cache_file) as f:
                 features = json.load(f)
         else:
-            features = self._fetch_class_arcgis(bounds, classes)
+            features = self._fetch_class_arcgis(snapped, classes)
             try:
                 with open(cache_file, "w") as f:
                     json.dump(features, f)

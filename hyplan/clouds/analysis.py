@@ -103,9 +103,29 @@ def simulate_visits(
         ``year -> polygon_id -> [day_of_year]``, and rest_days maps
         ``year -> [day_of_year]``.
     """
+    prev_level = logger.level
     if debug:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    try:
+        return _simulate_visits(
+            df, day_start, day_stop, year_start, year_stop,
+            cloud_fraction_threshold, rest_day_threshold, exclude_weekends,
+        )
+    finally:
+        if debug:
+            logger.setLevel(prev_level)
 
+
+def _simulate_visits(
+    df: pd.DataFrame,
+    day_start: int,
+    day_stop: int,
+    year_start: int,
+    year_stop: int,
+    cloud_fraction_threshold: float,
+    rest_day_threshold: int,
+    exclude_weekends: bool,
+) -> tuple[pd.DataFrame, dict[int, dict[str, list[int]]], dict[int, list[int]]]:
     crosses_year = day_start > day_stop
 
     visit_days = []

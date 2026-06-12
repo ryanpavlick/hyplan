@@ -24,14 +24,40 @@ logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://appeears.earthdatacloud.nasa.gov/api"
 
-# Product/layer mapping
-_APPEEARS_LAYERS = {
-    "ndvi": {"product": "MOD13A1.061", "layer": "_500m_16_days_NDVI"},
-    "evi": {"product": "MOD13A1.061", "layer": "_500m_16_days_EVI"},
-    "lai": {"product": "MOD15A2H.061", "layer": "Lai_500m"},
-    "fpar": {"product": "MOD15A2H.061", "layer": "Fpar_500m"},
-    "ndvi_aqua": {"product": "MYD13A1.061", "layer": "_500m_16_days_NDVI"},
-    "evi_aqua": {"product": "MYD13A1.061", "layer": "_500m_16_days_EVI"},
+# Product/layer mapping.  ``valid_range`` is the inclusive range of valid
+# values *after* AppEEARS applies the product scale factor, used to drop
+# fill values and out-of-range observations.
+_APPEEARS_LAYERS: dict[str, dict[str, Any]] = {
+    "ndvi": {
+        "product": "MOD13A1.061",
+        "layer": "_500m_16_days_NDVI",
+        "valid_range": (-0.2, 1.0),
+    },
+    "evi": {
+        "product": "MOD13A1.061",
+        "layer": "_500m_16_days_EVI",
+        "valid_range": (-0.2, 1.0),
+    },
+    "lai": {
+        "product": "MOD15A2H.061",
+        "layer": "Lai_500m",
+        "valid_range": (0.0, 10.0),
+    },
+    "fpar": {
+        "product": "MOD15A2H.061",
+        "layer": "Fpar_500m",
+        "valid_range": (0.0, 1.0),
+    },
+    "ndvi_aqua": {
+        "product": "MYD13A1.061",
+        "layer": "_500m_16_days_NDVI",
+        "valid_range": (-0.2, 1.0),
+    },
+    "evi_aqua": {
+        "product": "MYD13A1.061",
+        "layer": "_500m_16_days_EVI",
+        "valid_range": (-0.2, 1.0),
+    },
 }
 
 
@@ -215,8 +241,12 @@ def fetch_appeears_timeseries(
     raw_df["_date"] = pd.to_datetime(raw_df["Date"], errors="coerce")
     raw_df = raw_df.dropna(subset=["_date", value_col])
 
-    # Filter invalid values
-    raw_df = raw_df[(raw_df[value_col] >= -0.2) & (raw_df[value_col] <= 1.5)]
+    # Filter to the product's valid (post-scale) range.  The range is
+    # product-specific: NDVI/EVI saturate near 1.0, but LAI runs 0-10 and
+    # FPAR 0-1, so a single hard-coded range would silently discard most
+    # forest LAI.  Fill values fall outside the range and are dropped here.
+    lo, hi = layer_info["valid_range"]
+    raw_df = raw_df[(raw_df[value_col] >= lo) & (raw_df[value_col] <= hi)]
 
     df = pd.DataFrame({
         "polygon_id": raw_df["ID"],

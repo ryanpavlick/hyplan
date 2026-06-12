@@ -1,6 +1,7 @@
 """Tests for hyplan.phenology (no network calls, all earthaccess mocked)."""
 
 import datetime as dt
+from unittest.mock import patch
 
 import matplotlib
 
@@ -123,9 +124,10 @@ class TestApplyLaiQAMask:
         result = apply_lai_qa_mask(data, qa)
         assert result.count() == 3
 
-    def test_cloud_masked(self):
+    def test_non_best_scf_qc_masked(self):
         data = np.array([50, 60], dtype=np.uint8)
-        # bit 0 = 0 (good), but bits 5-7 = 001 (cloudy)
+        # bit 0 = 0 (good), but bits 5-7 = 001 (SCF_QC: main method with
+        # saturation) — rejected by the SCF_QC == 000 strict filter
         qa = np.array([0b00000000, 0b00100000], dtype=np.uint8)
         result = apply_lai_qa_mask(data, qa)
         assert result.count() == 1
@@ -410,6 +412,208 @@ class TestPlotYearOverYearHeatmap:
         ax = plot_year_over_year_heatmap(vi_df, polygon_id="B")
         assert isinstance(ax, plt.Axes)
         plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# Granule out-of-polygon masking (source="granules")
+# ---------------------------------------------------------------------------
+
+class TestGranuleOutOfPolygonMasking:
+    """Pixels in the crop bbox but outside the polygon must not enter stats."""
+
+    def test_out_of_polygon_zeros_excluded_from_mean(self):
+        from shapely.geometry import Polygon
+
+        from hyplan.phenology.sources import (
+            _PRODUCT_CONFIG,
+            _extract_vi_from_granule,
+        )
+
+        # Uniform NDVI raster (raw 5000 -> scaled 0.5), all-good QA.
+        data_arr = np.full((40, 40), 5000, dtype=np.int16)
+        qa_arr = np.zeros((40, 40), dtype=np.int8)
+
+        # MODIS sinusoidal bounds spanning ~ lon[-1, 1], lat[-1, 1] near origin.
+        m = 111195.0
+        grid_meta = {
+            "StructMetadata.0": (
+                f"UpperLeftPointMtrs=({-m},{m})\n"
+                f"\tLowerRightMtrs=({m},{-m})\n"
+            )
+        }
+
+        def read_side_effect(hdf_path, subdataset_name):
+            if "reliability" in subdataset_name.lower():
+                return qa_arr, grid_meta
+            return data_arr, grid_meta
+
+        # Right-triangle polygon: fills the lower-left half of its bbox, so the
+        # upper-right of the (inset, interior) bbox is out of polygon.
+        triangle = Polygon([(-0.9, -0.9), (-0.05, -0.9), (-0.9, 0.9)])
+
+        with patch(
+            "hyplan.phenology.sources._read_hdf4_subdataset",
+            side_effect=read_side_effect,
+        ):
+            result = _extract_vi_from_granule(
+                "/tmp/MOD13A1.A2020001.h00v00.061.hdf",
+                triangle,
+                _PRODUCT_CONFIG["ndvi"],
+                "mean",
+            )
+
+        assert result is not None
+        # In-polygon pixels are all 0.5; out-of-polygon zeros would drag the
+        # mean toward ~0.25 if they were (incorrectly) counted as valid.
+        assert result["value"] == pytest.approx(0.5, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Spatial fetch: granules from different MODIS tiles
+# ---------------------------------------------------------------------------
+
+class TestFetchPhenologySpatialMultiTile:
+    """Granules clipped to different grids must align before stacking."""
+
+    def test_granules_align_to_first_grid(self, tmp_path):
+        import rasterio
+
+        from hyplan.phenology.sources import fetch_phenology_spatial
+
+        gdf = _mock_gdf([("A", 49.98, 10.02)])
+        poly_file = str(tmp_path / "poly.geojson")
+        gdf.to_file(poly_file, driver="GeoJSON")
+
+        # Two granules whose clips land on grids offset by one pixel
+        # east (as happens when a polygon straddles MODIS tiles).
+        t1 = rasterio.Affine(0.01, 0.0, 10.0, 0.0, -0.01, 50.0)
+        t2 = rasterio.Affine(0.01, 0.0, 10.01, 0.0, -0.01, 50.0)
+
+        def read_side_effect(hdf_path, subdataset_name, geom):
+            if "tile1" in hdf_path:
+                shape, transform, fill = (4, 4), t1, 5000
+            else:
+                shape, transform, fill = (4, 5), t2, 7000
+            if "reliability" in subdataset_name.lower():
+                return np.ma.masked_array(np.zeros(shape, dtype=np.int8)), transform
+            return np.ma.masked_array(np.full(shape, fill, dtype=np.int16)), transform
+
+        with (
+            patch("hyplan._auth._earthdata_login"),
+            patch(
+                "hyplan.phenology.sources._search_granules",
+                return_value=["g1", "g2"],
+            ),
+            patch(
+                "hyplan.phenology.sources._download_granules",
+                return_value=["/tmp/tile1.hdf", "/tmp/tile2.hdf"],
+            ),
+            patch(
+                "hyplan.phenology.sources._get_cache_dir",
+                return_value=str(tmp_path),
+            ),
+            patch(
+                "hyplan.phenology.sources._read_and_clip_subdataset",
+                side_effect=read_side_effect,
+            ),
+        ):
+            result = fetch_phenology_spatial(
+                poly_file, product="ndvi", year_start=2020, year_stop=2020,
+            )
+
+        arr = result["A"]
+        # Output is on the FIRST granule's grid
+        assert arr.shape == (4, 4)
+        np.testing.assert_allclose(
+            arr.longitude.values, 10.005 + 0.01 * np.arange(4)
+        )
+        np.testing.assert_allclose(
+            arr.latitude.values, 49.995 - 0.01 * np.arange(4)
+        )
+        vals = arr.values
+        # Column 0 lies outside the second granule: first granule only (0.5)
+        np.testing.assert_allclose(vals[:, 0], 0.5)
+        # Overlapping columns average both granules: (0.5 + 0.7) / 2
+        np.testing.assert_allclose(vals[:, 1:], 0.6)
+
+
+# ---------------------------------------------------------------------------
+# AppEEARS product-specific valid range (source="appeears")
+# ---------------------------------------------------------------------------
+
+class _MockResp:
+    def __init__(self, *, status_code=200, json_data=None, text=""):
+        self.status_code = status_code
+        self._json = json_data if json_data is not None else {}
+        self.text = text
+
+    def json(self):
+        return self._json
+
+
+def _run_appeears_with_csv(product, csv_text):
+    """Drive fetch_appeears_timeseries against a fully mocked AppEEARS backend."""
+    from hyplan.phenology._appeears import fetch_appeears_timeseries
+
+    def post_side_effect(url, **kwargs):
+        return _MockResp(status_code=202, json_data={"task_id": "T1"})
+
+    def get_side_effect(url, **kwargs):
+        if "/status/" in url:
+            return _MockResp(json_data={"status": "done"})
+        if url.endswith("/bundle/T1"):
+            return _MockResp(
+                json_data={"files": [{"file_name": "r.csv", "file_id": "F1"}]}
+            )
+        if "/bundle/T1/" in url:
+            return _MockResp(text=csv_text)
+        raise AssertionError(f"unexpected GET {url}")
+
+    coords = [{"id": "siteA", "latitude": 34.0, "longitude": -118.0}]
+    with patch(
+        "hyplan.phenology._appeears._login", return_value="tok"
+    ), patch(
+        "hyplan.phenology._appeears.requests.post", side_effect=post_side_effect
+    ), patch(
+        "hyplan.phenology._appeears.requests.get", side_effect=get_side_effect
+    ):
+        return fetch_appeears_timeseries(
+            coordinates=coords, product=product,
+            year_start=2020, year_stop=2020,
+        )
+
+
+class TestAppeearsValidRange:
+    def test_lai_large_values_survive(self):
+        csv = (
+            "ID,Date,MOD15A2H_061_Lai_500m\n"
+            "siteA,2020-01-01,4.5\n"
+            "siteA,2020-01-17,6.0\n"
+            "siteA,2020-02-02,25.0\n"   # fill-scaled, > 10 -> dropped
+            "siteA,2020-02-18,-1.0\n"   # < 0 -> dropped
+        )
+        df = _run_appeears_with_csv("lai", csv)
+        assert sorted(df["value"].tolist()) == [4.5, 6.0]
+
+    def test_fpar_range(self):
+        csv = (
+            "ID,Date,MOD15A2H_061_Fpar_500m\n"
+            "siteA,2020-01-01,0.9\n"
+            "siteA,2020-01-17,2.49\n"   # fill-scaled, > 1 -> dropped
+        )
+        df = _run_appeears_with_csv("fpar", csv)
+        assert df["value"].tolist() == [0.9]
+
+    def test_ndvi_filtering_unchanged(self):
+        csv = (
+            "ID,Date,MOD13A1_061__500m_16_days_NDVI\n"
+            "siteA,2020-01-01,0.85\n"
+            "siteA,2020-01-17,0.30\n"
+            "siteA,2020-02-02,-0.30\n"  # fill, < -0.2 -> dropped
+            "siteA,2020-02-18,1.20\n"   # > 1.0 -> dropped
+        )
+        df = _run_appeears_with_csv("ndvi", csv)
+        assert sorted(df["value"].tolist()) == [0.30, 0.85]
 
 
 class TestPlotCloudPhenologyCombined:

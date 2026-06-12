@@ -38,9 +38,11 @@ def _require_xarray() -> Any:
 def _earthdata_login() -> Any:
     """Authenticate with NASA Earthdata using ``earthaccess``.
 
-    Tries strategies in order: ``EARTHDATA_TOKEN`` env var, ``~/.netrc``,
-    then interactive prompt.  Returns an authenticated ``requests.Session``
-    with a bearer token suitable for OPeNDAP access.
+    Tries non-interactive strategies in order: environment variables
+    (``EARTHDATA_USERNAME`` + ``EARTHDATA_PASSWORD``, or
+    ``EARTHDATA_TOKEN``), then ``~/.netrc``.  Returns an authenticated
+    ``requests.Session`` with a bearer token suitable for OPeNDAP
+    access.
 
     Raises :class:`~hyplan.exceptions.HyPlanRuntimeError` if ``earthaccess``
     is not installed or login fails.

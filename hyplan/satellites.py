@@ -31,6 +31,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import pymap3d.vincenty
+import requests
 import simplekml
 from pyproj import Geod
 from shapely.geometry import LineString, Point, Polygon
@@ -139,6 +140,23 @@ def _is_tle_stale(cache_path: str, max_age_hours: float = 24.0) -> bool:
     return age_hours > max_age_hours
 
 
+def _is_valid_tle(lines: list[str]) -> bool:
+    """Check that non-blank lines look like a TLE (optionally name-prefixed).
+
+    Rejects HTML error bodies (e.g. CelesTrak's "No GP data found") so
+    they never poison the cache.
+    """
+    if len(lines) < 2:
+        return False
+    line1, line2 = lines[-2], lines[-1]
+    return (
+        line1.startswith("1 ")
+        and line2.startswith("2 ")
+        and 60 <= len(line1) <= 72
+        and 60 <= len(line2) <= 72
+    )
+
+
 def fetch_tle(
     satellite: str | SatelliteInfo,
     max_age_hours: float = 24.0,
@@ -170,7 +188,36 @@ def fetch_tle(
 
     if _is_tle_stale(cache_path, max_age_hours):
         logger.info(f"Fetching TLE for {satellite.name} (NORAD {satellite.norad_id})")
-        download_file(cache_path, url, replace=True)
+        fetch_path = cache_path + ".fetch"
+        try:
+            download_file(fetch_path, url, replace=True)
+        except requests.RequestException as exc:
+            if not os.path.exists(cache_path):
+                raise HyPlanRuntimeError(
+                    f"Failed to fetch TLE for {satellite.name} and no "
+                    f"cached copy exists: {exc}"
+                ) from exc
+            logger.warning(
+                f"TLE download for {satellite.name} failed ({exc}); "
+                f"falling back to stale cache at {cache_path}"
+            )
+        else:
+            with open(fetch_path) as f:
+                fetched_lines = [line.strip() for line in f if line.strip()]
+            if _is_valid_tle(fetched_lines):
+                os.replace(fetch_path, cache_path)
+            else:
+                os.remove(fetch_path)
+                if not os.path.exists(cache_path):
+                    raise HyPlanRuntimeError(
+                        f"CelesTrak returned an invalid TLE payload for "
+                        f"{satellite.name} and no cached copy exists"
+                    )
+                logger.warning(
+                    f"CelesTrak returned an invalid TLE payload for "
+                    f"{satellite.name}; falling back to stale cache at "
+                    f"{cache_path}"
+                )
 
     # Parse the TLE file
     with open(cache_path) as f:
@@ -346,11 +393,16 @@ def _segment_passes(
     lats: npt.NDArray[np.floating[Any]],
     timestamps: npt.NDArray[Any],
     time_step_s: float,
+    lons: npt.NDArray[np.floating[Any]] | None = None,
+    lat_hysteresis_deg: float = 0.05,
 ) -> list[tuple[int, int]]:
     """Split a ground track into individual passes.
 
-    A new pass starts when there is a time gap > 2 * time_step_s or when the
-    latitude direction reverses (crossing a pole).
+    A new pass starts when there is a time gap > 2 * time_step_s, when the
+    latitude direction reverses (crossing a pole), or when the longitude
+    jumps by more than 180° (antimeridian wrap).  Latitude steps smaller
+    than ``lat_hysteresis_deg`` do not register a direction change, so
+    noise near the orbit extremes does not cause spurious splits.
 
     Returns:
         List of (start_idx, end_idx) tuples.
@@ -359,6 +411,7 @@ def _segment_passes(
         return [(0, len(lats))]
 
     breaks = [0]
+    lat_direction = 0
     for i in range(1, len(lats)):
         td = timestamps[i] - timestamps[i - 1]
         # Handle both datetime and numpy datetime64
@@ -368,6 +421,20 @@ def _segment_passes(
             dt = td / np.timedelta64(1, 's')
         if dt > 2 * time_step_s:
             breaks.append(i)
+            lat_direction = 0
+            continue
+
+        if lons is not None and abs(lons[i] - lons[i - 1]) > 180.0:
+            breaks.append(i)
+            lat_direction = 0
+            continue
+
+        dlat = lats[i] - lats[i - 1]
+        if abs(dlat) > lat_hysteresis_deg:
+            new_direction = 1 if dlat > 0 else -1
+            if lat_direction != 0 and new_direction != lat_direction:
+                breaks.append(i)
+            lat_direction = new_direction
     breaks.append(len(lats))
 
     passes = []
@@ -423,7 +490,7 @@ def compute_swath_footprint(
         time_step_s = max(dt0, 1.0)
 
     headings = _compute_headings(lats, lons)
-    passes = _segment_passes(lats, timestamps, time_step_s)
+    passes = _segment_passes(lats, timestamps, time_step_s, lons=lons)
 
     rows = []
     for start, end in passes:
@@ -569,8 +636,9 @@ def find_overpasses(
 
     # Segment into individual passes
     lats = fine_track_in["latitude"].values
+    lons = fine_track_in["longitude"].values
     timestamps = fine_track_in["timestamp"].values
-    passes = _segment_passes(lats, timestamps, time_step_s)
+    passes = _segment_passes(lats, timestamps, time_step_s, lons=lons)
 
     rows = []
     for start, end in passes:
@@ -623,7 +691,7 @@ def find_overpasses(
 
 def find_all_overpasses(
     satellites: list[str | SatelliteInfo] | None = None,
-    region: Polygon | gpd.GeoDataFrame = None,
+    region: Polygon | gpd.GeoDataFrame | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     max_sza: float | None = None,
@@ -634,7 +702,8 @@ def find_all_overpasses(
     Args:
         satellites: List of satellite names or SatelliteInfo objects. If None,
             uses all entries in SATELLITE_REGISTRY.
-        region: Geographic region of interest.
+        region: Geographic region of interest (shapely Polygon or
+            GeoDataFrame).  Required.
         start_time: Start of search window (UTC).
         end_time: End of search window (UTC).
         max_sza: Override max SZA for all satellites. If None, uses each
@@ -643,7 +712,27 @@ def find_all_overpasses(
 
     Returns:
         GeoDataFrame of combined overpass results, sorted by pass_start.
+
+    Raises:
+        HyPlanValueError: If ``region`` is None or not a shapely Polygon /
+            GeoDataFrame, or if ``start_time`` / ``end_time`` is None.
     """
+    if region is None:
+        raise HyPlanValueError(
+            "`region` is required: pass a shapely Polygon or a GeoDataFrame "
+            "defining the area of interest."
+        )
+    if not isinstance(region, (Polygon, gpd.GeoDataFrame)):
+        raise HyPlanValueError(
+            f"`region` must be a shapely Polygon or a GeoDataFrame, "
+            f"got {type(region).__name__}."
+        )
+    if start_time is None or end_time is None:
+        raise HyPlanValueError(
+            "`start_time` and `end_time` are required (UTC datetimes "
+            "bounding the search window)."
+        )
+
     if satellites is None:
         satellites = list(SATELLITE_REGISTRY.keys())
 
@@ -651,7 +740,7 @@ def find_all_overpasses(
     for sat in satellites:
         try:
             gdf = find_overpasses(
-                sat, region, start_time, end_time,  # type: ignore[arg-type]  # region union type vs concrete
+                sat, region, start_time, end_time,
                 max_sza=max_sza, **kwargs,
             )
             if not gdf.empty:
@@ -682,6 +771,8 @@ def compute_overpass_overlap(
 
     Args:
         flight_plan_gdf: GeoDataFrame from flight_plan.compute_flight_plan().
+            The ``time_to_segment`` column is interpreted as minutes from
+            flight start.
         overpasses_gdf: GeoDataFrame from find_overpasses().
         flight_time_utc: UTC datetime when the flight starts (used to compute
             absolute times for flight plan segments).
@@ -717,7 +808,7 @@ def compute_overpass_overlap(
             # Compute time offset
             if "time_to_segment" in segment and pd.notna(segment.get("time_to_segment")):
                 seg_time = flight_time_utc + timedelta(
-                    hours=float(segment["time_to_segment"])
+                    minutes=float(segment["time_to_segment"])
                 )
                 time_offset = abs((pass_mid - seg_time).total_seconds()) / 60.0
             else:

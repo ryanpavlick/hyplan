@@ -145,6 +145,81 @@ class TestComputeGlintVectorized:
         with pytest.raises(ValueError, match="Invalid output_geometry"):
             compute_glint_vectorized(fl, sensor, obs_time, output_geometry="invalid")
 
+    def test_signed_tilt_preserved_in_column_and_geometry(self):
+        """Port (−) and starboard (+) tilts must remain distinct in the
+        tilt_angle column and the along-track geometry."""
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(2000, "meter"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            site_name="Signed Tilt",
+        )
+        sensor = AVIRIS3()
+        obs_time = datetime(2025, 6, 15, 18, 0, tzinfo=timezone.utc)
+
+        gdf = compute_glint_vectorized(fl, sensor, obs_time, output_geometry="along_track")
+        port_tilt = gdf["tilt_angle"].min()
+        star_tilt = gdf["tilt_angle"].max()
+        assert port_tilt < 0 < star_tilt
+
+        atd0 = gdf["along_track_distance"].iloc[0]
+        sub = gdf[gdf["along_track_distance"] == atd0]
+        port = sub[sub["tilt_angle"] == port_tilt].geometry.iloc[0]
+        star = sub[sub["tilt_angle"] == star_tilt].geometry.iloc[0]
+        assert port.x == pytest.approx(port_tilt)
+        assert star.x == pytest.approx(star_tilt)
+        assert port.x < 0 < star.x
+
+        geo = compute_glint_vectorized(fl, sensor, obs_time, output_geometry="geographic")
+        geo_sub = geo[geo["along_track_distance"] == atd0]
+        geo_port = geo_sub[geo_sub["tilt_angle"] == port_tilt].geometry.iloc[0]
+        geo_star = geo_sub[geo_sub["tilt_angle"] == star_tilt].geometry.iloc[0]
+        assert (geo_port.x, geo_port.y) != (geo_star.x, geo_star.y)
+
+    def test_glint_angles_match_arc_convention(self):
+        """Glint must be computed from the ABSOLUTE tilt and the signed
+        view azimuth, exactly like compute_glint_arc does."""
+        from hyplan.geometry import process_linestring
+        from hyplan.sun import sunpos
+
+        fl = FlightLine.start_length_azimuth(
+            lat1=34.0, lon1=-118.0,
+            length=ureg.Quantity(2000, "meter"),
+            az=0.0,
+            altitude_msl=ureg.Quantity(6000, "meter"),
+            site_name="Arc Convention",
+        )
+        sensor = AVIRIS3()
+        obs_time = datetime(2025, 6, 15, 18, 0, tzinfo=timezone.utc)
+
+        gdf = compute_glint_vectorized(fl, sensor, obs_time)
+
+        latitudes, longitudes, _, _ = process_linestring(fl.track())
+        n_tilts = len(np.arange(-sensor.half_angle, sensor.half_angle + 1, 1))
+        sensor_lat = np.repeat(latitudes, n_tilts)
+        sensor_lon = np.repeat(longitudes, n_tilts)
+        sensor_alt = np.full_like(sensor_lat, 6000.0)
+        solar_az, solar_zen, *_ = sunpos(
+            dt=np.full(len(sensor_lat), obs_time),
+            latitude=sensor_lat,
+            longitude=sensor_lon,
+            elevation=sensor_alt,
+            radians=False,
+        )
+        _, _, expected_glint = calculate_target_and_glint_vectorized(
+            sensor_lat=sensor_lat,
+            sensor_lon=sensor_lon,
+            sensor_alt=sensor_alt,
+            viewing_azimuth=gdf["viewing_azimuth"].to_numpy(),
+            tilt_angle=np.abs(gdf["tilt_angle"].to_numpy(dtype=float)),
+            solar_azimuth=np.asarray(solar_az, dtype=float),
+            solar_zenith=np.asarray(solar_zen, dtype=float),
+        )
+        np.testing.assert_allclose(
+            gdf["glint_angle"].to_numpy(), expected_glint, atol=1e-6,
+        )
+
 
 # --- GlintArc tests ---
 

@@ -229,10 +229,16 @@ def solar_threshold_times(
     if not (1 <= len(thresholds) <= 2):
         raise HyPlanValueError("Thresholds must be a list with 1 or 2 elements.")
 
-    # Generate all timestamps at 1-minute intervals in UTC
+    # Generate all timestamps at 1-minute intervals in UTC, padded one
+    # day on each side so the full first and last LOCAL days are covered
+    # for both positive and negative UTC offsets.
     start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
     end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
-    timestamps = pd.date_range(start=start_datetime, end=end_datetime + timedelta(days=1) - timedelta(minutes=1), freq='1min', tz='UTC')
+    timestamps = pd.date_range(
+        start=start_datetime - timedelta(days=1),
+        end=end_datetime + timedelta(days=2) - timedelta(minutes=1),
+        freq='1min', tz='UTC',
+    )
 
     # Convert to local time. Prefer the IANA timezone (DST-aware) when given;
     # fall back to the legacy fixed-offset behavior otherwise.
@@ -352,8 +358,8 @@ def solar_position_increments(
     Returns:
         pandas.DataFrame: DataFrame with columns:
             - 'Time': Local time (HH:MM:SS),
-            - 'Solar Azimuth': Solar azimuth in degrees,
-            - 'Solar Elevation': Solar elevation in degrees.
+            - 'Azimuth': Solar azimuth in degrees,
+            - 'Elevation': Solar elevation in degrees.
     """
     # Convert date to a datetime object at midnight.
     if isinstance(date, str):
@@ -364,14 +370,16 @@ def solar_position_increments(
         # Assume it's a datetime.date
         date_dt = datetime.combine(date, datetime.min.time())
 
-    # Define the start and end of the day in UTC.
+    # Define the start and end of the day in UTC, padded one day on each
+    # side so the full LOCAL day is covered for both positive and
+    # negative UTC offsets.
     start_datetime = datetime.combine(date_dt.date(), datetime.min.time())
     end_datetime = start_datetime + timedelta(days=1)
 
     # Create a DateTimeIndex in UTC at the specified increments.
     # Subtract one increment from the end to avoid including the next day's midnight.
-    timestamps_utc = pd.date_range(start=start_datetime,
-                                   end=end_datetime - pd.Timedelta(increment),
+    timestamps_utc = pd.date_range(start=start_datetime - timedelta(days=1),
+                                   end=end_datetime + timedelta(days=1) - pd.Timedelta(increment),
                                    freq=increment,
                                    tz='UTC')
 
@@ -387,8 +395,9 @@ def solar_position_increments(
     azimuth, zenith, *_ = sunpos(timestamps_utc, latitude, longitude, elevation=0)
     solar_elevation = 90 - zenith
 
-    # Only keep times when the solar elevation exceeds the specified threshold.
-    valid = solar_elevation > min_elevation
+    # Only keep times on the requested LOCAL date when the solar
+    # elevation exceeds the specified threshold.
+    valid = (solar_elevation > min_elevation) & (local_timestamps.date == date_dt.date())
 
     return pd.DataFrame({
         'Time': local_timestamps[valid].strftime('%H:%M:%S'),
@@ -402,7 +411,7 @@ def plot_solar_positions(df_positions: pd.DataFrame) -> None:
     Plot the solar azimuth and elevation for a given day.
 
     Args:
-        df_positions (pd.DataFrame): DataFrame containing the 'Solar Azimuth', 'Time', and 'Elevation' columns.
+        df_positions (pd.DataFrame): DataFrame containing the 'Time', 'Azimuth', and 'Elevation' columns.
     """
     fig, ax1 = plt.subplots(figsize=(10, 6))
 

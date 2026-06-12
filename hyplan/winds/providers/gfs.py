@@ -26,16 +26,23 @@ _GFS_LEVELS_HPA = np.array([
 ], dtype=float)
 
 
-def _gfs_best_cycle(target: datetime.datetime) -> tuple[datetime.date, int]:
-    """Pick the most recent GFS cycle available before *target*.
+def _gfs_best_cycle(
+    target: datetime.datetime,
+    now: datetime.datetime | None = None,
+) -> tuple[datetime.date, int]:
+    """Pick the most recent GFS cycle at or before *target*.
 
     GFS cycles run at 00, 06, 12, 18 UTC.  Data is typically available
-    ~4-5 hours after the cycle time.  We pick the latest cycle whose
-    output would be available by now.
+    ~4-5 hours after the cycle time, so the chosen cycle is the latest
+    one no later than ``min(now - 5 h, target)`` — past targets get the
+    cycle nearest the target, future targets get the latest cycle whose
+    output is available by now.
     """
-    utc_now = datetime.datetime.now(tz=datetime.timezone.utc).replace(tzinfo=None)
+    if now is None:
+        now = datetime.datetime.now(tz=datetime.timezone.utc).replace(tzinfo=None)
+    target_naive = target.replace(tzinfo=None) if target.tzinfo else target
     cycles = [0, 6, 12, 18]
-    ref = utc_now - datetime.timedelta(hours=5)
+    ref = min(now - datetime.timedelta(hours=5), target_naive)
     cycle = max(c for c in cycles if c <= ref.hour)
     return ref.date(), cycle
 
@@ -149,12 +156,19 @@ class GFSWindField(_GriddedWindField):
             cycle_hour,
         )
 
+        ts = self._time_start.replace(tzinfo=None) if self._time_start.tzinfo else self._time_start
+        te = self._time_end.replace(tzinfo=None) if self._time_end.tzinfo else self._time_end
+        if ts < cycle_dt:
+            logger.warning(
+                "Requested wind window starts %s, before GFS cycle "
+                "%s/%02dZ — winds before the cycle time fall back to f000",
+                ts, cycle_date, cycle_hour,
+            )
+
         # Pick a single forecast hour
         if self._forecast_hour is not None:
             fhr = self._forecast_hour
         else:
-            ts = self._time_start.replace(tzinfo=None) if self._time_start.tzinfo else self._time_start
-            te = self._time_end.replace(tzinfo=None) if self._time_end.tzinfo else self._time_end
             mid = ts + (te - ts) / 2
             fhr = max(0, round((mid - cycle_dt).total_seconds() / 3600))
 

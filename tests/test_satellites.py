@@ -169,6 +169,42 @@ class TestSegmentPasses:
         assert len(passes) == 1
         assert passes[0] == (0, 1)
 
+    def test_latitude_reversal_creates_two_passes(self):
+        """A latitude direction reversal should split the track."""
+        n = 20
+        lats = np.concatenate([np.linspace(0, 50, 10), np.linspace(45, 0, 10)])
+        timestamps = np.array([
+            datetime(2025, 1, 1, 0, 0) + timedelta(seconds=i * 30)
+            for i in range(n)
+        ])
+        passes = _segment_passes(lats, timestamps, time_step_s=30.0)
+        assert len(passes) == 2
+
+    def test_small_lat_noise_does_not_split(self):
+        """Sub-hysteresis latitude wiggles must not create extra passes."""
+        n = 10
+        lats = np.linspace(0, 10, n)
+        lats[5] -= 0.01  # tiny dip well under the hysteresis threshold
+        timestamps = np.array([
+            datetime(2025, 1, 1, 0, 0) + timedelta(seconds=i * 30)
+            for i in range(n)
+        ])
+        passes = _segment_passes(lats, timestamps, time_step_s=30.0)
+        assert len(passes) == 1
+
+    def test_longitude_jump_creates_two_passes(self):
+        """A >180° longitude jump (antimeridian wrap) should split."""
+        n = 10
+        lats = np.linspace(0, 10, n)
+        lons = np.array([170.0, 174.0, 178.0, -178.0, -174.0,
+                         -170.0, -166.0, -162.0, -158.0, -154.0])
+        timestamps = np.array([
+            datetime(2025, 1, 1, 0, 0) + timedelta(seconds=i * 30)
+            for i in range(n)
+        ])
+        passes = _segment_passes(lats, timestamps, time_step_s=30.0, lons=lons)
+        assert len(passes) == 2
+
 
 class TestMergeTimeWindows:
     def test_no_timestamps(self):
@@ -310,6 +346,84 @@ class TestFetchTle:
         with patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)):
             sat = fetch_tle("PACE", max_age_hours=999)
             assert sat.name == "PACE"
+
+
+class TestFetchTleStaleFallback:
+    def _stale_cache(self, tmp_path, text=_ISS_TLE_TEXT):
+        cache_dir = tmp_path / "tle_cache"
+        cache_dir.mkdir()
+        tle_file = cache_dir / "25544.tle"
+        tle_file.write_text(text)
+        old_time = os.path.getmtime(str(tle_file)) - 48 * 3600
+        os.utime(str(tle_file), (old_time, old_time))
+        return tle_file
+
+    def test_network_failure_falls_back_to_stale_cache(self, tmp_path, caplog):
+        import requests
+
+        tle_file = self._stale_cache(tmp_path)
+        iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
+
+        def fail_download(filepath, url, replace=False):
+            raise requests.RequestException("403 Forbidden")
+
+        with patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)), \
+             patch("hyplan.satellites.download_file", side_effect=fail_download), \
+             caplog.at_level("WARNING", logger="hyplan.satellites"):
+            sat = fetch_tle(iss_info, max_age_hours=24.0)
+
+        assert sat.name == _ISS_TLE_NAME
+        assert any("stale cache" in r.getMessage() for r in caplog.records)
+        assert tle_file.read_text() == _ISS_TLE_TEXT
+
+    def test_html_body_rejected_and_stale_cache_used(self, tmp_path, caplog):
+        tle_file = self._stale_cache(tmp_path)
+        iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
+
+        def html_download(filepath, url, replace=False):
+            with open(filepath, "w") as f:
+                f.write("No GP data found\n")
+
+        with patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)), \
+             patch("hyplan.satellites.download_file", side_effect=html_download), \
+             caplog.at_level("WARNING", logger="hyplan.satellites"):
+            sat = fetch_tle(iss_info, max_age_hours=24.0)
+
+        assert sat.name == _ISS_TLE_NAME
+        assert any("invalid TLE payload" in r.getMessage() for r in caplog.records)
+        # The cache must not be poisoned by the error body
+        assert tle_file.read_text() == _ISS_TLE_TEXT
+
+    def test_no_cache_and_network_failure_raises(self, tmp_path):
+        import requests
+
+        (tmp_path / "tle_cache").mkdir()
+        iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
+
+        def fail_download(filepath, url, replace=False):
+            raise requests.RequestException("403 Forbidden")
+
+        with (
+            patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)),
+            patch("hyplan.satellites.download_file", side_effect=fail_download),
+            pytest.raises(RuntimeError, match="no cached copy"),
+        ):
+            fetch_tle(iss_info, max_age_hours=24.0)
+
+    def test_no_cache_and_invalid_payload_raises(self, tmp_path):
+        (tmp_path / "tle_cache").mkdir()
+        iss_info = SatelliteInfo("ISS (ZARYA)", 25544, swath_width_km=0.0)
+
+        def html_download(filepath, url, replace=False):
+            with open(filepath, "w") as f:
+                f.write("<html>No GP data found</html>")
+
+        with (
+            patch("hyplan.satellites.get_cache_root", return_value=str(tmp_path)),
+            patch("hyplan.satellites.download_file", side_effect=html_download),
+            pytest.raises(RuntimeError, match="invalid TLE payload"),
+        ):
+            fetch_tle(iss_info, max_age_hours=24.0)
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +583,33 @@ class TestComputeSwathFootprint:
         assert len(swath_gdf) == 1
         assert swath_gdf.geometry.iloc[0].is_valid
 
+    def test_multi_orbit_track_splits_into_passes(self):
+        """A continuous 2-orbit track must split at latitude reversals and
+        longitude wraps rather than producing one self-intersecting polygon."""
+        n = 200
+        start = datetime(2025, 6, 15, 12, 0, 0)
+        i = np.arange(n)
+        lats = 50.0 * np.sin(2 * np.pi * i / 100.0)  # 2 orbits
+        lons = ((3.6 + 5.0 * i) + 180.0) % 360.0 - 180.0  # wraps, avoids ±180 exactly
+        timestamps = np.array([start + timedelta(seconds=k * 30.0) for k in range(n)])
+        geometry = [Point(lon, lat) for lon, lat in zip(lons, lats, strict=False)]
+        gdf = gpd.GeoDataFrame(
+            {
+                "satellite_name": "ISS (ZARYA)",
+                "norad_id": 25544,
+                "timestamp": timestamps,
+                "latitude": lats,
+                "longitude": lons,
+                "altitude_km": np.full(n, 420.0),
+                "solar_zenith": np.full(n, 30.0),
+            },
+            geometry=geometry, crs="EPSG:4326",
+        )
+
+        swath_gdf = compute_swath_footprint(gdf, swath_width_km=10.0)
+        assert len(swath_gdf) >= 2
+        assert swath_gdf.geometry.is_valid.all()
+
 
 # ---------------------------------------------------------------------------
 # find_overpasses
@@ -620,6 +761,35 @@ class TestFindAllOverpasses:
             )
             assert len(result) == 0
 
+    def test_find_all_rejects_missing_region(self):
+        """region=None must raise instead of returning a deceptive empty result."""
+        from hyplan.exceptions import HyPlanValueError
+
+        with pytest.raises(HyPlanValueError, match="region"):
+            find_all_overpasses(
+                satellites=["PACE"],
+                start_time=datetime(2025, 6, 15, 12, 0, 0),
+                end_time=datetime(2025, 6, 15, 14, 0, 0),
+            )
+
+    def test_find_all_rejects_wrong_region_type(self):
+        from hyplan.exceptions import HyPlanValueError
+
+        with pytest.raises(HyPlanValueError, match="Polygon"):
+            find_all_overpasses(
+                satellites=["PACE"],
+                region=(-100, 25, -70, 45),
+                start_time=datetime(2025, 6, 15, 12, 0, 0),
+                end_time=datetime(2025, 6, 15, 14, 0, 0),
+            )
+
+    def test_find_all_rejects_missing_time_window(self):
+        from hyplan.exceptions import HyPlanValueError
+
+        region = Polygon([(-100, 25), (-100, 45), (-70, 45), (-70, 25)])
+        with pytest.raises(HyPlanValueError, match="start_time"):
+            find_all_overpasses(satellites=["PACE"], region=region)
+
     def test_find_all_sorts_by_pass_start(self):
         """Result should be sorted by pass_start."""
         call_count = [0]
@@ -748,7 +918,7 @@ class TestComputeOverpassOverlap:
         flight_plan = gpd.GeoDataFrame(
             {
                 "segment_name": ["seg1"],
-                "time_to_segment": [0.0],  # hours from flight start
+                "time_to_segment": [0.0],  # minutes from flight start
             },
             geometry=[flight_poly],
             crs="EPSG:4326",
@@ -760,6 +930,41 @@ class TestComputeOverpassOverlap:
             max_time_offset_min=60.0,
         )
         assert len(result) == 0
+
+    def test_overlap_time_to_segment_is_minutes(self):
+        """time_to_segment is minutes: a +90 min segment matches a +90 min pass."""
+        overpass_poly = Polygon([(-95, 28), (-95, 32), (-85, 32), (-85, 28)])
+        overpasses = gpd.GeoDataFrame(
+            {
+                "satellite_name": ["SAT-A"],
+                "norad_id": [99999],
+                "pass_start": [pd.Timestamp("2025-06-15 13:30:00")],
+                "pass_end": [pd.Timestamp("2025-06-15 13:30:00")],
+                "solar_zenith_at_center": [30.0],
+                "is_usable": [True],
+            },
+            geometry=[overpass_poly],
+            crs="EPSG:4326",
+        )
+        flight_poly = Polygon([(-92, 29), (-92, 31), (-88, 31), (-88, 29)])
+        flight_plan = gpd.GeoDataFrame(
+            {
+                "segment_name": ["seg1"],
+                "time_to_segment": [90.0],  # minutes from flight start
+            },
+            geometry=[flight_poly],
+            crs="EPSG:4326",
+        )
+        # Flight starts at 12:00; segment at +90 min = 13:30; overpass mid 13:30.
+        # If time_to_segment were (incorrectly) read as hours, seg_time would be
+        # +90 h and the pass would fall outside max_time_offset_min.
+        result = compute_overpass_overlap(
+            flight_plan, overpasses,
+            flight_time_utc=datetime(2025, 6, 15, 12, 0, 0),
+            max_time_offset_min=60.0,
+        )
+        assert len(result) == 1
+        assert result["time_offset_min"].iloc[0] == pytest.approx(0.0, abs=1e-6)
 
     def test_overlap_with_empty_geometry(self):
         """Flight segments with None geometry should be skipped."""

@@ -294,13 +294,15 @@ def _read_and_clip_subdataset(
     hdf_path: str,
     subdataset_name: str,
     polygon_geom: BaseGeometry,
-) -> tuple[npt.NDArray[Any], rasterio.Affine]:
+) -> tuple[np.ma.MaskedArray[Any, np.dtype[Any]], rasterio.Affine]:
     """Read a subdataset, reproject to WGS84, clip to polygon.
 
     Uses pyhdf to read HDF4-EOS files (GDAL HDF4 driver not required),
     then rasterio for reprojection and clipping.
 
-    Returns the clipped data array and its transform.
+    Returns a masked array clipped to *polygon_geom* (pixels falling in
+    the crop bounding box but outside the polygon are masked) and its
+    transform.
     """
     _require_rasterio()
     from rasterio.crs import CRS
@@ -356,9 +358,44 @@ def _read_and_clip_subdataset(
             [polygon_geom.__geo_interface__],
             crop=True,
             nodata=0,
+            filled=False,
         )
 
     return clipped[0], clipped_transform
+
+
+def _align_to_grid(
+    arr: np.ma.MaskedArray[Any, np.dtype[Any]],
+    src_transform: rasterio.Affine,
+    ref_transform: rasterio.Affine,
+    ref_shape: tuple[int, int],
+) -> np.ma.MaskedArray[Any, np.dtype[Any]]:
+    """Resample a clipped WGS84 masked array onto a reference grid.
+
+    Granules from different MODIS tiles clip to different grids, so they
+    must be reprojected onto a common (reference) grid before stacking.
+    Masked pixels travel as NaN through the resampling and come back
+    masked; pixels outside the source extent are masked as well.
+    """
+    _require_rasterio()
+    from rasterio.crs import CRS
+    from rasterio.warp import Resampling, reproject
+
+    wgs84 = CRS.from_epsg(4326)
+    source = np.ma.filled(arr, np.nan).astype(np.float64)  # type: ignore[no-untyped-call]
+    destination = np.full(ref_shape, np.nan, dtype=np.float64)
+    reproject(
+        source=source,
+        destination=destination,
+        src_transform=src_transform,
+        src_crs=wgs84,
+        dst_transform=ref_transform,
+        dst_crs=wgs84,
+        src_nodata=np.nan,
+        dst_nodata=np.nan,
+        resampling=Resampling.nearest,
+    )
+    return np.ma.masked_invalid(destination)  # type: ignore[no-untyped-call,no-any-return]
 
 
 def _parse_modis_date(hdf_path: str) -> datetime:
@@ -449,7 +486,7 @@ def _extract_phenology_from_granule(
     )
 
     # Read each stage and apply QA
-    stage_data = {}
+    stage_data: dict[str, npt.NDArray[Any]] = {}
     for stage_name, sds_name in subdatasets.items():
         data, _ = _read_and_clip_subdataset(hdf_path, sds_name, polygon_geom)
         stage_data[stage_name] = data
@@ -505,6 +542,21 @@ def fetch_phenology(
       computes spatial statistics locally.  Slower (downloads GBs of
       data) but provides full spatial coverage including ``pixel_stats``
       mode.
+
+    .. note::
+
+        **Quality filtering differs by source.**  The ``"granules"``
+        path applies per-pixel QA masks before averaging: pixel
+        reliability for ndvi/evi (:func:`~hyplan.phenology._qa.apply_vi_qa_mask`),
+        the FparLai_QC SCF_QC mask for lai/fpar
+        (:func:`~hyplan.phenology._qa.apply_lai_qa_mask`), and the
+        QA_Detailed mask for phenology
+        (:func:`~hyplan.phenology._qa.apply_phenology_qa_mask`).  The
+        ``"appeears"`` path applies **no** QA filtering — it returns the
+        raw server-side point samples (cloud-/snow-contaminated and
+        low-confidence retrievals included).  Results from the two
+        sources are therefore not directly comparable; prefer
+        ``"granules"`` when QA-screened values matter.
 
     Parameters
     ----------
@@ -885,6 +937,8 @@ def fetch_phenology_spatial(
         bounding_box = (bbox[0], bbox[1], bbox[2], bbox[3])
 
         all_arrays = []
+        ref_transform: rasterio.Affine | None = None
+        ref_shape: tuple[int, int] | None = None
 
         for short_name in short_names:
             cache_dir = _get_cache_dir(short_name)
@@ -908,6 +962,16 @@ def fetch_phenology_spatial(
                         masked = np.ma.masked_outside(masked, lo, hi)  # type: ignore[no-untyped-call]
 
                     scaled = masked.astype(np.float64) * config["scale_factor"]
+                    # The first granule's clipped grid is the reference;
+                    # granules from other MODIS tiles are resampled onto it
+                    # so they can be stacked.
+                    if ref_transform is None or ref_shape is None:
+                        ref_transform = transform
+                        ref_shape = scaled.shape
+                    elif scaled.shape != ref_shape or transform != ref_transform:
+                        scaled = _align_to_grid(
+                            scaled, transform, ref_transform, ref_shape,
+                        )
                     all_arrays.append(scaled)
                 except Exception:
                     logger.warning(
@@ -918,16 +982,17 @@ def fetch_phenology_spatial(
                     continue
 
         if all_arrays:
+            assert ref_transform is not None  # set with the first array
             # Stack and compute temporal mean, ignoring masked values
             stacked = np.ma.stack(all_arrays, axis=0)
             mean_arr = np.ma.mean(stacked, axis=0).filled(np.nan)
 
-            # Build coordinate arrays from transform
+            # Build coordinate arrays from the reference transform
             from rasterio.transform import xy
 
             rows_idx, cols_idx = np.arange(mean_arr.shape[0]), np.arange(mean_arr.shape[1])
-            lats = np.array([xy(transform, r, 0)[1] for r in rows_idx])
-            lons = np.array([xy(transform, 0, c)[0] for c in cols_idx])
+            lats = np.array([xy(ref_transform, r, 0)[1] for r in rows_idx])
+            lons = np.array([xy(ref_transform, 0, c)[0] for c in cols_idx])
 
             result[polygon_name] = xr.DataArray(
                 mean_arr,

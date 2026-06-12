@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import datetime
+import logging
+import re
 from typing import Any
 
 import numpy as np
 
 from ..gridded import _GriddedWindField
 from ..utils import _earthdata_login
+
+logger = logging.getLogger(__name__)
 
 # MERRA-2 standard pressure levels (hPa), descending (surface -> top of atm)
 _MERRA2_LEVELS_HPA = np.array([
@@ -18,9 +22,20 @@ _MERRA2_LEVELS_HPA = np.array([
     10, 7, 5, 4, 3, 2, 1, 0.7, 0.5, 0.4, 0.3, 0.1,
 ], dtype=float)
 
+# Months GES DISC republished under stream 401 instead of 400.
+_MERRA2_REPROCESSED_MONTHS: dict[tuple[int, int], int] = {
+    (2020, 9): 401,
+    (2021, 6): 401,
+    (2021, 7): 401,
+    (2021, 8): 401,
+    (2021, 9): 401,
+}
 
-def _merra2_stream(year: int) -> int:
-    """Return the MERRA-2 stream number for a given year."""
+
+def _merra2_stream(year: int, month: int | None = None) -> int:
+    """Return the MERRA-2 stream number for a given year (and month)."""
+    if month is not None and (year, month) in _MERRA2_REPROCESSED_MONTHS:
+        return _MERRA2_REPROCESSED_MONTHS[(year, month)]
     if year <= 1991:
         return 100
     if year <= 2000:
@@ -32,12 +47,22 @@ def _merra2_stream(year: int) -> int:
 
 def _merra2_url(dt: datetime.date) -> str:
     """Build the OPeNDAP URL for a single MERRA-2 daily file."""
-    stream = _merra2_stream(dt.year)
+    stream = _merra2_stream(dt.year, dt.month)
     return (
         f"dap2://goldsmr5.gesdisc.eosdis.nasa.gov/opendap/"
         f"MERRA2/M2I3NPASM.5.12.4/{dt.year:04d}/{dt.month:02d}/"
         f"MERRA2_{stream}.inst3_3d_asm_Np.{dt.year:04d}{dt.month:02d}{dt.day:02d}.nc4"
     )
+
+
+def _alternate_stream_url(url: str) -> str | None:
+    """Swap a MERRA-2 URL between the base and reprocessed stream (400<->401)."""
+    match = re.search(r"MERRA2_(\d{3})\.", url)
+    if match is None:
+        return None
+    stream = int(match.group(1))
+    alt = stream + 1 if stream % 10 == 0 else stream - 1
+    return url.replace(f"MERRA2_{stream}.", f"MERRA2_{alt}.", 1)
 
 
 class MERRA2WindField(_GriddedWindField):
@@ -76,7 +101,27 @@ class MERRA2WindField(_GriddedWindField):
         super().__init__(*args, **kwargs)
 
     def _open_dataset(self, url: str) -> Any:
-        """Open OPeNDAP dataset with Earthdata-authenticated session."""
+        """Open OPeNDAP dataset with Earthdata-authenticated session.
+
+        Falls back to the alternate stream number (400<->401) when the
+        primary URL fails to open — GES DISC republished some months
+        under a different stream, so the canonical URL can 404.
+        """
+        try:
+            return self._open_url(url)
+        except Exception:
+            alt_url = _alternate_stream_url(url)
+            if alt_url is None:
+                raise
+            logger.info(
+                "Failed to open %s; retrying alternate MERRA-2 stream %s",
+                url, alt_url,
+            )
+            ds = self._open_url(alt_url)
+            logger.info("MERRA-2 alternate stream succeeded: %s", alt_url)
+            return ds
+
+    def _open_url(self, url: str) -> Any:
         store = self._xr.backends.PydapDataStore.open(url, session=self._session)
         return self._xr.open_dataset(store)
 

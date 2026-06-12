@@ -34,8 +34,10 @@ def get_elevations_from_grid(
     gt = dem.geotransform
     raster = dem.array
 
-    xs = np.round((lons - gt[0]) / gt[1]).astype(int)
-    ys = np.round((lats - gt[3]) / gt[5]).astype(int)
+    # The geotransform origin is the top-left pixel *corner*, so the pixel
+    # containing a point is found with floor(), not round().
+    xs = np.floor((lons - gt[0]) / gt[1]).astype(int)
+    ys = np.floor((lats - gt[3]) / gt[5]).astype(int)
 
     out_of_bounds = (xs < 0) | (xs >= raster.shape[1]) | (ys < 0) | (ys >= raster.shape[0])
     if np.any(out_of_bounds):
@@ -116,12 +118,18 @@ def terrain_aspect_azimuth(polygon: Any, dem_file: str | None = None) -> float:
 
     dem = load_dem(dem_file)
     elevations: np.ndarray[Any, np.dtype[Any]] = dem.array.astype(float)
+    gt = dem.geotransform
 
     # np.gradient returns (d/d_row, d/d_col).  In a north-up GeoTIFF rows
     # increase southward, so the north component is the *negative* row gradient.
+    # Convert the per-pixel gradients to a common metric scale: a degree of
+    # longitude spans cos(lat) times the distance of a degree of latitude,
+    # so the east-west gradient must be divided by cos(lat) per row.
     dy, dx = np.gradient(elevations)
-    north_component = -dy   # positive = elevation increases going north
-    east_component = dx     # positive = elevation increases going east
+    row_lats = gt[3] + (np.arange(elevations.shape[0]) + 0.5) * gt[5]
+    cos_lat = np.cos(np.radians(row_lats))[:, np.newaxis]
+    north_component = -dy / abs(gt[5])              # positive = rising northward
+    east_component = dx / (abs(gt[1]) * cos_lat)    # positive = rising eastward
 
     # Aspect: direction of steepest ascent, clockwise from north.
     aspect = np.degrees(np.arctan2(east_component, north_component))

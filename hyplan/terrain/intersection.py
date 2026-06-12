@@ -194,11 +194,13 @@ def surface_normal_at(
     gt = dem.geotransform
     rows, cols = raster.shape
 
-    # Pixel coordinates (float for sub-pixel, int for indexing)
+    # Pixel coordinates (float for sub-pixel, int for indexing).  The
+    # geotransform origin is the top-left pixel *corner*, so the pixel
+    # containing a point is found with floor(), not round().
     px_x = (lons - gt[0]) / gt[1]
     px_y = (lats - gt[3]) / gt[5]
-    ix = np.round(px_x).astype(int)
-    iy = np.round(px_y).astype(int)
+    ix = np.floor(px_x).astype(int)
+    iy = np.floor(px_y).astype(int)
 
     # Clamp to valid range, leaving a 1-pixel border for central differences
     ix = np.clip(ix, 1, cols - 2)

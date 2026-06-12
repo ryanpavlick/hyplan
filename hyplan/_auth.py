@@ -23,27 +23,33 @@ def _require_earthaccess() -> Any:
 def _earthdata_login() -> Any:
     """Authenticate with NASA Earthdata using ``earthaccess``.
 
-    Tries strategies in order: ``EARTHDATA_TOKEN`` env var, ``~/.netrc``,
-    then interactive prompt.  Returns an authenticated ``requests.Session``
-    with a bearer token suitable for OPeNDAP access.
+    Tries non-interactive strategies in order: environment variables
+    (``EARTHDATA_USERNAME`` + ``EARTHDATA_PASSWORD``, or
+    ``EARTHDATA_TOKEN``), then ``~/.netrc``.  No interactive prompt is
+    attempted.  Returns an authenticated ``requests.Session`` with a
+    bearer token suitable for OPeNDAP access.
 
     Raises :class:`~hyplan.exceptions.HyPlanRuntimeError` if ``earthaccess``
-    is not installed or login fails.
+    is not installed or every strategy fails; per-strategy failure causes
+    are included in the error message.
     """
     earthaccess = _require_earthaccess()
 
-    # Try non-interactive strategies first
+    failures: list[str] = []
     for strategy in ("environment", "netrc"):
         try:
             auth = earthaccess.login(strategy=strategy)
             if auth.authenticated:
                 return earthaccess.get_requests_https_session()
-        except Exception:
-            continue
+            failures.append(f"{strategy}: not authenticated")
+        except Exception as exc:
+            failures.append(f"{strategy}: {exc}")
 
     raise HyPlanRuntimeError(
-        "NASA Earthdata login failed. Authenticate via one of:\n"
-        "  1. Set EARTHDATA_TOKEN environment variable\n"
+        f"NASA Earthdata login failed ({'; '.join(failures)}). "
+        "Authenticate via one of:\n"
+        "  1. Set EARTHDATA_USERNAME and EARTHDATA_PASSWORD (or "
+        "EARTHDATA_TOKEN) environment variables\n"
         "  2. Add to ~/.netrc:\n"
         "     machine urs.earthdata.nasa.gov login <user> password <pass>\n"
         "Register at https://urs.earthdata.nasa.gov if needed."

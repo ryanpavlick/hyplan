@@ -1,6 +1,7 @@
 """Tests for hyplan.airspace."""
 
 import json
+import logging
 import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -23,6 +24,7 @@ from hyplan.airspace import (
     _is_schedule_active,
     _parse_airspace_item,
     _resolve_type_filter,
+    _snap_bounds,
     check_airspace_conflicts,
     check_airspace_proximity,
     classify_severity,
@@ -247,8 +249,8 @@ class TestParseAirspaceItem:
         item = {
             "name": "FL Zone",
             "type": 1,
-            "lowerLimit": {"value": 100, "unit": 2},  # FL100
-            "upperLimit": {"value": 350, "unit": 2},  # FL350
+            "lowerLimit": {"value": 100, "unit": 6, "referenceDatum": 2},  # FL100
+            "upperLimit": {"value": 350, "unit": 6, "referenceDatum": 2},  # FL350
             "geometry": {
                 "type": "Polygon",
                 "coordinates": [[
@@ -260,6 +262,44 @@ class TestParseAirspaceItem:
         assert a is not None
         assert a.floor_ft == pytest.approx(10000.0, rel=1e-3)
         assert a.ceiling_ft == pytest.approx(35000.0, rel=1e-3)
+        assert a.floor_reference == "MSL"
+
+    def test_gnd_reference_floor_is_sfc(self):
+        item = {
+            "name": "AGL Zone",
+            "type": 1,
+            "lowerLimit": {"value": 0, "unit": 1, "referenceDatum": 0},  # GND
+            "upperLimit": {"value": 2500, "unit": 1, "referenceDatum": 0},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [0, 0], [1, 0], [1, 1], [0, 1], [0, 0],
+                ]],
+            },
+        }
+        a = _parse_airspace_item(item)
+        assert a is not None
+        assert a.floor_ft == 0.0
+        assert a.floor_reference == "SFC"
+
+    def test_msl_reference_floor_stays_msl(self):
+        item = {
+            "name": "MSL Zone",
+            "type": 1,
+            "lowerLimit": {"value": 1000, "unit": 1, "referenceDatum": 1},
+            "upperLimit": {"value": 5000, "unit": 1, "referenceDatum": 1},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [0, 0], [1, 0], [1, 1], [0, 1], [0, 0],
+                ]],
+            },
+        }
+        a = _parse_airspace_item(item)
+        assert a is not None
+        assert a.floor_ft == pytest.approx(1000.0)
+        assert a.ceiling_ft == pytest.approx(5000.0)
+        assert a.floor_reference == "MSL"
 
     def test_missing_geometry_returns_none(self):
         assert _parse_airspace_item({"name": "No Geom"}) is None
@@ -308,6 +348,20 @@ class TestCacheHelpers:
         f = tmp_path / "fresh.json"
         f.write_text("{}")
         assert not _is_cache_stale(str(f), 24.0)
+
+    def test_snap_bounds_outward(self):
+        snapped = _snap_bounds((-120.04, 33.96, -119.97, 34.04))
+        assert snapped == (-120.1, 33.9, -119.9, 34.1)
+
+    def test_snap_bounds_identity_on_grid(self):
+        assert _snap_bounds((-118.0, 33.0, -117.0, 34.0)) == (
+            -118.0, 33.0, -117.0, 34.0,
+        )
+
+    def test_nearby_queries_share_snapped_key(self):
+        k1 = _cache_key((-120.04, 33.01, -119.91, 33.99), None)
+        k2 = _cache_key((-120.01, 33.05, -119.95, 33.91), None)
+        assert k1 == k2
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +472,57 @@ class TestOpenAIPClient:
             assert len(result) == 1
             assert result[0].name == "API Zone"
             assert result[0].airspace_class == "B"
+
+    def test_fetch_requests_snapped_bounds(self, tmp_path):
+        """The fetched bbox is snapped outward to the 0.1° cache grid, so
+        every query sharing the cache key is covered by the payload."""
+        client = OpenAIPClient(api_key="test-key")
+        cache_dir = str(tmp_path / "airspace_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"totalPages": 1, "items": []}
+        mock_resp.raise_for_status = MagicMock()
+
+        bounds_a = (-120.04, 33.01, -119.91, 33.99)
+        bounds_b = (-120.01, 33.05, -119.95, 33.91)
+        assert _cache_key(bounds_a, None) == _cache_key(bounds_b, None)
+
+        with (
+            patch("hyplan.airspace._get_airspace_cache_dir", return_value=cache_dir),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp) as mock_get,
+        ):
+            client.fetch_airspaces(bounds_a)
+            assert mock_get.call_count == 1
+            bbox = mock_get.call_args.kwargs["params"]["bbox"]
+            assert bbox == "-120.1,33.0,-119.9,34.0"
+            # The snapped bbox covers both queries' exact bounds
+            for b in (bounds_a, bounds_b):
+                assert b[0] >= -120.1 and b[2] <= -119.9
+                assert b[1] >= 33.0 and b[3] <= 34.0
+
+            # The second query maps to the same key and hits the cache
+            client.fetch_airspaces(bounds_b)
+            assert mock_get.call_count == 1
+
+    def test_nasr_fetch_requests_snapped_bounds(self, tmp_path):
+        """NASR ArcGIS queries also request the snapped cache-grid bounds."""
+        source = NASRAirspaceSource()
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"features": []}
+        mock_resp.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "hyplan.airspace._get_airspace_cache_dir",
+                return_value=str(tmp_path / "airspace_cache"),
+            ),
+            patch("hyplan.airspace.requests.get", return_value=mock_resp) as mock_get,
+        ):
+            source.fetch_airspaces((-118.04, 33.96, -117.51, 34.49))
+            geometry = mock_get.call_args.kwargs["params"]["geometry"]
+            assert geometry == "-118.1,33.9,-117.5,34.5"
 
 
 # ---------------------------------------------------------------------------
@@ -804,19 +909,19 @@ class TestFAATFRClient:
         assert parse("") is None
 
     def test_filter_effective_removes_future(self):
-        from datetime import date, timedelta
-        today = date.today()
-        future = (today + timedelta(days=5)).isoformat()
-        past = (today - timedelta(days=1)).isoformat()
+        from datetime import date
 
+        reference = date(2026, 6, 1)
         a_future = _make_airspace(name="Future TFR")
-        a_future.effective_start = future
+        a_future.effective_start = "2026-06-06"
         a_past = _make_airspace(name="Past TFR")
-        a_past.effective_start = past
+        a_past.effective_start = "2026-05-31"
         a_none = _make_airspace(name="No Date TFR")
         a_none.effective_start = None
 
-        result = FAATFRClient._filter_effective([a_future, a_past, a_none])
+        result = FAATFRClient._filter_effective(
+            [a_future, a_past, a_none], today=reference,
+        )
         names = [a.name for a in result]
         assert "Past TFR" in names
         assert "No Date TFR" in names
@@ -876,6 +981,31 @@ class TestNASRAirspaceSource:
         feature = {"properties": {"NAME": "Bad"}}
         result = NASRAirspaceSource._feature_to_airspace(feature)
         assert result is None
+
+    def test_missing_uom_fl_heuristic_logs(self, caplog):
+        """The missing-UPPER_UOM flight-level heuristic logs when it fires."""
+        feature = {
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [-118, 33], [-117, 33], [-117, 34],
+                    [-118, 34], [-118, 33],
+                ]],
+            },
+            "properties": {
+                "NAME": "R-9999",
+                "TYPE_CODE": "R",
+                "UPPER_VAL": 180,
+            },
+        }
+        with caplog.at_level(logging.DEBUG, logger="hyplan.airspace"):
+            result = NASRAirspaceSource._feature_to_airspace(feature)
+        assert result is not None
+        assert result.ceiling_ft == 18000.0
+        assert any(
+            "UPPER_UOM" in rec.message and "R-9999" in rec.getMessage()
+            for rec in caplog.records
+        )
 
     def test_fetch_mocked(self, tmp_path):
         """Mocked ArcGIS response returns parsed airspaces."""
@@ -1127,6 +1257,17 @@ class TestBoundsWithinUS:
         # Spans both US and Europe — not within US
         assert _bounds_within_us((-80.0, 30.0, 10.0, 50.0)) is False
 
+    def test_alberta(self):
+        # Canadian prairies — outside FAA data coverage
+        assert _bounds_within_us((-115.0, 52.0, -112.0, 55.0)) is False
+
+    def test_mexico(self):
+        assert _bounds_within_us((-104.0, 19.0, -98.0, 23.0)) is False
+
+    def test_caribbean_non_us(self):
+        # Cuba — outside FAA data coverage
+        assert _bounds_within_us((-83.0, 20.0, -78.0, 22.5)) is False
+
 
 class TestFetchAndCheckRouting:
     def test_us_bounds_uses_faa(self):
@@ -1185,6 +1326,63 @@ class TestFetchAndCheckRouting:
             filtered = fetch_and_check([fl], type_filter="RESTRICTED")
             assert len(filtered) == 1
             assert filtered[0].airspace.name == "R-2508"
+
+    def test_outside_coverage_no_key_warns(self, caplog, monkeypatch):
+        """Non-US bounds with no OpenAIP key → warning and empty result."""
+        monkeypatch.delenv("OPENAIP_API_KEY", raising=False)
+        fl = _make_flight_line(53.5, -113.5, 53.6, -113.5, 5000)  # Alberta
+
+        with patch.object(NASRAirspaceSource, "fetch_airspaces") as mock_nasr, \
+             patch.object(OpenAIPClient, "fetch_airspaces") as mock_openaip, \
+             caplog.at_level(logging.WARNING, logger="hyplan.airspace"):
+            result = fetch_and_check([fl])
+            assert result == []
+            mock_nasr.assert_not_called()
+            mock_openaip.assert_not_called()
+        assert "cannot be assessed" in caplog.text
+
+    def test_outside_coverage_with_key_uses_openaip(self, caplog, monkeypatch):
+        """Non-US bounds with an OpenAIP key → OpenAIP, no coverage warning."""
+        monkeypatch.delenv("OPENAIP_API_KEY", raising=False)
+        fl = _make_flight_line(53.5, -113.5, 53.6, -113.5, 5000)  # Alberta
+
+        with patch.object(OpenAIPClient, "fetch_airspaces", return_value=[]) as mock_openaip, \
+             patch.object(NASRAirspaceSource, "fetch_airspaces") as mock_nasr, \
+             caplog.at_level(logging.WARNING, logger="hyplan.airspace"):
+            result = fetch_and_check([fl], api_key="test-key")
+            assert result == []
+            mock_openaip.assert_called_once()
+            mock_nasr.assert_not_called()
+        assert "cannot be assessed" not in caplog.text
+
+    def test_us_bounds_no_coverage_warning(self, caplog, monkeypatch):
+        """CONUS bounds use the FAA path with no coverage warning."""
+        monkeypatch.delenv("OPENAIP_API_KEY", raising=False)
+        fl = _make_flight_line(34.0, -118.0, 34.1, -118.0, 5000)
+
+        with patch.object(NASRAirspaceSource, "fetch_airspaces", return_value=[]) as mock_nasr, \
+             patch.object(NASRAirspaceSource, "fetch_sfras", return_value=[]), \
+             patch.object(NASRAirspaceSource, "fetch_class_airspace", return_value=[]), \
+             patch.object(FAATFRClient, "fetch_tfrs", return_value=[]), \
+             caplog.at_level(logging.WARNING, logger="hyplan.airspace"):
+            result = fetch_and_check([fl])
+            assert result == []
+            mock_nasr.assert_called_once()
+        assert "cannot be assessed" not in caplog.text
+
+    def test_alaska_bounds_use_faa(self, monkeypatch):
+        """Alaska bounds are still treated as US and use the FAA path."""
+        monkeypatch.delenv("OPENAIP_API_KEY", raising=False)
+        fl = _make_flight_line(64.8, -147.9, 64.9, -147.9, 5000)  # Fairbanks
+
+        with patch.object(NASRAirspaceSource, "fetch_airspaces", return_value=[]) as mock_nasr, \
+             patch.object(NASRAirspaceSource, "fetch_sfras", return_value=[]), \
+             patch.object(NASRAirspaceSource, "fetch_class_airspace", return_value=[]), \
+             patch.object(FAATFRClient, "fetch_tfrs", return_value=[]), \
+             patch.object(OpenAIPClient, "fetch_airspaces") as mock_openaip:
+            fetch_and_check([fl])
+            mock_nasr.assert_called_once()
+            mock_openaip.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1282,6 +1480,40 @@ class TestProximity:
         near = check_airspace_proximity([fl], [airspace], buffer_m=2000)
         assert len(near) == 0
 
+    def test_meridional_distance_at_high_latitude(self):
+        """North-south separation at 60°N reports the true geodesic distance.
+
+        A blanket cos(lat) conversion would underestimate this meridional
+        gap by a factor of two at 60°N (~400 m instead of ~800 m).
+        """
+        airspace = _make_airspace(
+            floor_ft=0, ceiling_ft=10000,
+            geometry=box(10.0, 60.0, 11.0, 60.5),
+        )
+        # Line 0.0072° (~800 m) south of the airspace's southern edge
+        fl = _make_flight_line(59.9928, 10.0, 59.9928, 11.0, 5000)
+        near = check_airspace_proximity([fl], [airspace], buffer_m=2000)
+        assert len(near) == 1
+        # 0.0072° of latitude ≈ 800.6 m on the great circle
+        assert near[0].distance_to_boundary_m == pytest.approx(800.6, rel=0.01)
+
+    def test_east_west_near_miss_detected_at_high_latitude(self):
+        """East-west near-miss at 70°N is not dropped by the prefilter.
+
+        0.0184° of longitude at 70°N is only ~700 m, inside a 1000 m
+        buffer, but a flat buf_deg = buffer_m/111000 prefilter (0.009°)
+        would never offer this airspace as a candidate.
+        """
+        airspace = _make_airspace(
+            floor_ft=0, ceiling_ft=10000,
+            geometry=box(10.0, 69.5, 11.0, 70.5),
+        )
+        fl = _make_flight_line(69.5, 11.0184, 70.5, 11.0184, 5000)
+        near = check_airspace_proximity([fl], [airspace], buffer_m=1000)
+        assert len(near) == 1
+        assert near[0].severity == "NEAR_MISS"
+        assert near[0].distance_to_boundary_m == pytest.approx(700.0, rel=0.05)
+
 
 # ---------------------------------------------------------------------------
 # Group 8: Schedule filtering
@@ -1312,6 +1544,24 @@ class TestScheduleFiltering:
         from datetime import datetime, timezone
         dt = datetime(2026, 4, 18, 15, 0, tzinfo=timezone.utc)  # Saturday
         assert _is_schedule_active("0600 - 2200, DAILY", 0, 0, dt)
+
+    def test_overnight_schedule_active_before_midnight(self):
+        from datetime import datetime, timezone
+        # 23:00 local → active for a 2200-0600 overnight schedule
+        dt = datetime(2026, 4, 15, 23, 0, tzinfo=timezone.utc)
+        assert _is_schedule_active("2200 - 0600", 0, 0, dt)
+
+    def test_overnight_schedule_active_after_midnight(self):
+        from datetime import datetime, timezone
+        # 03:00 local → active for a 2200-0600 overnight schedule
+        dt = datetime(2026, 4, 16, 3, 0, tzinfo=timezone.utc)
+        assert _is_schedule_active("2200 - 0600", 0, 0, dt)
+
+    def test_overnight_schedule_inactive_midday(self):
+        from datetime import datetime, timezone
+        # 12:00 local → inactive for a 2200-0600 overnight schedule
+        dt = datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc)
+        assert not _is_schedule_active("2200 - 0600", 0, 0, dt)
 
     def test_continuous_always_active(self):
         from datetime import datetime, timezone

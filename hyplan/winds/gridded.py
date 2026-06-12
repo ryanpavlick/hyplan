@@ -423,6 +423,31 @@ class _GriddedWindField(WindField):
             float(v) * (ureg.meter / ureg.second),
         )
 
+    def _warn_once(self, key: str, message: str, *args: Any) -> None:
+        """Log a warning once per field instance per key."""
+        warned: set[str] | None = getattr(self, "_warned_keys", None)
+        if warned is None:
+            warned = set()
+            self._warned_keys = warned
+        if key in warned:
+            return
+        warned.add(key)
+        logger.warning(message, *args)
+
+    def _check_extent(
+        self, axis: str, value: float,
+        coords: npt.NDArray[np.floating[Any]],
+    ) -> None:
+        """Warn (once per axis) when a query falls outside the slab extent."""
+        if coords[0] <= value <= coords[-1]:
+            return
+        self._warn_once(
+            axis,
+            "Wind query %s=%g is outside the fetched slab extent "
+            "[%g, %g]; clamping to the boundary value",
+            axis, value, coords[0], coords[-1],
+        )
+
     def _interp4d(
         self,
         data: npt.NDArray[np.floating[Any]],
@@ -432,20 +457,41 @@ class _GriddedWindField(WindField):
         lon: float,
     ) -> float:
         """4-D linear interpolation on (time, level, lat, lon)."""
+        self._check_extent("time (epoch s)", t, self._times)
+        self._check_extent("pressure (hPa)", p, self._levs)
+        self._check_extent("lat", lat, self._lats)
+        self._check_extent("lon", lon, self._lons)
+
         # Clamp and find bounding indices for each dimension
         ti = self._interp_weights(self._times, t)
         pi = self._interp_weights(self._levs, p)
         lai = self._interp_weights(self._lats, lat)
         loi = self._interp_weights(self._lons, lon)
 
-        # Trilinear over the 16 corners of the 4D hypercube
+        # Trilinear over the 16 corners of the 4D hypercube, skipping
+        # NaN corners (e.g. MERRA-2 below-ground fill) and renormalizing
+        # by the remaining weight.
         result = 0.0
+        weight_total = 0.0
         for it, wt in ti:
             for ip, wp in pi:
                 for ila, wla in lai:
                     for ilo, wlo in loi:
-                        result += wt * wp * wla * wlo * data[it, ip, ila, ilo]
-        return result
+                        corner = data[it, ip, ila, ilo]
+                        if np.isnan(corner):
+                            continue
+                        w = wt * wp * wla * wlo
+                        result += w * corner
+                        weight_total += w
+        if weight_total == 0.0:
+            self._warn_once(
+                "all-nan",
+                "All interpolation corners are NaN at "
+                "t=%g s, p=%g hPa, lat=%g, lon=%g; returning NaN",
+                t, p, lat, lon,
+            )
+            return float("nan")
+        return result / weight_total
 
     @staticmethod
     def _interp_weights(

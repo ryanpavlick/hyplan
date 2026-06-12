@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -28,16 +29,34 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def get_cache_root(custom_path: str | None = None) -> str:
-    """Get the root directory for caching files."""
-    return custom_path or os.environ.get("HYPLAN_CACHE_ROOT", f"{tempfile.gettempdir()}/hyplan")
+    """Get the root directory for caching files.
+
+    Precedence: the ``custom_path`` argument, then the
+    ``HYPLAN_CACHE_ROOT`` environment variable, then the default
+    ``~/.cache/hyplan``.
+    """
+    return custom_path or os.environ.get(
+        "HYPLAN_CACHE_ROOT", str(Path.home() / ".cache" / "hyplan")
+    )
 
 
 def clear_cache() -> None:
-    """Clears the entire cache directory after confirming it is safe to do so."""
-    cache_dir = get_cache_root()
-    if not cache_dir.startswith(tempfile.gettempdir()):
+    """Clears the entire cache directory after confirming it is safe to do so.
+
+    Refuses to remove anything that is not a strict subdirectory of the
+    system temp directory or of ``~/.cache``.
+    """
+    cache_dir = Path(get_cache_root()).resolve()
+    safe_roots = (
+        Path(tempfile.gettempdir()).resolve(),
+        (Path.home() / ".cache").resolve(),
+    )
+    if not any(
+        cache_dir != root and cache_dir.is_relative_to(root)
+        for root in safe_roots
+    ):
         raise HyPlanValueError(f"Refusing to clear unsafe cache directory: {cache_dir}")
-    if os.path.exists(cache_dir):
+    if cache_dir.exists():
         shutil.rmtree(cache_dir)
         logger.info(f"Cache directory {cache_dir} cleared.")
     else:

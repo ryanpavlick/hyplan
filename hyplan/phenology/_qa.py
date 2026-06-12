@@ -48,12 +48,25 @@ def apply_lai_qa_mask(
 ) -> np.ma.MaskedArray[Any, np.dtype[Any]]:
     """Apply QA filter for MOD15A2H LAI/FPAR.
 
-    Uses the FparLai_QC bitfield:
+    Uses the FparLai_QC bitfield (per the MOD15 C6.1 User's Guide):
 
-    * Bit 0: ``0`` = good quality main algorithm, ``1`` = other
-    * Bits 5-7: cloud state (``000`` = clear)
+    * Bit 0 — MODLAND_QC: ``0`` = good quality (main RT algorithm),
+      ``1`` = other quality.
+    * Bits 3-4 — CloudState (``00`` = clear).  **Not** filtered directly
+      here; see below.
+    * Bits 5-7 — SCF_QC: the retrieval algorithm-path / confidence score,
+      ``000`` = main (RT) method used, best result possible, no
+      saturation; ``001`` = main method with saturation; ``010``/``011``
+      = main method failed, empirical fallback used; ``100`` = pixel not
+      produced.
 
-    Also masks fill values (``255``).
+    This filter keeps a pixel only when ``MODLAND_QC == 0`` **and**
+    ``SCF_QC == 000`` — i.e. the highest-confidence main-algorithm
+    retrieval with no saturation.  That is intentionally stricter than a
+    cloud-only screen: it also rejects saturated and empirical-fallback
+    retrievals.  Because the SCF_QC == 000 class already implies a
+    successful clear-sky main retrieval, CloudState (bits 3-4) is not
+    tested separately.  Fill values (``255``) are also masked.
 
     Parameters
     ----------
@@ -67,15 +80,16 @@ def apply_lai_qa_mask(
     np.ma.MaskedArray
         Data with low-quality pixels masked.
     """
-    # Bit 0: algorithm quality
+    # Bit 0 — MODLAND_QC: 0 = good (main algorithm), 1 = other.
     algo_bad = (qa & 0b1) != 0
-    # Bits 5-7: cloud state (must be 000 = clear)
-    cloud_bits = (qa >> 5) & 0b111
-    cloudy = cloud_bits != 0
+    # Bits 5-7 — SCF_QC: keep only 000 (best main-RT retrieval, no
+    # saturation); any other value is rejected.
+    scf_qc = (qa >> 5) & 0b111
+    not_best_retrieval = scf_qc != 0
     # Fill value
     fill = data == 255
 
-    bad = algo_bad | cloudy | fill
+    bad = algo_bad | not_best_retrieval | fill
     return np.ma.masked_array(data, mask=bad)  # type: ignore[no-untyped-call]
 
 

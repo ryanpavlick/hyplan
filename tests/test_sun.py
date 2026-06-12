@@ -94,6 +94,33 @@ class TestSolarThresholdTimes:
         delta_minutes = (rise_pdt - rise_pst).total_seconds() / 60.0
         assert 50 < delta_minutes < 70  # ~60 min jump from DST
 
+    def test_positive_utc_offset_first_day_morning_covered(self):
+        """A UTC+10 site's first local day must include early-morning
+        samples — the rise time should be a real morning crossing, not
+        the 10:00 local start of an unpadded UTC grid."""
+        df = solar_threshold_times(
+            latitude=-33.87, longitude=151.21,  # Sydney
+            start_date="2025-01-15", end_date="2025-01-15",
+            thresholds=[20],
+            timezone_offset=10,
+        )
+        assert len(df) == 1
+        rise = df["Rise_20"].iloc[0]
+        assert rise is not None
+        assert pd.Timestamp(rise).hour < 10
+
+    def test_positive_utc_offset_iana_first_day_morning_covered(self):
+        df = solar_threshold_times(
+            latitude=-33.87, longitude=151.21,
+            start_date="2025-01-15", end_date="2025-01-15",
+            thresholds=[20],
+            timezone="Australia/Sydney",
+        )
+        assert len(df) == 1
+        rise = df["Rise_20"].iloc[0]
+        assert rise is not None
+        assert pd.Timestamp(rise).hour < 10
+
     def test_timezone_takes_precedence_over_offset(self):
         """When both ``timezone`` and ``timezone_offset`` are passed, the
         IANA zone wins and the offset is ignored."""
@@ -164,3 +191,15 @@ class TestSolarPositionIncrements:
             timezone_offset=-8,
         )
         assert list(df_iana["Time"]) == list(df_fixed["Time"])
+
+    def test_positive_utc_offset_covers_full_local_day(self):
+        """A UTC+10 site must get one contiguous local day, including the
+        early morning, rather than 10:00 onward plus mislabeled samples
+        from the next local day."""
+        df = solar_position_increments(
+            -33.87, 151.21, "2025-01-15", min_elevation=10,
+            timezone_offset=10,
+        )
+        times = pd.to_datetime(df["Time"], format="%H:%M:%S")
+        assert times.is_monotonic_increasing
+        assert times.dt.hour.min() < 10

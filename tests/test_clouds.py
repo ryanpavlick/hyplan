@@ -31,6 +31,7 @@ from hyplan.clouds import (
     summarize_cloud_fraction_by_doy,
 )
 from hyplan.clouds.plotting import (
+    plot_cloud_forecast,
     plot_cloud_fraction_spatial,
     plot_yearly_cloud_fraction_heatmaps_with_visits,
 )
@@ -143,6 +144,25 @@ class TestSimulateVisits:
             exclude_weekends=True,
         )
         assert len(result_df) == 1
+
+    def test_debug_does_not_mutate_logger_levels(self, sample_cloud_df):
+        """debug=True must not leave the root (or module) logger level changed."""
+        import logging
+
+        root_level = logging.getLogger().level
+        module_logger = logging.getLogger("hyplan.clouds.analysis")
+        module_level = module_logger.level
+
+        simulate_visits(
+            sample_cloud_df,
+            day_start=1, day_stop=10,
+            year_start=2020, year_stop=2020,
+            cloud_fraction_threshold=0.10,
+            debug=True,
+        )
+
+        assert logging.getLogger().level == root_level
+        assert module_logger.level == module_level
 
 
 # ---------------------------------------------------------------------------
@@ -684,4 +704,48 @@ class TestPlotYearlyCloudFractionHeatmapsWithVisits:
             df, visit_tracker, rest_days,
             day_start=1, day_stop=30,
         )
+        plt.close("all")
+
+    def test_visit_stars_at_integer_cell_centers(self):
+        """imshow cells are centered on integer coords; visit stars must
+        sit at (col, row), not the seaborn-era (col + 0.5, row + 0.5)."""
+        df = self._make_cloud_df()
+        visit_tracker = {2023: {"A": [3]}}
+
+        plot_yearly_cloud_fraction_heatmaps_with_visits(
+            df, visit_tracker, rest_days={},
+            day_start=1, day_stop=30,
+        )
+        ax = plt.gca()
+        assert len(ax.collections) >= 1
+        offsets = np.asarray(ax.collections[-1].get_offsets())
+        # Polygon "A" is row 0; visit day 3 with day_start=1 -> column 2.
+        assert (2.0, 0.0) in {tuple(o) for o in offsets}
+        plt.close("all")
+
+
+class TestPlotCloudForecastAlignment:
+    def _make_forecast_df(self):
+        return pd.DataFrame({
+            "polygon_id": ["A", "A", "B", "B"],
+            "date": [
+                pd.Timestamp("2026-04-11"), pd.Timestamp("2026-04-12"),
+                pd.Timestamp("2026-04-11"), pd.Timestamp("2026-04-12"),
+            ],
+            "cloud_fraction": [0.10, 0.90, 0.80, 0.20],
+        })
+
+    def test_go_rectangles_at_half_offset(self):
+        """imshow cell edges sit at +/-0.5, so go/no-go rectangles must be
+        anchored at (j - 0.5, i - 0.5)."""
+        import matplotlib.patches as mpatches
+
+        ax = plot_cloud_forecast(self._make_forecast_df(), threshold=0.25)
+        rects = [
+            p for p in ax.patches
+            if isinstance(p, mpatches.Rectangle) and p.get_width() == 1
+        ]
+        # Two "go" cells: A/2026-04-11 -> (row 0, col 0), B/2026-04-12 -> (row 1, col 1)
+        corners = {tuple(r.get_xy()) for r in rects}
+        assert corners == {(-0.5, -0.5), (0.5, 0.5)}
         plt.close("all")
