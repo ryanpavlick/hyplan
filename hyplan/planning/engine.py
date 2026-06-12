@@ -197,6 +197,10 @@ def compute_flight_plan(
         raise HyPlanValueError(
             "wind_direction is required when wind_speed is non-zero"
         )
+    if wind_direction is not None and wind_speed is None:
+        raise HyPlanValueError(
+            "wind_speed is required when wind_direction is set"
+        )
     # Gridded wind fields need takeoff_time; simple fields do not
     if wind_source is not None and takeoff_time is None:
         from ..winds.gridded import _GriddedWindField
@@ -501,8 +505,8 @@ def flag_below_min_safe_speed(
     schedule at the segment's altitude:
 
     * ``flight_line`` and ``loiter`` -> :meth:`Aircraft.cruise_speed_at`
-    * ``climb`` (any segment marked as climb) -> :meth:`Aircraft.climb_speed_at`
-    * ``descent`` -> :meth:`Aircraft.descent_speed_at`
+    * ``takeoff`` and ``climb`` -> :meth:`Aircraft.climb_speed_at`
+    * ``descent`` and ``approach`` -> :meth:`Aircraft.descent_speed_at`
     * any other segment is skipped (no TAS-vs-altitude check applicable).
 
     The altitude used is the segment's ``end_altitude`` (or
@@ -527,8 +531,10 @@ def flag_below_min_safe_speed(
     schedule_for = {
         "flight_line": aircraft.cruise_speed_at,
         "loiter":      aircraft.cruise_speed_at,
+        "takeoff":     aircraft.climb_speed_at,
         "climb":       aircraft.climb_speed_at,
         "descent":     aircraft.descent_speed_at,
+        "approach":    aircraft.descent_speed_at,
     }
 
     rows = []
@@ -537,8 +543,10 @@ def flag_below_min_safe_speed(
         speed_at = schedule_for.get(seg_type)
         if speed_at is None:
             continue
-        alt_ft = row.get("end_altitude") or row.get("start_altitude")
-        if alt_ft is None:
+        alt_ft = row.get("end_altitude")
+        if alt_ft is None or pd.isna(alt_ft):
+            alt_ft = row.get("start_altitude")
+        if alt_ft is None or pd.isna(alt_ft):
             continue
         alt_q = ureg.Quantity(float(alt_ft), "feet")
         planned_tas = speed_at(alt_q).to(ureg.knot).magnitude

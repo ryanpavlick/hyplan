@@ -356,6 +356,16 @@ class TestWindCorrectedTransit:
                 # wind_direction omitted on purpose
             )
 
+    def test_wind_speed_required_with_wind_direction(self, b200):
+        """wind_direction alone must raise, not silently plan in still air."""
+        wp1, wp2 = self._north_leg()
+        with pytest.raises(HyPlanValueError, match="wind_speed is required"):
+            compute_flight_plan(
+                aircraft=b200,
+                flight_sequence=[wp1, wp2],
+                wind_direction=270.0,
+            )
+
     def test_unflyable_headwind_raises(self, b200):
         """A headwind larger than TAS must raise — ground speed would go negative."""
         wp1, wp2 = self._north_leg()
@@ -798,6 +808,46 @@ class TestPhaseAwareWind:
         assert (
             flagged["planned_tas_kts"] < flagged["min_safe_tas_kts"]
         ).all()
+
+    def test_flag_descent_to_sea_level_uses_end_altitude(self, b200):
+        """A descent ending at 0 ft is evaluated at its end altitude — a
+        legitimate 0.0 must not be treated as missing."""
+        import pandas as pd
+
+        from hyplan.planning.engine import flag_below_min_safe_speed
+        plan = gpd.GeoDataFrame(pd.DataFrame([{
+            "segment_type": "descent",
+            "start_altitude": 20000.0,
+            "end_altitude": 0.0,
+        }]))
+        flagged = flag_below_min_safe_speed(plan, b200, margin=5.0)
+        assert len(flagged) == 1
+        sea_level = ureg.Quantity(0.0, "feet")
+        expected_tas = b200.descent_speed_at(sea_level).m_as(ureg.knot)
+        expected_min = b200.min_safe_speed_at(sea_level, margin=5.0).m_as(ureg.knot)
+        assert flagged.iloc[0]["planned_tas_kts"] == pytest.approx(expected_tas)
+        assert flagged.iloc[0]["min_safe_tas_kts"] == pytest.approx(expected_min)
+
+    def test_flag_checks_takeoff_and_approach_segments(self, b200):
+        """Departure climb-out and terminal approach rows are evaluated
+        against the climb and descent schedules respectively."""
+        import pandas as pd
+
+        from hyplan.planning.engine import flag_below_min_safe_speed
+        plan = gpd.GeoDataFrame(pd.DataFrame([
+            {"segment_type": "takeoff",
+             "start_altitude": 10.0, "end_altitude": 12000.0},
+            {"segment_type": "approach",
+             "start_altitude": 12000.0, "end_altitude": 10.0},
+        ]))
+        flagged = flag_below_min_safe_speed(plan, b200, margin=5.0)
+        assert len(flagged) == 2
+        climb_tas = b200.climb_speed_at(
+            ureg.Quantity(12000.0, "feet")).m_as(ureg.knot)
+        descent_tas = b200.descent_speed_at(
+            ureg.Quantity(10.0, "feet")).m_as(ureg.knot)
+        assert flagged.iloc[0]["planned_tas_kts"] == pytest.approx(climb_tas)
+        assert flagged.iloc[1]["planned_tas_kts"] == pytest.approx(descent_tas)
 
     def test_gridded_wind_without_takeoff_time_raises(
         self, b200, flight_line, airport,

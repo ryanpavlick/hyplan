@@ -2177,3 +2177,277 @@ class TestMultiRefuel:
                 refuel_airports=[klbb_wp],
                 return_mode="best_refuel",
             )
+
+
+# ---------------------------------------------------------------------------
+# 13. Polygon geometry: unflyable-row filtering + antimeridian handling
+# ---------------------------------------------------------------------------
+
+class TestIsochronePolygonGeometry:
+    """isochrone_polygon excludes unflyable rays and stays continuous
+    across the antimeridian."""
+
+    @staticmethod
+    def _synthetic_rays(start_lat, start_lon, unflyable_arc=()):
+        """Rays-GeoDataFrame mimicking the compute_isochrone row schema:
+        12 rays at 120 nmi, with the given azimuths collapsed onto the
+        start point as unflyable placeholders."""
+        import geopandas as gpd
+        import pandas as pd
+        from shapely.geometry import Point
+
+        rows = []
+        for az in range(0, 360, 30):
+            if az in unflyable_arc:
+                d, lat, lon = 0.0, start_lat, start_lon
+                limiting = "unflyable"
+            else:
+                d = 120.0
+                lat = start_lat + (d / 60.0) * np.cos(np.radians(az))
+                lon = start_lon + (
+                    (d / 60.0) * np.sin(np.radians(az))
+                    / np.cos(np.radians(start_lat))
+                )
+                lon = ((lon + 180.0) % 360.0) - 180.0
+                limiting = "outbound"
+            rows.append({
+                "azimuth_deg": float(az),
+                "distance_nmi": d,
+                "target_lat": lat,
+                "target_lon": lon,
+                "limiting_leg": limiting,
+            })
+        df = pd.DataFrame(rows)
+        return gpd.GeoDataFrame(
+            df,
+            geometry=[
+                Point(lon, lat) for lat, lon in
+                zip(df["target_lat"], df["target_lon"], strict=True)
+            ],
+            crs="EPSG:4326",
+        )
+
+    def test_unflyable_arc_excluded(self):
+        """A contiguous unflyable arc must not pinch the ring through
+        the start point (bowtie regression)."""
+        from shapely.geometry import Polygon as ShPolygon
+
+        gdf = self._synthetic_rays(34.9, -117.9, unflyable_arc=(60, 90, 120))
+        poly = isochrone_polygon(gdf)
+        assert isinstance(poly, ShPolygon)
+        assert poly.is_valid
+        assert all(
+            abs(x - -117.9) > 1e-9 or abs(y - 34.9) > 1e-9
+            for x, y in poly.exterior.coords
+        ), "polygon ring contains a vertex at the start point"
+
+    def test_union_with_unflyable_arcs(self):
+        from shapely.ops import unary_union
+
+        a = isochrone_polygon(
+            self._synthetic_rays(34.9, -117.9, unflyable_arc=(60, 90, 120))
+        )
+        b = isochrone_polygon(
+            self._synthetic_rays(35.4, -117.4, unflyable_arc=(240, 270))
+        )
+        union = unary_union([a, b])
+        assert union.is_valid
+        assert union.area > max(a.area, b.area)
+
+    def test_all_rays_unflyable_raises(self):
+        gdf = self._synthetic_rays(
+            34.9, -117.9, unflyable_arc=tuple(range(0, 360, 30)),
+        )
+        with pytest.raises(HyPlanValueError, match="at least 3"):
+            isochrone_polygon(gdf)
+
+    def test_antimeridian_continuous_frame(self):
+        """A boundary straddling ±180° is rebuilt in a continuous frame
+        (negative longitudes shifted east by 360°)."""
+        poly = isochrone_polygon(self._synthetic_rays(20.0, 179.5))
+        assert poly.is_valid
+        xs = [x for x, _ in poly.exterior.coords]
+        assert max(xs) > 180.0
+        assert max(xs) - min(xs) < 180.0
+        # Frame-shift symmetry: same construction at lon 0 must give
+        # the same area.
+        ref = isochrone_polygon(self._synthetic_rays(20.0, 0.0))
+        assert poly.area == pytest.approx(ref.area, rel=1e-6)
+
+    def test_union_mixed_antimeridian_members(self):
+        """Crossing and non-crossing members union in a common frame."""
+        from shapely.geometry import Polygon as ShPolygon
+        from shapely.ops import unary_union
+
+        from hyplan.planning.isochrone import _union_longitude_frame
+
+        crossing = isochrone_polygon(self._synthetic_rays(20.0, 179.8))
+        western = isochrone_polygon(self._synthetic_rays(20.0, -177.0))
+        assert crossing.bounds[2] > 180.0
+        assert western.bounds[2] < 0.0
+
+        framed = _union_longitude_frame([crossing, western])
+        union = unary_union(framed)
+        assert union.is_valid
+        # The members overlap geographically across the seam, so the
+        # common-frame union merges them into one polygon.
+        assert isinstance(union, ShPolygon)
+        assert union.area < crossing.area + western.area
+
+
+# ---------------------------------------------------------------------------
+# 14. Adaptive refinement seeding
+# ---------------------------------------------------------------------------
+
+def test_adaptive_refinement_seeds_previous_passes(
+    giii, kedw_wp, cruise_alt, monkeypatch,
+):
+    """Refinement passes seed already-converged rays: the result matches
+    an unseeded re-solve within solver tolerance while making
+    meaningfully fewer _leg_time calls."""
+    import hyplan.planning.isochrone as iso
+
+    common = {
+        "aircraft": giii, "start": kedw_wp, "budget": 4 * ureg.hour,
+        "cruise_altitude": cruise_alt, "mode": "round_trip",
+        "wind_source": StillAirField(), "azimuth_resolution_deg": 60.0,
+        "ray_strategy": "adaptive", "adaptive_spacing_nmi": 100.0,
+        "max_adaptive_rays": 24,
+    }
+
+    calls = {"n": 0}
+    real_leg_time = iso._leg_time
+
+    def counting_leg_time(**kwargs):
+        calls["n"] += 1
+        return real_leg_time(**kwargs)
+
+    monkeypatch.setattr(iso, "_leg_time", counting_leg_time)
+    seeded = compute_isochrone(**common)
+    seeded_calls = calls["n"]
+
+    # Replay the pipeline with seeding disabled (pre-seeding behavior).
+    real_solve_rays = iso._solve_rays
+
+    def unseeded_solve_rays(**kwargs):
+        kwargs["seed_d_lo"] = None
+        return real_solve_rays(**kwargs)
+
+    monkeypatch.setattr(iso, "_solve_rays", unseeded_solve_rays)
+    calls["n"] = 0
+    unseeded = compute_isochrone(**common)
+    unseeded_calls = calls["n"]
+
+    a = seeded.set_index("azimuth_deg")["distance_nmi"].sort_index()
+    b = unseeded.set_index("azimuth_deg")["distance_nmi"].sort_index()
+    assert list(a.index) == list(b.index)
+    # Both runs bracket the same boundary to within the 0.5 nmi
+    # tolerance, so they can differ by at most ~2x that.
+    assert (a - b).abs().max() <= 1.0 + 1e-9
+    assert seeded_calls < 0.8 * unseeded_calls, (
+        f"seeded refinement made {seeded_calls} _leg_time calls vs "
+        f"{unseeded_calls} unseeded — expected meaningful savings"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 15. Refuel probe avoids the unused start→target leg
+# ---------------------------------------------------------------------------
+
+def test_outbound_refuel_probe_skips_start_target_leg(
+    b200, kefd_wp, b200_cruise, monkeypatch,
+):
+    """The outbound_refuel template never consumes start→target, so a
+    filtered probe must not solve that leg."""
+    import datetime
+
+    import hyplan.planning.isochrone as iso
+
+    target = Waypoint(
+        latitude=kefd_wp.latitude + 4.0, longitude=kefd_wp.longitude,
+        heading=0.0, altitude_msl=b200_cruise,
+    )
+    r_wp = Waypoint(
+        latitude=kefd_wp.latitude + 2.0, longitude=kefd_wp.longitude,
+        heading=0.0, altitude_msl=100 * ureg.feet, name="R1",
+    )
+    elig = {
+        "label": "R1", "wp": r_wp, "outbound_ok": True, "return_ok": True,
+        "t_sR_min": 60.0, "t_Rrec_min": 60.0, "hw_Rrec_kt": 0.0,
+    }
+
+    legs = []
+    real_leg_time = iso._leg_time
+
+    def spying_leg_time(**kwargs):
+        legs.append((kwargs["start_wp"], kwargs["end_wp"]))
+        return real_leg_time(**kwargs)
+
+    monkeypatch.setattr(iso, "_leg_time", spying_leg_time)
+
+    cands = iso._evaluate_refuel_at_d(
+        aircraft=b200, start=kefd_wp, target=target, recovery_wp=kefd_wp,
+        cruise_altitude=b200_cruise,
+        start_time=datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc),
+        wind_source=StillAirField(),
+        on_station_min=0.0, sortie_budget_min=240.0,
+        flight_day_budget_min=480.0, reserve_min=0.0,
+        refuel_time_min=30.0, refuel_eligibility=[elig],
+        template="outbound_refuel", refuel_label="R1",
+    )
+    assert cands and cands[0]["itinerary"] == "outbound_refuel"
+    assert all(
+        not (s is kefd_wp and e is target) for s, e in legs
+    ), "outbound_refuel probe solved the unused start→target leg"
+    assert len(legs) == 2  # R→target and target→recovery only
+
+
+# ---------------------------------------------------------------------------
+# 16. Unflyable dot color is valid CSS for Folium
+# ---------------------------------------------------------------------------
+
+def test_plot_unflyable_dot_color_is_css(kefd_wp):
+    """Unflyable itinerary dots render with a CSS hex color (matplotlib
+    grayscale strings like "0.6" are invalid in Folium)."""
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import Point
+
+    from hyplan.planning.isochrone import plot_isochrone
+
+    rows = []
+    for az in (0.0, 90.0, 180.0, 270.0):
+        unflyable = az == 90.0
+        rows.append({
+            "azimuth_deg": az,
+            "distance_nmi": 0.0 if unflyable else 60.0,
+            "target_lat": kefd_wp.latitude + (
+                0.0 if unflyable else np.cos(np.radians(az))
+            ),
+            "target_lon": kefd_wp.longitude + (
+                0.0 if unflyable else np.sin(np.radians(az))
+            ),
+            "itinerary": "unflyable" if unflyable else "direct",
+            "refuel_airport": None,
+            "outbound_time_min": 0.0 if unflyable else 15.0,
+            "return_time_min": 0.0 if unflyable else 15.0,
+            "net_headwind_kt": float("nan") if unflyable else 0.0,
+            "headwind_asymmetry_kt": float("nan") if unflyable else 0.0,
+            "outbound_headwind_kt": float("nan") if unflyable else 0.0,
+            "limiting_leg": "unflyable" if unflyable else "sortie",
+        })
+    df = pd.DataFrame(rows)
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=[
+            Point(lon, lat) for lat, lon in
+            zip(df["target_lat"], df["target_lon"], strict=True)
+        ],
+        crs="EPSG:4326",
+    )
+    gdf.attrs["start_lat"] = kefd_wp.latitude
+    gdf.attrs["start_lon"] = kefd_wp.longitude
+
+    html = plot_isochrone(gdf).get_root().render()
+    assert "#999999" in html
+    assert '"0.6"' not in html

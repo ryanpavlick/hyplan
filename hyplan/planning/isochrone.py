@@ -59,6 +59,66 @@ sampled per leg:
   (jet streams, fronts).  Two-pass fixed-point on per-subsegment
   times.
 
+Column schema
+-------------
+
+:func:`compute_isochrone` (and the concentric / multi-base variants)
+return a GeoDataFrame with one row per ray, ``Point`` geometry at the
+boundary target, and these columns:
+
+* ``azimuth_deg`` — sweep bearing from the start (degrees true).
+* ``distance_nmi`` — converged boundary distance along the ray
+  (``0.0`` for unflyable rays).
+* ``target_lat`` / ``target_lon`` — boundary point coordinates (the
+  row geometry; equals the start point for unflyable rays).
+* ``outbound_time_min`` — leg time start → target.
+* ``on_station_min`` — required dwell at the target (constant per
+  call).
+* ``return_time_min`` — leg time target → return destination (NaN in
+  ``"one_way"`` mode).
+* ``total_time_min`` — outbound + on-station + return.
+* ``outbound_headwind_kt`` / ``return_headwind_kt`` — signed
+  along-track cruise headwind per leg (positive = headwind;
+  distance-weighted across subsegments under ``segmented_cruise``;
+  NaN for unflyable rays and for the return leg in ``"one_way"``).
+* ``net_headwind_kt`` — ``0.5 × (outbound + return)`` headwind (NaN
+  in ``"one_way"``).
+* ``headwind_asymmetry_kt`` — ``0.5 × (outbound − return)`` headwind
+  (NaN in ``"one_way"``).
+* ``limiting_leg`` — the leg that consumed the most time:
+  ``"outbound"`` | ``"on_station"`` | ``"return"`` (always
+  ``"outbound"`` in ``"one_way"`` mode), or ``"unflyable"`` when no
+  positive distance along the ray fits the budget.
+* ``time_slack_min`` — unused budget at the converged boundary.
+
+:func:`compute_multi_refuel_isochrone` shares ``azimuth_deg``,
+``distance_nmi``, ``target_lat`` / ``target_lon``, ``on_station_min``,
+``outbound_time_min``, ``return_time_min``, ``total_time_min``, and
+the four headwind columns, drops ``time_slack_min``, and adds:
+
+* ``itinerary`` — winning template: ``"direct"``,
+  ``"outbound_refuel"``, ``"return_refuel"``, or ``"unflyable"``.
+* ``refuel_airport`` — label of the refuel stop (``None`` for
+  direct / unflyable rows).
+* ``refuel_count`` — ``0`` or ``1``.
+* ``refuel_time_min`` — ground time at the stop (NaN for direct).
+* ``start_to_target_time_min``, ``start_to_refuel_time_min``,
+  ``refuel_to_target_time_min``, ``target_to_refuel_time_min``,
+  ``refuel_to_return_time_min``, ``target_to_return_time_min`` —
+  per-leg times of the chosen itinerary (NaN where the template does
+  not use that leg).
+* ``day_total_time_min`` — total elapsed flying + refuel time.
+* ``sortie_cycle_1_min`` / ``sortie_cycle_2_min`` — airborne time per
+  sortie cycle (cycle 2 is NaN for direct itineraries).
+* ``sortie_margin_min`` / ``day_margin_min`` — slack against the
+  sortie (endurance − reserve) and flight-day budgets.
+* ``limiting_leg`` — binding constraint instead of slowest leg:
+  ``"sortie"`` | ``"flight_day"`` | ``"both"`` | ``"slack"`` |
+  ``"unflyable"``.
+
+Invocation context (mode, budgets, start/return coordinates, wind
+provider, ray strategy, …) is stashed in ``gdf.attrs``.
+
 Limitations
 -----------
 
@@ -74,6 +134,12 @@ Limitations
   ``return_headwind_kt`` is the distance-weighted average across
   cruise subsegments; per-segment headwinds are not surfaced in the
   GeoDataFrame schema.
+* Cruise subsegments solve the track-hold wind triangle against the
+  leg's *initial* great-circle bearing, while the subsegment midpoints
+  themselves follow the geodesic (whose true bearing drifts along the
+  leg).  The mismatch is negligible for typical legs but becomes
+  material on 1000+ nmi legs at high latitudes, where the geodesic
+  bearing can change by tens of degrees.
 """
 
 from __future__ import annotations
@@ -89,11 +155,13 @@ import numpy.typing as npt
 import pandas as pd
 import pymap3d.vincenty
 from pint import Quantity
-from shapely.geometry import Point, Polygon
+from shapely.affinity import translate
+from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
 from ..aircraft._base import Aircraft
 from ..aircraft.wind_path import (
+    _warn_if_above_ceiling,
     climb_with_wind_field,
     descend_with_wind_field,
 )
@@ -1239,7 +1307,7 @@ def compute_multi_base_isochrone(
         )
 
     per_base_gdfs: list[gpd.GeoDataFrame] = []
-    per_base_polygons: list[Polygon] = []
+    per_base_polygons: list[Polygon | MultiPolygon] = []
     for i, base in enumerate(bases):
         return_dest = (
             return_destinations[i] if return_destinations is not None else None
@@ -1277,7 +1345,7 @@ def compute_multi_base_isochrone(
             f"wind, and aircraft envelope."
         )
 
-    union = unary_union(per_base_polygons)
+    union = unary_union(_union_longitude_frame(per_base_polygons))
     base_labels = [_destination_label(b) for b in bases]
 
     out = gpd.GeoDataFrame(
@@ -1405,7 +1473,7 @@ def compute_multi_refuel_isochrone(
         raise HyPlanValueError("`refuel_airports` must be non-empty.")
 
     per_refuel_gdfs: list[gpd.GeoDataFrame] = []
-    per_refuel_polygons: list[Polygon] = []
+    per_refuel_polygons: list[Polygon | MultiPolygon] = []
     for refuel in refuel_airports:
         gdf = compute_refuel_isochrone(
             aircraft, start, sortie_budget,
@@ -1442,7 +1510,7 @@ def compute_multi_refuel_isochrone(
             f"envelope."
         )
 
-    union = unary_union(per_refuel_polygons)
+    union = unary_union(_union_longitude_frame(per_refuel_polygons))
     refuel_labels = [_destination_label(r) for r in refuel_airports]
 
     out = gpd.GeoDataFrame(
@@ -1463,19 +1531,36 @@ def compute_multi_refuel_isochrone(
     return out
 
 
-def isochrone_polygon(gdf: gpd.GeoDataFrame) -> Polygon:
+def isochrone_polygon(gdf: gpd.GeoDataFrame) -> Polygon | MultiPolygon:
     """Connect the isochrone boundary points into a closed polygon.
 
-    Boundary points are taken in order of ``azimuth_deg``.  Result is
-    returned in EPSG:4326 (matches the input GeoDataFrame's CRS).
+    Boundary points are taken in order of ``azimuth_deg``.  Unflyable
+    rays (``distance_nmi == 0``; their targets collapse onto the start
+    point) are excluded so they cannot pinch the ring back through the
+    start.  When the remaining boundary crosses the antimeridian
+    (longitude span above 180°), the ring is rebuilt in a continuous
+    frame by shifting negative longitudes east by 360°, so output
+    longitudes may exceed +180°.  Any residual self-intersection is
+    repaired with a zero-width buffer, which may split the result into
+    a MultiPolygon.  Result is returned in EPSG:4326 (matches the
+    input GeoDataFrame's CRS).
     """
-    sorted_gdf = gdf.sort_values("azimuth_deg")
+    flyable = gdf
+    if "distance_nmi" in gdf.columns:
+        flyable = gdf[gdf["distance_nmi"] > 0.0]
+    sorted_gdf = flyable.sort_values("azimuth_deg")
     coords = [(p.x, p.y) for p in sorted_gdf.geometry]
     if len(coords) < 3:
         raise HyPlanValueError(
             "Need at least 3 boundary points to form a polygon."
         )
-    return Polygon(coords)
+    lons = [x for x, _ in coords]
+    if max(lons) - min(lons) > 180.0:
+        coords = [(x + 360.0, y) if x < 0.0 else (x, y) for x, y in coords]
+    poly: Polygon | MultiPolygon = Polygon(coords)
+    if not poly.is_valid:
+        poly = poly.buffer(0)
+    return poly
 
 
 def plot_isochrone(
@@ -1535,15 +1620,17 @@ def plot_isochrone(
         )
     else:
         budget_label = f"budget={attrs.get('budget_hr', float('nan')):.1f} hr"
-    folium.Polygon(
-        locations=[(y, x) for x, y in poly.exterior.coords],
-        color=color,
-        fill=True,
-        fill_color=color,
-        fill_opacity=fill_opacity,
-        weight=2,
-        popup=f"Isochrone — mode={attrs.get('mode', '?')}, {budget_label}",
-    ).add_to(base_map)
+    parts = list(poly.geoms) if isinstance(poly, MultiPolygon) else [poly]
+    for part in parts:
+        folium.Polygon(
+            locations=[(y, x) for x, y in part.exterior.coords],
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=fill_opacity,
+            weight=2,
+            popup=f"Isochrone — mode={attrs.get('mode', '?')}, {budget_label}",
+        ).add_to(base_map)
 
     # Start marker.
     folium.Marker(
@@ -1575,7 +1662,7 @@ def plot_isochrone(
         "direct": color,
         "outbound_refuel": "#1f77b4",
         "return_refuel": "#d62728",
-        "unflyable": "0.6",
+        "unflyable": "#999999",
     }
     for _, row in gdf.iterrows():
         popup_html = (
@@ -1695,6 +1782,27 @@ def _destination_label(dest: Airport | Waypoint) -> str:
     if isinstance(dest, Airport):
         return str(dest.icao_code)
     return dest.name or f"({dest.latitude:.2f}, {dest.longitude:.2f})"
+
+
+def _union_longitude_frame(
+    polygons: list[Polygon | MultiPolygon],
+) -> list[Polygon | MultiPolygon]:
+    """Re-express union members in a common longitude frame.
+
+    :func:`isochrone_polygon` emits antimeridian-crossing rings with
+    western longitudes shifted east past +180°.  When any member uses
+    that shifted frame, members lying entirely at negative longitudes
+    are shifted east by 360° as well, so geographically overlapping
+    members union in one continuous frame.  Members spanning the prime
+    meridian stay in place (they cannot meaningfully overlap a member
+    at the antimeridian).
+    """
+    if not any(p.bounds[2] > 180.0 for p in polygons):
+        return polygons
+    return [
+        translate(p, xoff=360.0) if p.bounds[2] < 0.0 else p
+        for p in polygons
+    ]
 
 
 def _unflyable_ray(
@@ -1989,12 +2097,14 @@ def _solve_rays(
     """Solve all radial rays, vectorizing candidate geometry per iteration.
 
     ``seed_d_lo`` (when provided) sets the per-ray lower bound for the
-    bracket search.  Used by ``compute_concentric_isochrones`` to
-    amortize work across budgets: the previous (smaller) budget's
-    converged ``d_lo`` is feasible at the current (larger) budget by
-    monotonicity, so we skip the doubling phase below that distance.
-    Rays seeded with ``0`` are treated as fresh (matches the
-    no-seed default behavior).
+    bracket search; each seed must be a known-feasible distance at this
+    budget.  Used by ``compute_concentric_isochrones`` to amortize work
+    across budgets (the previous, smaller budget's converged ``d_lo``
+    is feasible at the current, larger budget by monotonicity) and by
+    the adaptive refinement in ``_solve_rays_with_strategy`` to carry
+    converged same-budget distances across passes, so we skip the
+    doubling phase below that distance.  Rays seeded with ``0`` are
+    treated as fresh (matches the no-seed default behavior).
     """
     feasible_budget_min = budget_min - reserve_min
     n_rays = len(azimuths_deg)
@@ -2011,9 +2121,13 @@ def _solve_rays(
         seed_d_lo = np.zeros(n_rays, dtype=float)
     seeded_mask = seed_d_lo > 0
     d_lo = seed_d_lo.astype(float).copy()
-    # Ensure d_hi[i] > d_lo[i] for every ray; the doubling loop expands
-    # from there.
-    d_hi = np.maximum(initial_hi, d_lo + max(initial_hi, 1.0))
+    # Ensure d_hi[i] > d_lo[i] for every ray.  Fresh rays start at the
+    # heuristic upper bound; seeded rays start with a tight bracket
+    # just above the known-feasible seed (when the boundary lies
+    # further out — e.g. concentric reuse at a larger budget — the
+    # doubling loop expands from there).
+    seed_step = max(2.0 * distance_tolerance_nmi, 1.0)
+    d_hi = np.where(seeded_mask, d_lo + seed_step, initial_hi)
     active = np.ones(n_rays, dtype=bool)
     zero_unflyable = np.zeros(n_rays, dtype=bool)
 
@@ -2099,18 +2213,21 @@ def _solve_rays(
     # remove that probe without also tightening this one.
     active_indices = np.flatnonzero(active)
     totals, _ = _evaluate_many(active_indices, d_hi[active_indices])
-    zero_totals, _ = _evaluate_many(
-        active_indices, np.zeros_like(active_indices, dtype=float)
-    )
-    zero_infeasible = (
-        ~np.isfinite(zero_totals) | (zero_totals > feasible_budget_min)
-    )
-    # Seeded rays were known feasible at d=seed_d_lo>0 from a smaller
-    # budget; do not mark them unflyable just because d=0 is over the
-    # new budget (return-leg-binding rays where the boundary is
-    # strictly outside the start can have zero infeasibility but a
-    # valid annular feasible region).
-    zero_infeasible_for_unflyable = zero_infeasible & ~seeded_mask[active_indices]
+    # Seeded rays were known feasible at d=seed_d_lo>0 from an earlier
+    # solve, so they skip the d=0 probe and are never marked unflyable
+    # here (return-leg-binding rays where the boundary is strictly
+    # outside the start can have zero infeasibility but a valid
+    # annular feasible region).
+    fresh_local = ~seeded_mask[active_indices]
+    fresh_indices = active_indices[fresh_local]
+    zero_infeasible_for_unflyable = np.zeros(len(active_indices), dtype=bool)
+    if len(fresh_indices):
+        zero_totals, _ = _evaluate_many(
+            fresh_indices, np.zeros(len(fresh_indices), dtype=float)
+        )
+        zero_infeasible_for_unflyable[fresh_local] = (
+            ~np.isfinite(zero_totals) | (zero_totals > feasible_budget_min)
+        )
     if np.any(zero_infeasible_for_unflyable):
         zero_indices = active_indices[zero_infeasible_for_unflyable]
         zero_unflyable[zero_indices] = True
@@ -2272,6 +2389,17 @@ def _solve_rays_with_strategy(
         )
         if len(refined) == len(azimuths):
             break
+        # Converged distances from the previous pass are known-feasible
+        # lower brackets at this same budget; newly inserted midpoint
+        # rays carry no seed and solve from scratch.
+        solved_d = {
+            round(float(row["azimuth_deg"]), 8): float(row["distance_nmi"])
+            for row in rows
+        }
+        refine_seed = np.array(
+            [solved_d.get(round(float(az), 8), 0.0) for az in refined],
+            dtype=float,
+        )
         azimuths = refined
         rows = _solve_rays(
             aircraft=aircraft,
@@ -2286,6 +2414,7 @@ def _solve_rays_with_strategy(
             reserve_min=reserve_min,
             azimuths_deg=azimuths,
             distance_tolerance_nmi=distance_tolerance_nmi,
+            seed_d_lo=refine_seed,
             wind_sampling=wind_sampling,
             wind_sample_spacing=wind_sample_spacing,
             max_wind_samples_per_leg=max_wind_samples_per_leg,
@@ -2374,7 +2503,10 @@ def _leg_time(
                 wind_source=wind_source,
             )
         else:
-            t_climb_q, d_climb_q = aircraft._climb(start_alt, cruise_altitude)
+            _warn_if_above_ceiling(aircraft, cruise_altitude)
+            t_climb_q, d_climb_q = aircraft._climb(
+                start_alt, cruise_altitude, _allow_above_ceiling=True,
+            )
         t_climb_min = t_climb_q.m_as(ureg.minute)
         d_climb_nmi = d_climb_q.m_as(ureg.nautical_mile)
     else:
@@ -2840,55 +2972,67 @@ def _evaluate_refuel_at_d(
     cycle_cap_min = sortie_budget_min - reserve_min
     candidates: list[dict[str, Any]] = []
 
+    # start → target is consumed by the direct and return_refuel
+    # templates only; compute it lazily (and at most once) so
+    # outbound_refuel probes skip the leg solve entirely.
+    start_to_target: tuple[float, float] | None = None
+
+    def _start_to_target() -> tuple[float, float]:
+        nonlocal start_to_target
+        if start_to_target is None:
+            start_to_target = _leg_time(
+                aircraft=aircraft, start_wp=start, end_wp=target,
+                cruise_altitude=cruise_altitude, t_anchor=start_time,
+                wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
+            )
+        return start_to_target
+
     # --- direct: start → target → recovery -------------------------------
-    t_st, hw_st = _leg_time(
-        aircraft=aircraft, start_wp=start, end_wp=target,
-        cruise_altitude=cruise_altitude, t_anchor=start_time,
-        wind_source=wind_source,
-        wind_sampling=wind_sampling,
-        wind_sample_spacing=wind_sample_spacing,
-        max_wind_samples_per_leg=max_wind_samples_per_leg,
-    )
-    if (template is None or template == "direct") and np.isfinite(t_st):
-        anchor_tr = start_time + datetime.timedelta(
-            minutes=t_st + on_station_min
-        )
-        t_tr, hw_tr = _leg_time(
-            aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
-            cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
-            wind_source=wind_source,
-            wind_sampling=wind_sampling,
-            wind_sample_spacing=wind_sample_spacing,
-            max_wind_samples_per_leg=max_wind_samples_per_leg,
-        )
-        if np.isfinite(t_tr):
-            cycle_1 = t_st + on_station_min + t_tr
-            day_total = cycle_1
-            sortie_margin = cycle_cap_min - cycle_1
-            day_margin = flight_day_budget_min - day_total
-            if sortie_margin >= 0 and day_margin >= 0:
-                candidates.append({
-                    "itinerary": "direct",
-                    "refuel_airport": None,
-                    "refuel_count": 0,
-                    "refuel_time_min": float("nan"),
-                    "start_to_target_time_min": t_st,
-                    "start_to_refuel_time_min": float("nan"),
-                    "refuel_to_target_time_min": float("nan"),
-                    "target_to_refuel_time_min": float("nan"),
-                    "refuel_to_return_time_min": float("nan"),
-                    "target_to_return_time_min": t_tr,
-                    "outbound_time_min": t_st,
-                    "return_time_min": t_tr,
-                    "total_time_min": day_total,
-                    "outbound_headwind_kt": hw_st,
-                    "return_headwind_kt": hw_tr,
-                    "day_total_time_min": day_total,
-                    "sortie_cycle_1_min": cycle_1,
-                    "sortie_cycle_2_min": float("nan"),
-                    "sortie_margin_min": sortie_margin,
-                    "day_margin_min": day_margin,
-                })
+    if template is None or template == "direct":
+        t_st, hw_st = _start_to_target()
+        if np.isfinite(t_st):
+            anchor_tr = start_time + datetime.timedelta(
+                minutes=t_st + on_station_min
+            )
+            t_tr, hw_tr = _leg_time(
+                aircraft=aircraft, start_wp=target, end_wp=recovery_wp,
+                cruise_altitude=cruise_altitude, t_anchor=anchor_tr,
+                wind_source=wind_source,
+                wind_sampling=wind_sampling,
+                wind_sample_spacing=wind_sample_spacing,
+                max_wind_samples_per_leg=max_wind_samples_per_leg,
+            )
+            if np.isfinite(t_tr):
+                cycle_1 = t_st + on_station_min + t_tr
+                day_total = cycle_1
+                sortie_margin = cycle_cap_min - cycle_1
+                day_margin = flight_day_budget_min - day_total
+                if sortie_margin >= 0 and day_margin >= 0:
+                    candidates.append({
+                        "itinerary": "direct",
+                        "refuel_airport": None,
+                        "refuel_count": 0,
+                        "refuel_time_min": float("nan"),
+                        "start_to_target_time_min": t_st,
+                        "start_to_refuel_time_min": float("nan"),
+                        "refuel_to_target_time_min": float("nan"),
+                        "target_to_refuel_time_min": float("nan"),
+                        "refuel_to_return_time_min": float("nan"),
+                        "target_to_return_time_min": t_tr,
+                        "outbound_time_min": t_st,
+                        "return_time_min": t_tr,
+                        "total_time_min": day_total,
+                        "outbound_headwind_kt": hw_st,
+                        "return_headwind_kt": hw_tr,
+                        "day_total_time_min": day_total,
+                        "sortie_cycle_1_min": cycle_1,
+                        "sortie_cycle_2_min": float("nan"),
+                        "sortie_margin_min": sortie_margin,
+                        "day_margin_min": day_margin,
+                    })
 
     # --- outbound_refuel(R): start → R → target → recovery -----------------
     if template is None or template == "outbound_refuel":
@@ -2967,9 +3111,9 @@ def _evaluate_refuel_at_d(
             if refuel_label is not None and elig["label"] != refuel_label:
                 continue
             r_wp = elig["wp"]
-            # Cycle 1's start→target leg was computed unconditionally
-            # at the top of this function; bail this refuel placement
-            # if that leg is unflyable.
+            # Cycle 1's start→target leg is shared with the direct
+            # template; bail this refuel placement if it is unflyable.
+            t_st, hw_st = _start_to_target()
             if not np.isfinite(t_st):
                 continue
             anchor_tR = start_time + datetime.timedelta(

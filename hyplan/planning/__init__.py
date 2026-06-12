@@ -5,7 +5,7 @@ of flight lines and waypoints into a complete mission plan with takeoff,
 transit, data-collection, and landing phases.
 """
 
-from .engine import compute_flight_plan, expand_sequence
+from .engine import compute_flight_plan, expand_sequence, flag_below_min_safe_speed
 from .isochrone import (
     compute_concentric_isochrones,
     compute_isochrone,
@@ -28,6 +28,7 @@ __all__ = [
     "create_flight_line_record",
     "evaluate_target_reachability",
     "expand_sequence",
+    "flag_below_min_safe_speed",
     "isochrone_polygon",
     "plot_isochrone",
     "process_flight_phase",

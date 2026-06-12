@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 import networkx as nx
+import pymap3d.vincenty
 
 from .aircraft import Aircraft
 from .airports import Airport
@@ -119,14 +120,32 @@ def _flight_line_time(aircraft: Aircraft, flight_line: FlightLine, cruise_speed:
     return float((flight_line.length / cruise_speed).m_as(ureg.hour))
 
 
+def _direct_transition_time(aircraft: Aircraft, start_wp: Waypoint, end_wp: Waypoint) -> float:
+    """Time in hours for a direct great-circle hop between pattern waypoints.
+
+    Mirrors the arithmetic of the engine's
+    :func:`~hyplan.planning.segments._direct_segment_record` (still air):
+    Vincenty distance flown at the cruise speed for the mean altitude, or
+    at the departing waypoint's ``speed`` override when set.
+    """
+    dist_m, _ = pymap3d.vincenty.vdist(
+        start_wp.latitude, start_wp.longitude,
+        end_wp.latitude, end_wp.longitude,
+    )
+    alt_start = start_wp.altitude_msl if start_wp.altitude_msl is not None else ureg.Quantity(0, "foot")
+    alt_end = end_wp.altitude_msl if end_wp.altitude_msl is not None else ureg.Quantity(0, "foot")
+    avg_alt = (alt_start + alt_end) / 2.0
+    speed = start_wp.speed if start_wp.speed is not None else aircraft.cruise_speed_at(avg_alt)
+    return float((ureg.Quantity(float(dist_m), "meter") / speed).m_as(ureg.hour))
+
+
 def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     """Compute total in-pattern traversal time in hours.
 
-    Sums internal element traversal times plus inter-element transitions,
-    using the same cost helpers (``_flight_line_time``, ``_transit_time``)
-    the optimizer already trusts for free flight lines and transit between
-    them. This keeps the cost model used for ordering identical to the one
-    used for endurance/refueling feasibility.
+    Mirrors the cost model :func:`~hyplan.planning.engine.compute_flight_plan`
+    applies when it expands the pattern, so the time used for ordering and
+    endurance/refueling feasibility matches the schedule the engine
+    ultimately produces.
 
     For a **line-based** pattern, the total is:
 
@@ -134,8 +153,13 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
     - sum of transit times between consecutive legs (waypoint2 of leg N
       to waypoint1 of leg N+1).
 
-    For a **waypoint-based** pattern, the total is the sum of transit
-    times between consecutive waypoints.
+    For a **waypoint-based** pattern, consecutive waypoint pairs that are
+    both intra-pattern (a ``"pattern"`` waypoint departing into a
+    ``"pattern"`` or ``"pattern_turn"`` waypoint) are timed as direct
+    great-circle hops at cruise speed — the engine deliberately connects
+    densely spaced pattern waypoints (e.g. spiral, polygon) without Dubins
+    geometry, which would distort them. ``"pattern_turn"`` departures keep
+    the full Dubins transit time (``_transit_time``).
 
     Args:
         aircraft: Aircraft performance model.
@@ -161,7 +185,13 @@ def _pattern_internal_time(aircraft: Aircraft, pattern: Pattern) -> float:
         return 0.0
     total = 0.0
     for prev_wp, next_wp in itertools.pairwise(waypoints):
-        total += _transit_time(aircraft, prev_wp, next_wp)
+        if (
+            prev_wp.segment_type == "pattern"
+            and next_wp.segment_type in ("pattern", "pattern_turn")
+        ):
+            total += _direct_transition_time(aircraft, prev_wp, next_wp)
+        else:
+            total += _transit_time(aircraft, prev_wp, next_wp)
     return total
 
 
@@ -491,6 +521,9 @@ def _find_closest_unvisited_item(
     no reverse along-edge — automatically excludes reverse traversal via
     the ``has_edge`` guard below.
 
+    Candidates are ranked by transit-to-entry time only; traversal and
+    return times enter the feasibility checks but not the ranking.
+
     Returns:
         (item_key, entry_node, time_to_entry) or (None, None, None) if none feasible.
     """
@@ -574,11 +607,18 @@ def _find_best_refuel_airport(
     max_daily_flight_time: float,
     refuel_time: float,
     takeoff_landing_overhead: float,
+    return_to: str | None = None,
 ) -> tuple[str | None, float]:
     """
     Find the best airport to refuel at, ensuring that refueling there
     actually enables reaching at least one more unvisited visit item
-    (FlightLine or Pattern).
+    (FlightLine or Pattern) within both endurance and daily time limits.
+
+    When ``return_to`` is given (end-of-day routing), the usefulness
+    criterion is instead that the ``return_to`` airport is reachable on a
+    fresh tank after refueling. The daily budget is deliberately not
+    enforced for that terminal leg — the aircraft has to land somewhere —
+    so the caller is responsible for flagging any daily-time overrun.
 
     Returns:
         (airport_icao, time_to_airport) or (None, inf) if no useful refuel exists.
@@ -596,37 +636,32 @@ def _find_best_refuel_airport(
         if time_since_refuel + t_to_airport + takeoff_landing_overhead > max_endurance:
             continue
 
-        # Check that after refueling here, at least one unvisited item is reachable.
-        can_continue = False
-        for _item, key in item_keys:
-            if key in visited_items:
+        if return_to is not None:
+            # Day-end routing: refueling here must put the return airport
+            # within a fresh tank (transit + landing overhead).
+            if not G.has_edge(icao, return_to):
                 continue
-            for endpoint in ["start", "end"]:
-                node = f"{key}_{endpoint}"
-                exit_node = _opposite_endpoint(node)
-                if not G.has_edge(icao, node):
-                    continue
-                # Skip pattern reverse traversal (no along-edge in that direction).
-                if not G.has_edge(node, exit_node):
-                    continue
-                t_depart = G[icao][node]["weight"]
-                t_line = G[node][exit_node]["weight"]
+            t_home = G[icao][return_to]["weight"]
+            if t_home + takeoff_landing_overhead > max_endurance:
+                continue
+            if t_to_airport < best_time:
+                best_time = t_to_airport
+                best_icao = icao
+            continue
 
-                # Find return time from exit to any airport
-                t_return = float("inf")
-                for ret_airport in airports:
-                    ret_icao = ret_airport.icao_code
-                    if G.has_edge(exit_node, ret_icao):
-                        t_return = min(t_return, G[exit_node][ret_icao]["weight"])
+        # Check that after refueling here, at least one unvisited item is
+        # feasible under both endurance and daily flight time constraints.
+        candidate_key, _, _ = _find_closest_unvisited_item(
+            G, icao, visited_items, item_keys,
+            airports=airports,
+            time_since_refuel=0.0,
+            time_elapsed=time_elapsed + t_to_airport + takeoff_landing_overhead + refuel_time,
+            max_endurance=max_endurance,
+            max_daily_flight_time=max_daily_flight_time,
+            takeoff_landing_overhead=takeoff_landing_overhead,
+        )
 
-                total_sortie = t_depart + t_line + t_return + takeoff_landing_overhead
-                if total_sortie <= max_endurance:
-                    can_continue = True
-                    break
-            if can_continue:
-                break
-
-        if can_continue and t_to_airport < best_time:
+        if candidate_key is not None and t_to_airport < best_time:
             best_time = t_to_airport
             best_icao = icao
 
@@ -670,7 +705,9 @@ def greedy_optimize(
     Builds a graph of all visit items and airports, then iteratively
     selects the closest feasible unvisited item, inserting refuel stops
     when endurance limits would be exceeded. Supports multi-day missions
-    where daily flight time resets each day.
+    where daily flight time resets each day; day 1 departs from
+    ``takeoff_airport`` and each subsequent day departs from wherever the
+    previous day ended (normally ``return_airport``).
 
     Args:
         aircraft: Aircraft performing the mission.
@@ -692,7 +729,11 @@ def greedy_optimize(
         max_daily_flight_time: Maximum flying hours per day.
             Defaults to aircraft.endurance (no daily limit beyond endurance).
         takeoff_landing_overhead: Time in hours for takeoff/landing procedures
-            not captured in route calculations (default 0.25).
+            not captured in route calculations (default 0.25). Every
+            feasibility check reserves one overhead per airborne cycle
+            (takeoff to landing), and the reported times charge it the
+            same way: once at each landing (refuel stops and the
+            end-of-day return).
         max_days: Maximum number of flight days (default 1).
 
     Returns:
@@ -715,12 +756,15 @@ def greedy_optimize(
               of its internal legs; skipped waypoint-based Patterns and
               bare Waypoints contribute nothing.
             - "route": list of node names traversed
-            - "total_time": total mission time in hours (across all days)
+            - "total_time": total mission time in hours (across all days),
+              including takeoff/landing overhead and refuel stops
             - "daily_times": list of flight time per day
-            - "lines_covered": number of visit items completed
-            - "lines_skipped": list of item keys that were infeasible
             - "refuel_stops": list of airport ICAO codes where refueling occurred
             - "days_used": number of days used
+            - "issues": list of warning strings for any constraint the
+              emitted schedule could not honor (e.g. an end-of-day return
+              leg that exceeds remaining endurance with no feasible refuel
+              stop, or a return edge missing from the graph)
             - "takeoff_airport": Airport object
             - "return_airport": Airport object
             - "graph": the constructed DiGraph
@@ -752,19 +796,32 @@ def greedy_optimize(
     flight_sequence: list[FlightLine | Pattern | Waypoint] = []
     refuel_stops: list[str] = []
     daily_times: list[float] = []
+    issues: list[str] = []
     total_time = 0.0
 
     logger.info(f"Starting greedy optimization from {takeoff_airport.icao_code}")
+
+    day_start_node = takeoff_airport.icao_code
 
     for day in range(1, max_days + 1):
         if len(visited_items) >= len(flight_lines):
             break
 
         logger.info(f"--- Day {day} ---")
+        items_at_day_start = len(visited_items)
         daily_time = 0.0
         time_since_refuel = 0.0
-        current_node = takeoff_airport.icao_code
-        route.append(current_node)
+        current_node = day_start_node
+        if current_node not in G:
+            message = (
+                f"Day {day}: start airport {current_node} has no node in the "
+                f"flight graph; stopping optimization."
+            )
+            logger.warning(message)
+            issues.append(message)
+            break
+        if not route or route[-1] != current_node:
+            route.append(current_node)
 
         while len(visited_items) < len(flight_lines):
             # Find closest feasible unvisited visit item (FlightLine or Pattern)
@@ -821,28 +878,26 @@ def greedy_optimize(
                 if is_at_airport:
                     refuel_icao: str | None = current_node
                     time_to_refuel_airport = 0.0
-                    # Check if refueling here enables any further items
-                    _, _ = _find_best_refuel_airport(
-                        G, current_node, airports, visited_items, item_keys,
-                        time_since_refuel, daily_time, max_endurance,
-                        max_daily_flight_time, refuel_time, takeoff_landing_overhead,
+                    # Already on the ground — no landing overhead for an
+                    # in-place refuel.
+                    landing_overhead = 0.0
+                    # Even at an airport, verify refueling is useful: after
+                    # refueling here, at least one unvisited item must be
+                    # feasible under both endurance and daily time limits.
+                    candidate_key, _, _ = _find_closest_unvisited_item(
+                        G, current_node, visited_items, item_keys,
+                        airports=airports,
+                        time_since_refuel=0.0,
+                        time_elapsed=daily_time + refuel_time,
+                        max_endurance=max_endurance,
+                        max_daily_flight_time=max_daily_flight_time,
+                        takeoff_landing_overhead=takeoff_landing_overhead,
                     )
-                    # Even at an airport, verify refueling is useful. The
-                    # "edge exists in both directions" guard implicitly
-                    # excludes pattern reverse traversal (no along-edge).
-                    can_refuel_help = any(
-                        G.has_edge(refuel_icao, f"{key}_{ep}")
-                        and G.has_edge(f"{key}_{ep}", _opposite_endpoint(f"{key}_{ep}"))
-                        and (G[refuel_icao][f"{key}_{ep}"]["weight"]
-                             + G[f"{key}_{ep}"][_opposite_endpoint(f"{key}_{ep}")]["weight"]
-                             + takeoff_landing_overhead) <= max_endurance
-                        for key in (k for it, k in item_keys if k not in visited_items)
-                        for ep in ["start", "end"]
-                    )
-                    if not can_refuel_help:
+                    if candidate_key is None:
                         logger.info(f"Day {day}: No feasible items remain from {current_node}. Ending day.")
                         break
                 else:
+                    landing_overhead = takeoff_landing_overhead
                     refuel_icao, time_to_refuel_airport = _find_best_refuel_airport(
                         G, current_node, airports, visited_items, item_keys,
                         time_since_refuel, daily_time, max_endurance,
@@ -853,13 +908,13 @@ def greedy_optimize(
                     logger.info(f"Day {day}: No useful refueling option. Ending day.")
                     break
 
-                # Check daily time allows transit to airport + refuel
-                if daily_time + time_to_refuel_airport + refuel_time > max_daily_flight_time:
+                # Check daily time allows transit to airport + landing + refuel
+                if daily_time + time_to_refuel_airport + landing_overhead + refuel_time > max_daily_flight_time:
                     logger.info(f"Day {day}: Not enough daily time to refuel. Ending day.")
                     break
 
                 logger.info(f"Refueling at {refuel_icao} (time since last refuel: {time_since_refuel:.2f}h)")
-                daily_time += time_to_refuel_airport
+                daily_time += time_to_refuel_airport + landing_overhead
                 time_since_refuel = 0.0
                 if refuel_icao != current_node:
                     route.append(refuel_icao)
@@ -867,18 +922,71 @@ def greedy_optimize(
                 refuel_stops.append(refuel_icao)
                 daily_time += refuel_time
 
-        # Return to airport at end of day
-        if (
-            current_node != return_airport.icao_code
-            and G.has_edge(current_node, return_airport.icao_code)
-        ):
-            return_t = G[current_node][return_airport.icao_code]["weight"]
-            daily_time += return_t
-            route.append(return_airport.icao_code)
-            current_node = return_airport.icao_code
+        if len(visited_items) == items_at_day_start:
+            # A zero-progress day leaves the aircraft at its start airport
+            # with a full daily budget already spent trying, so later days
+            # would repeat the same outcome.
+            logger.info(f"Day {day}: No items completed; stopping optimization.")
+            break
+
+        # Return to airport at end of day, refueling en route if the
+        # direct leg exceeds remaining endurance.
+        return_icao = return_airport.icao_code
+        if current_node != return_icao:
+            if not G.has_edge(current_node, return_icao):
+                message = (
+                    f"Day {day}: no return edge from {current_node} to "
+                    f"{return_icao} in the flight graph; the day ends "
+                    f"without reaching the return airport."
+                )
+                logger.warning(message)
+                issues.append(message)
+            else:
+                return_t = G[current_node][return_icao]["weight"]
+                if time_since_refuel + return_t + takeoff_landing_overhead > max_endurance:
+                    refuel_icao, time_to_refuel_airport = _find_best_refuel_airport(
+                        G, current_node, airports, visited_items, item_keys,
+                        time_since_refuel, daily_time, max_endurance,
+                        max_daily_flight_time, refuel_time,
+                        takeoff_landing_overhead,
+                        return_to=return_icao,
+                    )
+                    if refuel_icao is not None:
+                        logger.info(
+                            f"Day {day}: refueling at {refuel_icao} en route to {return_icao}"
+                        )
+                        daily_time += time_to_refuel_airport + takeoff_landing_overhead + refuel_time
+                        time_since_refuel = 0.0
+                        route.append(refuel_icao)
+                        current_node = refuel_icao
+                        refuel_stops.append(refuel_icao)
+                        return_t = G[current_node][return_icao]["weight"]
+                    else:
+                        message = (
+                            f"Day {day}: return leg {current_node} -> {return_icao} "
+                            f"needs {time_since_refuel + return_t + takeoff_landing_overhead:.2f}h "
+                            f"since the last refuel but max_endurance is "
+                            f"{max_endurance:.2f}h, and no feasible refuel stop "
+                            f"exists; the schedule includes an infeasible return leg."
+                        )
+                        logger.warning(message)
+                        issues.append(message)
+                daily_time += return_t + takeoff_landing_overhead
+                time_since_refuel += return_t + takeoff_landing_overhead
+                route.append(return_icao)
+                current_node = return_icao
+                if daily_time > max_daily_flight_time:
+                    message = (
+                        f"Day {day}: returning to {return_icao} brings the daily "
+                        f"time to {daily_time:.2f}h, exceeding "
+                        f"max_daily_flight_time ({max_daily_flight_time:.2f}h)."
+                    )
+                    logger.warning(message)
+                    issues.append(message)
 
         daily_times.append(daily_time)
         total_time += daily_time
+        day_start_node = current_node
         logger.info(f"Day {day} complete: {daily_time:.2f}h flown")
 
     # Check for items that were never reachable
@@ -927,6 +1035,7 @@ def greedy_optimize(
         "lines_skipped": lines_skipped_list,
         "refuel_stops": refuel_stops,
         "days_used": len(daily_times),
+        "issues": issues,
         "takeoff_airport": takeoff_airport,
         "return_airport": return_airport,
         "graph": G,

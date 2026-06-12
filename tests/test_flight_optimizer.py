@@ -1,5 +1,7 @@
 """Tests for hyplan.flight_optimizer."""
 
+import itertools
+
 import networkx as nx
 import pytest
 
@@ -14,7 +16,7 @@ from hyplan.flight_optimizer import (
     build_graph,
     greedy_optimize,
 )
-from hyplan.flight_patterns import racetrack, sawtooth
+from hyplan.flight_patterns import racetrack, sawtooth, spiral
 from hyplan.pattern import Pattern
 from hyplan.units import ureg
 from hyplan.waypoint import Waypoint
@@ -292,6 +294,67 @@ class TestGreedyOptimizeEndurance:
         )
         assert result["lines_covered"] == len(flight_lines)
         assert len(result["lines_skipped"]) == 0
+
+
+class TestRefuelDailyBudget:
+    """Refueling is only inserted when it enables an item within BOTH the
+    endurance and daily flight time budgets."""
+
+    def test_no_phantom_refuels_when_daily_budget_blocks_everything(self, b200, airports):
+        """Regression: a line that fits endurance but not the daily budget
+        must not trigger repeated in-place refueling that burns whole days."""
+        far_line = FlightLine.start_length_azimuth(
+            lat1=39.5, lon1=-122.0,
+            length=ureg.Quantity(150, "kilometer"),
+            az=90,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="FAR_150KM",
+        )
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[far_line],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=6.0,
+            max_daily_flight_time=1.0,
+            max_days=3,
+        )
+        # Sanity: the sortie fits within endurance, so only the daily
+        # budget makes it infeasible.
+        G = result["graph"]
+        sortie = (
+            G["KSBA"]["FAR_150KM_start"]["weight"]
+            + G["FAR_150KM_start"]["FAR_150KM_end"]["weight"]
+            + G["FAR_150KM_end"]["KSBA"]["weight"]
+            + 0.25
+        )
+        assert sortie <= 6.0
+        assert result["refuel_stops"] == []
+        assert result["items_covered"] == 0
+        assert result["items_skipped"] == ["FAR_150KM"]
+        # The day loop terminates after the first zero-progress day instead
+        # of padding the result with max_days of phantom refueling.
+        assert result["days_used"] < 3
+        assert result["daily_times"] == []
+        assert result["total_time"] == 0.0
+
+    def test_legitimate_refueling_still_occurs(self, b200, flight_lines, airports):
+        """With endurance tight enough to need a refuel but a generous daily
+        budget, the optimizer still refuels and covers all lines."""
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=flight_lines,
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=1.0,
+            max_daily_flight_time=8.0,
+            max_days=1,
+        )
+        assert result["items_covered"] == len(flight_lines)
+        assert len(result["refuel_stops"]) >= 1
+        assert result["days_used"] == 1
 
 
 class TestBuildGraphDuplicateNames:
@@ -855,3 +918,271 @@ class TestCoverageCounts:
         for leg_key in result["lines_skipped"]:
             assert leg_key.startswith("HUGE_RT:")
         assert all("ENDLESS_LOITER" not in leg_key for leg_key in result["lines_skipped"])
+
+
+# ---------------------------------------------------------------------------
+# Takeoff/landing overhead accounting
+# ---------------------------------------------------------------------------
+
+
+def _replay_route_times(result, airports, *, takeoff_landing_overhead,
+                        refuel_time, max_endurance):
+    """Re-walk a single-day route with the feasibility arithmetic.
+
+    Sums the graph's leg weights, charging the takeoff/landing overhead at
+    every airport arrival (matching how the feasibility checks reserve it)
+    plus the refuel time at each refuel stop, and asserts the endurance
+    limit is honored between refuels.
+    """
+    G = result["graph"]
+    icaos = {a.icao_code for a in airports}
+    refuels = list(result["refuel_stops"])
+    total = 0.0
+    since_refuel = 0.0
+    for u, v in itertools.pairwise(result["route"]):
+        leg = G[u][v]["weight"]
+        total += leg
+        since_refuel += leg
+        if v in icaos:
+            total += takeoff_landing_overhead
+            since_refuel += takeoff_landing_overhead
+            assert since_refuel <= max_endurance + 1e-9
+            if refuels and refuels[0] == v:
+                refuels.pop(0)
+                total += refuel_time
+                since_refuel = 0.0
+    assert refuels == []
+    return total
+
+
+class TestOverheadAccounting:
+    """takeoff_landing_overhead is charged to reported times, mirroring the
+    arithmetic the feasibility checks use (one overhead per airborne cycle)."""
+
+    def test_single_line_daily_time_includes_overhead(self, b200, airports):
+        line = FlightLine.start_length_azimuth(
+            lat1=34.4, lon1=-119.8,
+            length=ureg.Quantity(10000, "meter"),
+            az=90,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="Single",
+        )
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[line],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=4.0,
+            takeoff_landing_overhead=0.25,
+        )
+        G = result["graph"]
+        legs = sum(
+            G[u][v]["weight"] for u, v in itertools.pairwise(result["route"])
+        )
+        # One airborne cycle (takeoff -> landing) -> exactly one overhead.
+        assert result["daily_times"][0] == pytest.approx(legs + 0.25)
+        assert result["total_time"] == pytest.approx(legs + 0.25)
+        assert result["issues"] == []
+
+    def test_refuel_day_replay_matches_reported_times(self, b200, flight_lines, airports):
+        """Replaying the route with feasibility arithmetic reproduces the
+        reported daily time and honors both endurance and daily budgets."""
+        max_endurance = 1.0
+        max_daily = 8.0
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=flight_lines,
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[0],
+            max_endurance=max_endurance,
+            max_daily_flight_time=max_daily,
+            max_days=1,
+        )
+        assert result["items_covered"] == len(flight_lines)
+        assert len(result["refuel_stops"]) >= 1
+        replayed = _replay_route_times(
+            result, airports,
+            takeoff_landing_overhead=0.25,
+            refuel_time=0.5,
+            max_endurance=max_endurance,
+        )
+        assert result["daily_times"][0] == pytest.approx(replayed)
+        assert result["daily_times"][0] <= max_daily
+        assert result["total_time"] == pytest.approx(sum(result["daily_times"]))
+        assert result["issues"] == []
+
+
+# ---------------------------------------------------------------------------
+# Day-end return feasibility
+# ---------------------------------------------------------------------------
+
+
+class TestDayEndReturn:
+    """The end-of-day return leg is checked against endurance, refueling
+    en route when needed and recording issues when no feasible route exists."""
+
+    @pytest.fixture
+    def sba_line(self):
+        return FlightLine.start_length_azimuth(
+            lat1=34.45, lon1=-119.8,
+            length=ureg.Quantity(10, "kilometer"),
+            az=90,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="SBA_LINE",
+        )
+
+    def test_far_return_refuels_en_route(self, b200, sba_line):
+        """Direct return to a distant airport exceeds remaining endurance, so
+        the optimizer inserts a refuel stop on the way home."""
+        airports = [Airport("KSBA"), Airport("KMRY"), Airport("KSFO")]
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[sba_line],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[2],
+            max_endurance=1.4,
+            max_daily_flight_time=8.0,
+        )
+        assert result["items_covered"] == 1
+        # Refueling proves the direct return was infeasible — the optimizer
+        # prefers the direct leg whenever endurance allows it. KSBA is the
+        # closest airport from which KSFO fits in a fresh tank.
+        assert result["refuel_stops"] == ["KSBA"]
+        assert result["route"][-1] == "KSFO"
+        assert result["issues"] == []
+        replayed = _replay_route_times(
+            result, airports,
+            takeoff_landing_overhead=0.25,
+            refuel_time=0.5,
+            max_endurance=1.4,
+        )
+        assert result["daily_times"][0] == pytest.approx(replayed)
+
+    def test_infeasible_return_records_issue(self, b200, sba_line, caplog):
+        """No refuel stop can make the return reachable: the schedule is
+        emitted with a prominent warning and a recorded issue."""
+        import logging
+
+        airports = [Airport("KSBA"), Airport("KBUR"), Airport("KJFK")]
+        with caplog.at_level(logging.WARNING, logger="hyplan.flight_optimizer"):
+            result = greedy_optimize(
+                aircraft=b200,
+                flight_lines=[sba_line],
+                airports=airports,
+                takeoff_airport=airports[0],
+                return_airport=airports[2],
+                max_endurance=1.5,
+            )
+        assert result["items_covered"] == 1
+        assert result["route"][-1] == "KJFK"
+        assert any("infeasible return leg" in msg for msg in result["issues"])
+        assert any("infeasible return leg" in rec.message for rec in caplog.records)
+
+    def test_missing_return_edge_records_issue(self, b200, sba_line, caplog):
+        """A return airport absent from the graph triggers a loud warning."""
+        import logging
+
+        airports = [Airport("KSBA"), Airport("KBUR")]
+        with caplog.at_level(logging.WARNING, logger="hyplan.flight_optimizer"):
+            result = greedy_optimize(
+                aircraft=b200,
+                flight_lines=[sba_line],
+                airports=airports,
+                takeoff_airport=airports[0],
+                return_airport=Airport("KSFO"),
+                max_endurance=4.0,
+            )
+        assert result["items_covered"] == 1
+        assert result["route"][-1] != "KSFO"
+        assert any("no return edge" in msg for msg in result["issues"])
+        assert any("no return edge" in rec.message for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Multi-day continuity
+# ---------------------------------------------------------------------------
+
+
+class TestMultiDayContinuity:
+    """Each day after the first starts where the previous day ended."""
+
+    def test_day_two_starts_at_previous_day_end(self, b200):
+        airports = [Airport("KSBA"), Airport("KBUR")]
+        sba_line = FlightLine.start_length_azimuth(
+            lat1=34.45, lon1=-119.8,
+            length=ureg.Quantity(10, "kilometer"),
+            az=90,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="SBA_LINE",
+        )
+        bur_line = FlightLine.start_length_azimuth(
+            lat1=34.25, lon1=-118.4,
+            length=ureg.Quantity(10, "kilometer"),
+            az=90,
+            altitude_msl=ureg.Quantity(20000, "feet"),
+            site_name="BUR_LINE",
+        )
+        # Daily budget sized from a single-line day so day 1 can fly only
+        # the SBA line before returning to KBUR for the night.
+        single = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[sba_line],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[1],
+            max_endurance=4.0,
+        )
+        budget = single["daily_times"][0] + 0.05
+
+        result = greedy_optimize(
+            aircraft=b200,
+            flight_lines=[sba_line, bur_line],
+            airports=airports,
+            takeoff_airport=airports[0],
+            return_airport=airports[1],
+            max_endurance=4.0,
+            max_daily_flight_time=budget,
+            max_days=2,
+        )
+        assert result["items_covered"] == 2
+        assert result["days_used"] == 2
+        route = result["route"]
+        # Day 2 departs KBUR (where day 1 ended) — the takeoff airport
+        # appears exactly once, at the very start of the mission.
+        assert route[0] == "KSBA"
+        assert route.count("KSBA") == 1
+        # KBUR closes both days; the day-2 start is not re-appended.
+        assert route[-1] == "KBUR"
+        assert route.count("KBUR") == 2
+        assert all(t <= budget + 1e-9 for t in result["daily_times"])
+        assert result["issues"] == []
+
+
+# ---------------------------------------------------------------------------
+# Waypoint-based pattern cost model vs the planning engine
+# ---------------------------------------------------------------------------
+
+
+class TestPatternInternalTimeMatchesEngine:
+    """_pattern_internal_time mirrors compute_flight_plan's intra-pattern
+    direct-segment cost model for densely spaced waypoint patterns."""
+
+    def test_spiral_internal_time_matches_engine(self, b200):
+        from hyplan.flight_plan import compute_flight_plan
+
+        sp = spiral(
+            center=(34.4, -119.8),
+            heading=0.0,
+            altitude_start=ureg.Quantity(3000, "meter"),
+            altitude_end=ureg.Quantity(5000, "meter"),
+            radius=ureg.Quantity(3, "kilometer"),
+            n_turns=1.0,
+            points_per_turn=12,
+        )
+        internal_hours = _pattern_internal_time(b200, sp)
+        plan = compute_flight_plan(aircraft=b200, flight_sequence=[sp])
+        engine_hours = plan["time_to_segment"].sum() / 60.0
+        assert internal_hours == pytest.approx(engine_hours, rel=0.05)
