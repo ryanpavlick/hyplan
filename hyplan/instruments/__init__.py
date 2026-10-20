@@ -56,6 +56,7 @@ from .line_scanner import (
     GLiHT_SWIR,
     GLiHT_VNIR,
     HyTES,
+    HyTES2,
     LineScanner,
     eMAS,
 )
@@ -97,6 +98,7 @@ def _register_defaults() -> None:
         ("AVIRIS3",        AVIRIS3,        ("AVIRIS-3",)),
         ("AVIRIS5",        AVIRIS5,        ("AVIRIS-5",)),
         ("HyTES",          HyTES,          ()),
+        ("HyTES2",         HyTES2,         ("HyTES-2", "HyTES 2.0")),
         ("PRISM",          PRISM,          ()),
         ("MASTER",         MASTER,         ()),
         ("GLiHT_VNIR",     GLiHT_VNIR,     ()),
@@ -203,6 +205,7 @@ __all__ = [
     "GLiHT_SWIR",
     "GLiHT_VNIR",
     "HyTES",
+    "HyTES2",
     # LVIS lidar
     "LVISLens",
     "LidarMount",

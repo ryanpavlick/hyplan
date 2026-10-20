@@ -1,5 +1,7 @@
 """Tests for the hyplan.instruments subpackage."""
 
+import math
+
 import pytest
 
 from hyplan.exceptions import HyPlanValueError
@@ -11,6 +13,7 @@ from hyplan.instruments import (
     SENSOR_REGISTRY,
     FrameCamera,
     HyTES,
+    HyTES2,
     LineScanner,
     ScanningSensor,
     SidelookingRadar,
@@ -70,6 +73,19 @@ class TestLineScanner:
     def test_hytes(self):
         s = HyTES()
         assert s.swath_width(ureg.Quantity(5000, "meter")).magnitude > 0
+
+    def test_hytes2_matches_jpl_planning_table(self):
+        # hytes.jpl.nasa.gov/flight-planning/hytes2_0-altitude-pixel-swath:
+        # 5000 m -> 6.82 m pixel, 331.32 kt max ground speed.
+        s = HyTES2()
+        alt = ureg.Quantity(5000, "meter")
+        assert s.ground_sample_distance(alt).m_as("meter") == pytest.approx(6.82, abs=0.01)
+        assert s.critical_ground_speed(alt).m_as("knot") == pytest.approx(331.32, rel=1e-3)
+        # JPL's swath (3.49 km) is the small-angle 512 x pixel; HyPlan
+        # projects the 40 deg FOV exactly onto flat ground.
+        assert s.swath_width(alt).m_as("meter") == pytest.approx(
+            2 * 5000 * math.tan(math.radians(20.0)), rel=1e-9,
+        )
 
     def test_prism(self):
         s = PRISM()

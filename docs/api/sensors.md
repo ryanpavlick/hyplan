@@ -18,6 +18,7 @@ re-exported from the top-level `hyplan` namespace for convenience.
 .. autoclass:: hyplan.instruments.AVIRIS3
 .. autoclass:: hyplan.instruments.AVIRIS5
 .. autoclass:: hyplan.instruments.HyTES
+.. autoclass:: hyplan.instruments.HyTES2
 .. autoclass:: hyplan.instruments.PRISM
 .. autoclass:: hyplan.instruments.MASTER
 .. autoclass:: hyplan.instruments.GLiHT_VNIR

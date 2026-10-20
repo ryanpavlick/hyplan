@@ -3,7 +3,7 @@
 Defines the :class:`LineScanner` subclass for computing ground sample distance
 (GSD), swath width, and critical speed from sensor optics, altitude, and
 aircraft parameters.  Pre-configured sensors include NASA instruments
-(AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER) and others.  Use
+(AVIRIS-3, AVIRIS-5, HyTES, HyTES-2, PRISM, MASTER) and others.  Use
 :func:`create_sensor` for name-based construction.
 """
 
@@ -33,6 +33,7 @@ __all__ = [
     "GLiHT_SWIR",
     "GLiHT_VNIR",
     "HyTES",
+    "HyTES2",
     "LineScanner",
     "create_sensor",
     "eMAS",
@@ -276,6 +277,10 @@ _SENSOR_SPECS = {
     "AVIRIS5":        ("AVIRIS 5",                                    40.2, 1239, 148.0),
     # source: hytes.jpl.nasa.gov/specifications (50° FOV, 512 px cross-track), retrieved 2026-06
     "HyTES":          ("HyTES",                                       50.0,  512,  36.0),
+    # source: hytes.jpl.nasa.gov/flight-planning/hytes2_0-altitude-pixel-swath, retrieved 2026-10.
+    # Derived from the altitude/pixel/swath table: pixel = 1.3636e-3·h (IFOV 1.3635 mrad),
+    # swath = 512·pixel → 40° FOV; max ground speed = pixel × 25 Hz.
+    "HyTES2":         ("HyTES 2.0",                                   40.0,  512,  25.0),
     # source: Mouroulis et al. 2014 (Appl. Opt. 53, 1363) / JPL PRISM (30.8° swath, 608 px), retrieved 2026-06
     "PRISM":          ("PRISM",                                       30.7,  608, 176.0),
     # source: MASTER ASAP datasheet / master.jpl.nasa.gov (85.92° FOV, 716 px, 6.25–25 Hz), retrieved 2026-06
@@ -327,6 +332,7 @@ AVIRISNextGen: type = globals()["AVIRISNextGen"]
 AVIRIS3: type = globals()["AVIRIS3"]
 AVIRIS5: type = globals()["AVIRIS5"]
 HyTES: type = globals()["HyTES"]
+HyTES2: type = globals()["HyTES2"]
 PRISM: type = globals()["PRISM"]
 MASTER: type = globals()["MASTER"]
 GLiHT_VNIR: type = globals()["GLiHT_VNIR"]

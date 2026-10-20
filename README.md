@@ -29,7 +29,7 @@ HyPlan helps scientists and engineers design remote sensing flight missions. It 
 - **Pattern workflows** — Build reusable racetrack, rosette, polygon, sawtooth, spiral, and glint-arc patterns as first-class objects that can be edited, serialized, re-planned, translated, rotated, or anchored relative to another waypoint
 - **Flight optimization** — Automatically order flight lines with multi-day scheduling, endurance constraints, and refueling stops
 - **Wind-aware isochrones** — Compute reachability boundaries from a base airport given an aircraft, time budget, and wind field; supports refuel-extended reach with two-clock budget tracking, single-target spot checks, and multi-budget concentric contours; static (Cartopy) and interactive (Folium) plotters
-- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, and more) with ground sample distance and swath calculations
+- **Sensor modeling** — Pre-configured NASA instruments (AVIRIS-3, AVIRIS-5, HyTES, HyTES-2, PRISM, MASTER, and more) with ground sample distance and swath calculations
 - **Lidar & radar** — Three lidar sensor families (full-waveform conical-scan `LVIS`, scanning-mirror discrete-return topographic `ALSLidar` with a RIEGL VQ-480 II reference, and single-beam atmospheric profilers `HSRL2`/`HALO`/`CPL`), plus a multi-lidar rig class (`MultiALSLidarRig` with a NASA G-LiHT dual VQ-480i reference) and UAVSAR L/P/Ka-band SAR sensor models
 - **Solar glint prediction** — Predict glint angles across flight lines for water observation missions
 - **Solar illumination** — Compute solar position and daily data-collection windows for any site and date
@@ -258,7 +258,7 @@ gdf.to_file("glint_results.geojson", driver="GeoJSON")
 | `waypoint` | Waypoint class for flight planning with altitude, heading, and speed |
 | `campaign` | Campaign manager for organizing free-standing lines and patterns, caching reference data, tracking revisions, and persisting plans |
 | | **Instruments** |
-| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, PRISM, MASTER, etc.), LVIS lidar, ALS topographic lidar (RIEGL VQ-480 II) + multi-lidar rig (G-LiHT dual VQ-480i), profiling lidars (HSRL-2, HALO, CPL), AWP wind profiler, UAVSAR SAR, and frame cameras |
+| `instruments` | All sensor models — line scanners (AVIRIS-3, AVIRIS-5, HyTES, HyTES-2, PRISM, MASTER, etc.), LVIS lidar, ALS topographic lidar (RIEGL VQ-480 II) + multi-lidar rig (G-LiHT dual VQ-480i), profiling lidars (HSRL-2, HALO, CPL), AWP wind profiler, UAVSAR SAR, and frame cameras |
 | `swath` | Sensor swath coverage with terrain integration |
 | | **Aircraft** |
 | `aircraft` | Aircraft performance models (22 pre-configured research aircraft, 19 data-calibrated) |

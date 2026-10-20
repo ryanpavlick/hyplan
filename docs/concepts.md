@@ -23,7 +23,7 @@ distinction matters.
 All sensors derive from the {class}`~hyplan.instruments.Sensor` base class:
 
 - {class}`~hyplan.instruments.LineScanner` — Whiskbroom/pushbroom imagers
-  (AVIRIS-3, HyTES, PRISM, MASTER, G-LiHT, GCAS, eMAS, PICARD).
+  (AVIRIS-3, HyTES, HyTES-2, PRISM, MASTER, G-LiHT, GCAS, eMAS, PICARD).
   Defined by FOV, across-track pixels, and frame rate.
 
 - {class}`~hyplan.instruments.SidelookingRadar` — Side-looking SAR instruments

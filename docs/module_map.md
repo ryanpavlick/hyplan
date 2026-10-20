@@ -133,7 +133,7 @@ pattern.
 
 ### Instruments and swath ([`hyplan/instruments/`](https://github.com/ryanpavlick/hyplan/tree/main/hyplan/instruments), [`hyplan/swath.py`](https://github.com/ryanpavlick/hyplan/blob/main/hyplan/swath.py))
 
-* Sensor models: AVIRIS-3 / AVIRIS-5 / HyTES / PRISM / MASTER
+* Sensor models: AVIRIS-3 / AVIRIS-5 / HyTES / HyTES-2 / PRISM / MASTER
   (line-scanners), LVIS (full-waveform lidar), ALSLidar
   (scanning-mirror topographic lidar — RIEGL VQ-480 II) plus
   `MultiALSLidarRig` (multi-lidar rig with G-LiHT dual VQ-480i
