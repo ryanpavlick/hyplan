@@ -13,27 +13,6 @@ When an item ships, move it into the relevant `## vX.Y.Z` section in
 
 ### Calibration data-quality fixes
 
-* **`NERC_DO228` cruise schedule inversion above FL100** — fitted
-  cruise TAS decreases from 176 kt @ FL100 → 146 kt @ FL200, which
-  is unphysical for a turboprop.  Sample-size artifact: the
-  FL150 / FL200 cruise bins are populated by < 200 fixes from a
-  34-sortie sample across two CEDA campaigns.  Approach speed
-  110 kt is also above the brochure 80-90 kt Vref.
-  Fix: truncate cruise schedule at FL100 or add a sparse-bin
-  caveat in `notebooks/calibration/NERC_DO228/calibrate.py`.
-  Discussed in `docs/calibration.md` "Performance envelope
-  cross-check" and the `NERC_DO228` constructor.
-
-* **`DLR_HALO` flat cruise artifact FL200-FL300** — fitted cruise
-  is implausibly flat at 457 kt through FL200-FL300; a G550
-  climbing through these levels should see ~360 kt @ FL200 and
-  ~430 kt @ FL300.  18-sortie HALO-AC3 sample is heavily biased
-  toward high-altitude transit; sub-FL300 cruise bins are
-  populated by descent fixes mislabeled as cruise.  Already
-  ships with `confidence=0.7` reflecting low sample size.
-  Fix: truncate cruise schedule below FL300 or add a
-  campaign-specific caveat.
-
 * **`KingAirA90` wind-triangle TAS** — current calibration uses
   groundspeed-as-TAS still-air baseline (`wind_source="still_air"`
   in `notebooks/calibration/KingAirA90/calibrate.py`).  Switch to

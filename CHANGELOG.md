@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## v1.12.0 — 2026-10-20
+
+Feature release: adds the HyTES 2.0 thermal imager, refines the
+NASA B-777 performance model, and fixes two calibration artifacts
+in the DLR HALO and NERC Do228 cruise schedules.  Planning outputs
+for `NASA_B777`, `DLR_HALO` and `NERC_DO228` will shift; nothing
+else changes behaviour.
+
+### Added
+
+- `HyTES2` line scanner (HyTES 2.0: 40° FOV, 512 px, 25 Hz), derived
+  from the JPL HyTES 2.0 altitude/pixel/swath planning table.
+  Registered as `"HyTES2"`, `"HyTES-2"` and `"HyTES 2.0"`.
+
+### Changed
+
+- `NASA_B777` profile: speed schedules now follow 250 KCAS below
+  10,000 ft / 310 KCAS / M0.84 (climb, cruise) and M0.84 / 290 KCAS /
+  250 KCAS (descent) instead of a linear TAS ramp; climb and descent
+  rates revised to typical heavy-weight values; tail number set to
+  N577NA.  Still uncalibrated.
+
+### Bug fixes — aircraft calibration
+
+- `NERC_DO228` cruise schedule is truncated at FL100.  The previous
+  fit fell from 175 kt to an unphysical 127 KTAS by FL200 because the
+  FL150 / FL200 cruise bins held < 2,000 fixes (vs 13k–58k below
+  FL100); the schedule now clamps to ~175 KTAS above FL100.
+- `DLR_HALO` cruise schedule no longer reports a flat 457 kt from
+  FL200.  The FL200 cruise target had been snapped to the nearest
+  cruise bin (FL250); the breakpoint now anchors at FL250, so the
+  schedule interpolates ~354 kt @ FL150 and ~405 kt @ FL200.
+
+### Docs
+
+- Sphinx autodoc mocks `xarray`, so the `-W` docs build resolves
+  `xr.DataArray` type hints in environments without xarray (fixes the
+  `Deploy Documentation` workflow, red since v1.10.1).
+
 ## v1.11.0 — 2026-06-12
 
 Correctness release. A full-codebase review (six parallel subsystem
