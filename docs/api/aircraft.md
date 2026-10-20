@@ -28,7 +28,7 @@ calibration sortie counts or performance values change.
 | `NOAA_WP3D` | P-3 Orion (WP-3D) | NOAA AOC | N42RF + N43RF | 27,600 | 3,800 | 12.0 | turboprop | calibrated · n=96 |
 | `NOAA_GIV` | Gulfstream IV-SP | NOAA AOC | N49RF | 47,500 | 4,220 | 8.5 | jet | calibrated · n=93 |
 | `NASA_WB57` | WB-57 | NASA JSC | NASA 926/927 | 63,000 | 2,500 | 6.5 | jet | calibrated · n=100 |
-| `NASA_B777` | B777 | NASA LaRC | Unknown | 43,000 | 9,000 | 18.0 | jet | brochure only |
+| `NASA_B777` | B777 | NASA LaRC | N577NA | 43,000 | 9,000 | 18.0 | jet | brochure only |
 | `KingAirA90` | King Air 90 | Unknown | Unknown | 30,000 | 1,500 | 6.0 | turboprop | brochure only |
 | `KingAirB200` | King Air 200 | NASA (multiple) | multi-tail | 30,000 | 1,632 | 6.0 | turboprop | calibrated |
 | `KingAir350` | King Air 350 | Unknown | Unknown | 35,000 | 2,100 | 5.0 | turboprop | brochure only |
