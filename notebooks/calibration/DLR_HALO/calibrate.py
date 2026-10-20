@@ -46,6 +46,15 @@ MAX_DUR_MIN = 720
 MIN_PEAK_ALT_FT = 15000
 MAX_PEAK_ALT_FT = 55000
 TARGET_ALTS_FT = (0, 10000, 20000, 30000, 40000, 45000)
+# Cruise targets skip FL200.  HALO climbs straight through FL150-FL200 and
+# only sustains cruise at FL250+ (49k-185k fixes per bin there vs none at
+# FL150/FL200).  With FL200 in the target set, schedule_pts snapped it to the
+# nearest *cruise* bin — FL250 — fabricating a flat 457 KTAS from FL200 up.
+# Anchoring at FL250 instead (where the cruise data actually is) and keeping
+# the FL000/FL100 anchors lets TasSchedule interpolate across the real gap
+# (~405 KTAS @ FL200) rather than clamp the artifact.  Climb / descent keep
+# FL200 — they have real data there (n>2000).
+CRUISE_TARGET_ALTS_FT = (0, 10000, 25000, 30000, 40000, 45000)
 
 M_PER_S_TO_KT = 1.9438444924406046
 M_TO_FT = 3.28083989501
@@ -139,7 +148,7 @@ def main() -> None:
     print("\nCRUISE TAS bins:")
     print(cruise_tas.to_string(index=False))
 
-    cs = schedule_pts(cruise_tas, TARGET_ALTS_FT, n_min=200)
+    cs = schedule_pts(cruise_tas, CRUISE_TARGET_ALTS_FT, n_min=200)
     klms = schedule_pts(climb_tas, TARGET_ALTS_FT, n_min=200)
     ds = schedule_pts(desc_tas, TARGET_ALTS_FT, n_min=200)
     print(f"\nCruise TAS schedule: {cs}")

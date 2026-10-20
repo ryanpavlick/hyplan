@@ -212,22 +212,23 @@ where the calibration is on thinner ice.
   the 93-sortie hurricane-surveillance sample where the airframe
   was light enough to overshoot AFM in practice.  Realistic for the
   NOAA mission mix but worth noting.
-* **`NERC_DO228`** — cruise schedule decreases above FL100
-  (176 kt → 146 kt by FL200), which is unphysical for a turboprop.
-  Small-sample artifact at the upper bins (n=34 sorties across two
-  CEDA campaigns; the FL150-FL200 cruise bins are populated by
-  fewer than 200 fixes).  Approach speed 110 kt is also above the
-  80-90 kt brochure Vref.  Queued for v1.6.1 (truncate cruise
-  schedule at FL100 or add caveat).
-* **`DLR_HALO`** — cruise schedule is implausibly flat at 457 kt
-  through FL200-FL300; the brochure long-range cruise band starts
-  above FL400 and a G550 climbing through these levels should see
-  ~360 kt @ FL200 and ~430 kt @ FL300.  18-sortie HALO-AC3 sample
-  is heavily biased toward high-altitude transit, and sub-FL300
-  bins are populated by descent fixes mislabeled as cruise.  The
-  class already ships with `confidence=0.7` reflecting the
-  single-campaign sample size.  Queued for v1.6.1 (truncate cruise
-  schedule below FL300).
+* **`NERC_DO228`** — the cruise schedule is now truncated at FL100.
+  The earlier fit decreased above FL100 (175 kt → 127 kt by FL200),
+  which is unphysical for a turboprop: the FL150 / FL200 cruise bins
+  hold < 2000 fixes (vs 13k-58k below FL100) and collapse near the
+  non-pressurised operating ceiling.  The schedule now clamps to the
+  well-sampled FL100 value (~175 KTAS) above FL100.  Approach speed
+  is still slightly above the 80-90 kt brochure Vref, and TAS remains
+  wind-triangle reconstructed, so the class stays lower confidence.
+* **`DLR_HALO`** — the cruise schedule no longer reports a flat
+  457 kt from FL200.  HALO climbs straight through FL150-FL200 and
+  only sustains cruise at FL250+ (49k-185k fixes per bin there, none
+  at FL150/FL200), so the old FL200 breakpoint had been snapped to
+  the nearest cruise bin (FL250) and clamped the artifact downward.
+  The cruise breakpoint now anchors at FL250 where the data is, and
+  TasSchedule interpolates across the real gap (~354 kt @ FL150,
+  ~405 kt @ FL200, 457 kt @ FL250).  The class still ships
+  `confidence=0.7` reflecting the single-campaign HALO-AC3 sample.
 
 ### Uncalibrated brochure values — reasonableness
 

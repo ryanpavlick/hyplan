@@ -57,6 +57,14 @@ MAX_DUR_MIN = 600
 MIN_PEAK_ALT_FT = 3000
 MAX_PEAK_ALT_FT = 28000
 TARGET_ALTS_FT = (0, 5000, 10000, 15000, 20000)
+# Cruise schedule is truncated at FL100.  The Do228 is non-pressurised and
+# rarely sustains cruise above ~FL120; the FL150 / FL200 cruise bins are
+# populated by < 2000 fixes (vs 13k-58k below FL100) and collapse to an
+# unphysical 155 / 127 KTAS — a small-sample artifact near the operating
+# ceiling, not a real airspeed.  Truncating here makes TasSchedule clamp to
+# the well-sampled FL100 value (~175 KTAS) above FL100.  Climb / descent
+# schedules keep the full altitude range (their high bins are physical).
+CRUISE_TARGET_ALTS_FT = (0, 5000, 10000)
 
 M_PER_S_TO_KT = 1.9438444924406046
 M_TO_FT = 3.28083989501
@@ -198,7 +206,7 @@ def main() -> None:
     print("\nCRUISE TAS bins:")
     print(cruise_tas.to_string(index=False))
 
-    cs = schedule_pts(cruise_tas, TARGET_ALTS_FT, n_min=200)
+    cs = schedule_pts(cruise_tas, CRUISE_TARGET_ALTS_FT, n_min=200)
     klms = schedule_pts(climb_tas, TARGET_ALTS_FT, n_min=200)
     ds = schedule_pts(desc_tas, TARGET_ALTS_FT, n_min=200)
     print(f"\nCruise TAS schedule: {cs}")
