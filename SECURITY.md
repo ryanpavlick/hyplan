@@ -7,18 +7,19 @@ Earlier major-version branches are not maintained.
 
 | Version  | Supported          |
 |----------|--------------------|
-| 1.11.x   | :white_check_mark: |
-| 1.10.x   | :x: (use 1.11.x)    |
-| 1.9.x    | :x: (use 1.11.x)    |
-| 1.8.x    | :x: (use 1.11.x)    |
-| 1.7.x    | :x: (use 1.11.x)    |
-| 1.6.x    | :x: (use 1.11.x)    |
-| 1.5.x    | :x: (use 1.11.x)    |
-| 1.4.x    | :x: (use 1.11.x)    |
-| 1.3.x    | :x: (use 1.11.x)    |
-| 1.2.x    | :x: (use 1.11.x)    |
-| 1.1.x    | :x: (use 1.11.x)    |
-| 1.0.x    | :x: (use 1.11.x)    |
+| 1.12.x   | :white_check_mark: |
+| 1.11.x   | :x: (use 1.12.x)    |
+| 1.10.x   | :x: (use 1.12.x)    |
+| 1.9.x    | :x: (use 1.12.x)    |
+| 1.8.x    | :x: (use 1.12.x)    |
+| 1.7.x    | :x: (use 1.12.x)    |
+| 1.6.x    | :x: (use 1.12.x)    |
+| 1.5.x    | :x: (use 1.12.x)    |
+| 1.4.x    | :x: (use 1.12.x)    |
+| 1.3.x    | :x: (use 1.12.x)    |
+| 1.2.x    | :x: (use 1.12.x)    |
+| 1.1.x    | :x: (use 1.12.x)    |
+| 1.0.x    | :x: (use 1.12.x)    |
 | < 1.0    | :x:                |
 
 ## Reporting a vulnerability
