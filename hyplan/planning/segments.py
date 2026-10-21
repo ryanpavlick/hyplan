@@ -158,9 +158,8 @@ def loiter_orbit_geometry(
             ``"descent"``.
     """
     from shapely.geometry import LineString
-    from shapely.ops import transform
 
-    from ..geometry import get_utm_transforms
+    from ..geometry import get_utm_transforms, transform_geometry
 
     if waypoint.altitude_msl is None:
         raise ValueError(
@@ -187,7 +186,7 @@ def loiter_orbit_geometry(
     from shapely.geometry import Point
     wp_pt = Point(waypoint.longitude, waypoint.latitude)
     to_utm, from_utm = get_utm_transforms([wp_pt])
-    wp_utm = transform(to_utm, wp_pt)
+    wp_utm = transform_geometry(to_utm, wp_pt)
     perp_az_rad = np.radians(waypoint.heading + 90.0)
     cx = wp_utm.x + radius_m * np.sin(perp_az_rad)
     cy = wp_utm.y + radius_m * np.cos(perp_az_rad)
@@ -202,7 +201,7 @@ def loiter_orbit_geometry(
     ys = cy + radius_m * np.sin(sample_angles)
 
     pts_utm = [Point(x, y) for x, y in zip(xs, ys, strict=False)]
-    pts_wgs = [transform(from_utm, p) for p in pts_utm]
+    pts_wgs = [transform_geometry(from_utm, p) for p in pts_utm]
     return LineString([(p.x, p.y) for p in pts_wgs])
 
 

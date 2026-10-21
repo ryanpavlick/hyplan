@@ -44,11 +44,16 @@ import pymap3d
 import pymap3d.vincenty
 from pymap3d import los
 from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import transform
 
 from .exceptions import HyPlanValueError
 from .flight_line import FlightLine
-from .geometry import get_utm_transforms, process_linestring, wrap_to_180, wrap_to_360
+from .geometry import (
+    get_utm_transforms,
+    process_linestring,
+    transform_geometry,
+    wrap_to_180,
+    wrap_to_360,
+)
 from .instruments import ScanningSensor
 from .sun import sunpos
 from .units import magnitude_in, ureg
@@ -210,8 +215,8 @@ class GlintArc:
 
         to_utm, from_utm = get_utm_transforms([A, C])
 
-        A_utm = transform(to_utm, A)
-        C_utm = transform(to_utm, C)
+        A_utm = transform_geometry(to_utm, A)
+        C_utm = transform_geometry(to_utm, C)
 
         dx = A_utm.x - C_utm.x
         dy = A_utm.y - C_utm.y
@@ -350,8 +355,8 @@ class GlintArc:
         C = Point(float(C_lon), float(C_lat))
 
         to_utm, from_utm = get_utm_transforms([A, C])
-        A_utm = transform(to_utm, A)
-        C_utm = transform(to_utm, C)
+        A_utm = transform_geometry(to_utm, A)
+        C_utm = transform_geometry(to_utm, C)
 
         dx = A_utm.x - C_utm.x
         dy = A_utm.y - C_utm.y

@@ -783,7 +783,7 @@ def compute_overpass_overlap(
         GeoDataFrame with overlap results. Columns: satellite_name,
         segment_name, time_offset_min, overlap_area_km2, geometry.
     """
-    from .geometry import get_utm_transforms
+    from .geometry import get_utm_transforms, transform_geometry
 
     if overpasses_gdf.empty or flight_plan_gdf.empty:
         return gpd.GeoDataFrame(
@@ -830,8 +830,7 @@ def compute_overpass_overlap(
             to_utm, from_utm = get_utm_transforms(centroid)
             intersection_utm = intersection  # simplified: use degree-based area
             try:
-                from shapely.ops import transform
-                intersection_utm = transform(to_utm, intersection)
+                intersection_utm = transform_geometry(to_utm, intersection)
                 area_km2 = intersection_utm.area / 1e6
             except Exception:
                 area_km2 = float("nan")

@@ -16,7 +16,7 @@ dependencies:
   - rasterio
   - requests
   - rtree
-  - shapely
+  - shapely>=2.0
   - timezonefinder
   - xlsxwriter
   - pip

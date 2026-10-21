@@ -155,9 +155,8 @@ class TestLoiterOrbitGeometry:
     def test_radius_matches_v_squared_over_g_tan_bank(self, b200):
         """The orbit radius equals v² / (g · tan(bank_cruise))."""
         from shapely.geometry import Point
-        from shapely.ops import transform as shp_transform
 
-        from hyplan.geometry import get_utm_transforms
+        from hyplan.geometry import get_utm_transforms, transform_geometry
         from hyplan.planning.segments import loiter_orbit_geometry
 
         altitude = ureg.Quantity(20000, "feet")
@@ -172,7 +171,7 @@ class TestLoiterOrbitGeometry:
         coords = np.array(list(ring.coords))
         pts_wgs = [Point(lon, lat) for lon, lat in coords]
         to_utm, _ = get_utm_transforms(pts_wgs)
-        pts_utm = np.array([(shp_transform(to_utm, p).x, shp_transform(to_utm, p).y) for p in pts_wgs])
+        pts_utm = np.array([(transform_geometry(to_utm, p).x, transform_geometry(to_utm, p).y) for p in pts_wgs])
         # Pairwise distances; pick max as diameter.
         dx = pts_utm[:, None, 0] - pts_utm[None, :, 0]
         dy = pts_utm[:, None, 1] - pts_utm[None, :, 1]
@@ -202,10 +201,9 @@ class TestLoiterOrbitGeometry:
         # FL200 (calibrated against ACT-America), so it would be a
         # poor choice for testing the underlying geometry.
         from shapely.geometry import Point
-        from shapely.ops import transform as shp_transform
 
         from hyplan.aircraft import NASA_GIII
-        from hyplan.geometry import get_utm_transforms
+        from hyplan.geometry import get_utm_transforms, transform_geometry
         from hyplan.planning.segments import loiter_orbit_geometry
 
         ac = NASA_GIII()
@@ -216,7 +214,7 @@ class TestLoiterOrbitGeometry:
             pts_wgs = [Point(lon, lat) for lon, lat in coords]
             to_utm, _ = get_utm_transforms(pts_wgs)
             pts_utm = np.array(
-                [(shp_transform(to_utm, p).x, shp_transform(to_utm, p).y) for p in pts_wgs]
+                [(transform_geometry(to_utm, p).x, transform_geometry(to_utm, p).y) for p in pts_wgs]
             )
             dx = pts_utm[:, None, 0] - pts_utm[None, :, 0]
             dy = pts_utm[:, None, 1] - pts_utm[None, :, 1]

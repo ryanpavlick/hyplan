@@ -12,7 +12,7 @@ pyproj
 rasterio
 requests
 rtree
-shapely
+shapely>=2.0
 simplekml
 skyfield
 timezonefinder

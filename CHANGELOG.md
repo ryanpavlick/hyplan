@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- `hyplan.geometry.transform_geometry(func, geometry)`: vectorized
+  replacement for `shapely.ops.transform`; accepts the transforms
+  returned by `get_utm_transforms`.
+
+### Changed
+
+- Internal geometry projection (swath, glint, Dubins, satellite
+  overlap, loiter orbits, polygon utilities) uses `transform_geometry`
+  instead of `shapely.ops.transform`, which Shapely 2.2 deprecates.
+  Silences the `DeprecationWarning` flood under Shapely >= 2.2.
+- Requires `shapely>=2.0` (previously unpinned).
+
 ## v1.12.0 — 2026-10-20
 
 Feature release: adds the HyTES 2.0 thermal imager, refines the

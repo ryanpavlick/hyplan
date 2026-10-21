@@ -27,6 +27,7 @@ from functools import lru_cache
 from typing import Any
 
 import numpy as np
+import shapely
 from pint import Quantity
 from pymap3d.lox import meanm
 from pymap3d.vincenty import vdist
@@ -34,7 +35,7 @@ from pyproj import CRS, Transformer
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform, triangulate, unary_union
+from shapely.ops import triangulate, unary_union
 from shapely.validation import explain_validity
 
 from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
@@ -381,6 +382,32 @@ def get_utm_transforms(geometry: BaseGeometry | list[BaseGeometry]) -> tuple[Cal
     logger.debug(f"Generated UTM transformations for centroid ({lat:.6f}, {lon:.6f}).")
     return wgs84_to_utm, utm_to_wgs84
 
+
+def transform_geometry(func: Callable[..., Any], geometry: BaseGeometry) -> BaseGeometry:
+    """Apply a coordinate function to every vertex of a Shapely geometry.
+
+    Drop-in replacement for ``shapely.ops.transform`` (deprecated in
+    Shapely 2.2), vectorized via :func:`shapely.transform`.  ``func`` is
+    called once with coordinate arrays, ``func(x, y)`` or ``func(x, y, z)``
+    for 3D geometries, and must return arrays of the same shape — e.g.
+    the transforms returned by :func:`get_utm_transforms`.
+
+    Args:
+        func: Coordinate function such as a pyproj ``Transformer.transform``.
+        geometry: Geometry to transform.
+
+    Returns:
+        BaseGeometry: A new geometry of the same type and dimensionality.
+    """
+    def _apply(coords: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
+        # A single vertex goes in as plain floats: pyproj's scalar fast path
+        # calls float() on its inputs, which NumPy >= 1.25 deprecates for
+        # 1-element arrays.
+        cols = [float(v) for v in coords[0]] if len(coords) == 1 else list(coords.T)
+        return np.column_stack(func(*cols))
+
+    return shapely.transform(geometry, _apply, include_z=geometry.has_z)
+
 def haversine(
     lat1: float | np.ndarray[Any, np.dtype[Any]],
     lon1: float | np.ndarray[Any, np.dtype[Any]],
@@ -523,7 +550,7 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
         # "divide by zero" / "invalid value" RuntimeWarning from inside the
         # rotating-calipers algorithm even on perfectly valid inputs; the
         # returned geometry is still correct. Silence just that warning here.
-        polygon_utm = transform(wgs84_to_utm, polygon).convex_hull
+        polygon_utm = transform_geometry(wgs84_to_utm, polygon).convex_hull
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -533,7 +560,7 @@ def minimum_rotated_rectangle(polygon: Polygon) -> Polygon:
             mrr = polygon_utm.minimum_rotated_rectangle
 
         # Transform results back to WGS84
-        mrr_wgs84 = transform(utm_to_wgs84, mrr)
+        mrr_wgs84 = transform_geometry(utm_to_wgs84, mrr)
 
     except Exception as e:
         raise HyPlanValueError(f"Failed to calculate minimum rotated rectangle: {e}") from e
@@ -566,7 +593,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
     try:
         # Transform polygon to UTM
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(polygon)
-        polygon_utm = transform(wgs84_to_utm, polygon).convex_hull
+        polygon_utm = transform_geometry(wgs84_to_utm, polygon).convex_hull
 
         # Perform rotation
         azimuth_radians = np.radians(azimuth)
@@ -593,7 +620,7 @@ def rotated_rectangle(polygon: Polygon, azimuth: float) -> Polygon:
 
         # Create rotated bounding box
         rotated_bbox_utm = Polygon(zip(xbound, ybound, strict=False))
-        rotated_bbox_wgs84 = transform(utm_to_wgs84, rotated_bbox_utm)
+        rotated_bbox_wgs84 = transform_geometry(utm_to_wgs84, rotated_bbox_utm)
 
     except Exception as e:
         raise HyPlanValueError(f"Failed to compute rotated bounding rectangle: {e}") from e
@@ -746,7 +773,7 @@ def buffer_polygon_along_azimuth(
     try:
         # Transform to UTM
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(polygon)
-        polygon_utm = transform(wgs84_to_utm, polygon)
+        polygon_utm = transform_geometry(wgs84_to_utm, polygon)
 
         translated_polygon_1 = translate_polygon(polygon_utm, along_track_m, azimuth)
         translated_polygon_2 = translate_polygon(polygon_utm, along_track_m, azimuth-180)
@@ -760,7 +787,7 @@ def buffer_polygon_along_azimuth(
         # Compute the union of the translated polygons
         polygon_utm = unary_union([translated_polygon_1, translated_polygon_2, polygon_utm_translated])
 
-        buffered_polygon_wgs84 = transform(utm_to_wgs84, polygon_utm)
+        buffered_polygon_wgs84 = transform_geometry(utm_to_wgs84, polygon_utm)
 
     except Exception as e:
         raise HyPlanValueError(f"Failed to buffer polygon along azimuth: {e}") from e

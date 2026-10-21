@@ -16,11 +16,10 @@ import pandas as pd
 import pymap3d.vincenty
 import simplekml
 from shapely.geometry import Polygon
-from shapely.ops import transform
 
 from .exceptions import HyPlanValueError
 from .flight_line import FlightLine
-from .geometry import get_utm_transforms, process_linestring
+from .geometry import get_utm_transforms, process_linestring, transform_geometry
 from .instruments import ScanningSensor
 from .terrain import ray_terrain_intersection
 
@@ -297,8 +296,8 @@ def analyze_swath_gaps_overlaps(
 
         # Project this pair to a local UTM CRS so areas come out in m².
         to_utm, _ = get_utm_transforms([a.centroid, b.centroid])
-        a_m = transform(to_utm, a)
-        b_m = transform(to_utm, b)
+        a_m = transform_geometry(to_utm, a)
+        b_m = transform_geometry(to_utm, b)
 
         overlap_area = a_m.intersection(b_m).area
         if overlap_area > 0:

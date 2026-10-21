@@ -52,10 +52,9 @@ from typing import Any
 import numpy as np
 from pint import Quantity
 from shapely.geometry import LineString
-from shapely.ops import transform
 
 from .exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
-from .geometry import get_utm_transforms
+from .geometry import get_utm_transforms, transform_geometry
 from .units import ureg
 from .waypoint import Waypoint, is_waypoint
 
@@ -581,8 +580,8 @@ class DubinsPath2D:
         # UTM transforms (cached for sample_at_distance).
         to_utm, from_utm = get_utm_transforms([start.geometry, end.geometry])
         self._from_utm = from_utm
-        start_utm = transform(to_utm, start.geometry)
-        end_utm = transform(to_utm, end.geometry)
+        start_utm = transform_geometry(to_utm, start.geometry)
+        end_utm = transform_geometry(to_utm, end.geometry)
 
         # Math-frame headings (CCW from +x, i.e. east).
         heading1 = -math.radians(start.heading - 90.0)

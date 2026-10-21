@@ -5,7 +5,6 @@ import random
 import numpy as np
 import pytest
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
-from shapely.ops import transform
 
 from hyplan.exceptions import HyPlanRuntimeError, HyPlanTypeError, HyPlanValueError
 from hyplan.geometry import (
@@ -25,6 +24,7 @@ from hyplan.geometry import (
     random_points_in_polygon,
     rectangle_dimensions,
     rotated_rectangle,
+    transform_geometry,
     translate_polygon,
     true_to_magnetic,
     wrap_to_180,
@@ -160,12 +160,40 @@ class TestValidatePolygon:
             _validate_polygon(bowtie)
 
 
+class TestTransformGeometry:
+    def test_matches_per_vertex_projection(self, simple_polygon):
+        to_utm, _ = get_utm_transforms(simple_polygon)
+        out = transform_geometry(to_utm, simple_polygon)
+        assert isinstance(out, Polygon)
+        xs, ys = np.array(simple_polygon.exterior.coords).T
+        np.testing.assert_allclose(np.array(out.exterior.coords), np.column_stack(to_utm(xs, ys)))
+
+    def test_preserves_z(self):
+        line = LineString([(-118.0, 34.0, 100.0), (-117.9, 34.1, 250.0)])
+        to_utm, _ = get_utm_transforms(line)
+        out = transform_geometry(to_utm, line)
+        assert out.has_z
+        np.testing.assert_allclose(np.array(out.coords)[:, 2], [100.0, 250.0])
+
+    def test_empty_geometry(self):
+        to_utm, _ = get_utm_transforms(Point(-118.0, 34.0))
+        assert transform_geometry(to_utm, Polygon()).is_empty
+
+    def test_emits_no_deprecation_warning(self, simple_polygon):
+        import warnings
+
+        to_utm, _ = get_utm_transforms(simple_polygon)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            transform_geometry(to_utm, simple_polygon)
+
+
 class TestGetUtmTransforms:
     def test_round_trip(self, simple_polygon):
         """Transform WGS84 -> UTM -> WGS84 should recover original coordinates."""
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(simple_polygon)
-        poly_utm = transform(wgs84_to_utm, simple_polygon)
-        poly_back = transform(utm_to_wgs84, poly_utm)
+        poly_utm = transform_geometry(wgs84_to_utm, simple_polygon)
+        poly_back = transform_geometry(utm_to_wgs84, poly_utm)
 
         orig_coords = np.array(simple_polygon.exterior.coords)
         back_coords = np.array(poly_back.exterior.coords)
@@ -174,8 +202,8 @@ class TestGetUtmTransforms:
     def test_point_input(self):
         pt = Point(-118.25, 34.05)
         wgs84_to_utm, utm_to_wgs84 = get_utm_transforms(pt)
-        pt_utm = transform(wgs84_to_utm, pt)
-        pt_back = transform(utm_to_wgs84, pt_utm)
+        pt_utm = transform_geometry(wgs84_to_utm, pt)
+        pt_back = transform_geometry(utm_to_wgs84, pt_utm)
         assert pt_back.x == pytest.approx(pt.x, abs=1e-6)
         assert pt_back.y == pytest.approx(pt.y, abs=1e-6)
 
