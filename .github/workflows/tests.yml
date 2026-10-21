@@ -34,7 +34,7 @@ jobs:
           # for 3.9 compatibility; with 3.9 dropped in v1.6 it can
           # now move toward >=2.0 as the stubs continue to settle.
           pip install "numpy>=2.0,<2.3" "pint>=0.24,<0.26"
-          pip install pytest pytest-cov ruff mypy
+          pip install pytest pytest-cov ruff==0.15.12 mypy
 
       - name: Lint (ruff)
         run: ruff check hyplan tests
