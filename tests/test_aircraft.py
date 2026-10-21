@@ -565,9 +565,12 @@ class TestAircraftPerformance:
         below_ft = ceiling_ft - 5000
         wp1 = Waypoint(34.0, -118.0, 90.0, altitude_msl=below_ft * ureg.foot)
         wp2 = Waypoint(34.5, -117.5, 90.0, altitude_msl=below_ft * ureg.foot)
-        with _warnings.catch_warnings():
-            _warnings.simplefilter("error")
+        # Record rather than escalate: unrelated dependency deprecations
+        # (e.g. shapely 2.2's ops.transform) must not fail this test.
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
             ac.time_to_cruise(wp1, wp2)
+        assert not [w for w in caught if "service ceiling" in str(w.message)]
 
     def test_service_ceiling_warning_climb_continues(self):
         """A climbing leg whose cruise altitude exceeds the ceiling
